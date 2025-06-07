@@ -262,7 +262,7 @@ JointAngles HexapodLocomotionSystem::calculateInverseKinematics(int leg,
 
         Eigen::Matrix3f J = calculateAnalyticJacobian(leg, q);
 
-        //  Δq = Jᵀ (J Jᵀ + λ²I)⁻¹ e      (Levenberg-Marquardt)  :contentReference[oaicite:2]{index=2}
+        //  Δq = Jᵀ (J Jᵀ + λ²I)⁻¹ e      (Levenberg-Marquardt) 
         const float lambda = params.ik.use_damping ? params.ik.damping_lambda : 0.0f;
         Eigen::Matrix3f Z = (J * J.transpose() + lambda * lambda * Eigen::Matrix3f::Identity()).inverse();
         Eigen::Vector3f dq = J.transpose() * Z * e;

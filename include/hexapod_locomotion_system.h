@@ -90,12 +90,12 @@ struct HexapodParameters {
         float pos_threshold_mm = 0.5f; //   ”      ”
         bool use_damping = true;
         float damping_lambda = 30.0f; // λ ≈ 30mm  (see paper)
-        bool clamp_joints = true;     // ik_clamp_joints :contentReference[oaicite:0]{index=0}
+        bool clamp_joints = true;     // ik_clamp_joints
     } ik;
 
     // Parametros de compensación del cuerpo
     struct BodyCompConfig {
-        bool enable = true;         // “IMU body compensation” :contentReference[oaicite:1]{index=1}
+        bool enable = true;         // “IMU body compensation”
         float kp = 0.6f;            // same order as OpenSHC demos
         float lp_alpha = 0.10f;     // 1-pole low-pass
         float max_tilt_deg = 12.0f; // disable beyond this (OpenSHC default)
