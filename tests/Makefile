@@ -1,5 +1,11 @@
 CXX=g++
-CXXFLAGS=-I../include -I. -I/usr/include/eigen3 -std=c++17
+UNAME_S := $(shell uname -s)
+ifeq ($(UNAME_S),Darwin)
+EIGEN_PATH := $(shell brew --prefix eigen 2>/dev/null)/include/eigen3
+else
+EIGEN_PATH := /usr/include/eigen3
+endif
+CXXFLAGS=-I../include -I. -I$(EIGEN_PATH) -std=c++17
 
 all: math_utils_test model_test pose_controller_test walk_controller_test admittance_controller_test locomotion_system_test
 
