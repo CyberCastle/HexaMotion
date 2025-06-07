@@ -44,3 +44,12 @@ void loop() {
 Simple mock implementations of these interfaces are provided under the
 `examples/` directory.
 
+## Running tests
+Basic tests for the utility functions can be built using `make` inside the
+`tests/` folder:
+
+```bash
+cd tests
+make && ./utils_test
+```
+
