@@ -12,22 +12,22 @@ HexaMotion provides kinematic and gait planning utilities to drive a six legged 
 Place this repository inside your Arduino `libraries` directory.  In your sketch include the header:
 
 ```cpp
-#include <hexapod_locomotion_system.h>
+#include <locomotion_system.h>
 ```
 
 ## Basic usage
-Create hardware interface classes that implement `IIMUInterface`, `IFSRInterface` and `IServoInterface`.  Then pass instances of these classes to `HexapodLocomotionSystem` together with your robot parameters.
+Create hardware interface classes that implement `IIMUInterface`, `IFSRInterface` and `IServoInterface`.  Then pass instances of these classes to `LocomotionSystem` together with your robot parameters.
 
 ```cpp
 #include <Arduino.h>
-#include <hexapod_locomotion_system.h>
+#include <locomotion_system.h>
 
 class MyIMU : public IIMUInterface { /* ... */ };
 class MyFSR : public IFSRInterface { /* ... */ };
 class MyServo : public IServoInterface { /* ... */ };
 
-HexapodParameters params;            // fill your robot parameters
-HexapodLocomotionSystem robot(params);
+Parameters params;            // fill your robot parameters
+LocomotionSystem robot(params);
 MyIMU imu;
 MyFSR fsr;
 MyServo servos;

@@ -2,7 +2,7 @@
 #define HEXAMOTION_MOCK_INTERFACES_H
 
 #include <Arduino.h>
-#include <hexapod_locomotion_system.h>
+#include <locomotion_system.h>
 
 /**
  * @brief Example IMU interface returning mock data.
