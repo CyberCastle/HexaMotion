@@ -1,4 +1,5 @@
 #include <cassert>
+#include <iostream>
 #include "../include/model.h"
 
 int main() {
@@ -14,5 +15,6 @@ int main() {
     p.control_frequency = 50;
     RobotModel model_ok(p);
     assert(model_ok.validate());
+    std::cout << "model_test executed successfully" << std::endl;
     return 0;
 }

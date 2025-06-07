@@ -1,4 +1,5 @@
 #include <cassert>
+#include <iostream>
 #include "test_stubs.h"
 #include "../include/locomotion_system.h"
 
@@ -15,5 +16,6 @@ int main() {
     p.tibia_angle_limits[0] = -90; p.tibia_angle_limits[1] = 90;
     LocomotionSystem sys(p);
     (void)sys;
+    std::cout << "locomotion_system_test executed successfully" << std::endl;
     return 0;
 }

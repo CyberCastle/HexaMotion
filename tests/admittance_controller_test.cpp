@@ -1,4 +1,5 @@
 #include <cassert>
+#include <iostream>
 #include "test_stubs.h"
 #include "../include/admittance_controller.h"
 
@@ -21,5 +22,6 @@ int main() {
     LegState states[NUM_LEGS]{};
     Point3D legs[NUM_LEGS]{};
     assert(ac.checkStability(legs, states));
+    std::cout << "admittance_controller_test executed successfully" << std::endl;
     return 0;
 }

@@ -1,4 +1,5 @@
 #include <cassert>
+#include <iostream>
 #include "test_stubs.h"
 #include "../include/walk_controller.h"
 
@@ -19,5 +20,6 @@ int main() {
     float offsets[NUM_LEGS]{};
     Point3D traj = wc.footTrajectory(0, 0.2f, 20, 50, 0.5f, 0.5f, p.robot_height, offsets, states, nullptr, nullptr);
     (void)traj;
+    std::cout << "walk_controller_test executed successfully" << std::endl;
     return 0;
 }
