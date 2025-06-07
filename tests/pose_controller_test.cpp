@@ -1,4 +1,5 @@
 #include <cassert>
+#include <iostream>
 #include "test_stubs.h"
 #include "../include/pose_controller.h"
 
@@ -22,5 +23,6 @@ int main() {
     pc.initializeDefaultPose(legs, joints, p.hexagon_radius, p.robot_height);
     assert(pc.setStandingPose(legs, joints, p.robot_height));
     assert(pc.setCrouchPose(legs, joints, p.robot_height));
+    std::cout << "pose_controller_test executed successfully" << std::endl;
     return 0;
 }

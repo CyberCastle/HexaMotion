@@ -1,4 +1,5 @@
 #include <cassert>
+#include <iostream>
 #include "../include/math_utils.h"
 
 int main() {
@@ -10,5 +11,6 @@ int main() {
     auto R = rotationMatrixZ(45.0f);
     Eigen::Matrix3f I = R * R.transpose();
     assert((I - Eigen::Matrix3f::Identity()).norm() < 1e-5);
+    std::cout << "math_utils_test executed successfully" << std::endl;
     return 0;
 }
