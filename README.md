@@ -41,3 +41,6 @@ void loop() {
 }
 ```
 
+Simple mock implementations of these interfaces are provided under the
+`examples/` directory.
+
