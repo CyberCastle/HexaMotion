@@ -473,6 +473,15 @@ bool LocomotionSystem::update() {
     if (dt > 0.1f)
         dt = 0.1f;
 
+    // Update sensor-based leg states
+    updateLegStates();
+
+    // Adapt gait and step parameters depending on terrain
+    adaptGaitToTerrain();
+    updateStepParameters();
+    adjustStepParameters();
+    compensateForSlope();
+
     // Actualizar fase de marcha
     updateGaitPhase();
 
@@ -666,8 +675,13 @@ void LocomotionSystem::initializeDefaultPose() {
 }
 
 void LocomotionSystem::updateLegStates() {
-    // This function is called from calculateFootTrajectory
-    // Leg states are updated there according to the current gait
+    if (!fsr_interface)
+        return;
+
+    for (int i = 0; i < NUM_LEGS; ++i) {
+        FSRData fsr = fsr_interface->readFSR(i);
+        leg_states[i] = fsr.in_contact ? STANCE_PHASE : SWING_PHASE;
+    }
 }
 
 void LocomotionSystem::updateStepParameters() {
