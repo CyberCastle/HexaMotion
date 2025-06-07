@@ -1,43 +1,43 @@
 /**
  * @file hexapod_locomotion_system.h
- * @brief Sistema de Control de Locomoción para Robot Hexápodo basado en OpenSHC
+ * @brief Hexapod Locomotion Control System inspired by OpenSHC
  * @author BlightHunter Team
  * @version 1.0
  * @date 2024
  *
- * PARÁMETROS DE ENTRADA REQUERIDOS:
- * ================================
+ * REQUIRED INPUT PARAMETERS:
+ * ==========================
  *
- * DIMENSIONES FÍSICAS:
- * - HEXAGON_RADIUS: Radio del hexágono del cuerpo (mm) [Típico: 150-200mm]
- * - COXA_LENGTH: Longitud del segmento coxa (mm) [Típico: 40-60mm]
- * - FEMUR_LENGTH: Longitud del segmento fémur (mm) [Típico: 80-120mm]
- * - TIBIA_LENGTH: Longitud del segmento tibia (mm) [Típico: 100-150mm]
+ * PHYSICAL DIMENSIONS:
+ * - HEXAGON_RADIUS: Body hexagon radius (mm) [Typical: 150-200mm]
+ * - COXA_LENGTH: Coxa segment length (mm) [Typical: 40-60mm]
+ * - FEMUR_LENGTH: Femur segment length (mm) [Typical: 80-120mm]
+ * - TIBIA_LENGTH: Tibia segment length (mm) [Typical: 100-150mm]
  *
- * ÁNGULOS DE CONFIGURACIÓN:
- * - LEG_ANGLE_OFFSET: Ángulo entre patas (60° para hexápodo)
- * - COXA_ANGLE_LIMITS: Límites de ángulo coxa [min_angle, max_angle] (grados)
- * - FEMUR_ANGLE_LIMITS: Límites de ángulo fémur [min_angle, max_angle] (grados)
- * - TIBIA_ANGLE_LIMITS: Límites de ángulo tibia [min_angle, max_angle] (grados)
+ * CONFIGURATION ANGLES:
+ * - LEG_ANGLE_OFFSET: Angle between legs (60° for hexapod)
+ * - COXA_ANGLE_LIMITS: Coxa angle limits [min_angle, max_angle] (degrees)
+ * - FEMUR_ANGLE_LIMITS: Femur angle limits [min_angle, max_angle] (degrees)
+ * - TIBIA_ANGLE_LIMITS: Tibia angle limits [min_angle, max_angle] (degrees)
  *
- * CARACTERÍSTICAS DEL ROBOT:
- * - ROBOT_HEIGHT: Altura nominal del robot (mm) [Típico: 80-150mm]
- * - ROBOT_WEIGHT: Peso del robot (kg) [Para cálculos de estabilidad]
- * - CENTER_OF_MASS: Coordenadas del centro de masa [x, y, z] (mm)
+ * ROBOT CHARACTERISTICS:
+ * - ROBOT_HEIGHT: Nominal robot height (mm) [Typical: 80-150mm]
+ * - ROBOT_WEIGHT: Robot weight (kg) [Used for stability calculations]
+ * - CENTER_OF_MASS: Center of mass coordinates [x, y, z] (mm)
  *
- * PARÁMETROS DENAVIT-HARTENBERG:
- * - DH_PARAMETERS: Matriz 6x4 con parámetros [a, alpha, d, theta] para cada articulación
+ * DENAVIT-HARTENBERG PARAMETERS:
+ * - DH_PARAMETERS: 6x4 matrix with [a, alpha, d, theta] for each joint
  *
- * CONFIGURACIÓN DE SENSORES:
- * - IMU_CALIBRATION_OFFSET: Offset de calibración del IMU [roll, pitch, yaw] (grados)
- * - FSR_THRESHOLD: Umbral de detección de contacto FSR (unidades ADC)
- * - FSR_MAX_PRESSURE: Presión máxima detectable FSR (N o kg)
+ * SENSOR SETTINGS:
+ * - IMU_CALIBRATION_OFFSET: IMU calibration offset [roll, pitch, yaw] (degrees)
+ * - FSR_THRESHOLD: FSR contact detection threshold (ADC units)
+ * - FSR_MAX_PRESSURE: Maximum detectable FSR pressure (N or kg)
  *
- * PARÁMETROS DE CONTROL:
- * - MAX_VELOCITY: Velocidad máxima de locomoción (mm/s)
- * - MAX_ANGULAR_VELOCITY: Velocidad angular máxima (grados/s)
- * - STABILITY_MARGIN: Margen de estabilidad mínimo (mm)
- * - CONTROL_FREQUENCY: Frecuencia de control (Hz) [Típico: 50-100Hz]
+ * CONTROL PARAMETERS:
+ * - MAX_VELOCITY: Maximum locomotion speed (mm/s)
+ * - MAX_ANGULAR_VELOCITY: Maximum angular velocity (degrees/s)
+ * - STABILITY_MARGIN: Minimum stability margin (mm)
+ * - CONTROL_FREQUENCY: Control frequency (Hz) [Typical: 50-100Hz]
  */
 
 #ifndef HEXAPOD_LOCOMOTION_SYSTEM_H
@@ -47,44 +47,44 @@
 #include <ArduinoEigen.h>
 #include <math.h>
 
-// Configuración del sistema
+// System configuration
 #define NUM_LEGS 6
 #define DOF_PER_LEG 3
 #define TOTAL_DOF (NUM_LEGS * DOF_PER_LEG)
 
-// Parámetros físicos configurables
+// Configurable physical parameters
 struct HexapodParameters {
-    // Dimensiones físicas
-    float hexagon_radius; // Radio del hexágono (mm)
-    float coxa_length;    // Longitud coxa (mm)
-    float femur_length;   // Longitud fémur (mm)
-    float tibia_length;   // Longitud tibia (mm)
+    // Physical dimensions
+    float hexagon_radius; // Hexagon radius (mm)
+    float coxa_length;    // Coxa length (mm)
+    float femur_length;   // Femur length (mm)
+    float tibia_length;   // Tibia length (mm)
 
-    // Características del robot
-    float robot_height;             // Altura nominal (mm)
-    float robot_weight;             // Peso (kg)
-    Eigen::Vector3f center_of_mass; // Centro de masa [x,y,z] (mm)
+    // Robot characteristics
+    float robot_height;             // Nominal height (mm)
+    float robot_weight;             // Weight (kg)
+    Eigen::Vector3f center_of_mass; // Center of mass [x,y,z] (mm)
 
-    // Límites angulares (grados)
+    // Angle limits (degrees)
     float coxa_angle_limits[2];  // [min, max]
     float femur_angle_limits[2]; // [min, max]
     float tibia_angle_limits[2]; // [min, max]
 
-    // Parámetros DH (a, alpha, d, theta_offset)
+    // DH parameters (a, alpha, d, theta_offset)
     float dh_parameters[NUM_LEGS][DOF_PER_LEG][4];
 
-    // Configuración de sensores
+    // Sensor configuration
     Eigen::Vector3f imu_calibration_offset; // [roll, pitch, yaw] (grados)
-    float fsr_threshold;                    // Umbral contacto FSR
-    float fsr_max_pressure;                 // Presión máxima FSR
+    float fsr_threshold;                    // FSR contact threshold
+    float fsr_max_pressure;                 // Maximum FSR pressure
 
-    // Parámetros de control
-    float max_velocity;         // Velocidad máxima (mm/s)
-    float max_angular_velocity; // Velocidad angular máxima (grados/s)
-    float stability_margin;     // Margen de estabilidad (mm)
-    float control_frequency;    // Frecuencia de control (Hz)
+    // Control parameters
+    float max_velocity;         // Maximum speed (mm/s)
+    float max_angular_velocity; // Maximum angular speed (degrees/s)
+    float stability_margin;     // Stability margin (mm)
+    float control_frequency;    // Control frequency (Hz)
 
-    // Parámetros de cinemática inversa
+    // Inverse kinematics parameters
     struct IKConfig {
         uint8_t max_iterations = 30;   // OpenSHC default
         float pos_threshold_mm = 0.5f; //   ”      ”
@@ -93,7 +93,7 @@ struct HexapodParameters {
         bool clamp_joints = true;     // ik_clamp_joints
     } ik;
 
-    // Parametros de compensación del cuerpo
+    // Body compensation parameters
     struct BodyCompConfig {
         bool enable = true;         // “IMU body compensation”
         float kp = 0.6f;            // same order as OpenSHC demos
@@ -102,7 +102,7 @@ struct HexapodParameters {
     } body_comp;
 };
 
-// Enumeraciones para tipos de marcha
+// Gait type enumerations
 enum GaitType {
     TRIPOD_GAIT,
     WAVE_GAIT,
@@ -111,42 +111,42 @@ enum GaitType {
     ADAPTIVE_GAIT
 };
 
-// Estados de las patas
+// Leg states
 enum LegState {
-    STANCE_PHASE,   // Pata en contacto con suelo
-    SWING_PHASE,    // Pata en movimiento
-    LIFT_PHASE,     // Levantando pata
-    TOUCHDOWN_PHASE // Bajando pata
+    STANCE_PHASE,   // Leg on ground
+    SWING_PHASE,    // Leg moving
+    LIFT_PHASE,     // Lifting leg
+    TOUCHDOWN_PHASE // Lowering leg
 };
 
-// Estructura para punto 3D
+// 3D point structure
 struct Point3D {
     float x, y, z;
     Point3D(float x = 0, float y = 0, float z = 0) : x(x), y(y), z(z) {}
 };
 
-// Estructura para ángulos de articulación
+// Joint angles structure
 struct JointAngles {
     float coxa, femur, tibia;
     JointAngles(float c = 0, float f = 0, float t = 0) : coxa(c), femur(f), tibia(t) {}
 };
 
-// Estructura para datos del IMU
+// IMU data structure
 struct IMUData {
-    float roll, pitch, yaw;          // Orientación (grados)
-    float accel_x, accel_y, accel_z; // Aceleración (m/s²)
-    float gyro_x, gyro_y, gyro_z;    // Velocidad angular (grados/s)
+    float roll, pitch, yaw;          // Orientation (degrees)
+    float accel_x, accel_y, accel_z; // Acceleration (m/s²)
+    float gyro_x, gyro_y, gyro_z;    // Angular velocity (degrees/s)
     bool is_valid;
 };
 
-// Estructura para datos FSR
+// FSR data structure
 struct FSRData {
-    float pressure;     // Presión detectada
-    bool in_contact;    // Estado de contacto
-    float contact_time; // Tiempo en contacto (ms)
+    float pressure;     // Measured pressure
+    bool in_contact;    // Contact state
+    float contact_time; // Contact time (ms)
 };
 
-// Interfaces para hardware (a implementar por el usuario)
+// Hardware interfaces (to be implemented by the user)
 class IIMUInterface {
   public:
     virtual ~IIMUInterface() = default;
@@ -176,42 +176,42 @@ class IServoInterface {
     virtual bool enableTorque(int leg_index, int joint_index, bool enable) = 0;
 };
 
-// Clase principal del sistema de locomoción
+// Main locomotion system class
 class HexapodLocomotionSystem {
   private:
-    // Parámetros del robot
+    // Robot parameters
     HexapodParameters params;
 
-    // Interfaces de hardware
+    // Hardware interfaces
     IIMUInterface *imu_interface;
     IFSRInterface *fsr_interface;
     IServoInterface *servo_interface;
 
-    // Estados del sistema
-    Eigen::Vector3f body_position;      // Posición del cuerpo [x,y,z]
-    Eigen::Vector3f body_orientation;   // Orientación del cuerpo [roll,pitch,yaw]
-    Point3D leg_positions[NUM_LEGS];    // Posiciones de las patas
-    JointAngles joint_angles[NUM_LEGS]; // Ángulos de articulaciones
+    // System states
+    Eigen::Vector3f body_position;      // Body position [x,y,z]
+    Eigen::Vector3f body_orientation;   // Body orientation [roll,pitch,yaw]
+    Point3D leg_positions[NUM_LEGS];    // Leg positions
+    JointAngles joint_angles[NUM_LEGS]; // Joint angles
     LegState leg_states[NUM_LEGS];      // Estados de las patas
 
-    // Control de marcha
+    // Gait control
     GaitType current_gait;
     float gait_phase;
     float step_height;
     float step_length;
 
-    // Parámetros específicos de gait
-    float stance_duration;             // Duración de fase de apoyo (0-1)
-    float swing_duration;              // Duración de fase de vuelo (0-1)
-    float cycle_frequency;             // Frecuencia del ciclo de gait (Hz)
-    float leg_phase_offsets[NUM_LEGS]; // Offset de fase por pata
+    // Gait-specific parameters
+    float stance_duration;             // Stance phase duration (0-1)
+    float swing_duration;              // Swing phase duration (0-1)
+    float cycle_frequency;             // Gait cycle frequency (Hz)
+    float leg_phase_offsets[NUM_LEGS]; // Phase offset per leg
 
-    // Variables de control
+    // Control variables
     bool system_enabled;
     unsigned long last_update_time;
     float dt; // Delta time
 
-    // Matrices para cinemática
+    // Kinematics matrices
     Eigen::MatrixXf dh_transforms[NUM_LEGS][DOF_PER_LEG];
 
     Point3D transformWorldToBody(const Point3D &p_world) const;
@@ -225,35 +225,35 @@ class HexapodLocomotionSystem {
     // Destructor
     ~HexapodLocomotionSystem();
 
-    // Inicialización
+    // Initialization
     bool initialize(IIMUInterface *imu, IFSRInterface *fsr, IServoInterface *servo);
     bool calibrateSystem();
 
-    // Control de pose
+    // Pose control
     bool setBodyPose(const Eigen::Vector3f &position, const Eigen::Vector3f &orientation);
     bool setLegPosition(int leg_index, const Point3D &position);
     bool setStandingPose();
     bool setCrouchPose();
 
-    // Cinemática inversa
+    // Inverse kinematics
     JointAngles calculateInverseKinematics(int leg_index, const Point3D &target_position);
     Point3D calculateForwardKinematics(int leg_index, const JointAngles &angles);
 
-    // Cálculo de jacobianos
+    // Jacobian calculation
     Eigen::MatrixXf calculateJacobian(int leg_index, const JointAngles &angles);
     Eigen::Matrix3f calculateAnalyticJacobian(int leg_index, const JointAngles &q);
 
-    // Transformaciones Denavit-Hartenberg
+    // Denavit-Hartenberg transforms
     Eigen::Matrix4f calculateDHTransform(float a, float alpha, float d, float theta);
     Eigen::Matrix4f calculateLegTransform(int leg_index, const JointAngles &angles);
 
-    // Planificador de marchas
+    // Gait planner
     bool setGaitType(GaitType gait);
     bool planGaitSequence(float velocity_x, float velocity_y, float angular_velocity);
     void updateGaitPhase();
     Point3D calculateFootTrajectory(int leg_index, float phase);
 
-    // Control de locomoción
+    // Locomotion control
     bool walkForward(float velocity);
     bool walkBackward(float velocity);
     bool turnInPlace(float angular_velocity);
@@ -264,18 +264,18 @@ class HexapodLocomotionSystem {
     bool walkSideways(float velocity, float duration, bool right_direction = true);
     bool stopMovement();
 
-    // Control de orientación
+    // Orientation control
     bool maintainOrientation(const Eigen::Vector3f &target_orientation);
     bool correctBodyTilt();
     Eigen::Vector3f calculateOrientationError();
 
-    // Análisis de estabilidad
+    // Stability analysis
     bool checkStabilityMargin();
     Eigen::Vector2f calculateCenterOfPressure();
     float calculateStabilityIndex();
     bool isStaticallyStable();
 
-    // Control de errores
+    // Error control
     enum ErrorCode {
         NO_ERROR = 0,
         IMU_ERROR = 1,
@@ -290,7 +290,7 @@ class HexapodLocomotionSystem {
     String getErrorMessage(ErrorCode error);
     bool handleError(ErrorCode error);
 
-    // Actualización del sistema
+    // System update
     bool update();
 
     // Getters
@@ -306,16 +306,16 @@ class HexapodLocomotionSystem {
     bool setControlFrequency(float frequency);
     bool setStepParameters(float height, float length);
 
-    // Diagnóstico
+    // Diagnostics
     bool performSelfTest();
     void printSystemStatus();
     void printLegStatus(int leg_index);
 
   private:
-    // Variables de error
+    // Error variables
     ErrorCode last_error;
 
-    // Métodos auxiliares
+    // Helper methods
     float constrainAngle(float angle, float min_angle, float max_angle);
     bool validateParameters();
     void initializeDefaultPose();
@@ -324,13 +324,13 @@ class HexapodLocomotionSystem {
     bool checkJointLimits(int leg_index, const JointAngles &angles);
     float calculateLegReach(int leg_index);
 
-    // Control adaptativo
+    // Adaptive control
     void adaptGaitToTerrain();
     void adjustStepParameters();
     void compensateForSlope();
 };
 
-// Funciones de utilidad
+// Utility functions
 namespace HexapodUtils {
 float degreesToRadians(float degrees);
 float radiansToDegrees(float radians);
@@ -339,12 +339,12 @@ Point3D rotatePoint(const Point3D &point, const Eigen::Vector3f &rotation);
 float distance3D(const Point3D &p1, const Point3D &p2);
 bool isPointReachable(const Point3D &point, float max_reach);
 
-// Funciones matemáticas de matrices de rotación
+// Rotation matrix functions
 Eigen::Matrix3f rotationMatrixX(float angle);
 Eigen::Matrix3f rotationMatrixY(float angle);
 Eigen::Matrix3f rotationMatrixZ(float angle);
 
-// Cálculos matemáticos
+// Mathematical calculations
 Eigen::Vector3f quaternionToEuler(const Eigen::Vector4f &quaternion);
 Eigen::Vector4f eulerToQuaternion(const Eigen::Vector3f &euler);
 Eigen::Vector4f quaternionMultiply(const Eigen::Vector4f &q1, const Eigen::Vector4f &q2);

@@ -1,16 +1,16 @@
 /**
  * @file hexapod_locomotion_system.cpp
- * @brief Implementación del Sistema de Control de Locomoción para Robot Hexápodo
+ * @brief Implementation of the Hexapod Locomotion Control System
  * @author BlightHunter Team
  * @version 1.0
  * @date 2024
  *
- * Implementa control basado en:
- * - Cinemática inversa con parámetros Denavit-Hartenberg
- * - Jacobianos para control de velocidad
- * - Planificador de marchas con múltiples gaits
- * - Control de orientación y estabilidad
- * - Principios de OpenSHC (Open Source Humanoid Control)
+ * Implements control based on:
+ * - Inverse kinematics using Denavit-Hartenberg parameters
+ * - Jacobians for velocity control
+ * - Gait planner with multiple gaits
+ * - Orientation and stability control
+ * - Principles of OpenSHC (Open Source Humanoid Control)
  */
 
 #include "hexapod_locomotion_system.h"
@@ -35,7 +35,7 @@ float normalizeAngle(float angle) {
 }
 
 Point3D rotatePoint(const Point3D &point, const Eigen::Vector3f &rotation) {
-    // Usar las matrices de rotación del mismo namespace
+    // Use rotation matrices from this namespace
     Eigen::Matrix3f Rx = rotationMatrixX(rotation[0]);
     Eigen::Matrix3f Ry = rotationMatrixY(rotation[1]);
     Eigen::Matrix3f Rz = rotationMatrixZ(rotation[2]);
@@ -58,7 +58,7 @@ bool isPointReachable(const Point3D &point, float max_reach) {
     return distance <= max_reach;
 }
 
-// Implementaciones de funciones matemáticas auxiliares
+// Helper math function implementations
 Eigen::Vector4f quaternionMultiply(const Eigen::Vector4f &q1, const Eigen::Vector4f &q2) {
     Eigen::Vector4f result;
     result[0] = q1[0] * q2[0] - q1[1] * q2[1] - q1[2] * q2[2] - q1[3] * q2[3]; // w
@@ -162,7 +162,7 @@ HexapodLocomotionSystem::HexapodLocomotionSystem(const HexapodParameters &params
       stance_duration(0.5f), swing_duration(0.5f), cycle_frequency(2.0f),
       system_enabled(false), last_update_time(0), dt(0.02f), last_error(NO_ERROR) {
 
-    // Inicializar posición del cuerpo
+    // Initialize body position
     body_position = Eigen::Vector3f(0.0f, 0.0f, params.robot_height);
     body_orientation = Eigen::Vector3f(0.0f, 0.0f, 0.0f);
 
@@ -180,7 +180,7 @@ HexapodLocomotionSystem::~HexapodLocomotionSystem() {
     system_enabled = false;
 }
 
-// Inicialización del sistema
+// System initialization
 bool HexapodLocomotionSystem::initialize(IIMUInterface *imu, IFSRInterface *fsr, IServoInterface *servo) {
     if (!imu || !fsr || !servo) {
         last_error = PARAMETER_ERROR;
@@ -207,7 +207,7 @@ bool HexapodLocomotionSystem::initialize(IIMUInterface *imu, IFSRInterface *fsr,
         return false;
     }
 
-    // Validar parámetros
+    // Validar parameters
     if (!validateParameters()) {
         last_error = PARAMETER_ERROR;
         return false;
@@ -219,7 +219,7 @@ bool HexapodLocomotionSystem::initialize(IIMUInterface *imu, IFSRInterface *fsr,
     return true;
 }
 
-// Calibración del sistema
+// System calibration
 bool HexapodLocomotionSystem::calibrateSystem() {
     if (!system_enabled)
         return false;
@@ -244,7 +244,7 @@ bool HexapodLocomotionSystem::calibrateSystem() {
     return true;
 }
 
-// Cinemática inversa usando método geométrico optimizado
+// Inverse kinematics using an optimized geometric method
 JointAngles HexapodLocomotionSystem::calculateInverseKinematics(int leg,
                                                                 const Point3D &p_target) {
     JointAngles q = joint_angles[leg]; // semilla “cercana”
@@ -271,7 +271,7 @@ JointAngles HexapodLocomotionSystem::calculateInverseKinematics(int leg,
         q.femur += HexapodUtils::radiansToDegrees(dq[1]);
         q.tibia += HexapodUtils::radiansToDegrees(dq[2]);
 
-        if (params.ik.clamp_joints) // opción tomada de Open SHC
+        if (params.ik.clamp_joints) // option taken from Open SHC
         {
             q.coxa = constrainAngle(q.coxa, params.coxa_angle_limits[0], params.coxa_angle_limits[1]);
             q.femur = constrainAngle(q.femur, params.femur_angle_limits[0], params.femur_angle_limits[1]);
@@ -279,16 +279,16 @@ JointAngles HexapodLocomotionSystem::calculateInverseKinematics(int leg,
         }
     }
 
-    last_error = KINEMATICS_ERROR; // no convergió
+    last_error = KINEMATICS_ERROR; // did not converge
     return q;
 }
 
-// Cinemática directa usando transformaciones DH
+// Forward kinematics using DH transforms
 Point3D HexapodLocomotionSystem::calculateForwardKinematics(int leg_index, const JointAngles &angles) {
-    // Calcular transformación total de la pata
+    // Compute total leg transform
     Eigen::Matrix4f transform = calculateLegTransform(leg_index, angles);
 
-    // Extraer posición del extremo de la pata
+    // Extract foot position
     Point3D position;
     position.x = transform(0, 3);
     position.y = transform(1, 3);
@@ -297,7 +297,7 @@ Point3D HexapodLocomotionSystem::calculateForwardKinematics(int leg_index, const
     return position;
 }
 
-// Cálculo de transformación DH individual
+// DH transformation calculation
 Eigen::Matrix4f HexapodLocomotionSystem::calculateDHTransform(float a, float alpha, float d, float theta) {
     float cos_theta = cos(HexapodUtils::degreesToRadians(theta));
     float sin_theta = sin(HexapodUtils::degreesToRadians(theta));
@@ -313,17 +313,17 @@ Eigen::Matrix4f HexapodLocomotionSystem::calculateDHTransform(float a, float alp
     return transform;
 }
 
-// Transformación completa de la pata
+// Complete leg transform
 Eigen::Matrix4f HexapodLocomotionSystem::calculateLegTransform(int leg_index,
                                                                const JointAngles &q) {
-    // Transformación de la base (hexágono)
+    // Base transformation (hexagon)
     const float base_angle_deg = leg_index * 60.0f;
     Eigen::Matrix4f T = Eigen::Matrix4f::Identity();
     T(0, 3) = params.hexagon_radius * cos(HexapodUtils::degreesToRadians(base_angle_deg));
     T(1, 3) = params.hexagon_radius * sin(HexapodUtils::degreesToRadians(base_angle_deg));
     T.block<3, 3>(0, 0) = HexapodUtils::rotationMatrixZ(base_angle_deg);
 
-    // Lista de ángulos de articulación
+    // List of joint angles
     const float joint_deg[DOF_PER_LEG] = {q.coxa, q.femur, q.tibia};
 
     // Encadenar Aᵢ = A(aᵢ, αᵢ, dᵢ, θ₀ᵢ + θᵢ)
@@ -339,14 +339,14 @@ Eigen::Matrix4f HexapodLocomotionSystem::calculateLegTransform(int leg_index,
     return T;
 }
 
-// Cálculo del Jacobiano
+// Jacobian calculation
 Eigen::Matrix3f HexapodLocomotionSystem::calculateAnalyticJacobian(int leg, const JointAngles &q) {
-    // FK parcial para obtener orígenes y ejes Z de cada articulación
+    // Partial FK to obtain origins and Z axes for each joint
     Eigen::Matrix4f T = Eigen::Matrix4f::Identity();
-    Eigen::Vector3f o[DOF_PER_LEG + 1]; // orígenes 0…3
+    Eigen::Vector3f o[DOF_PER_LEG + 1]; // origins 0..3
     Eigen::Vector3f z[DOF_PER_LEG];     // ejes Z 0…2
 
-    // Transformación base
+    // Base transform
     const float base_angle = leg * 60.0f;
     T(0, 3) = params.hexagon_radius * cos(HexapodUtils::degreesToRadians(base_angle));
     T(1, 3) = params.hexagon_radius * sin(HexapodUtils::degreesToRadians(base_angle));
@@ -389,14 +389,14 @@ Point3D HexapodLocomotionSystem::transformWorldToBody(const Point3D &p_world) co
                 p_world.y - body_position[1],
                 p_world.z - body_position[2]);
 
-    // Rotar con los ángulos negativos (inversa)
+    // Rotate with negative angles (inverse)
     Eigen::Vector3f neg_rpy(-body_orientation[0],
                             -body_orientation[1],
                             -body_orientation[2]);
     return HexapodUtils::rotatePoint(rel, neg_rpy);
 }
 
-/* Fijar ángulos en RAM + servos = “alias” */
+/* Store angles both in RAM and servos */
 bool HexapodLocomotionSystem::setLegJointAngles(int leg, const JointAngles &q) {
     if (!servo_interface)
         return false;
@@ -408,41 +408,41 @@ bool HexapodLocomotionSystem::setLegJointAngles(int leg, const JointAngles &q) {
     return true;
 }
 
-// Planificador de marchas
+// Gait planner
 bool HexapodLocomotionSystem::setGaitType(GaitType gait) {
     current_gait = gait;
     gait_phase = 0.0f;
 
-    // Configurar parámetros específicos del gait
+    // Configure gait-specific parameters
     switch (gait) {
     case TRIPOD_GAIT:
-        // Dos grupos de patas alternando (0,2,4 y 1,3,5)
-        // 50% del ciclo en apoyo, 50% en vuelo
+        // Two alternating leg groups (0,2,4 and 1,3,5)
+        // 50% of the cycle in stance, 50% in swing
         stance_duration = 0.5f;
         swing_duration = 0.5f;
-        cycle_frequency = 2.0f; // Hz - Rápido para velocidad
+        cycle_frequency = 2.0f; // Hz - fast for speed
 
-        // Configurar offsets de fase por pata
+        // Set phase offsets per leg
         for (int i = 0; i < NUM_LEGS; i++) {
-            leg_phase_offsets[i] = (i % 2) * 0.5f; // Grupo A: 0, Grupo B: 0.5
+            leg_phase_offsets[i] = (i % 2) * 0.5f; // Group A: 0, Group B: 0.5
         }
 
-        Serial.println("Gait configurado: TRIPOD - Rápido, estabilidad media");
+        Serial.println("Gait set: TRIPOD - fast, medium stability");
         break;
 
     case WAVE_GAIT:
-        // Una pata a la vez en secuencia (0->1->2->3->4->5)
-        // 83.3% apoyo, 16.7% vuelo para máxima estabilidad
+        // One leg at a time in sequence (0->1->2->3->4->5)
+        // 83.3% stance, 16.7% swing for maximum stability
         stance_duration = 0.833f;
         swing_duration = 0.167f;
-        cycle_frequency = 1.0f; // Hz más lento para estabilidad
+        cycle_frequency = 1.0f; // Hz slower for stability
 
-        // Secuencia uniforme con offset de 1/6 del ciclo
+        // Uniform sequence with 1/6 cycle offset
         for (int i = 0; i < NUM_LEGS; i++) {
             leg_phase_offsets[i] = i / 6.0f;
         }
 
-        Serial.println("Gait configurado: WAVE - Lento, máxima estabilidad");
+        Serial.println("Gait set: WAVE - slow, maximum stability");
         break;
 
     case RIPPLE_GAIT:
@@ -462,12 +462,12 @@ bool HexapodLocomotionSystem::setGaitType(GaitType gait) {
 
     case METACHRONAL_GAIT:
         // Gait ondulatorio para terreno irregular
-        // Propagación de onda metacronal alrededor del hexágono
+        // Metachronal wave propagation around the hexagon
         stance_duration = 0.75f;
         swing_duration = 0.25f;
         cycle_frequency = 1.2f; // Hz adaptativo
 
-        // Propagación de onda metacronal con componente sinusoidal
+        // Metachronal wave propagation with sinusoidal component
         for (int i = 0; i < NUM_LEGS; i++) {
             float base_offset = i / 6.0f;
             float wave_component = sin(i * M_PI / 3.0f) * 0.1f;
@@ -484,8 +484,8 @@ bool HexapodLocomotionSystem::setGaitType(GaitType gait) {
         break;
 
     case ADAPTIVE_GAIT:
-        // Gait que se adapta según sensores FSR y IMU
-        // Parámetros iniciales, se modificarán dinámicamente
+        // Gait adapting using FSR and IMU sensors
+        // Initial parameters modified dynamically
         stance_duration = 0.6f;
         swing_duration = 0.4f;
         cycle_frequency = 1.5f;
@@ -495,10 +495,10 @@ bool HexapodLocomotionSystem::setGaitType(GaitType gait) {
             leg_phase_offsets[i] = (i % 2) * 0.5f;
         }
 
-        // Llamar función de adaptación
+        // Call adaptation function
         adaptGaitToTerrain();
 
-        Serial.println("Gait configurado: ADAPTIVE - Automático según sensores");
+        Serial.println("Gait set: ADAPTIVE - automatic based on sensors");
         break;
 
     default:
@@ -506,7 +506,7 @@ bool HexapodLocomotionSystem::setGaitType(GaitType gait) {
         return false;
     }
 
-    // Actualizar parámetros de paso según el nuevo gait
+    // Update step parameters for the new gait
     updateStepParameters();
 
     // Reinicializar estados de las patas
@@ -517,12 +517,12 @@ bool HexapodLocomotionSystem::setGaitType(GaitType gait) {
     return true;
 }
 
-// Planificación de secuencia de marcha
+// Gait sequence planning
 bool HexapodLocomotionSystem::planGaitSequence(float velocity_x, float velocity_y, float angular_velocity) {
     if (!system_enabled)
         return false;
 
-    // Verificar límites de velocidad
+    // Check limits de velocidad
     float total_velocity = sqrt(velocity_x * velocity_x + velocity_y * velocity_y);
     if (total_velocity > params.max_velocity) {
         // Escalar velocidades
@@ -535,17 +535,17 @@ bool HexapodLocomotionSystem::planGaitSequence(float velocity_x, float velocity_
         angular_velocity = (angular_velocity > 0) ? params.max_angular_velocity : -params.max_angular_velocity;
     }
 
-    // Calcular parámetros de paso
+    // Calcular parameters de paso
     float cycle_time = 1.0f;                          // Tiempo de ciclo base (segundos)
     step_length = total_velocity * cycle_time * 0.5f; // 50% del desplazamiento por ciclo
 
-    // Ajustar altura de paso según velocidad
+    // Adjust step height according to speed
     step_height = 20.0f + (total_velocity / params.max_velocity) * 20.0f; // 20-40mm
 
     return true;
 }
 
-// Actualización de fase de marcha
+// Gait phase update
 void HexapodLocomotionSystem::updateGaitPhase() {
     // float phase_increment = dt * params.control_frequency / 100.0f; //Original
     float phase_increment = dt * params.control_frequency;
@@ -558,11 +558,11 @@ void HexapodLocomotionSystem::updateGaitPhase() {
     updateLegStates();
 }
 
-// Cálculo de trayectoria del pie
+// Foot trajectory calculation
 Point3D HexapodLocomotionSystem::calculateFootTrajectory(int leg_index, float phase) {
     Point3D trajectory;
 
-    // Posición base de la pata
+    // Base leg position
     float base_angle = leg_index * 60.0f;
     float base_x = params.hexagon_radius * cos(HexapodUtils::degreesToRadians(base_angle)) + params.coxa_length;
     float base_y = params.hexagon_radius * sin(HexapodUtils::degreesToRadians(base_angle));
@@ -588,7 +588,7 @@ Point3D HexapodLocomotionSystem::calculateFootTrajectory(int leg_index, float ph
             float swing_progress = (leg_phase - 0.5f) * 2.0f;
             trajectory.x = base_x + step_length * (swing_progress - 0.5f);
             trajectory.y = base_y;
-            // Trayectoria parabólica en altura
+            // Parabolic height trajectory
             trajectory.z = -params.robot_height + step_height * sin(M_PI * swing_progress);
         }
         break;
@@ -640,7 +640,7 @@ Point3D HexapodLocomotionSystem::calculateFootTrajectory(int leg_index, float ph
     }
 
     case METACHRONAL_GAIT: {
-        // Gait ondulatorio con propagación de onda metacronal
+        // Wave gait with metachronal propagation
         float leg_offset = leg_phase_offsets[leg_index];
         float leg_phase = phase + leg_offset;
         if (leg_phase >= 1.0f)
@@ -651,7 +651,7 @@ Point3D HexapodLocomotionSystem::calculateFootTrajectory(int leg_index, float ph
             leg_states[leg_index] = STANCE_PHASE;
             float support_progress = leg_phase / 0.75f;
 
-            // Trayectoria ondulada durante apoyo para adaptación al terreno
+            // Wavy trajectory during stance for terrain adaptation
             float wave_amplitude = step_length * 0.1f; // 10% de amplitud ondulada
             float wave_offset = sin(leg_phase * 2.0f * M_PI + leg_index * M_PI / 3.0f) * wave_amplitude;
 
@@ -667,7 +667,7 @@ Point3D HexapodLocomotionSystem::calculateFootTrajectory(int leg_index, float ph
 
             trajectory.x = base_x + step_length * (swing_progress - 0.5f);
             trajectory.y = base_y;
-            // Trayectoria parabólica modificada para mayor clearance
+            // Modified parabolic trajectory for extra clearance
             trajectory.z = -params.robot_height + adaptive_height * sin(M_PI * swing_progress) *
                                                       (1.0f + 0.2f * sin(2.0f * M_PI * swing_progress));
         }
@@ -675,16 +675,16 @@ Point3D HexapodLocomotionSystem::calculateFootTrajectory(int leg_index, float ph
     }
 
     case ADAPTIVE_GAIT: {
-        // Gait que se adapta dinámicamente según sensores FSR e IMU
+        // Adaptive gait based on FSR and IMU sensors
         float leg_phase = phase + leg_phase_offsets[leg_index];
         if (leg_phase >= 1.0f)
             leg_phase -= 1.0f;
 
-        // Obtener datos de sensores para adaptación
+        // Get sensor data for adaptation
         FSRData fsr_data = fsr_interface->readFSR(leg_index);
         IMUData imu_data = imu_interface->readIMU();
 
-        // Adaptar duración de fases según presión y inclinación
+        // Adapt phase duration based on pressure and tilt
         float adaptive_stance_duration = stance_duration;
         float adaptive_swing_duration = swing_duration;
 
@@ -698,7 +698,7 @@ Point3D HexapodLocomotionSystem::calculateFootTrajectory(int leg_index, float ph
         }
 
         if (fsr_data.pressure > params.fsr_max_pressure * 0.7f) {
-            // Si hay mucha presión, reducir tiempo de vuelo
+            // If pressure is high reduce swing time
             adaptive_stance_duration = min(0.85f, stance_duration + 0.05f);
             adaptive_swing_duration = 1.0f - adaptive_stance_duration;
         }
@@ -707,7 +707,7 @@ Point3D HexapodLocomotionSystem::calculateFootTrajectory(int leg_index, float ph
             leg_states[leg_index] = STANCE_PHASE;
             float support_progress = leg_phase / adaptive_stance_duration;
 
-            // Compensación por inclinación del terreno
+            // Slope compensation
             float tilt_compensation_x = 0.0f;
             float tilt_compensation_y = 0.0f;
 
@@ -723,10 +723,10 @@ Point3D HexapodLocomotionSystem::calculateFootTrajectory(int leg_index, float ph
             leg_states[leg_index] = SWING_PHASE;
             float swing_progress = (leg_phase - adaptive_stance_duration) / adaptive_swing_duration;
 
-            // Altura adaptativa según el terreno detectado
+            // Adaptive height depending on terrain
             float adaptive_step_height = step_height;
 
-            // Si se detecta terreno irregular (por variación en FSRs de otras patas)
+            // If irregular terrain detected (by FSR variation)
             float avg_pressure = 0.0f;
             int contact_legs = 0;
             for (int i = 0; i < NUM_LEGS; i++) {
@@ -752,10 +752,10 @@ Point3D HexapodLocomotionSystem::calculateFootTrajectory(int leg_index, float ph
             trajectory.x = base_x + step_length * (swing_progress - 0.5f);
             trajectory.y = base_y;
 
-            // Trayectoria parabólica con posible doble pico para obstáculos
+            // Parabolic trajectory with optional double peak for obstacles
             float base_height = adaptive_step_height * sin(M_PI * swing_progress);
             if (swing_progress > 0.3f && swing_progress < 0.7f) {
-                // Pico adicional en el medio para sortear obstáculos
+                // Additional mid-peak to clear obstacles
                 base_height += adaptive_step_height * 0.3f * sin(5.0f * M_PI * swing_progress);
             }
 
@@ -765,7 +765,7 @@ Point3D HexapodLocomotionSystem::calculateFootTrajectory(int leg_index, float ph
     }
 
     default:
-        // Pose estática
+        // Static pose
         leg_states[leg_index] = STANCE_PHASE;
         trajectory.x = base_x;
         trajectory.y = base_y;
@@ -776,7 +776,7 @@ Point3D HexapodLocomotionSystem::calculateFootTrajectory(int leg_index, float ph
     return trajectory;
 }
 
-// Control de locomoción hacia adelante
+// Forward locomotion control
 bool HexapodLocomotionSystem::walkForward(float velocity) {
     if (!system_enabled)
         return false;
@@ -784,7 +784,7 @@ bool HexapodLocomotionSystem::walkForward(float velocity) {
     return planGaitSequence(velocity, 0.0f, 0.0f);
 }
 
-// Control de locomoción hacia atrás
+// Backward locomotion control
 bool HexapodLocomotionSystem::walkBackward(float velocity) {
     if (!system_enabled)
         return false;
@@ -792,7 +792,7 @@ bool HexapodLocomotionSystem::walkBackward(float velocity) {
     return planGaitSequence(-velocity, 0.0f, 0.0f);
 }
 
-// Control de giro en el lugar
+// In-place turning control
 bool HexapodLocomotionSystem::turnInPlace(float angular_velocity) {
     if (!system_enabled)
         return false;
@@ -800,7 +800,7 @@ bool HexapodLocomotionSystem::turnInPlace(float angular_velocity) {
     return planGaitSequence(0.0f, 0.0f, angular_velocity);
 }
 
-// Control de locomoción lateral
+// Sideways locomotion control
 bool HexapodLocomotionSystem::walkSideways(float velocity, bool right_direction) {
     if (!system_enabled)
         return false;
@@ -809,21 +809,21 @@ bool HexapodLocomotionSystem::walkSideways(float velocity, bool right_direction)
     return planGaitSequence(0.0f, lateral_velocity, 0.0f);
 }
 
-// Avanza durante “duration” segundos
+// Advance for “duration” seconds
 bool HexapodLocomotionSystem::walkForward(float velocity, float duration) {
     if (!system_enabled)
         return false;
 
-    // Planificar marcha para avanzar en X (velocity m/s)
+    // Plan gait to move forward along X (velocity m/s)
     planGaitSequence(velocity, 0.0f, 0.0f);
 
     unsigned long startTime = millis();
     unsigned long durationMs = (unsigned long)(duration * 1000.0f);
 
-    // Bucle bloqueante: ejecutar update() hasta que se cumpla el tiempo
+    // Blocking loop: run update() until duration elapsed
     while (millis() - startTime < durationMs) {
         update();
-        // En un entorno real de Arduino, podría haber delay(1) o similar
+        // In a real Arduino environment there may be delay(1) calls
         // delay(1);
     }
 
@@ -831,12 +831,12 @@ bool HexapodLocomotionSystem::walkForward(float velocity, float duration) {
     return true;
 }
 
-// Retrocede durante “duration” segundos
+// Move backward for “duration” seconds
 bool HexapodLocomotionSystem::walkBackward(float velocity, float duration) {
     if (!system_enabled)
         return false;
 
-    // Planificar marcha para avanzar en -X (hacia atrás)
+    // Plan gait to move in -X (backwards)
     planGaitSequence(-velocity, 0.0f, 0.0f);
 
     unsigned long startTime = millis();
@@ -844,7 +844,7 @@ bool HexapodLocomotionSystem::walkBackward(float velocity, float duration) {
 
     while (millis() - startTime < durationMs) {
         update();
-        // En un entorno real de Arduino, podría haber delay(1) o similar
+        // In a real Arduino environment there may be delay(1)
         // delay(1);
     }
 
@@ -852,12 +852,12 @@ bool HexapodLocomotionSystem::walkBackward(float velocity, float duration) {
     return true;
 }
 
-// Gira en el lugar durante “duration” segundos
+// Turn in place for “duration” seconds
 bool HexapodLocomotionSystem::turnInPlace(float angular_velocity, float duration) {
     if (!system_enabled)
         return false;
 
-    // Planificar marcha solo con componente angular
+    // Plan gait with only angular component
     planGaitSequence(0.0f, 0.0f, angular_velocity);
 
     unsigned long startTime = millis();
@@ -865,7 +865,7 @@ bool HexapodLocomotionSystem::turnInPlace(float angular_velocity, float duration
 
     while (millis() - startTime < durationMs) {
         update();
-        // En un entorno real de Arduino, podría haber delay(1) o similar
+        // In a real Arduino environment there may be delay(1)
         // delay(1);
     }
 
@@ -873,7 +873,7 @@ bool HexapodLocomotionSystem::turnInPlace(float angular_velocity, float duration
     return true;
 }
 
-// Camina lateralmente (derecha/izquierda) durante “duration” segundos
+// Walk sideways (right/left) for “duration” seconds
 bool HexapodLocomotionSystem::walkSideways(float velocity, float duration, bool right_direction) {
     if (!system_enabled)
         return false;
@@ -886,7 +886,7 @@ bool HexapodLocomotionSystem::walkSideways(float velocity, float duration, bool 
 
     while (millis() - startTime < durationMs) {
         update();
-        // En un entorno real de Arduino, podría haber delay(1) o similar
+        // In a real Arduino environment there may be delay(1)
         // delay(1);
     }
 
@@ -894,19 +894,19 @@ bool HexapodLocomotionSystem::walkSideways(float velocity, float duration, bool 
     return true;
 }
 
-// Detener movimiento, manteniendo la pose actual
+// Stop movement while keeping current pose
 bool HexapodLocomotionSystem::stopMovement() {
     if (!system_enabled)
         return false;
 
-    // Planificar marcha con cero velocidades para que el robot se quede parado
+    // Plan gait with zero velocities to stop the robot
     planGaitSequence(0.0f, 0.0f, 0.0f);
-    // Llamar una vez a update() para reenviar ángulos “sin movimiento”
+    // Call update() once to resend no movement angles
     update();
     return true;
 }
 
-// Control de orientación
+// Orientation control
 bool HexapodLocomotionSystem::maintainOrientation(const Eigen::Vector3f &target_rpy) {
     if (!system_enabled || !imu_interface || !params.body_comp.enable)
         return false;
@@ -926,12 +926,12 @@ bool HexapodLocomotionSystem::maintainOrientation(const Eigen::Vector3f &target_
     Eigen::Vector3f desired = body_orientation + err * params.body_comp.kp;
     body_orientation = body_orientation * (1.0f - params.body_comp.lp_alpha) + desired * params.body_comp.lp_alpha;
 
-    // Si la inclinación supera el umbral, se inhibe la compensación
+    // If tilt exceeds the threshold compensation is disabled
     if (fabsf(current[0]) > params.body_comp.max_tilt_deg ||
         fabsf(current[1]) > params.body_comp.max_tilt_deg)
         return false;
 
-    // Mantén la altura (z) y re-proyecta las puntas al suelo
+    // Maintain height (z) and reproject feet onto the ground
     body_position[2] = params.robot_height;
     reprojectStandingFeet();
 
@@ -943,27 +943,27 @@ void HexapodLocomotionSystem::reprojectStandingFeet() {
         if (leg_states[leg] != STANCE_PHASE)
             continue;
 
-        // Posición actual del pie en mundo → cuerpo
+        // Current foot position world -> body
         Point3D tip_body = transformWorldToBody(leg_positions[leg]);
 
         // IK para la nueva actitud del cuerpo
         JointAngles q_new = calculateInverseKinematics(leg, tip_body);
 
-        // Aplica ángulos a servos + RAM
+        // Apply angles to servos and RAM
         setLegJointAngles(leg, q_new);
 
-        // Actualiza posición mundial para coherencia
+        // Update world position for consistency
         leg_positions[leg] = calculateForwardKinematics(leg, q_new);
     }
 }
 
-// Corrección automática de inclinación
+// Automatic tilt correction
 bool HexapodLocomotionSystem::correctBodyTilt() {
     Eigen::Vector3f target_orientation(0.0f, 0.0f, body_orientation[2]); // Mantener yaw, corregir roll/pitch
     return maintainOrientation(target_orientation);
 }
 
-// Calcular error de orientación
+// Calculate orientation error
 Eigen::Vector3f HexapodLocomotionSystem::calculateOrientationError() {
     if (!imu_interface)
         return Eigen::Vector3f::Zero();
@@ -981,7 +981,7 @@ bool HexapodLocomotionSystem::checkStabilityMargin() {
     if (!system_enabled)
         return false;
 
-    // Calcular polígono de soporte
+    // Compute support polygon
     std::vector<Point3D> support_points;
 
     for (int i = 0; i < NUM_LEGS; i++) {
@@ -999,18 +999,18 @@ bool HexapodLocomotionSystem::checkStabilityMargin() {
         return false;
     }
 
-    // Calcular centro de presión
+    // Compute center of pressure
     Eigen::Vector2f cop = calculateCenterOfPressure();
 
-    // Verificar si el COP está dentro del polígono de soporte
-    // Implementación simplificada: verificar distancia mínima a los bordes
+    // Check if COP is inside the support polygon
+    // Simplified implementation: check minimum distance to edges
     float min_distance = params.stability_margin + 10.0f; // Margen adicional
 
     for (size_t i = 0; i < support_points.size(); i++) {
         Point3D p1 = support_points[i];
         Point3D p2 = support_points[(i + 1) % support_points.size()];
 
-        // Calcular distancia del COP a la línea p1-p2
+        // Compute COP distance to line p1-p2
         float line_dist = abs((p2.y - p1.y) * cop[0] - (p2.x - p1.x) * cop[1] + p2.x * p1.y - p2.y * p1.x) /
                           sqrt((p2.y - p1.y) * (p2.y - p1.y) + (p2.x - p1.x) * (p2.x - p1.x));
 
@@ -1022,7 +1022,7 @@ bool HexapodLocomotionSystem::checkStabilityMargin() {
     return min_distance >= params.stability_margin;
 }
 
-// Calcular centro de presión
+// Compute center of pressure
 Eigen::Vector2f HexapodLocomotionSystem::calculateCenterOfPressure() {
     Eigen::Vector2f cop(0.0f, 0.0f);
     float total_force = 0.0f;
@@ -1045,7 +1045,7 @@ Eigen::Vector2f HexapodLocomotionSystem::calculateCenterOfPressure() {
     return cop;
 }
 
-// Calcular índice de estabilidad
+// Compute stability index
 float HexapodLocomotionSystem::calculateStabilityIndex() {
     if (!checkStabilityMargin())
         return 0.0f;
@@ -1053,8 +1053,8 @@ float HexapodLocomotionSystem::calculateStabilityIndex() {
     Eigen::Vector2f cop = calculateCenterOfPressure();
     float stability_index = 1.0f;
 
-    // Calcular distancia al borde más cercano del polígono de soporte
-    // Implementación simplificada
+    // Distance to closest edge of the support polygon
+    // Simplified implementation
     float min_edge_distance = 1000.0f;
 
     for (int i = 0; i < NUM_LEGS; i++) {
@@ -1067,14 +1067,14 @@ float HexapodLocomotionSystem::calculateStabilityIndex() {
         }
     }
 
-    // Normalizar índice (0-1)
+    // Normalize index (0-1)
     stability_index = min_edge_distance / (params.stability_margin * 3.0f);
     return min(1.0f, max(0.0f, stability_index));
 }
 
-// Verificar estabilidad estática
+// Check static stability
 bool HexapodLocomotionSystem::isStaticallyStable() {
-    return calculateStabilityIndex() > 0.2f; // Umbral mínimo de estabilidad
+    return calculateStabilityIndex() > 0.2f; // Minimum stability threshold
 }
 
 // Control de pose del cuerpo
@@ -1082,16 +1082,16 @@ bool HexapodLocomotionSystem::setBodyPose(const Eigen::Vector3f &position, const
     if (!system_enabled)
         return false;
 
-    // Para cada pata, tomar posición mundial actual y convertirla
+    // For each leg take current world position and convert it
     for (int i = 0; i < NUM_LEGS; ++i) {
 
-        // Obtener posición relativa antigua de la pata (coordenadas del cuerpo viejo)
+        // Get old leg relative position (old body frame)
         Point3D old_leg_body = transformWorldToBody(leg_positions[i]);
 
-        // Rotar esa posición con la NUEVA orientación
+        // Rotate that position with the NEW orientation
         Point3D new_leg_body = HexapodUtils::rotatePoint(old_leg_body, orientation);
 
-        // Convertir de nuevo a coordenadas mundiales con la NUEVA posición del cuerpo
+        // Convert back to world coordinates with the NEW body position
         Point3D new_leg_world;
         new_leg_world.x = position[0] + new_leg_body.x;
         new_leg_world.y = position[1] + new_leg_body.y;
@@ -1157,7 +1157,7 @@ bool HexapodLocomotionSystem::setCrouchPose() {
     return setBodyPose(crouch_position, neutral_orientation);
 }
 
-// Actualización principal del sistema
+// Main system update
 bool HexapodLocomotionSystem::update() {
     if (!system_enabled)
         return false;
@@ -1177,15 +1177,15 @@ bool HexapodLocomotionSystem::update() {
     for (int i = 0; i < NUM_LEGS; i++) {
         Point3D target_position = calculateFootTrajectory(i, gait_phase);
 
-        // Calcular cinemática inversa
+        // Compute inverse kinematics
         JointAngles target_angles = calculateInverseKinematics(i, target_position);
 
-        // Verificar límites
+        // Check limits
         if (checkJointLimits(i, target_angles)) {
             joint_angles[i] = target_angles;
             leg_positions[i] = target_position;
 
-            // Enviar comandos a servos
+            // Send commands to servos
             for (int j = 0; j < DOF_PER_LEG; j++) {
                 float angle_value;
                 switch (j) {
@@ -1204,7 +1204,7 @@ bool HexapodLocomotionSystem::update() {
         }
     }
 
-    // Control de orientación automático
+    // Automatic orientation control
     if (imu_interface && imu_interface->isConnected()) {
         correctBodyTilt();
     }
@@ -1218,7 +1218,7 @@ bool HexapodLocomotionSystem::update() {
     return true;
 }
 
-// Manejo de errores
+// Error handling
 String HexapodLocomotionSystem::getErrorMessage(ErrorCode error) {
     switch (error) {
     case NO_ERROR:
@@ -1230,11 +1230,11 @@ String HexapodLocomotionSystem::getErrorMessage(ErrorCode error) {
     case SERVO_ERROR:
         return "Error en servos";
     case KINEMATICS_ERROR:
-        return "Error de cinemática";
+        return "Kinematics error";
     case STABILITY_ERROR:
         return "Error de estabilidad";
     case PARAMETER_ERROR:
-        return "Error en parámetros";
+        return "Error en parameters";
     default:
         return "Error desconocido";
     }
@@ -1245,14 +1245,14 @@ bool HexapodLocomotionSystem::handleError(ErrorCode error) {
 
     switch (error) {
     case IMU_ERROR:
-        // Intentar reinicializar IMU
+        // Try to reinitialize IMU
         if (imu_interface) {
             return imu_interface->initialize();
         }
         break;
 
     case FSR_ERROR:
-        // Intentar recalibrar FSRs
+        // Try to recalibrate FSRs
         if (fsr_interface) {
             for (int i = 0; i < NUM_LEGS; i++) {
                 fsr_interface->calibrateFSR(i);
@@ -1262,18 +1262,18 @@ bool HexapodLocomotionSystem::handleError(ErrorCode error) {
         break;
 
     case SERVO_ERROR:
-        // Intentar reinicializar servos
+        // Try to reinitialize servos
         if (servo_interface) {
             return servo_interface->initialize();
         }
         break;
 
     case STABILITY_ERROR:
-        // Adoptar pose más estable
+        // Adopt a more stable pose
         return setCrouchPose();
 
     case KINEMATICS_ERROR:
-        // Retornar a pose segura
+        // Return to a safe pose
         return setStandingPose();
 
     default:
@@ -1283,59 +1283,59 @@ bool HexapodLocomotionSystem::handleError(ErrorCode error) {
     return false;
 }
 
-// Auto-diagnóstico del sistema
+// System self test
 bool HexapodLocomotionSystem::performSelfTest() {
-    Serial.println("=== Iniciando auto-diagnóstico ===");
+    Serial.println("=== Starting self test ===");
 
-    // Test IMU
+    // IMU test
     if (!imu_interface || !imu_interface->isConnected()) {
-        Serial.println("❌ Error: IMU no conectado");
+        Serial.println("X Error: IMU no conectado");
         return false;
     }
 
     IMUData imu_test = imu_interface->readIMU();
     if (!imu_test.is_valid) {
-        Serial.println("❌ Error: Datos IMU inválidos");
+        Serial.println("X Error: invalid IMU data");
         return false;
     }
-    Serial.println("✅ IMU funcionando correctamente");
+    Serial.println("OK IMU funcionando correctamente");
 
-    // Test FSRs
+    // FSR test
     for (int i = 0; i < NUM_LEGS; i++) {
         FSRData fsr_test = fsr_interface->readFSR(i);
         if (fsr_test.pressure < 0) {
-            Serial.print("❌ Error: FSR pata ");
+            Serial.print("X Error: FSR pata ");
             Serial.print(i);
             Serial.println(" mal funcionamiento");
             return false;
         }
     }
-    Serial.println("✅ Todos los FSRs funcionando");
+    Serial.println("OK Todos los FSRs funcionando");
 
-    // Test servos
+    // Servo test
     for (int i = 0; i < NUM_LEGS; i++) {
         for (int j = 0; j < DOF_PER_LEG; j++) {
             float current_angle = servo_interface->getJointAngle(i, j);
             if (current_angle < -180 || current_angle > 180) {
-                Serial.print("❌ Error: Servo pata ");
+                Serial.print("X Error: Servo pata ");
                 Serial.print(i);
-                Serial.print(" articulación ");
+                Serial.print(" joint ");
                 Serial.println(j);
                 return false;
             }
         }
     }
-    Serial.println("✅ Todos los servos funcionando");
+    Serial.println("OK Todos los servos funcionando");
 
-    // Test cinemática
+    // Kinematics test
     for (int i = 0; i < NUM_LEGS; i++) {
         Point3D test_point(100, 0, -100);
         JointAngles angles = calculateInverseKinematics(i, test_point);
         Point3D calculated_point = calculateForwardKinematics(i, angles);
 
         float error = HexapodUtils::distance3D(test_point, calculated_point);
-        if (error > 5.0f) { // Error mayor a 5mm
-            Serial.print("❌ Error: Cinemática pata ");
+        if (error > 5.0f) { // Error greater than 5mm
+            Serial.print("X Error: leg kinematics ");
             Serial.print(i);
             Serial.print(" error=");
             Serial.print(error);
@@ -1343,13 +1343,13 @@ bool HexapodLocomotionSystem::performSelfTest() {
             return false;
         }
     }
-    Serial.println("✅ Cinemática funcionando correctamente");
+    Serial.println("OK Kinematics working correctly");
 
-    Serial.println("=== Auto-diagnóstico completado exitosamente ===");
+    Serial.println("=== Auto-diagnostic completado exitosamente ===");
     return true;
 }
 
-// Funciones auxiliares
+// Helper functions
 void HexapodLocomotionSystem::initializeDefaultPose() {
     for (int i = 0; i < NUM_LEGS; i++) {
         float angle = i * 60.0f;
@@ -1357,51 +1357,51 @@ void HexapodLocomotionSystem::initializeDefaultPose() {
         leg_positions[i].y = params.hexagon_radius * sin(HexapodUtils::degreesToRadians(angle));
         leg_positions[i].z = -params.robot_height;
 
-        joint_angles[i] = JointAngles(0, 45, -90); // Ángulos por defecto
+        joint_angles[i] = JointAngles(0, 45, -90); // Default angles
         leg_states[i] = STANCE_PHASE;
     }
 }
 
 void HexapodLocomotionSystem::updateLegStates() {
-    // Esta función se llama desde calculateFootTrajectory
-    // Los estados se actualizan allí según el gait actual
+    // This function is called from calculateFootTrajectory
+    // Leg states are updated there according to the current gait
 }
 
 void HexapodLocomotionSystem::updateStepParameters() {
-    // Ajustar parámetros de paso según el tipo de gait
+    // Adjust step parameters depending on gait type
     switch (current_gait) {
     case TRIPOD_GAIT:
-        // Pasos más largos para velocidad
+        // Longer steps for speed
         step_length = 60.0f; // mm
         step_height = 35.0f; // mm
         break;
 
     case WAVE_GAIT:
-        // Pasos más cortos para estabilidad
+        // Shorter steps for stability
         step_length = 40.0f; // mm
         step_height = 25.0f; // mm
         break;
 
     case RIPPLE_GAIT:
-        // Pasos medianos para balance
+        // Medium steps for balance
         step_length = 50.0f; // mm
         step_height = 30.0f; // mm
         break;
 
     case METACHRONAL_GAIT:
-        // Pasos adaptativos
+        // Adaptive steps
         step_length = 45.0f; // mm
         step_height = 30.0f; // mm
         break;
 
     case ADAPTIVE_GAIT:
-        // Se ajustarán dinámicamente
+        // They will be adjusted dynamically
         step_length = 50.0f; // mm inicial
         step_height = 30.0f; // mm inicial
         break;
     }
 
-    // Verificar que los parámetros estén dentro de límites
+    // Verify that parameters are within limits
     step_length = constrainAngle(step_length, 20.0f, 80.0f);
     step_height = constrainAngle(step_height, 15.0f, 50.0f);
 }
@@ -1423,7 +1423,7 @@ bool HexapodLocomotionSystem::validateParameters() {
 }
 
 void HexapodLocomotionSystem::adaptGaitToTerrain() {
-    // Analizar datos de FSRs para adaptar el gait
+    // Analyze FSR data to adapt gait
     float avg_pressure = 0;
     int contact_count = 0;
 
@@ -1438,7 +1438,7 @@ void HexapodLocomotionSystem::adaptGaitToTerrain() {
     if (contact_count > 0) {
         avg_pressure /= contact_count;
 
-        // Si la presión promedio es alta, usar gait más estable
+        // If average pressure is high use a more stable gait
         if (avg_pressure > params.fsr_max_pressure * 0.8f) {
             current_gait = WAVE_GAIT;
         } else {
@@ -1447,13 +1447,13 @@ void HexapodLocomotionSystem::adaptGaitToTerrain() {
     }
 }
 
-// Implementaciones adicionales que faltan
+// Additional implementations pending
 
 bool HexapodLocomotionSystem::setLegPosition(int leg_index, const Point3D &position) {
     if (!system_enabled || leg_index < 0 || leg_index >= NUM_LEGS)
         return false;
 
-    // Calcular cinemática inversa para la nueva posición
+    // Calculate inverse kinematics for the new position
     JointAngles angles = calculateInverseKinematics(leg_index, position);
 
     if (!checkJointLimits(leg_index, angles)) {
@@ -1461,11 +1461,11 @@ bool HexapodLocomotionSystem::setLegPosition(int leg_index, const Point3D &posit
         return false;
     }
 
-    // Actualizar posición y ángulos
+    // Update position and angles
     leg_positions[leg_index] = position;
     joint_angles[leg_index] = angles;
 
-    // Enviar comandos a servos
+    // Send commands to servos
     for (int j = 0; j < DOF_PER_LEG; j++) {
         float angle_value;
         switch (j) {
@@ -1497,7 +1497,7 @@ bool HexapodLocomotionSystem::setStepParameters(float height, float length) {
 }
 
 bool HexapodLocomotionSystem::setParameters(const HexapodParameters &new_params) {
-    // Validar nuevos parámetros
+    // Validar nuevos parameters
     if (new_params.hexagon_radius <= 0 || new_params.coxa_length <= 0 ||
         new_params.femur_length <= 0 || new_params.tibia_length <= 0) {
         last_error = PARAMETER_ERROR;
@@ -1519,9 +1519,9 @@ bool HexapodLocomotionSystem::setControlFrequency(float frequency) {
 }
 
 void HexapodLocomotionSystem::printSystemStatus() {
-    Serial.println("=== Estado del Sistema Hexápodo ===");
+    Serial.println("=== Hexapod System Status ===");
     Serial.print("Sistema habilitado: ");
-    Serial.println(system_enabled ? "Sí" : "No");
+    Serial.println(system_enabled ? "Yes" : "No");
     Serial.print("Gait actual: ");
     Serial.println(current_gait);
     Serial.print("Fase de gait: ");
@@ -1542,7 +1542,7 @@ void HexapodLocomotionSystem::printLegStatus(int leg_index) {
     Serial.println(" ===");
     Serial.print("Estado: ");
     Serial.println(leg_states[leg_index]);
-    Serial.print("Posición: (");
+    Serial.print("Position: (");
     Serial.print(leg_positions[leg_index].x, 1);
     Serial.print(", ");
     Serial.print(leg_positions[leg_index].y, 1);
@@ -1558,10 +1558,10 @@ void HexapodLocomotionSystem::printLegStatus(int leg_index) {
     Serial.println(")");
 
     FSRData fsr_data = fsr_interface->readFSR(leg_index);
-    Serial.print("FSR - Presión: ");
+    Serial.print("FSR - Pressure: ");
     Serial.print(fsr_data.pressure, 2);
     Serial.print(" kg, Contacto: ");
-    Serial.println(fsr_data.in_contact ? "Sí" : "No");
+    Serial.println(fsr_data.in_contact ? "Yes" : "No");
     Serial.println("===================");
 }
 
@@ -1570,19 +1570,19 @@ float HexapodLocomotionSystem::calculateLegReach(int leg_index) {
 }
 
 void HexapodLocomotionSystem::adjustStepParameters() {
-    // Ajustar parámetros según condiciones del terreno
+    // Adjust parameters according to terrain conditions
     IMUData imu_data = imu_interface->readIMU();
     if (!imu_data.is_valid)
         return;
 
-    // Si hay mucha inclinación, reducir pasos
+    // If slope is large reduce step size
     float total_tilt = sqrt(imu_data.roll * imu_data.roll + imu_data.pitch * imu_data.pitch);
     if (total_tilt > 15.0f) {
         step_height *= 0.8f;
         step_length *= 0.7f;
     }
 
-    // Limitar parámetros
+    // Limitar parameters
     step_height = constrainAngle(step_height, 15.0f, 50.0f);
     step_length = constrainAngle(step_length, 20.0f, 80.0f);
 }
@@ -1595,15 +1595,15 @@ void HexapodLocomotionSystem::compensateForSlope() {
     if (!imu_data.is_valid)
         return;
 
-    // Compensar inclinación ajustando posición del cuerpo
-    float roll_compensation = -imu_data.roll * 0.5f; // Factor de compensación
+    // Compensate tilt by adjusting body position
+    float roll_compensation = -imu_data.roll * 0.5f; // Compensation factor
     float pitch_compensation = -imu_data.pitch * 0.5f;
 
-    // Ajustar orientación del cuerpo
+    // Adjust body orientation
     body_orientation[0] += roll_compensation * dt;
     body_orientation[1] += pitch_compensation * dt;
 
-    // Limitar compensación
+    // Clamp compensation
     body_orientation[0] = constrainAngle(body_orientation[0], -15.0f, 15.0f);
     body_orientation[1] = constrainAngle(body_orientation[1], -15.0f, 15.0f);
 }
