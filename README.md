@@ -45,11 +45,16 @@ Simple mock implementations of these interfaces are provided under the
 `examples/` directory.
 
 ## Running tests
-Basic tests for the utility functions can be built using `make` inside the
-`tests/` folder:
+The test suite depends on the Eigen library. A helper script in the
+`tests/` directory installs this dependency automatically on both Linux and
+macOS. Ensure you have **Homebrew** installed when running on macOS.
+After executing the script, build the tests using `make`:
 
 ```bash
 cd tests
-make && ./utils_test
+./setup.sh
+make
 ```
+
+Each test binary can be executed individually once the build completes.
 
