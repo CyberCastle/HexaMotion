@@ -48,6 +48,8 @@ Simple mock implementations of these interfaces are provided under the
 The test suite depends on the Eigen library. A helper script in the
 `tests/` directory installs this dependency automatically on both Linux and
 macOS. Ensure you have **Homebrew** installed when running on macOS.
+The accompanying `Makefile` will detect the Eigen installation path on
+macOS using `brew --prefix eigen`, so no manual configuration is required.
 After executing the script, build the tests using `make`:
 
 ```bash
