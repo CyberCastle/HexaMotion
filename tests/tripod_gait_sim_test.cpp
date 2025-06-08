@@ -36,21 +36,6 @@ int main() {
     p.femur_angle_limits[0] = -75; p.femur_angle_limits[1] = 75;
     p.tibia_angle_limits[0] = -45; p.tibia_angle_limits[1] = 45;
 
-    for (int l = 0; l < NUM_LEGS; ++l) {
-        p.dh_parameters[l][0][0] = 0.0f;           // a
-        p.dh_parameters[l][0][1] = 0.0f;           // alpha
-        p.dh_parameters[l][0][2] = 0.0f;           // d
-        p.dh_parameters[l][0][3] = 0.0f;           // theta0
-        p.dh_parameters[l][1][0] = p.coxa_length;
-        p.dh_parameters[l][1][1] = 0.0f;
-        p.dh_parameters[l][1][2] = 0.0f;
-        p.dh_parameters[l][1][3] = 0.0f;
-        p.dh_parameters[l][2][0] = p.femur_length;
-        p.dh_parameters[l][2][1] = 0.0f;
-        p.dh_parameters[l][2][2] = 0.0f;
-        p.dh_parameters[l][2][3] = 0.0f;
-    }
-
     LocomotionSystem sys(p);
     DummyIMU imu;
     DummyFSR fsr;

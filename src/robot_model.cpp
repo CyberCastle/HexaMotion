@@ -1,7 +1,44 @@
 #include "model.h"
 #include <math.h>
 
-RobotModel::RobotModel(const Parameters &p) : params(p) {}
+RobotModel::RobotModel(const Parameters &p) : params(p) {
+    initializeDH();
+}
+
+void RobotModel::initializeDH() {
+    bool custom = false;
+    for (int l = 0; l < NUM_LEGS; ++l) {
+        for (int j = 0; j < DOF_PER_LEG; ++j) {
+            for (int k = 0; k < 4; ++k) {
+                dh[l][j][k] = params.dh_parameters[l][j][k];
+                if (params.dh_parameters[l][j][k] != 0.0f)
+                    custom = true;
+            }
+        }
+    }
+
+    if (!custom) {
+        for (int l = 0; l < NUM_LEGS; ++l) {
+            // Joint 1 (coxa): vertical axis
+            dh[l][0][0] = 0.0f;      // a0
+            dh[l][0][1] = -90.0f;    // alpha0 rotate to femur axis
+            dh[l][0][2] = 0.0f;      // d1
+            dh[l][0][3] = 0.0f;      // theta1 offset
+
+            // Joint 2 (femur): pitch axis
+            dh[l][1][0] = params.coxa_length; // translation along rotated x
+            dh[l][1][1] = 0.0f;      // alpha1
+            dh[l][1][2] = 0.0f;      // d2
+            dh[l][1][3] = 0.0f;      // theta2 offset
+
+            // Joint 3 (tibia): pitch axis
+            dh[l][2][0] = params.femur_length; // translation along femur
+            dh[l][2][1] = 0.0f;      // alpha2
+            dh[l][2][2] = 0.0f;      // d3
+            dh[l][2][3] = 0.0f;      // theta3 offset
+        }
+    }
+}
 
 JointAngles RobotModel::inverseKinematics(int leg, const Point3D &p_target) {
     JointAngles q{};
@@ -55,13 +92,14 @@ Eigen::Matrix4f RobotModel::legTransform(int leg_index, const JointAngles &q) {
     const float joint_deg[DOF_PER_LEG] = {q.coxa, q.femur, q.tibia};
 
     for (int j = 0; j < DOF_PER_LEG; ++j) {
-        float a = params.dh_parameters[leg_index][j][0];
-        float alpha = params.dh_parameters[leg_index][j][1];
-        float d = params.dh_parameters[leg_index][j][2];
-        float theta0 = params.dh_parameters[leg_index][j][3];
+        float a = dh[leg_index][j][0];
+        float alpha = dh[leg_index][j][1];
+        float d = dh[leg_index][j][2];
+        float theta0 = dh[leg_index][j][3];
         float theta = theta0 + joint_deg[j];
         T *= math_utils::dhTransform(a, alpha, d, theta);
     }
+    T *= math_utils::dhTransform(params.tibia_length, 0.0f, 0.0f, 0.0f);
     return T;
 }
 
@@ -79,17 +117,18 @@ Eigen::Matrix3f RobotModel::analyticJacobian(int leg, const JointAngles &q) {
 
     const float q_deg[DOF_PER_LEG] = {q.coxa, q.femur, q.tibia};
     for (int j = 0; j < DOF_PER_LEG; ++j) {
-        float a = params.dh_parameters[leg][j][0];
-        float alpha = params.dh_parameters[leg][j][1];
-        float d = params.dh_parameters[leg][j][2];
-        float theta0 = params.dh_parameters[leg][j][3];
+        float a = dh[leg][j][0];
+        float alpha = dh[leg][j][1];
+        float d = dh[leg][j][2];
+        float theta0 = dh[leg][j][3];
         float theta = theta0 + q_deg[j];
         T *= math_utils::dhTransform(a, alpha, d, theta);
         z[j] = T.block<3, 1>(0, 2);
         o[j + 1] = T.block<3, 1>(0, 3);
     }
 
-    Eigen::Vector3f p_end = o[DOF_PER_LEG];
+    T *= math_utils::dhTransform(params.tibia_length, 0.0f, 0.0f, 0.0f);
+    Eigen::Vector3f p_end = T.block<3, 1>(0, 3);
     Eigen::Matrix3f J;
     for (int j = 0; j < DOF_PER_LEG; ++j)
         J.col(j) = z[j].cross(p_end - o[j]);
