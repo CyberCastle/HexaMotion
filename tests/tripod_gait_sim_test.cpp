@@ -138,7 +138,7 @@ int main() {
             Point3D pos = sys.calculateFootTrajectory(leg, phase);
             sys.setLegPosition(leg, pos);
         }
-        printAngles(s, sys);
+        printAngles(s, sys, phase);
         for (int i = 0; i < NUM_LEGS; ++i) {
             JointAngles q = sys.getJointAngles(i);
             if (!changed && (q.coxa != prev[i].coxa || q.femur != prev[i].femur || q.tibia != prev[i].tibia)) {
