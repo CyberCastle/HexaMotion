@@ -7,7 +7,7 @@ EIGEN_PATH := /usr/include/eigen3
 endif
 CXXFLAGS=-I../include -I. -I$(EIGEN_PATH) -std=c++17
 
-all: math_utils_test model_test pose_controller_test walk_controller_test admittance_controller_test locomotion_system_test tripod_gait_sim_test ik_debug_test
+all: math_utils_test model_test pose_controller_test walk_controller_test admittance_controller_test locomotion_system_test tripod_gait_sim_test ik_debug_test height_range_test
 
 math_utils_test: math_utils_test.cpp ../src/math_utils.cpp
 	$(CXX) $(CXXFLAGS) $^ -o $@
@@ -33,5 +33,8 @@ tripod_gait_sim_test: tripod_gait_sim_test.cpp ../src/locomotion_system.cpp ../s
 ik_debug_test: ik_debug_test.cpp ../src/locomotion_system.cpp ../src/robot_model.cpp ../src/pose_controller.cpp ../src/walk_controller.cpp ../src/admittance_controller.cpp ../src/math_utils.cpp
 	$(CXX) $(CXXFLAGS) $^ -o $@
 
+height_range_test: height_range_test.cpp ../src/robot_model.cpp ../src/math_utils.cpp
+	$(CXX) $(CXXFLAGS) $^ -o $@
+
 clean:
-	rm -f math_utils_test model_test pose_controller_test walk_controller_test admittance_controller_test locomotion_system_test tripod_gait_sim_test ik_debug_test
+	        rm -f math_utils_test model_test pose_controller_test walk_controller_test admittance_controller_test locomotion_system_test tripod_gait_sim_test ik_debug_test height_range_test

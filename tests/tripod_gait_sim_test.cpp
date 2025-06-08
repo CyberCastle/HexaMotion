@@ -216,6 +216,7 @@ int main() {
     p1.femur_length = 101;
     p1.tibia_length = 208;
     p1.robot_height = 80; // Lower height
+    p1.height_offset = 0;
     p1.control_frequency = 50;
     p1.coxa_angle_limits[0] = -65;
     p1.coxa_angle_limits[1] = 65;
@@ -261,6 +262,7 @@ int main() {
     p2.femur_length = 101;
     p2.tibia_length = 208;
     p2.robot_height = 200; // Higher height
+    p2.height_offset = 0;
     p2.control_frequency = 50;
     p2.coxa_angle_limits[0] = -65;
     p2.coxa_angle_limits[1] = 65;
@@ -308,6 +310,7 @@ int main() {
     p.femur_length = 101;
     p.tibia_length = 208;
     p.robot_height = 150;
+    p.height_offset = 0;
     p.control_frequency = 50;
     p.coxa_angle_limits[0] = -90;
     p.coxa_angle_limits[1] = 90;

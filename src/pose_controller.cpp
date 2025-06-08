@@ -26,13 +26,22 @@ bool PoseController::setBodyPose(const Eigen::Vector3f &position, const Eigen::V
 bool PoseController::setLegPosition(int leg_index, const Point3D &position,
                                     Point3D leg_pos[NUM_LEGS], JointAngles joint_q[NUM_LEGS]) {
     JointAngles angles = model.inverseKinematics(leg_index, position);
-    if (!model.checkJointLimits(leg_index, angles))
-        return false;
-    leg_pos[leg_index] = position;
+
+    angles.coxa = model.constrainAngle(angles.coxa, model.getParams().coxa_angle_limits[0],
+                                       model.getParams().coxa_angle_limits[1]);
+    angles.femur = model.constrainAngle(angles.femur, model.getParams().femur_angle_limits[0],
+                                        model.getParams().femur_angle_limits[1]);
+    angles.tibia = model.constrainAngle(angles.tibia, model.getParams().tibia_angle_limits[0],
+                                        model.getParams().tibia_angle_limits[1]);
+
+    leg_pos[leg_index] = model.forwardKinematics(leg_index, angles);
     joint_q[leg_index] = angles;
+
     if (servos)
         for (int j = 0; j < DOF_PER_LEG; ++j)
-            servos->setJointAngle(leg_index, j, j == 0 ? angles.coxa : (j == 1 ? angles.femur : angles.tibia));
+            servos->setJointAngle(leg_index, j,
+                                 j == 0 ? angles.coxa : (j == 1 ? angles.femur : angles.tibia));
+
     return true;
 }
 
