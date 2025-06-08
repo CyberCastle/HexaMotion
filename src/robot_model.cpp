@@ -1,6 +1,6 @@
 #include "model.h"
-#include <math.h>
 #include <limits>
+#include <math.h>
 
 RobotModel::RobotModel(const Parameters &p) : params(p) {
     initializeDH();
@@ -21,22 +21,22 @@ void RobotModel::initializeDH() {
     if (!custom) {
         for (int l = 0; l < NUM_LEGS; ++l) {
             // Joint 1 (coxa): vertical axis
-            dh[l][0][0] = 0.0f;      // a0
-            dh[l][0][1] = -90.0f;    // alpha0 rotate to femur axis
-            dh[l][0][2] = 0.0f;      // d1
-            dh[l][0][3] = 0.0f;      // theta1 offset
+            dh[l][0][0] = 0.0f;   // a0
+            dh[l][0][1] = -90.0f; // alpha0 rotate to femur axis
+            dh[l][0][2] = 0.0f;   // d1
+            dh[l][0][3] = 0.0f;   // theta1 offset
 
             // Joint 2 (femur): pitch axis
             dh[l][1][0] = params.coxa_length; // translation along rotated x
-            dh[l][1][1] = 0.0f;      // alpha1
-            dh[l][1][2] = 0.0f;      // d2
-            dh[l][1][3] = 0.0f;      // theta2 offset
+            dh[l][1][1] = 0.0f;               // alpha1
+            dh[l][1][2] = 0.0f;               // d2
+            dh[l][1][3] = 0.0f;               // theta2 offset
 
             // Joint 3 (tibia): pitch axis
             dh[l][2][0] = params.femur_length; // translation along femur
-            dh[l][2][1] = 0.0f;      // alpha2
-            dh[l][2][2] = 0.0f;      // d3
-            dh[l][2][3] = 0.0f;      // theta3 offset
+            dh[l][2][1] = 0.0f;                // alpha2
+            dh[l][2][2] = 0.0f;                // d3
+            dh[l][2][3] = 0.0f;                // theta3 offset
         }
     }
 }
@@ -155,21 +155,47 @@ std::pair<float, float> RobotModel::calculateHeightRange() const {
     float min_h = std::numeric_limits<float>::max();
     float max_h = -std::numeric_limits<float>::max();
 
-    const float femur_limits[2] = {params.femur_angle_limits[0], params.femur_angle_limits[1]};
-    const float tibia_limits[2] = {params.tibia_angle_limits[0], params.tibia_angle_limits[1]};
+    // Workspace analysis: discretize the joint configuration space
+    // Based on "Introduction to Robotics" - Craig and "Robotics: Modelling, Planning and Control" - Siciliano
+    const int resolution = 10; // discretization resolution
 
-    for (float f : femur_limits) {
-        for (float t : tibia_limits) {
-            JointAngles q(0.0f, f, t);
-            Point3D pos = forwardKinematics(0, q);
-            float height = -pos.z + params.height_offset;
-            if (height < min_h)
-                min_h = height;
-            if (height > max_h)
-                max_h = height;
+    const float coxa_step = (params.coxa_angle_limits[1] - params.coxa_angle_limits[0]) / resolution;
+    const float femur_step = (params.femur_angle_limits[1] - params.femur_angle_limits[0]) / resolution;
+    const float tibia_step = (params.tibia_angle_limits[1] - params.tibia_angle_limits[0]) / resolution;
+
+    // Evaluate the entire workspace of valid joint configurations
+    for (int i = 0; i <= resolution; i++) {
+        for (int j = 0; j <= resolution; j++) {
+            for (int k = 0; k <= resolution; k++) {
+                float coxa = params.coxa_angle_limits[0] + i * coxa_step;
+                float femur = params.femur_angle_limits[0] + j * femur_step;
+                float tibia = params.tibia_angle_limits[0] + k * tibia_step;
+                JointAngles q(coxa, femur, tibia);
+
+                // Check that angles are within limits
+                if (!checkJointLimits(0, q))
+                    continue;
+
+                Point3D pos = forwardKinematics(0, q);
+
+                // Calculate body height considering the robot's physical offset
+                // pos.z is negative when the leg is below the body
+                float height = -pos.z + params.height_offset;
+
+                // Only consider physically valid heights (positive)
+                if (height > 0) {
+                    min_h = std::min(min_h, height);
+                    max_h = std::max(max_h, height);
+                }
+            }
         }
+    }
+
+    // If no valid configurations were found, indicates parameter error
+    if (min_h == std::numeric_limits<float>::max()) {
+        // Return values indicating error - inconsistent robot parameters
+        return {-1.0f, -1.0f};
     }
 
     return {min_h, max_h};
 }
-
