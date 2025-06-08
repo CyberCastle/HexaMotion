@@ -180,7 +180,8 @@ class LocomotionSystem {
     LegState getLegState(int leg_index) const { return leg_states[leg_index]; }
     JointAngles getJointAngles(int leg_index) const { return joint_angles[leg_index]; }
     Point3D getLegPosition(int leg_index) const { return leg_positions[leg_index]; }
-    float getStepLength() const;
+    float getStepHeight() const { return step_height; }
+    float getStepLength() const { return step_length; }
 
     // Setters
     bool setParameters(const Parameters &new_params);

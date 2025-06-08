@@ -473,6 +473,15 @@ bool LocomotionSystem::update() {
     if (dt > 0.1f)
         dt = 0.1f;
 
+    // Update sensor-based leg states
+    updateLegStates();
+
+    // Adapt gait and step parameters depending on terrain
+    adaptGaitToTerrain();
+    updateStepParameters();
+    adjustStepParameters();
+    compensateForSlope();
+
     // Actualizar fase de marcha
     updateGaitPhase();
 
@@ -667,6 +676,16 @@ void LocomotionSystem::initializeDefaultPose() {
 
         joint_angles[i] = JointAngles(0, 45, -90); // Default angles
         leg_states[i] = STANCE_PHASE;
+    }
+}
+
+void LocomotionSystem::updateLegStates() {
+    if (!fsr_interface)
+        return;
+
+    for (int i = 0; i < NUM_LEGS; ++i) {
+        FSRData fsr = fsr_interface->readFSR(i);
+        leg_states[i] = fsr.in_contact ? STANCE_PHASE : SWING_PHASE;
     }
 }
 
