@@ -5,11 +5,11 @@
 
 int main() {
     Parameters p{};
-    p.hexagon_radius = 100;
-    p.coxa_length = 30;
-    p.femur_length = 50;
-    p.tibia_length = 70;
-    p.robot_height = 100;
+    p.hexagon_radius = 400;
+    p.coxa_length = 50;
+    p.femur_length = 101;
+    p.tibia_length = 208;
+    p.robot_height = 7;
     p.control_frequency = 50;
 
     RobotModel model(p);

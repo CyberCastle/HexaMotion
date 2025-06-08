@@ -5,15 +5,15 @@
 
 int main() {
     Parameters p{};
-    p.hexagon_radius = 100;
-    p.coxa_length = 30;
-    p.femur_length = 50;
-    p.tibia_length = 70;
-    p.robot_height = 100;
+    p.hexagon_radius = 400;
+    p.coxa_length = 50;
+    p.femur_length = 101;
+    p.tibia_length = 208;
+    p.robot_height = 7;
     p.control_frequency = 50;
-    p.coxa_angle_limits[0] = -90; p.coxa_angle_limits[1] = 90;
-    p.femur_angle_limits[0] = -90; p.femur_angle_limits[1] = 90;
-    p.tibia_angle_limits[0] = -90; p.tibia_angle_limits[1] = 90;
+    p.coxa_angle_limits[0] = -65; p.coxa_angle_limits[1] = 65;
+    p.femur_angle_limits[0] = -75; p.femur_angle_limits[1] = 75;
+    p.tibia_angle_limits[0] = -45; p.tibia_angle_limits[1] = 45;
     DummyIMU imu;
     DummyFSR fsr;
     DummyServo servos;
@@ -30,11 +30,11 @@ int main() {
 
     // Second system with invalid limits should report kinematics error
     Parameters bad{};
-    bad.hexagon_radius = 100;
-    bad.coxa_length = 30;
-    bad.femur_length = 50;
-    bad.tibia_length = 70;
-    bad.robot_height = 100;
+    bad.hexagon_radius = 400;
+    bad.coxa_length = 50;
+    bad.femur_length = 101;
+    bad.tibia_length = 208;
+    bad.robot_height = 7;
     bad.control_frequency = 50;
     // All valid poses yield angles near 0 so exclude zero from allowed range
     bad.coxa_angle_limits[0] = 10; bad.coxa_angle_limits[1] = 20;
