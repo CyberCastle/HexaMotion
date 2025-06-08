@@ -1,0 +1,94 @@
+#include <cassert>
+#include <chrono>
+#include <iomanip>
+#include <iostream>
+#include <thread>
+#include "test_stubs.h"
+#include "../include/locomotion_system.h"
+
+static void printHeader() {
+    std::cout << "Idx |";
+    for (int leg = 0; leg < NUM_LEGS; ++leg) {
+        std::cout << " L" << leg + 1 << "C  L" << leg + 1 << "F  L" << leg + 1 << "T |";
+    }
+    std::cout << std::endl;
+}
+
+static void printAngles(int step, LocomotionSystem &sys) {
+    std::cout << std::setw(3) << step << " |";
+    for (int leg = 0; leg < NUM_LEGS; ++leg) {
+        JointAngles q = sys.getJointAngles(leg);
+        std::cout << std::fixed << std::setw(6) << std::setprecision(1) << q.coxa << ' '
+                  << std::setw(6) << q.femur << ' ' << std::setw(6) << q.tibia << " |";
+    }
+    std::cout << std::endl;
+}
+
+int main() {
+    Parameters p{};
+    p.hexagon_radius = 100;
+    p.coxa_length = 30;
+    p.femur_length = 50;
+    p.tibia_length = 70;
+    p.robot_height = 100;
+    p.control_frequency = 50;
+    p.coxa_angle_limits[0] = -180; p.coxa_angle_limits[1] = 180;
+    p.femur_angle_limits[0] = -180; p.femur_angle_limits[1] = 180;
+    p.tibia_angle_limits[0] = -180; p.tibia_angle_limits[1] = 180;
+
+    for (int l = 0; l < NUM_LEGS; ++l) {
+        p.dh_parameters[l][0][0] = 0.0f;           // a
+        p.dh_parameters[l][0][1] = 0.0f;           // alpha
+        p.dh_parameters[l][0][2] = 0.0f;           // d
+        p.dh_parameters[l][0][3] = 0.0f;           // theta0
+        p.dh_parameters[l][1][0] = p.coxa_length;
+        p.dh_parameters[l][1][1] = 0.0f;
+        p.dh_parameters[l][1][2] = 0.0f;
+        p.dh_parameters[l][1][3] = 0.0f;
+        p.dh_parameters[l][2][0] = p.femur_length;
+        p.dh_parameters[l][2][1] = 0.0f;
+        p.dh_parameters[l][2][2] = 0.0f;
+        p.dh_parameters[l][2][3] = 0.0f;
+    }
+
+    LocomotionSystem sys(p);
+    DummyIMU imu;
+    DummyFSR fsr;
+    DummyServo servos;
+    assert(sys.initialize(&imu, &fsr, &servos));
+    assert(sys.calibrateSystem());
+    assert(sys.setGaitType(TRIPOD_GAIT));
+
+    float velocity = 400.0f; // mm/s
+    assert(sys.walkForward(velocity));
+    float distance = 800.0f; // mm
+    unsigned steps = static_cast<unsigned>((distance / velocity) * p.control_frequency);
+
+    JointAngles prev[NUM_LEGS];
+    for (int i = 0; i < NUM_LEGS; ++i) {
+        prev[i] = sys.getJointAngles(i);
+    }
+
+    bool changed = false;
+    printHeader();
+    for (unsigned s = 0; s < steps; ++s) {
+        float phase = static_cast<float>(s) / steps;
+        for (int leg = 0; leg < NUM_LEGS; ++leg) {
+            Point3D pos = sys.calculateFootTrajectory(leg, phase);
+            sys.setLegPosition(leg, pos);
+        }
+        printAngles(s, sys);
+        for (int i = 0; i < NUM_LEGS; ++i) {
+            JointAngles q = sys.getJointAngles(i);
+            if (!changed && (q.coxa != prev[i].coxa || q.femur != prev[i].femur || q.tibia != prev[i].tibia)) {
+                changed = true;
+            }
+            prev[i] = q;
+        }
+        std::this_thread::sleep_for(std::chrono::milliseconds(20));
+    }
+
+    assert(changed && "servo angles did not change");
+    std::cout << "tripod_gait_sim_test executed successfully" << std::endl;
+    return 0;
+}
