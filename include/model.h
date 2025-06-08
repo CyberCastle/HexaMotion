@@ -146,6 +146,11 @@ class RobotModel {
   public:
     explicit RobotModel(const Parameters &params);
 
+    /**
+     * \brief Initialize DH parameters from robot dimensions.
+     */
+    void initializeDH();
+
     JointAngles inverseKinematics(int leg, const Point3D &p);
     Point3D forwardKinematics(int leg, const JointAngles &q);
     Eigen::Matrix3f analyticJacobian(int leg, const JointAngles &q);
@@ -157,6 +162,7 @@ class RobotModel {
 
   private:
     const Parameters &params;
+    float dh[NUM_LEGS][DOF_PER_LEG][4];
 };
 
 #endif // MODEL_H
