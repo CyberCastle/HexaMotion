@@ -1,6 +1,12 @@
 # AGENT Instructions
 
 Este archivo define las pautas para colaborar en HexaMotion.
+## Objetivo
+Esta librería proporciona control de locomoción para un robot hexápodo basado en Arduino Giga R1.
+El cuerpo del robot es un hexágono con las patas separadas 60° entre sí.
+Incluye cinemática inversa con parámetros DH y jacobianos, control de orientación y pose, planificador de marchas y manejo de errores.
+Las interfaces `IIMUInterface`, `IFSRInterface` e `IServoInterface` deben implementarse para conectar el IMU, los sensores FSR y los servos inteligentes.
+
 
 ## Estilo de código
 
