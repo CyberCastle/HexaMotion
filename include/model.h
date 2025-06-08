@@ -3,6 +3,7 @@
 
 #include <Arduino.h>
 #include <ArduinoEigen.h>
+#include <utility>
 #include "math_utils.h"
 
 // System configuration
@@ -18,6 +19,7 @@ struct Parameters {
     float tibia_length;
 
     float robot_height;
+    float height_offset = 0.0f; ///< structural body height offset
     float robot_weight;
     Eigen::Vector3f center_of_mass;
 
@@ -152,12 +154,17 @@ class RobotModel {
     void initializeDH();
 
     JointAngles inverseKinematics(int leg, const Point3D &p);
-    Point3D forwardKinematics(int leg, const JointAngles &q);
-    Eigen::Matrix3f analyticJacobian(int leg, const JointAngles &q);
-    Eigen::Matrix4f legTransform(int leg, const JointAngles &q);
+    Point3D forwardKinematics(int leg, const JointAngles &q) const;
+    Eigen::Matrix3f analyticJacobian(int leg, const JointAngles &q) const;
+    Eigen::Matrix4f legTransform(int leg, const JointAngles &q) const;
     bool checkJointLimits(int leg, const JointAngles &q) const;
     float constrainAngle(float angle, float min_angle, float max_angle) const;
     bool validate() const;
+    /**
+     * \brief Calculate minimal and maximal body height based on joint limits.
+     * \return Pair {min_height, max_height} in millimeters.
+     */
+    std::pair<float, float> calculateHeightRange() const;
     const Parameters &getParams() const { return params; }
 
   private:

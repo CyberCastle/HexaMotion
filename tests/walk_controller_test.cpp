@@ -10,6 +10,7 @@ int main() {
     p.femur_length = 101;
     p.tibia_length = 208;
     p.robot_height = 90;
+    p.height_offset = 0;
     p.control_frequency = 50;
 
     RobotModel model(p);

@@ -1,5 +1,4 @@
-#include "../include/pose_controller.h"
-#include "test_stubs.h"
+#include "../include/model.h"
 #include <cassert>
 #include <iostream>
 
@@ -20,13 +19,9 @@ int main() {
     p.tibia_angle_limits[1] = 45;
 
     RobotModel model(p);
-    DummyServo servos;
-    PoseController pc(model, &servos);
-    Point3D legs[NUM_LEGS];
-    JointAngles joints[NUM_LEGS];
-    pc.initializeDefaultPose(legs, joints, p.hexagon_radius, p.robot_height);
-    assert(pc.setStandingPose(legs, joints, p.robot_height));
-    assert(pc.setCrouchPose(legs, joints, p.robot_height));
-    std::cout << "pose_controller_test executed successfully" << std::endl;
+    auto range = model.calculateHeightRange();
+    std::cout << "Min height=" << range.first << " Max height=" << range.second << std::endl;
+    assert(range.first <= range.second);
+    std::cout << "height_range_test executed successfully" << std::endl;
     return 0;
 }

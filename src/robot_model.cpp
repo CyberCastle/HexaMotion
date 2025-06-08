@@ -1,5 +1,6 @@
 #include "model.h"
 #include <math.h>
+#include <limits>
 
 RobotModel::RobotModel(const Parameters &p) : params(p) {
     initializeDH();
@@ -73,7 +74,7 @@ JointAngles RobotModel::inverseKinematics(int leg, const Point3D &p_target) {
     return q;
 }
 
-Point3D RobotModel::forwardKinematics(int leg_index, const JointAngles &angles) {
+Point3D RobotModel::forwardKinematics(int leg_index, const JointAngles &angles) const {
     Eigen::Matrix4f transform = legTransform(leg_index, angles);
     Point3D position;
     position.x = transform(0, 3);
@@ -82,7 +83,7 @@ Point3D RobotModel::forwardKinematics(int leg_index, const JointAngles &angles) 
     return position;
 }
 
-Eigen::Matrix4f RobotModel::legTransform(int leg_index, const JointAngles &q) {
+Eigen::Matrix4f RobotModel::legTransform(int leg_index, const JointAngles &q) const {
     const float base_angle_deg = leg_index * 60.0f;
     Eigen::Matrix4f T = Eigen::Matrix4f::Identity();
     T(0, 3) = params.hexagon_radius * cos(math_utils::degreesToRadians(base_angle_deg));
@@ -103,7 +104,7 @@ Eigen::Matrix4f RobotModel::legTransform(int leg_index, const JointAngles &q) {
     return T;
 }
 
-Eigen::Matrix3f RobotModel::analyticJacobian(int leg, const JointAngles &q) {
+Eigen::Matrix3f RobotModel::analyticJacobian(int leg, const JointAngles &q) const {
     Eigen::Matrix4f T = Eigen::Matrix4f::Identity();
     Eigen::Vector3f o[DOF_PER_LEG + 1];
     Eigen::Vector3f z[DOF_PER_LEG];
@@ -148,5 +149,27 @@ float RobotModel::constrainAngle(float angle, float min_angle, float max_angle) 
 bool RobotModel::validate() const {
     return (params.hexagon_radius > 0 && params.coxa_length > 0 && params.femur_length > 0 && params.tibia_length > 0 &&
             params.robot_height > 0 && params.control_frequency > 0);
+}
+
+std::pair<float, float> RobotModel::calculateHeightRange() const {
+    float min_h = std::numeric_limits<float>::max();
+    float max_h = -std::numeric_limits<float>::max();
+
+    const float femur_limits[2] = {params.femur_angle_limits[0], params.femur_angle_limits[1]};
+    const float tibia_limits[2] = {params.tibia_angle_limits[0], params.tibia_angle_limits[1]};
+
+    for (float f : femur_limits) {
+        for (float t : tibia_limits) {
+            JointAngles q(0.0f, f, t);
+            Point3D pos = forwardKinematics(0, q);
+            float height = -pos.z + params.height_offset;
+            if (height < min_h)
+                min_h = height;
+            if (height > max_h)
+                max_h = height;
+        }
+    }
+
+    return {min_h, max_h};
 }
 
