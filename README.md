@@ -27,6 +27,12 @@ class MyFSR : public IFSRInterface { /* ... */ };
 class MyServo : public IServoInterface { /* ... */ };
 
 Parameters params;            // fill your robot parameters
+params.coxa_angle_limits[0] = -90;
+params.coxa_angle_limits[1] = 90;
+params.femur_angle_limits[0] = -90;
+params.femur_angle_limits[1] = 90;
+params.tibia_angle_limits[0] = -90;
+params.tibia_angle_limits[1] = 90;
 LocomotionSystem robot(params);
 MyIMU imu;
 MyFSR fsr;
@@ -41,8 +47,17 @@ void loop() {
 }
 ```
 
+Make sure the joint limit arrays (`coxa_angle_limits`, `femur_angle_limits` and
+`tibia_angle_limits`) are populated with valid ranges before creating the
+`LocomotionSystem` instance. If these values remain at their defaults the system
+will flag `KINEMATICS_ERROR` and skip sending servo commands.
+
 Simple mock implementations of these interfaces are provided under the
 `examples/` directory.
+
+Debug logging can be enabled by defining the `ENABLE_LOG` macro before
+including the library. When active, certain events such as joint limit
+violations will be printed to the serial console.
 
 ## Running tests
 The test suite depends on the Eigen library. A helper script in the

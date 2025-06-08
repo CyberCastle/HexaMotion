@@ -511,6 +511,12 @@ bool LocomotionSystem::update() {
                 }
                 servo_interface->setJointAngle(i, j, angle_value);
             }
+        } else {
+            last_error = KINEMATICS_ERROR;
+#if defined(ENABLE_LOG) && defined(ARDUINO)
+            Serial.print("Joint limit violation on leg ");
+            Serial.println(i);
+#endif
         }
     }
 

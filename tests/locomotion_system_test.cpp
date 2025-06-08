@@ -28,6 +28,27 @@ int main() {
     assert(len >= 20.0f && len <= 80.0f);
     assert(h >= 15.0f && h <= 50.0f);
 
+    // Second system with invalid limits should report kinematics error
+    Parameters bad{};
+    bad.hexagon_radius = 100;
+    bad.coxa_length = 30;
+    bad.femur_length = 50;
+    bad.tibia_length = 70;
+    bad.robot_height = 100;
+    bad.control_frequency = 50;
+    // All valid poses yield angles near 0 so exclude zero from allowed range
+    bad.coxa_angle_limits[0] = 10; bad.coxa_angle_limits[1] = 20;
+    bad.femur_angle_limits[0] = 10; bad.femur_angle_limits[1] = 20;
+    bad.tibia_angle_limits[0] = 10; bad.tibia_angle_limits[1] = 20;
+    bad.ik.clamp_joints = false;
+
+    LocomotionSystem sys2(bad);
+    assert(sys2.initialize(&imu, &fsr, &servos));
+    assert(sys2.calibrateSystem());
+    assert(sys2.setGaitType(TRIPOD_GAIT));
+    assert(sys2.update());
+    assert(sys2.getLastError() == LocomotionSystem::KINEMATICS_ERROR);
+
     std::cout << "locomotion_system_test executed successfully" << std::endl;
     return 0;
 }
