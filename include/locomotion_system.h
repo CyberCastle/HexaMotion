@@ -180,6 +180,7 @@ class LocomotionSystem {
     LegState getLegState(int leg_index) const { return leg_states[leg_index]; }
     JointAngles getJointAngles(int leg_index) const { return joint_angles[leg_index]; }
     Point3D getLegPosition(int leg_index) const { return leg_positions[leg_index]; }
+    float getStepLength() const;
 
     // Setters
     bool setParameters(const Parameters &new_params);
@@ -199,7 +200,6 @@ class LocomotionSystem {
     float constrainAngle(float angle, float min_angle, float max_angle);
     bool validateParameters();
     void initializeDefaultPose();
-    void updateLegStates();
     void updateStepParameters();
     bool checkJointLimits(int leg_index, const JointAngles &angles);
     float calculateLegReach(int leg_index);

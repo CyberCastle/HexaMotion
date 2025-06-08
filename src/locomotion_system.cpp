@@ -665,48 +665,53 @@ void LocomotionSystem::initializeDefaultPose() {
     }
 }
 
-void LocomotionSystem::updateLegStates() {
-    // This function is called from calculateFootTrajectory
-    // Leg states are updated there according to the current gait
-}
-
 void LocomotionSystem::updateStepParameters() {
-    // Adjust step parameters depending on gait type
+    // Calculate leg reach and robot dimensions
+    float leg_reach = params.coxa_length + params.femur_length + params.tibia_length;
+    float robot_height = params.robot_height;
+
+    // Adjust step parameters depending on gait type using parametrizable factors
     switch (current_gait) {
     case TRIPOD_GAIT:
         // Longer steps for speed
-        step_length = 60.0f; // mm
-        step_height = 35.0f; // mm
+        step_length = leg_reach * params.gait_factors.tripod_length_factor;
+        step_height = robot_height * params.gait_factors.tripod_height_factor;
         break;
 
     case WAVE_GAIT:
         // Shorter steps for stability
-        step_length = 40.0f; // mm
-        step_height = 25.0f; // mm
+        step_length = leg_reach * params.gait_factors.wave_length_factor;
+        step_height = robot_height * params.gait_factors.wave_height_factor;
         break;
 
     case RIPPLE_GAIT:
         // Medium steps for balance
-        step_length = 50.0f; // mm
-        step_height = 30.0f; // mm
+        step_length = leg_reach * params.gait_factors.ripple_length_factor;
+        step_height = robot_height * params.gait_factors.ripple_height_factor;
         break;
 
     case METACHRONAL_GAIT:
         // Adaptive steps
-        step_length = 45.0f; // mm
-        step_height = 30.0f; // mm
+        step_length = leg_reach * params.gait_factors.metachronal_length_factor;
+        step_height = robot_height * params.gait_factors.metachronal_height_factor;
         break;
 
     case ADAPTIVE_GAIT:
         // They will be adjusted dynamically
-        step_length = 50.0f; // mm inicial
-        step_height = 30.0f; // mm inicial
+        step_length = leg_reach * params.gait_factors.adaptive_length_factor;
+        step_height = robot_height * params.gait_factors.adaptive_height_factor;
         break;
     }
 
-    // Verify that parameters are within limits
-    step_length = constrainAngle(step_length, 20.0f, 80.0f);
-    step_height = constrainAngle(step_height, 15.0f, 50.0f);
+    // Calculate dynamic limits based on robot dimensions
+    float min_step_length = leg_reach * params.gait_factors.min_length_factor;
+    float max_step_length = leg_reach * params.gait_factors.max_length_factor;
+    float min_step_height = robot_height * params.gait_factors.min_height_factor;
+    float max_step_height = robot_height * params.gait_factors.max_height_factor;
+
+    // Verify that parameters are within dynamic limits
+    step_length = constrainAngle(step_length, min_step_length, max_step_length);
+    step_height = constrainAngle(step_height, min_step_height, max_step_height);
 }
 
 bool LocomotionSystem::checkJointLimits(int leg_index, const JointAngles &angles) {
@@ -879,4 +884,43 @@ void LocomotionSystem::compensateForSlope() {
     // Clamp compensation
     body_orientation[0] = constrainAngle(body_orientation[0], -15.0f, 15.0f);
     body_orientation[1] = constrainAngle(body_orientation[1], -15.0f, 15.0f);
+}
+
+float LocomotionSystem::getStepLength() const {
+    // Base step length según el tipo de marcha actual
+    float base_step_length = step_length;
+
+    // Factores de ajuste basados en parámetros del robot
+    float leg_reach = params.coxa_length + params.femur_length + params.tibia_length;
+    float max_safe_step = leg_reach * params.gait_factors.max_length_factor;
+
+    // Ajuste por estabilidad - reducir paso si la estabilidad es baja
+    float stability_factor = 1.0f;
+    if (system_enabled) {
+        float stability_index = const_cast<LocomotionSystem*>(this)->calculateStabilityIndex();
+        if (stability_index < 0.5f) {
+            stability_factor = 0.7f + 0.3f * stability_index; // Reducir hasta 70%
+        }
+    }
+
+    // Ajuste por inclinación del terreno si hay IMU
+    float terrain_factor = 1.0f;
+    if (imu_interface && imu_interface->isConnected()) {
+        IMUData imu_data = imu_interface->readIMU();
+        if (imu_data.is_valid) {
+            float total_tilt = sqrt(imu_data.roll * imu_data.roll + imu_data.pitch * imu_data.pitch);
+            if (total_tilt > 10.0f) {
+                terrain_factor = std::max(0.6f, 1.0f - (total_tilt - 10.0f) / 20.0f);
+            }
+        }
+    }
+
+    // Calcular longitud final del paso
+    float calculated_step_length = base_step_length * stability_factor * terrain_factor;
+
+    // Limitar dentro de rangos seguros basados en parámetros
+    float min_safe_step = leg_reach * params.gait_factors.min_length_factor;
+    calculated_step_length = std::max(min_safe_step, std::min(max_safe_step, calculated_step_length));
+
+    return calculated_step_length;
 }
