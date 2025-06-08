@@ -1,6 +1,6 @@
+#include "../include/model.h"
 #include <cassert>
 #include <iostream>
-#include "../include/model.h"
 
 int main() {
     Parameters p{};
@@ -11,7 +11,7 @@ int main() {
     p.coxa_length = 50;
     p.femur_length = 101;
     p.tibia_length = 208;
-    p.robot_height = 7;
+    p.robot_height = 90;
     p.control_frequency = 50;
     RobotModel model_ok(p);
     assert(model_ok.validate());

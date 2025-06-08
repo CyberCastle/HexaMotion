@@ -3,15 +3,17 @@
 Este archivo define las pautas para colaborar en HexaMotion.
 
 ## Estilo de código
-- Utilizar C++17.
-- Indentación de 4 espacios sin tabulaciones.
-- Colocar la llave de apertura en la misma línea que la declaración.
-- Documentar funciones públicas con comentarios estilo Doxygen (`/** ... */`).
+
+-   Utilizar C++17.
+-   Indentación de 4 espacios sin tabulaciones.
+-   Colocar la llave de apertura en la misma línea que la declaración.
+-   Documentar funciones públicas con comentarios estilo Doxygen (`/** ... */`).
 
 ## Pruebas
-- Antes de enviar cambios, ejecutar las pruebas unitarias.
-- Instalar la dependencia Eigen ejecutando `tests/setup.sh` si es necesario.
-- Construir las pruebas con `make` dentro del directorio `tests`.
+
+-   Antes de enviar cambios, ejecutar las pruebas unitarias.
+-   Instalar la dependencia Eigen ejecutando `tests/setup.sh` si es necesario.
+-   Construir las pruebas con `make` dentro del directorio `tests`.
 
 ```bash
 cd tests
@@ -22,6 +24,7 @@ make
 Cada ejecutable de prueba puede ejecutarse de forma individual.
 
 ### Parámetros de prueba
+
 Usar la siguiente configuración de `Parameters` en los archivos de prueba:
 
 ```cpp
@@ -30,7 +33,7 @@ p.hexagon_radius = 400;
 p.coxa_length = 50;
 p.femur_length = 101;
 p.tibia_length = 208;
-p.robot_height = 7;
+p.robot_height = 90;
 p.control_frequency = 50;
 p.coxa_angle_limits[0] = -65;
 p.coxa_angle_limits[1] = 65;
@@ -41,10 +44,11 @@ p.tibia_angle_limits[1] = 45;
 ```
 
 ## Mensajes de commit
-- Usar tiempo imperativo en inglés. Ejemplos: "Add new gait option".
-- Mantener el resumen por debajo de 72 caracteres.
+
+-   Usar tiempo imperativo en inglés. Ejemplos: "Add new gait option".
+-   Mantener el resumen por debajo de 72 caracteres.
 
 ## Solicitudes de extracción
-- Incluir un resumen de los cambios realizados.
-- Mencionar cualquier limitación conocida o pasos adicionales.
 
+-   Incluir un resumen de los cambios realizados.
+-   Mencionar cualquier limitación conocida o pasos adicionales.
