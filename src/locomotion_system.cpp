@@ -588,6 +588,7 @@ bool LocomotionSystem::handleError(ErrorCode error) {
 
 // System self test
 bool LocomotionSystem::performSelfTest() {
+#if defined(ENABLE_SELF_TEST) && defined(ARDUINO)
     Serial.println("=== Starting self test ===");
 
     // IMU test
@@ -650,6 +651,10 @@ bool LocomotionSystem::performSelfTest() {
 
     Serial.println("=== Auto-diagnostic completado exitosamente ===");
     return true;
+#else
+    // Self test not available without Arduino environment
+    return false;
+#endif
 }
 
 // Helper functions
@@ -796,52 +801,6 @@ bool LocomotionSystem::setControlFrequency(float frequency) {
     return true;
 }
 
-void LocomotionSystem::printSystemStatus() {
-    Serial.println("=== System Status ===");
-    Serial.print("Sistema habilitado: ");
-    Serial.println(system_enabled ? "Yes" : "No");
-    Serial.print("Gait actual: ");
-    Serial.println(current_gait);
-    Serial.print("Fase de gait: ");
-    Serial.println(gait_phase, 3);
-    Serial.print("Índice de estabilidad: ");
-    Serial.println(calculateStabilityIndex(), 3);
-    Serial.print("Último error: ");
-    Serial.println(getErrorMessage(last_error));
-    Serial.println("==================================");
-}
-
-void LocomotionSystem::printLegStatus(int leg_index) {
-    if (leg_index < 0 || leg_index >= NUM_LEGS)
-        return;
-
-    Serial.print("=== Estado Pata ");
-    Serial.print(leg_index);
-    Serial.println(" ===");
-    Serial.print("Estado: ");
-    Serial.println(leg_states[leg_index]);
-    Serial.print("Position: (");
-    Serial.print(leg_positions[leg_index].x, 1);
-    Serial.print(", ");
-    Serial.print(leg_positions[leg_index].y, 1);
-    Serial.print(", ");
-    Serial.print(leg_positions[leg_index].z, 1);
-    Serial.println(")");
-    Serial.print("Ángulos: (");
-    Serial.print(joint_angles[leg_index].coxa, 1);
-    Serial.print(", ");
-    Serial.print(joint_angles[leg_index].femur, 1);
-    Serial.print(", ");
-    Serial.print(joint_angles[leg_index].tibia, 1);
-    Serial.println(")");
-
-    FSRData fsr_data = fsr_interface->readFSR(leg_index);
-    Serial.print("FSR - Pressure: ");
-    Serial.print(fsr_data.pressure, 2);
-    Serial.print(" kg, Contacto: ");
-    Serial.println(fsr_data.in_contact ? "Yes" : "No");
-    Serial.println("===================");
-}
 
 float LocomotionSystem::calculateLegReach(int leg_index) {
     return params.coxa_length + params.femur_length + params.tibia_length;
