@@ -30,10 +30,10 @@ LocomotionSystem::LocomotionSystem(const Parameters &params)
     body_position = Eigen::Vector3f(0.0f, 0.0f, params.robot_height);
     body_orientation = Eigen::Vector3f(0.0f, 0.0f, 0.0f);
 
-    // Inicializar estados de las patas
+    // Initialize leg states
     for (int i = 0; i < NUM_LEGS; i++) {
         leg_states[i] = STANCE_PHASE;
-        leg_phase_offsets[i] = (i % 2) * 0.5f; // Inicializar con TRIPOD por defecto
+        leg_phase_offsets[i] = (i % 2) * 0.5f; // Initialize with TRIPOD by default
     }
 
     initializeDefaultPose();
@@ -58,7 +58,7 @@ bool LocomotionSystem::initialize(IIMUInterface *imu, IFSRInterface *fsr, IServo
     fsr_interface = fsr;
     servo_interface = servo;
 
-    // Inicializar interfaces
+    // Initialize interfaces
     if (!imu_interface->initialize()) {
         last_error = IMU_ERROR;
         return false;
@@ -78,7 +78,7 @@ bool LocomotionSystem::initialize(IIMUInterface *imu, IFSRInterface *fsr, IServo
     walk_ctrl = new WalkController(model);
     admittance_ctrl = new AdmittanceController(model, imu_interface, fsr_interface);
 
-    // Validar parameters
+    // Validate parameters
     if (!validateParameters()) {
         last_error = PARAMETER_ERROR;
         return false;
@@ -95,13 +95,13 @@ bool LocomotionSystem::calibrateSystem() {
     if (!system_enabled)
         return false;
 
-    // Calibrar IMU
+    // Calibrate IMU
     if (!imu_interface->calibrate()) {
         last_error = IMU_ERROR;
         return false;
     }
 
-    // Calibrar FSRs
+    // Calibrate FSRs
     for (int i = 0; i < NUM_LEGS; i++) {
         if (!fsr_interface->calibrateFSR(i)) {
             last_error = FSR_ERROR;
@@ -109,7 +109,7 @@ bool LocomotionSystem::calibrateSystem() {
         }
     }
 
-    // Establecer pose inicial
+    // Set initial pose
     setStandingPose();
 
     return true;
@@ -146,9 +146,9 @@ Eigen::MatrixXf LocomotionSystem::calculateJacobian(int leg, const JointAngles &
     return model.analyticJacobian(leg, q);
 }
 
-/* Transformar punto mundo → cuerpo = Rᵀ·(p - p₀) */
+/* Transform world point to body frame = Rᵀ·(p - p0) */
 Point3D LocomotionSystem::transformWorldToBody(const Point3D &p_world) const {
-    // Vector relativo al centro del cuerpo
+    // Vector relative to the body center
     Point3D rel(p_world.x - body_position[0],
                 p_world.y - body_position[1],
                 p_world.z - body_position[2]);
@@ -165,7 +165,7 @@ bool LocomotionSystem::setLegJointAngles(int leg, const JointAngles &q) {
     if (!servo_interface)
         return false;
 
-    joint_angles[leg] = q; // estado interno
+    joint_angles[leg] = q; // internal state
     servo_interface->setJointAngle(leg, 0, q.coxa);
     servo_interface->setJointAngle(leg, 1, q.femur);
     servo_interface->setJointAngle(leg, 2, q.tibia);
@@ -347,7 +347,7 @@ void LocomotionSystem::reprojectStandingFeet() {
         // Current foot position world -> body
         Point3D tip_body = transformWorldToBody(leg_positions[leg]);
 
-        // IK para la nueva actitud del cuerpo
+        // IK for the new body orientation
         JointAngles q_new = calculateInverseKinematics(leg, tip_body);
 
         // Apply angles to servos and RAM
@@ -371,7 +371,7 @@ Eigen::Vector3f LocomotionSystem::calculateOrientationError() {
     return admittance_ctrl->orientationError(body_orientation);
 }
 
-// Verificar margen de estabilidad
+// Check stability margin
 bool LocomotionSystem::checkStabilityMargin() {
     if (!system_enabled || !admittance_ctrl)
         return false;
@@ -433,7 +433,7 @@ bool LocomotionSystem::isStaticallyStable() {
     return calculateStabilityIndex() > 0.2f; // Minimum stability threshold
 }
 
-// Control de pose del cuerpo
+// Body pose control
 bool LocomotionSystem::setBodyPose(const Eigen::Vector3f &position, const Eigen::Vector3f &orientation) {
     if (!system_enabled || !pose_ctrl)
         return false;
@@ -446,14 +446,14 @@ bool LocomotionSystem::setBodyPose(const Eigen::Vector3f &position, const Eigen:
     return true;
 }
 
-// Establecer pose de pie
+// Set standing pose
 bool LocomotionSystem::setStandingPose() {
     if (!pose_ctrl)
         return false;
     return pose_ctrl->setStandingPose(leg_positions, joint_angles, params.robot_height);
 }
 
-// Establecer pose agachada
+// Set crouch pose
 bool LocomotionSystem::setCrouchPose() {
     if (!pose_ctrl)
         return false;
@@ -466,10 +466,10 @@ bool LocomotionSystem::update() {
         return false;
 
     unsigned long current_time = millis();
-    dt = (current_time - last_update_time) / 1000.0f; // Convertir a segundos
+    dt = (current_time - last_update_time) / 1000.0f; // Convert to seconds
     last_update_time = current_time;
 
-    // Limitar dt para evitar saltos grandes
+    // Limit dt to avoid large jumps
     if (dt > 0.1f)
         dt = 0.1f;
 
@@ -480,10 +480,10 @@ bool LocomotionSystem::update() {
     adjustStepParameters();
     compensateForSlope();
 
-    // Actualizar fase de marcha
+    // Update gait phase
     updateGaitPhase();
 
-    // Calcular nuevas posiciones de las patas
+    // Calculate new leg positions
     for (int i = 0; i < NUM_LEGS; i++) {
         Point3D target_position = calculateFootTrajectory(i, gait_phase);
 
@@ -519,9 +519,9 @@ bool LocomotionSystem::update() {
         correctBodyTilt();
     }
 
-    // Verificar estabilidad
+    // Check stability
     if (!checkStabilityMargin()) {
-        // Implementar acciones correctivas si es necesario
+        // Implement corrective actions if necessary
         last_error = STABILITY_ERROR;
     }
 
@@ -532,21 +532,21 @@ bool LocomotionSystem::update() {
 String LocomotionSystem::getErrorMessage(ErrorCode error) {
     switch (error) {
     case NO_ERROR:
-        return "Sin errores";
+        return "No errors";
     case IMU_ERROR:
-        return "Error en IMU";
+        return "IMU error";
     case FSR_ERROR:
-        return "Error en sensores FSR";
+        return "FSR sensor error";
     case SERVO_ERROR:
-        return "Error en servos";
+        return "Servo error";
     case KINEMATICS_ERROR:
         return "Kinematics error";
     case STABILITY_ERROR:
-        return "Error de estabilidad";
+        return "Stability error";
     case PARAMETER_ERROR:
-        return "Error en parameters";
+        return "Parameter error";
     default:
-        return "Error desconocido";
+        return "Unknown error";
     }
 }
 
@@ -600,7 +600,7 @@ bool LocomotionSystem::performSelfTest() {
 
     // IMU test
     if (!imu_interface || !imu_interface->isConnected()) {
-        Serial.println("X Error: IMU no conectado");
+        Serial.println("X Error: IMU not connected");
         return false;
     }
 
@@ -609,26 +609,26 @@ bool LocomotionSystem::performSelfTest() {
         Serial.println("X Error: invalid IMU data");
         return false;
     }
-    Serial.println("OK IMU funcionando correctamente");
+    Serial.println("OK IMU working correctly");
 
     // FSR test
     for (int i = 0; i < NUM_LEGS; i++) {
         FSRData fsr_test = fsr_interface->readFSR(i);
         if (fsr_test.pressure < 0) {
-            Serial.print("X Error: FSR pata ");
+            Serial.print("X Error: FSR leg ");
             Serial.print(i);
-            Serial.println(" mal funcionamiento");
+            Serial.println(" malfunction");
             return false;
         }
     }
-    Serial.println("OK Todos los FSRs funcionando");
+    Serial.println("OK All FSRs working");
 
     // Servo test
     for (int i = 0; i < NUM_LEGS; i++) {
         for (int j = 0; j < DOF_PER_LEG; j++) {
             float current_angle = servo_interface->getJointAngle(i, j);
             if (current_angle < -180 || current_angle > 180) {
-                Serial.print("X Error: Servo pata ");
+                Serial.print("X Error: Servo leg ");
                 Serial.print(i);
                 Serial.print(" joint ");
                 Serial.println(j);
@@ -636,7 +636,7 @@ bool LocomotionSystem::performSelfTest() {
             }
         }
     }
-    Serial.println("OK Todos los servos funcionando");
+    Serial.println("OK All servos working");
 
     // Kinematics test
     for (int i = 0; i < NUM_LEGS; i++) {
@@ -656,7 +656,7 @@ bool LocomotionSystem::performSelfTest() {
     }
     Serial.println("OK Kinematics working correctly");
 
-    Serial.println("=== Auto-diagnostic completado exitosamente ===");
+    Serial.println("=== Self test completed successfully ===");
     return true;
 #else
     // Self test not available without Arduino environment
@@ -797,7 +797,7 @@ bool LocomotionSystem::setStepParameters(float height, float length) {
 }
 
 bool LocomotionSystem::setParameters(const Parameters &new_params) {
-    // Validar nuevos parameters
+    // Validate new parameters
     if (new_params.hexagon_radius <= 0 || new_params.coxa_length <= 0 ||
         new_params.femur_length <= 0 || new_params.tibia_length <= 0) {
         last_error = PARAMETER_ERROR;
@@ -836,7 +836,7 @@ void LocomotionSystem::adjustStepParameters() {
         step_length *= 0.7f;
     }
 
-    // Limitar parameters
+    // Limit parameters
     step_height = constrainAngle(step_height, 15.0f, 50.0f);
     step_length = constrainAngle(step_length, 20.0f, 80.0f);
 }
@@ -863,23 +863,23 @@ void LocomotionSystem::compensateForSlope() {
 }
 
 float LocomotionSystem::getStepLength() const {
-    // Base step length según el tipo de marcha actual
+    // Base step length according to the current gait
     float base_step_length = step_length;
 
-    // Factores de ajuste basados en parámetros del robot
+    // Adjustment factors based on robot parameters
     float leg_reach = params.coxa_length + params.femur_length + params.tibia_length;
     float max_safe_step = leg_reach * params.gait_factors.max_length_factor;
 
-    // Ajuste por estabilidad - reducir paso si la estabilidad es baja
+    // Stability adjustment - reduce step if stability is low
     float stability_factor = 1.0f;
     if (system_enabled) {
         float stability_index = const_cast<LocomotionSystem*>(this)->calculateStabilityIndex();
         if (stability_index < 0.5f) {
-            stability_factor = 0.7f + 0.3f * stability_index; // Reducir hasta 70%
+            stability_factor = 0.7f + 0.3f * stability_index; // Reduce up to 70%
         }
     }
 
-    // Ajuste por inclinación del terreno si hay IMU
+    // Slope adjustment if IMU is present
     float terrain_factor = 1.0f;
     if (imu_interface && imu_interface->isConnected()) {
         IMUData imu_data = imu_interface->readIMU();
@@ -891,10 +891,10 @@ float LocomotionSystem::getStepLength() const {
         }
     }
 
-    // Calcular longitud final del paso
+    // Calculate final step length
     float calculated_step_length = base_step_length * stability_factor * terrain_factor;
 
-    // Limitar dentro de rangos seguros basados en parámetros
+    // Limit within safe ranges based on parameters
     float min_safe_step = leg_reach * params.gait_factors.min_length_factor;
     calculated_step_length = std::max(min_safe_step, std::min(max_safe_step, calculated_step_length));
 
