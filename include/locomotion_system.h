@@ -43,13 +43,13 @@
 #ifndef LOCOMOTION_SYSTEM_H
 #define LOCOMOTION_SYSTEM_H
 
-#include <Arduino.h>
-#include <ArduinoEigen.h>
-#include <math.h>
+#include "admittance_controller.h"
 #include "model.h"
 #include "pose_controller.h"
 #include "walk_controller.h"
-#include "admittance_controller.h"
+#include <Arduino.h>
+#include <ArduinoEigen.h>
+#include <math.h>
 
 // Main locomotion system class
 class LocomotionSystem {
@@ -181,7 +181,7 @@ class LocomotionSystem {
     JointAngles getJointAngles(int leg_index) const { return joint_angles[leg_index]; }
     Point3D getLegPosition(int leg_index) const { return leg_positions[leg_index]; }
     float getStepHeight() const { return step_height; }
-    float getStepLength() const { return step_length; }
+    float getStepLength() const;
 
     // Setters
     bool setParameters(const Parameters &new_params);
@@ -190,8 +190,6 @@ class LocomotionSystem {
 
     // Diagnostics
     bool performSelfTest();
-    void printSystemStatus();
-    void printLegStatus(int leg_index);
 
   private:
     // Error variables
@@ -201,6 +199,7 @@ class LocomotionSystem {
     float constrainAngle(float angle, float min_angle, float max_angle);
     bool validateParameters();
     void initializeDefaultPose();
+    void updateLegStates();
     void updateStepParameters();
     bool checkJointLimits(int leg_index, const JointAngles &angles);
     float calculateLegReach(int leg_index);

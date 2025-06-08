@@ -473,8 +473,6 @@ bool LocomotionSystem::update() {
     if (dt > 0.1f)
         dt = 0.1f;
 
-    // Update sensor-based leg states
-    updateLegStates();
 
     // Adapt gait and step parameters depending on terrain
     adaptGaitToTerrain();
