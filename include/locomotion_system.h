@@ -67,7 +67,7 @@ class LocomotionSystem {
     Eigen::Vector3f body_orientation;   // Body orientation [roll,pitch,yaw]
     Point3D leg_positions[NUM_LEGS];    // Leg positions
     JointAngles joint_angles[NUM_LEGS]; // Joint angles
-    LegState leg_states[NUM_LEGS];      // Estados de las patas
+    LegState leg_states[NUM_LEGS];      // Leg states
 
     // Gait control
     GaitType current_gait;
