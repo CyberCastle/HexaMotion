@@ -15,8 +15,8 @@
 
 #include "locomotion_system.h"
 #include "math_utils.h"
-#include <vector>
 #include <algorithm>
+#include <vector>
 
 // Constructor
 LocomotionSystem::LocomotionSystem(const Parameters &params)
@@ -117,7 +117,7 @@ bool LocomotionSystem::calibrateSystem() {
 
 // Inverse kinematics using an optimized geometric method
 JointAngles LocomotionSystem::calculateInverseKinematics(int leg,
-                                                        const Point3D &p_target) {
+                                                         const Point3D &p_target) {
     return model.inverseKinematics(leg, p_target);
 }
 
@@ -133,7 +133,7 @@ Eigen::Matrix4f LocomotionSystem::calculateDHTransform(float a, float alpha, flo
 
 // Complete leg transform
 Eigen::Matrix4f LocomotionSystem::calculateLegTransform(int leg_index,
-                                                       const JointAngles &q) {
+                                                        const JointAngles &q) {
     return model.legTransform(leg_index, q);
 }
 
@@ -174,7 +174,8 @@ bool LocomotionSystem::setLegJointAngles(int leg, const JointAngles &q) {
 
 // Gait planner
 bool LocomotionSystem::setGaitType(GaitType gait) {
-    if (!walk_ctrl) return false;
+    if (!walk_ctrl)
+        return false;
     current_gait = gait;
     gait_phase = 0.0f;
     return walk_ctrl->setGaitType(gait);
@@ -182,7 +183,8 @@ bool LocomotionSystem::setGaitType(GaitType gait) {
 
 // Gait sequence planning
 bool LocomotionSystem::planGaitSequence(float vx, float vy, float omega) {
-    if (!walk_ctrl) return false;
+    if (!walk_ctrl)
+        return false;
     return walk_ctrl->planGaitSequence(vx, vy, omega);
 }
 
@@ -200,7 +202,6 @@ Point3D LocomotionSystem::calculateFootTrajectory(int leg_index, float phase) {
                                      stance_duration, swing_duration, params.robot_height,
                                      leg_phase_offsets, leg_states, fsr_interface, imu_interface);
 }
-
 
 // Forward locomotion control
 bool LocomotionSystem::walkForward(float velocity) {
@@ -473,7 +474,6 @@ bool LocomotionSystem::update() {
     if (dt > 0.1f)
         dt = 0.1f;
 
-
     // Adapt gait and step parameters depending on terrain
     adaptGaitToTerrain();
     updateStepParameters();
@@ -601,7 +601,7 @@ bool LocomotionSystem::handleError(ErrorCode error) {
 
 // System self test
 bool LocomotionSystem::performSelfTest() {
-#if defined(ENABLE_SELF_TEST) && defined(ARDUINO)
+#if defined(ENABLE_LOG) && defined(ARDUINO)
     Serial.println("=== Starting self test ===");
 
     // IMU test
@@ -824,7 +824,6 @@ bool LocomotionSystem::setControlFrequency(float frequency) {
     return true;
 }
 
-
 float LocomotionSystem::calculateLegReach(int leg_index) {
     return params.coxa_length + params.femur_length + params.tibia_length;
 }
@@ -879,7 +878,7 @@ float LocomotionSystem::getStepLength() const {
     // Stability adjustment - reduce step if stability is low
     float stability_factor = 1.0f;
     if (system_enabled) {
-        float stability_index = const_cast<LocomotionSystem*>(this)->calculateStabilityIndex();
+        float stability_index = const_cast<LocomotionSystem *>(this)->calculateStabilityIndex();
         if (stability_index < 0.5f) {
             stability_factor = 0.7f + 0.3f * stability_index; // Reduce up to 70%
         }
