@@ -7,7 +7,7 @@ EIGEN_PATH := /usr/include/eigen3
 endif
 CXXFLAGS=-I../include -I. -I$(EIGEN_PATH) -std=c++17
 
-all: math_utils_test model_test pose_controller_test walk_controller_test admittance_controller_test locomotion_system_test tripod_gait_sim_test ik_debug_test height_range_test
+all: math_utils_test model_test pose_controller_test walk_controller_test admittance_controller_test locomotion_system_test tripod_gait_sim_test ik_debug_test height_range_test geometry_test ik_analytical_fix ik_coordinate_test coord_test joint_test ik_debug_detailed dls_validation_test ik_debug_analysis workspace_analysis actual_workspace_test comprehensive_ik_test
 
 math_utils_test: math_utils_test.cpp ../src/math_utils.cpp
 	$(CXX) $(CXXFLAGS) $^ -o $@
@@ -36,5 +36,41 @@ ik_debug_test: ik_debug_test.cpp ../src/locomotion_system.cpp ../src/robot_model
 height_range_test: height_range_test.cpp ../src/robot_model.cpp ../src/math_utils.cpp
 	$(CXX) $(CXXFLAGS) $^ -o $@
 
+geometry_test: geometry_test.cpp ../src/locomotion_system.cpp ../src/robot_model.cpp ../src/pose_controller.cpp ../src/walk_controller.cpp ../src/admittance_controller.cpp ../src/math_utils.cpp
+	$(CXX) $(CXXFLAGS) $^ -o $@
+
+ik_analytical_fix: ik_analytical_fix.cpp ../src/locomotion_system.cpp ../src/robot_model.cpp ../src/pose_controller.cpp ../src/walk_controller.cpp ../src/admittance_controller.cpp ../src/math_utils.cpp
+	$(CXX) $(CXXFLAGS) $^ -o $@
+
+ik_coordinate_test: ik_coordinate_test.cpp ../src/locomotion_system.cpp ../src/robot_model.cpp ../src/pose_controller.cpp ../src/walk_controller.cpp ../src/admittance_controller.cpp ../src/math_utils.cpp
+	$(CXX) $(CXXFLAGS) $^ -o $@
+
+coord_test: coord_test.cpp ../src/locomotion_system.cpp ../src/robot_model.cpp ../src/pose_controller.cpp ../src/walk_controller.cpp ../src/admittance_controller.cpp ../src/math_utils.cpp
+	$(CXX) $(CXXFLAGS) $^ -o $@
+
+joint_test: joint_test.cpp ../src/robot_model.cpp ../src/math_utils.cpp
+	$(CXX) $(CXXFLAGS) $^ -o $@
+
+ik_debug_detailed: ik_debug_detailed.cpp ../src/robot_model.cpp ../src/math_utils.cpp
+	$(CXX) $(CXXFLAGS) $^ -o $@
+
+dls_validation_test: dls_validation_test.cpp ../src/robot_model.cpp ../src/math_utils.cpp
+	$(CXX) $(CXXFLAGS) $^ -o $@
+
+ik_debug_analysis: ik_debug_analysis.cpp ../src/robot_model.cpp ../src/math_utils.cpp
+	$(CXX) $(CXXFLAGS) $^ -o $@
+
+workspace_analysis: workspace_analysis.cpp ../src/robot_model.cpp ../src/math_utils.cpp
+	$(CXX) $(CXXFLAGS) $^ -o $@
+
+actual_workspace_test: actual_workspace_test.cpp ../src/robot_model.cpp ../src/math_utils.cpp
+	$(CXX) $(CXXFLAGS) $^ -o $@
+
+comprehensive_ik_test: comprehensive_ik_test.cpp ../src/robot_model.cpp ../src/math_utils.cpp
+	$(CXX) $(CXXFLAGS) $^ -o $@
+
+test3_analysis: test3_analysis.cpp ../src/robot_model.cpp ../src/math_utils.cpp
+	$(CXX) $(CXXFLAGS) $^ -o $@
+
 clean:
-	        rm -f math_utils_test model_test pose_controller_test walk_controller_test admittance_controller_test locomotion_system_test tripod_gait_sim_test ik_debug_test height_range_test
+	rm -f math_utils_test model_test pose_controller_test walk_controller_test admittance_controller_test locomotion_system_test tripod_gait_sim_test ik_debug_test height_range_test geometry_test ik_analytical_fix ik_coordinate_test coord_test joint_test ik_debug_detailed dls_validation_test ik_debug_analysis workspace_analysis actual_workspace_test comprehensive_ik_test test3_analysis
