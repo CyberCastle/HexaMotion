@@ -31,8 +31,10 @@ Point3D WalkController::footTrajectory(int leg_index, float phase, float step_he
     const Parameters &p = model.getParams();
 
     // Calculate leg base position (hexagon corner)
-    float base_x = p.hexagon_radius * cos(math_utils::degreesToRadians(base_angle));
-    float base_y = p.hexagon_radius * sin(math_utils::degreesToRadians(base_angle));
+    float reach = p.coxa_length + p.femur_length + p.tibia_length;
+    float base_radius = std::min(p.hexagon_radius, reach - 10.0f);
+    float base_x = base_radius * cos(math_utils::degreesToRadians(base_angle));
+    float base_y = base_radius * sin(math_utils::degreesToRadians(base_angle));
 
     // Default foot position placed to keep the leg within reach even at low
     // robot heights. Position the foot forward from the hip by the minimum
@@ -41,6 +43,8 @@ Point3D WalkController::footTrajectory(int leg_index, float phase, float step_he
         (p.tibia_length - p.femur_length) * (p.tibia_length - p.femur_length) -
             robot_height * robot_height,
         0.0f));
+    float max_horiz = sqrtf(std::max(reach * reach - robot_height * robot_height, 0.0f)) - p.coxa_length;
+    min_horiz = std::min(min_horiz, max_horiz);
     float default_foot_x = base_x + p.coxa_length + min_horiz;
     float default_foot_y = base_y;
 
@@ -48,12 +52,18 @@ Point3D WalkController::footTrajectory(int leg_index, float phase, float step_he
         leg_states[leg_index] = STANCE_PHASE;
         float support_progress = leg_phase / stance_duration;
         trajectory.x = default_foot_x + step_length * (0.5f - support_progress);
+        float rel = trajectory.x - base_x - p.coxa_length;
+        if (fabs(rel) > max_horiz)
+            trajectory.x = base_x + p.coxa_length + copysignf(max_horiz, rel);
         trajectory.y = default_foot_y;
         trajectory.z = -robot_height;
     } else {
         leg_states[leg_index] = SWING_PHASE;
         float swing_progress = (leg_phase - stance_duration) / swing_duration;
         trajectory.x = default_foot_x + step_length * (swing_progress - 0.5f);
+        float rel2 = trajectory.x - base_x - p.coxa_length;
+        if (fabs(rel2) > max_horiz)
+            trajectory.x = base_x + p.coxa_length + copysignf(max_horiz, rel2);
         trajectory.y = default_foot_y;
         trajectory.z = -robot_height + step_height * sin(M_PI * swing_progress);
     }

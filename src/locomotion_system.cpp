@@ -684,14 +684,19 @@ bool LocomotionSystem::performSelfTest() {
 void LocomotionSystem::initializeDefaultPose() {
     for (int i = 0; i < NUM_LEGS; i++) {
         float angle = i * 60.0f;
+        float reach = params.coxa_length + params.femur_length + params.tibia_length;
+        float base_radius = std::min(params.hexagon_radius, reach - 10.0f);
         float min_horiz = sqrtf(std::max(
             (params.tibia_length - params.femur_length) *
                     (params.tibia_length - params.femur_length) -
                 params.robot_height * params.robot_height,
             0.0f));
-        leg_positions[i].x = params.hexagon_radius * cos(math_utils::degreesToRadians(angle)) +
+        float max_horiz = sqrtf(std::max(reach * reach - params.robot_height * params.robot_height, 0.0f)) -
+                          params.coxa_length;
+        min_horiz = std::min(min_horiz, max_horiz);
+        leg_positions[i].x = base_radius * cos(math_utils::degreesToRadians(angle)) +
                              params.coxa_length + min_horiz;
-        leg_positions[i].y = params.hexagon_radius * sin(math_utils::degreesToRadians(angle));
+        leg_positions[i].y = base_radius * sin(math_utils::degreesToRadians(angle));
         leg_positions[i].z = -params.robot_height;
 
         float coxa = model.constrainAngle(0.0f, params.coxa_angle_limits[0], params.coxa_angle_limits[1]);
