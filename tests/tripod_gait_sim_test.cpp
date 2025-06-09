@@ -287,7 +287,7 @@ int main() {
 
     std::cout << "Sample joint angles at 100mm height:" << std::endl;
     std::cout << "=== About to call trajectory and setLegPosition ===" << std::endl;
-    for (int leg = 0; leg < 3; ++leg) {
+    for (int leg = 0; leg < NUM_LEGS; ++leg) {
         Point3D pos = sys1.calculateFootTrajectory(leg, 0.5f);
         std::cout << "  Leg " << leg + 1 << " target position: x=" << std::fixed << std::setprecision(1) << pos.x << ", y=" << pos.y << ", z=" << pos.z << std::endl;
         sys1.setLegPosition(leg, pos);
@@ -333,7 +333,7 @@ int main() {
 
     std::cout << "Sample joint angles at 200mm height:" << std::endl;
     std::cout << "=== About to call trajectory and setLegPosition ===" << std::endl;
-    for (int leg = 0; leg < 3; ++leg) {
+    for (int leg = 0; leg < NUM_LEGS; ++leg) {
         Point3D pos = sys2.calculateFootTrajectory(leg, 0.5f);
         std::cout << "  Leg " << leg + 1 << " target position: x=" << std::fixed << std::setprecision(1) << pos.x << ", y=" << pos.y << ", z=" << pos.z << std::endl;
         sys2.setLegPosition(leg, pos);
