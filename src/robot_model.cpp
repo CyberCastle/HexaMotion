@@ -42,9 +42,9 @@ void RobotModel::initializeDH() {
     }
 }
 
+// Damped Least Squares (DLS) iterative inverse kinematics
+// Based on CSIRO syropod_highlevel_controller implementation
 JointAngles RobotModel::inverseKinematics(int leg, const Point3D &p_target) {
-    // Damped Least Squares (DLS) iterative inverse kinematics
-    // Based on CSIRO syropod_highlevel_controller implementation
 
     const float DLS_COEFFICIENT = 0.02f; // Damping factor for numerical stability
     const float IK_TOLERANCE = 0.005f;   // 5mm tolerance for convergence
@@ -66,34 +66,38 @@ JointAngles RobotModel::inverseKinematics(int leg, const Point3D &p_target) {
     float min_reach = std::abs(params.femur_length - params.tibia_length);
 
     // Only reject if target is significantly outside workspace (allow some margin for numerical precision)
-    if (target_distance > max_reach * 1.05f) {
-        // Target clearly too far - return pose pointing toward target but at max reach
+    if (target_distance > max_reach * 1.02f) { // Reduced from 1.05f to be less conservative
+        // Target clearly too far - return pose pointing toward target but at max reach with valid joint limits
         float coxa_angle = atan2(local_target.y, local_target.x) * 180.0f / M_PI;
-        return JointAngles(coxa_angle, -60.0f, 120.0f); // Extended pose
+        coxa_angle = constrainAngle(coxa_angle, params.coxa_angle_limits[0], params.coxa_angle_limits[1]);
+        // Use a valid extended pose within joint limits
+        return JointAngles(coxa_angle, -45.0f, 60.0f); // Constrained extended pose
     }
 
-    if (target_distance < min_reach * 0.8f) {
-        // Target clearly too close - return retracted pose
+    if (target_distance < min_reach * 0.9f) { // Reduced from 0.8f to be less conservative
+        // Target clearly too close - return retracted pose within joint limits
         float coxa_angle = atan2(local_target.y, local_target.x) * 180.0f / M_PI;
-        return JointAngles(coxa_angle, 45.0f, -90.0f); // Retracted pose
+        coxa_angle = constrainAngle(coxa_angle, params.coxa_angle_limits[0], params.coxa_angle_limits[1]);
+        return JointAngles(coxa_angle, 30.0f, -60.0f); // Constrained retracted pose
     }
 
     // Try multiple starting positions for challenging cases
     JointAngles best_result;
     float best_error = std::numeric_limits<float>::max();
 
-    // Define multiple starting configurations
+    // Define multiple starting configurations - all within joint limits
     std::vector<JointAngles> starting_configs;
     float coxa_start = atan2(local_target.y, local_target.x) * 180.0f / M_PI;
+    coxa_start = constrainAngle(coxa_start, params.coxa_angle_limits[0], params.coxa_angle_limits[1]);
 
     // Primary starting guess: target-oriented with typical leg pose
-    starting_configs.push_back(JointAngles(coxa_start, -45.0f, 90.0f));
+    starting_configs.push_back(JointAngles(coxa_start, -45.0f, 60.0f));
 
-    // Alternative starting guesses for difficult cases
-    starting_configs.push_back(JointAngles(coxa_start, 30.0f, -60.0f));  // High pose
-    starting_configs.push_back(JointAngles(coxa_start, -30.0f, 60.0f));  // Mid pose
-    starting_configs.push_back(JointAngles(coxa_start, 0.0f, 0.0f));     // Straight pose
-    starting_configs.push_back(JointAngles(coxa_start, -60.0f, 120.0f)); // Extended pose
+    // Alternative starting guesses for difficult cases - all within [-90°, 90°]
+    starting_configs.push_back(JointAngles(coxa_start, 30.0f, -60.0f)); // High pose
+    starting_configs.push_back(JointAngles(coxa_start, -30.0f, 45.0f)); // Mid pose
+    starting_configs.push_back(JointAngles(coxa_start, 0.0f, 0.0f));    // Straight pose
+    starting_configs.push_back(JointAngles(coxa_start, -60.0f, 80.0f)); // Valid extended pose
 
     // Try each starting configuration
     for (const auto &start_config : starting_configs) {
@@ -159,6 +163,11 @@ JointAngles RobotModel::inverseKinematics(int leg, const Point3D &p_target) {
                 current_angles.coxa += angle_delta(0) * 180.0f / M_PI;
                 current_angles.femur += angle_delta(1) * 180.0f / M_PI;
                 current_angles.tibia += angle_delta(2) * 180.0f / M_PI;
+
+                // Normalize angles to handle wraparound
+                current_angles.coxa = normalizeAngle(current_angles.coxa);
+                current_angles.femur = normalizeAngle(current_angles.femur);
+                current_angles.tibia = normalizeAngle(current_angles.tibia);
             } else {
                 // Apply standard Damped Least Squares method
                 // J_inv = J^T * (J * J^T + λ^2 * I)^(-1)
@@ -174,6 +183,11 @@ JointAngles RobotModel::inverseKinematics(int leg, const Point3D &p_target) {
                 current_angles.coxa += angle_delta(0) * 180.0f / M_PI;
                 current_angles.femur += angle_delta(1) * 180.0f / M_PI;
                 current_angles.tibia += angle_delta(2) * 180.0f / M_PI;
+
+                // Normalize angles to handle wraparound
+                current_angles.coxa = normalizeAngle(current_angles.coxa);
+                current_angles.femur = normalizeAngle(current_angles.femur);
+                current_angles.tibia = normalizeAngle(current_angles.tibia);
             }
 
             // Apply joint limits
@@ -190,7 +204,21 @@ JointAngles RobotModel::inverseKinematics(int leg, const Point3D &p_target) {
                                  pow(p_target.y - final_pos.y, 2) +
                                  pow(p_target.z - final_pos.z, 2));
 
-        if (final_error < best_error) {
+        // Prefer solutions with better accuracy, but also consider if solution is within joint limits
+        bool current_within_limits = checkJointLimits(leg, current_angles);
+        bool best_within_limits = checkJointLimits(leg, best_result);
+
+        bool update_best = false;
+        if (current_within_limits && !best_within_limits) {
+            // Current solution is within limits, best is not - prefer current
+            update_best = true;
+        } else if (current_within_limits == best_within_limits) {
+            // Both have same limit status - prefer better accuracy
+            update_best = (final_error < best_error);
+        }
+        // If current is outside limits but best is within limits, don't update
+
+        if (update_best) {
             best_result = current_angles;
             best_error = final_error;
         }
@@ -295,7 +323,25 @@ bool RobotModel::checkJointLimits(int leg_index, const JointAngles &angles) cons
 }
 
 float RobotModel::constrainAngle(float angle, float min_angle, float max_angle) const {
-    return std::max(min_angle, std::min(max_angle, angle));
+    // First normalize angle to [-180, 180] range to handle wraparound
+    float normalized_angle = normalizeAngle(angle);
+
+    // Then clamp to the specified joint limits
+    return std::max(min_angle, std::min(max_angle, normalized_angle));
+}
+
+float RobotModel::normalizeAngle(float angle_deg) const {
+    // Normalize angle to [-180, 180] range following syropod implementation
+    // This handles angle wraparound issues that can occur during IK iteration
+
+    // Convert to [-PI, PI] range first
+    float angle_rad = angle_deg * M_PI / 180.0f;
+
+    // Normalize to [-PI, PI] using atan2 trick
+    angle_rad = atan2(sin(angle_rad), cos(angle_rad));
+
+    // Convert back to degrees
+    return angle_rad * 180.0f / M_PI;
 }
 
 bool RobotModel::validate() const {

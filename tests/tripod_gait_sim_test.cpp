@@ -21,6 +21,39 @@ static void printWelcome() {
 // Forward declaration
 static void printAngleBar(float angle, float min_angle, float max_angle);
 
+// Add function to display robot dimensions
+static void printRobotDimensions(const Parameters &p) {
+    std::cout << "=========================================" << std::endl;
+    std::cout << "           ROBOT DIMENSIONS" << std::endl;
+    std::cout << "=========================================" << std::endl;
+    std::cout << "Hexagon Radius:    " << std::setw(6) << p.hexagon_radius << " mm" << std::endl;
+    std::cout << "Coxa Length:       " << std::setw(6) << p.coxa_length << " mm" << std::endl;
+    std::cout << "Femur Length:      " << std::setw(6) << p.femur_length << " mm" << std::endl;
+    std::cout << "Tibia Length:      " << std::setw(6) << p.tibia_length << " mm" << std::endl;
+    std::cout << "Robot Height:      " << std::setw(6) << p.robot_height << " mm" << std::endl;
+    std::cout << "Height Offset:     " << std::setw(6) << p.height_offset << " mm" << std::endl;
+    std::cout << "Control Frequency: " << std::setw(6) << p.control_frequency << " Hz" << std::endl;
+    std::cout << std::endl;
+
+    // Calculate and display total leg reach
+    float max_reach = p.coxa_length + p.femur_length + p.tibia_length;
+    float body_diagonal = p.hexagon_radius * 2;
+
+    std::cout << "CALCULATED DIMENSIONS:" << std::endl;
+    std::cout << "Max Leg Reach:     " << std::setw(6) << std::setprecision(1) << std::fixed << max_reach << " mm" << std::endl;
+    std::cout << "Body Diagonal:     " << std::setw(6) << std::setprecision(1) << body_diagonal << " mm" << std::endl;
+    std::cout << "Working Radius:    " << std::setw(6) << std::setprecision(1) << (p.hexagon_radius + max_reach) << " mm" << std::endl;
+    std::cout << std::endl;
+
+    // Display joint limits
+    std::cout << "JOINT ANGLE LIMITS:" << std::endl;
+    std::cout << "Coxa:  " << std::setw(4) << p.coxa_angle_limits[0] << "° to " << std::setw(4) << p.coxa_angle_limits[1] << "°" << std::endl;
+    std::cout << "Femur: " << std::setw(4) << p.femur_angle_limits[0] << "° to " << std::setw(4) << p.femur_angle_limits[1] << "°" << std::endl;
+    std::cout << "Tibia: " << std::setw(4) << p.tibia_angle_limits[0] << "° to " << std::setw(4) << p.tibia_angle_limits[1] << "°" << std::endl;
+    std::cout << "=========================================" << std::endl;
+    std::cout << std::endl;
+}
+
 static void printHeader() {
     std::cout << "Step|";
     for (int leg = 0; leg < NUM_LEGS; ++leg) {
@@ -185,11 +218,28 @@ static void printDetailedRobotStatus(LocomotionSystem &sys, float distance_cover
               << "═══════════════════════════════════════" << std::endl;
     std::cout << "HEXAPOD STATUS - Step " << step << std::endl;
     std::cout << "═══════════════════════════════════════" << std::endl;
+
+    // Motion status
     std::cout << "Distance: " << std::setw(6) << std::setprecision(1) << distance_covered
               << "mm / 800mm (" << std::setw(3) << (int)((distance_covered / 800.0f) * 100) << "%)" << std::endl;
-    std::cout << "Robot Height: " << std::setw(4) << std::setprecision(1) << sys.getParameters().robot_height << "mm" << std::endl;
     std::cout << "Step Height: " << std::setw(4) << std::setprecision(1) << sys.getStepHeight() << "mm" << std::endl;
     std::cout << "Step Length: " << std::setw(4) << std::setprecision(1) << sys.getStepLength() << "mm" << std::endl;
+
+    // Robot dimensions
+    const Parameters &p = sys.getParameters();
+    std::cout << std::endl
+              << "ROBOT DIMENSIONS:" << std::endl;
+    std::cout << "Body Radius: " << std::setw(4) << std::setprecision(1) << p.hexagon_radius << "mm | ";
+    std::cout << "Height: " << std::setw(4) << std::setprecision(1) << p.robot_height << "mm" << std::endl;
+    std::cout << "Leg Segments: C" << std::setw(3) << p.coxa_length << "mm | ";
+    std::cout << "F" << std::setw(3) << p.femur_length << "mm | ";
+    std::cout << "T" << std::setw(3) << p.tibia_length << "mm" << std::endl;
+
+    // Calculate total robot footprint
+    float max_reach = p.coxa_length + p.femur_length + p.tibia_length;
+    float footprint_radius = p.hexagon_radius + max_reach;
+    std::cout << "Max Reach: " << std::setw(4) << std::setprecision(1) << max_reach << "mm | ";
+    std::cout << "Footprint: " << std::setw(4) << std::setprecision(1) << (footprint_radius * 2) << "mm diameter" << std::endl;
 
     // Show active servo count
     int active_servos = 0;
@@ -239,17 +289,17 @@ int main() {
     std::cout << "=== About to call trajectory and setLegPosition ===" << std::endl;
     for (int leg = 0; leg < 3; ++leg) {
         Point3D pos = sys1.calculateFootTrajectory(leg, 0.5f);
-        std::cout << "  Leg " << leg + 1 << " target position: x=" << pos.x << ", y=" << pos.y << ", z=" << pos.z << std::endl;
+        std::cout << "  Leg " << leg + 1 << " target position: x=" << std::fixed << std::setprecision(1) << pos.x << ", y=" << pos.y << ", z=" << pos.z << std::endl;
         sys1.setLegPosition(leg, pos);
         JointAngles q = sys1.getJointAngles(leg);
-        std::cout << "  Leg " << leg + 1 << ": Coxa=" << std::setw(6) << std::setprecision(1) << q.coxa
-                  << "° Femur=" << std::setw(6) << q.femur << "° Tibia=" << std::setw(6) << q.tibia << "°" << std::endl;
+        std::cout << "  Leg " << leg + 1 << ": Coxa=" << std::fixed << std::setw(6) << std::setprecision(1) << q.coxa
+                  << "° Femur=" << std::fixed << std::setw(6) << q.femur << "° Tibia=" << std::fixed << std::setw(6) << q.tibia << "°" << std::endl;
 
         // Verify forward kinematics result
         Point3D fk_pos = sys1.calculateForwardKinematics(leg, q);
-        std::cout << "  FK verification: x=" << fk_pos.x << ", y=" << fk_pos.y << ", z=" << fk_pos.z << std::endl;
+        std::cout << "  FK verification: x=" << std::fixed << std::setprecision(1) << fk_pos.x << ", y=" << fk_pos.y << ", z=" << fk_pos.z << std::endl;
         float error = sqrt(pow(pos.x - fk_pos.x, 2) + pow(pos.y - fk_pos.y, 2) + pow(pos.z - fk_pos.z, 2));
-        std::cout << "  IK error: " << error << "mm" << std::endl;
+        std::cout << "  IK error: " << std::fixed << std::setprecision(1) << error << "mm" << std::endl;
     }
 
     std::cout << std::endl;
@@ -285,17 +335,17 @@ int main() {
     std::cout << "=== About to call trajectory and setLegPosition ===" << std::endl;
     for (int leg = 0; leg < 3; ++leg) {
         Point3D pos = sys2.calculateFootTrajectory(leg, 0.5f);
-        std::cout << "  Leg " << leg + 1 << " target position: x=" << pos.x << ", y=" << pos.y << ", z=" << pos.z << std::endl;
+        std::cout << "  Leg " << leg + 1 << " target position: x=" << std::fixed << std::setprecision(1) << pos.x << ", y=" << pos.y << ", z=" << pos.z << std::endl;
         sys2.setLegPosition(leg, pos);
         JointAngles q = sys2.getJointAngles(leg);
-        std::cout << "  Leg " << leg + 1 << ": Coxa=" << std::setw(6) << std::setprecision(1) << q.coxa
-                  << "° Femur=" << std::setw(6) << q.femur << "° Tibia=" << std::setw(6) << q.tibia << "°" << std::endl;
+        std::cout << "  Leg " << leg + 1 << ": Coxa=" << std::fixed << std::setw(6) << std::setprecision(1) << q.coxa
+                  << "° Femur=" << std::fixed << std::setw(6) << q.femur << "° Tibia=" << std::fixed << std::setw(6) << q.tibia << "°" << std::endl;
 
         // Verify forward kinematics result
         Point3D fk_pos = sys2.calculateForwardKinematics(leg, q);
-        std::cout << "  FK verification: x=" << fk_pos.x << ", y=" << fk_pos.y << ", z=" << fk_pos.z << std::endl;
+        std::cout << "  FK verification: x=" << std::fixed << std::setprecision(1) << fk_pos.x << ", y=" << fk_pos.y << ", z=" << fk_pos.z << std::endl;
         float error = sqrt(pow(pos.x - fk_pos.x, 2) + pow(pos.y - fk_pos.y, 2) + pow(pos.z - fk_pos.z, 2));
-        std::cout << "  IK error: " << error << "mm" << std::endl;
+        std::cout << "  IK error: " << std::fixed << std::setprecision(1) << error << "mm" << std::endl;
     }
 
     std::cout << std::endl
@@ -312,12 +362,16 @@ int main() {
     p.robot_height = 150;
     p.height_offset = 0;
     p.control_frequency = 50;
-    p.coxa_angle_limits[0] = -90;
-    p.coxa_angle_limits[1] = 90;
-    p.femur_angle_limits[0] = -90;
-    p.femur_angle_limits[1] = 90;
-    p.tibia_angle_limits[0] = -90;
-    p.tibia_angle_limits[1] = 90;
+    // Use proper CSIRO-style joint limits
+    p.coxa_angle_limits[0] = -65;
+    p.coxa_angle_limits[1] = 65;
+    p.femur_angle_limits[0] = -75;
+    p.femur_angle_limits[1] = 75;
+    p.tibia_angle_limits[0] = -45;
+    p.tibia_angle_limits[1] = 45;
+
+    // Display robot dimensions
+    printRobotDimensions(p);
 
     // Initialize locomotion system
     LocomotionSystem sys(p);
@@ -329,6 +383,9 @@ int main() {
     assert(sys.initialize(&imu, &fsr, &servos));
     assert(sys.calibrateSystem());
     assert(sys.setGaitType(TRIPOD_GAIT));
+
+    // Display robot dimensions
+    printRobotDimensions(p);
 
     // Simulation parameters
     float velocity = 400.0f;              // mm/s

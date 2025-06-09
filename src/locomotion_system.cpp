@@ -534,27 +534,10 @@ bool LocomotionSystem::update() {
         // Compute inverse kinematics
         JointAngles target_angles = calculateInverseKinematics(i, target_position);
 
-        // Check limits
-        if (checkJointLimits(i, target_angles)) {
-            joint_angles[i] = target_angles;
+        // Use setLegJointAngles to enforce constraints at servo level
+        // This implements the CSIRO syropod approach of joint position clamping
+        if (setLegJointAngles(i, target_angles)) {
             leg_positions[i] = target_position;
-
-            // Send commands to servos
-            for (int j = 0; j < DOF_PER_LEG; j++) {
-                float angle_value;
-                switch (j) {
-                case 0:
-                    angle_value = target_angles.coxa;
-                    break;
-                case 1:
-                    angle_value = target_angles.femur;
-                    break;
-                case 2:
-                    angle_value = target_angles.tibia;
-                    break;
-                }
-                servo_interface->setJointAngle(i, j, angle_value);
-            }
         } else {
             last_error = KINEMATICS_ERROR;
 #if defined(ENABLE_LOG) && defined(ARDUINO)

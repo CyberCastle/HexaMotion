@@ -160,6 +160,7 @@ class RobotModel {
     Eigen::Matrix4f legTransform(int leg, const JointAngles &q) const;
     bool checkJointLimits(int leg, const JointAngles &q) const;
     float constrainAngle(float angle, float min_angle, float max_angle) const;
+    float normalizeAngle(float angle_deg) const;
     bool validate() const;
     /**
      * \brief Calculate minimal and maximal body height based on joint limits.
