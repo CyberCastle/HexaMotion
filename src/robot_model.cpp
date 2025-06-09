@@ -48,7 +48,7 @@ JointAngles RobotModel::inverseKinematics(int leg, const Point3D &p_target) {
 
     const float DLS_COEFFICIENT = 0.02f; // Damping factor for numerical stability
     const float IK_TOLERANCE = 0.005f;   // 5mm tolerance for convergence
-    const int MAX_ITERATIONS = 50;       // Maximum iterations for convergence
+    const int MAX_ITERATIONS = 75;       // Increased iterations for better convergence
 
     // Transform target to leg coordinate system
     const float base_angle_deg = leg * 60.0f;
@@ -81,23 +81,49 @@ JointAngles RobotModel::inverseKinematics(int leg, const Point3D &p_target) {
         return JointAngles(coxa_angle, 30.0f, -60.0f); // Constrained retracted pose
     }
 
+    /*
+     * MULTIPLE STARTING CONFIGURATIONS APPROACH:
+     *
+     * This implementation differs from the original CSIRO syropod_highlevel_controller
+     * by using multiple starting configurations to improve convergence robustness.
+     *
+     * RATIONALE:
+     * - The original CSIRO implementation uses a single initial guess for DLS iteration
+     * - For challenging targets (near singularities, workspace boundaries, multiple solutions),
+     *   a single starting point may fail to converge or converge to suboptimal solutions
+     * - This enhanced approach tries up to 5 different starting configurations to find
+     *   the best solution within joint limits
+     *
+     * CONFIGURATIONS TRIED:
+     * 1. Target-oriented pose (-45°, 60°) - typical walking configuration
+     * 2. High pose (30°, -60°) - leg raised up
+     * 3. Mid pose (-30°, 45°) - intermediate position
+     * 4. Straight pose (0°, 0°) - fully extended
+     * 5. Extended pose (-60°, 80°) - maximum reach
+     *
+     * DISABLE WITH: Set params.ik.use_multiple_starts = false to use original CSIRO behavior
+     */
+
     // Try multiple starting positions for challenging cases
     JointAngles best_result;
     float best_error = std::numeric_limits<float>::max();
 
-    // Define multiple starting configurations - all within joint limits
+    // Define starting configurations based on user preference
     std::vector<JointAngles> starting_configs;
     float coxa_start = atan2(local_target.y, local_target.x) * 180.0f / M_PI;
     coxa_start = constrainAngle(coxa_start, params.coxa_angle_limits[0], params.coxa_angle_limits[1]);
 
-    // Primary starting guess: target-oriented with typical leg pose
-    starting_configs.push_back(JointAngles(coxa_start, -45.0f, 60.0f));
-
-    // Alternative starting guesses for difficult cases - all within [-90°, 90°]
-    starting_configs.push_back(JointAngles(coxa_start, 30.0f, -60.0f)); // High pose
-    starting_configs.push_back(JointAngles(coxa_start, -30.0f, 45.0f)); // Mid pose
-    starting_configs.push_back(JointAngles(coxa_start, 0.0f, 0.0f));    // Straight pose
-    starting_configs.push_back(JointAngles(coxa_start, -60.0f, 80.0f)); // Valid extended pose
+    if (params.ik.use_multiple_starts) {
+        // Enhanced approach: Multiple starting configurations for better convergence
+        starting_configs.push_back(JointAngles(coxa_start, -45.0f, 60.0f)); // Primary guess
+        starting_configs.push_back(JointAngles(coxa_start, 30.0f, -60.0f)); // High pose
+        starting_configs.push_back(JointAngles(coxa_start, -30.0f, 45.0f)); // Mid pose
+        starting_configs.push_back(JointAngles(coxa_start, 0.0f, 0.0f));    // Straight pose
+        starting_configs.push_back(JointAngles(coxa_start, -60.0f, 80.0f)); // Extended pose
+    } else {
+        // Original CSIRO approach: Single starting configuration
+        starting_configs.push_back(JointAngles(coxa_start, -45.0f, 60.0f));
+    }
 
     // Try each starting configuration
     for (const auto &start_config : starting_configs) {

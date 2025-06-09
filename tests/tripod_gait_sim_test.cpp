@@ -439,8 +439,8 @@ int main() {
             std::cout << std::endl;
         }
 
-        // Simulate real-time execution
-        std::this_thread::sleep_for(std::chrono::milliseconds(20));
+        // Simulate real-time execution - commented out for faster analysis
+        // std::this_thread::sleep_for(std::chrono::milliseconds(20));
     }
 
     // Final status
