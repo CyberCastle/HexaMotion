@@ -52,7 +52,13 @@ void PoseController::initializeDefaultPose(Point3D leg_pos[NUM_LEGS], JointAngle
         leg_pos[i].x = hex_radius * cos(math_utils::degreesToRadians(angle)) + 50.0f;
         leg_pos[i].y = hex_radius * sin(math_utils::degreesToRadians(angle));
         leg_pos[i].z = -robot_height;
-        joint_q[i] = JointAngles(0, 45, -90);
+        float coxa = model.constrainAngle(0.0f, model.getParams().coxa_angle_limits[0],
+                                         model.getParams().coxa_angle_limits[1]);
+        float femur = model.constrainAngle(45.0f, model.getParams().femur_angle_limits[0],
+                                          model.getParams().femur_angle_limits[1]);
+        float tibia = model.constrainAngle(-90.0f, model.getParams().tibia_angle_limits[0],
+                                          model.getParams().tibia_angle_limits[1]);
+        joint_q[i] = JointAngles(coxa, femur, tibia);
     }
 }
 
