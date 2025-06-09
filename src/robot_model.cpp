@@ -47,8 +47,9 @@ JointAngles RobotModel::inverseKinematics(int leg, const Point3D &p_target) {
     float cos_b = cos(math_utils::degreesToRadians(base_angle));
     float sin_b = sin(math_utils::degreesToRadians(base_angle));
 
-    float x = p_target.x - params.hexagon_radius * cos_b;
-    float y = p_target.y - params.hexagon_radius * sin_b;
+    float base_r = getBaseRadius();
+    float x = p_target.x - base_r * cos_b;
+    float y = p_target.y - base_r * sin_b;
     float z = p_target.z;
 
     float xr = cos_b * x + sin_b * y;
@@ -109,8 +110,9 @@ Point3D RobotModel::forwardKinematics(int leg_index, const JointAngles &angles) 
 Eigen::Matrix4f RobotModel::legTransform(int leg_index, const JointAngles &q) const {
     const float base_angle_deg = leg_index * 60.0f;
     Eigen::Matrix4f T = Eigen::Matrix4f::Identity();
-    T(0, 3) = params.hexagon_radius * cos(math_utils::degreesToRadians(base_angle_deg));
-    T(1, 3) = params.hexagon_radius * sin(math_utils::degreesToRadians(base_angle_deg));
+    float base_r = getBaseRadius();
+    T(0, 3) = base_r * cos(math_utils::degreesToRadians(base_angle_deg));
+    T(1, 3) = base_r * sin(math_utils::degreesToRadians(base_angle_deg));
     T.block<3, 3>(0, 0) = math_utils::rotationMatrixZ(base_angle_deg);
 
     const float joint_deg[DOF_PER_LEG] = {q.coxa, q.femur, q.tibia};
@@ -133,8 +135,9 @@ Eigen::Matrix3f RobotModel::analyticJacobian(int leg, const JointAngles &q) cons
     Eigen::Vector3f z[DOF_PER_LEG];
 
     const float base_angle = leg * 60.0f;
-    T(0, 3) = params.hexagon_radius * cos(math_utils::degreesToRadians(base_angle));
-    T(1, 3) = params.hexagon_radius * sin(math_utils::degreesToRadians(base_angle));
+    float base_r = getBaseRadius();
+    T(0, 3) = base_r * cos(math_utils::degreesToRadians(base_angle));
+    T(1, 3) = base_r * sin(math_utils::degreesToRadians(base_angle));
     T.block<3, 3>(0, 0) = math_utils::rotationMatrixZ(base_angle);
 
     o[0] = T.block<3, 1>(0, 3);
@@ -221,4 +224,9 @@ std::pair<float, float> RobotModel::calculateHeightRange() const {
     }
 
     return {min_h, max_h};
+}
+
+float RobotModel::getBaseRadius() const {
+    float reach = params.coxa_length + params.femur_length + params.tibia_length;
+    return std::min(params.hexagon_radius, reach - 10.0f);
 }

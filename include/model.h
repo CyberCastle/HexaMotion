@@ -166,6 +166,10 @@ class RobotModel {
      */
     std::pair<float, float> calculateHeightRange() const;
     const Parameters &getParams() const { return params; }
+    /**
+     * \brief Effective radius from body center to hip joints, clamped to leg reach.
+     */
+    float getBaseRadius() const;
 
   private:
     const Parameters &params;

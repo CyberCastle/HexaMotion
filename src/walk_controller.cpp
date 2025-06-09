@@ -32,7 +32,7 @@ Point3D WalkController::footTrajectory(int leg_index, float phase, float step_he
 
     // Calculate leg base position (hexagon corner)
     float reach = p.coxa_length + p.femur_length + p.tibia_length;
-    float base_radius = std::min(p.hexagon_radius, reach - 10.0f);
+    float base_radius = model.getBaseRadius();
     float base_x = base_radius * cos(math_utils::degreesToRadians(base_angle));
     float base_y = base_radius * sin(math_utils::degreesToRadians(base_angle));
 

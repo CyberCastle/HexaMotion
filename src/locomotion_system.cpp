@@ -685,7 +685,7 @@ void LocomotionSystem::initializeDefaultPose() {
     for (int i = 0; i < NUM_LEGS; i++) {
         float angle = i * 60.0f;
         float reach = params.coxa_length + params.femur_length + params.tibia_length;
-        float base_radius = std::min(params.hexagon_radius, reach - 10.0f);
+        float base_radius = model.getBaseRadius();
         float min_horiz = sqrtf(std::max(
             (params.tibia_length - params.femur_length) *
                     (params.tibia_length - params.femur_length) -
