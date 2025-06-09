@@ -1,10 +1,10 @@
 #ifndef MODEL_H
 #define MODEL_H
 
+#include "math_utils.h"
 #include <Arduino.h>
 #include <ArduinoEigen.h>
 #include <utility>
-#include "math_utils.h"
 
 // System configuration
 #define NUM_LEGS 6
@@ -56,24 +56,24 @@ struct Parameters {
     // Gait step calculation factors
     struct GaitFactors {
         // Step length as percentage of leg reach
-        float tripod_length_factor = 0.35f;    // 35% for speed
-        float wave_length_factor = 0.25f;      // 25% for stability
-        float ripple_length_factor = 0.30f;    // 30% for balance
+        float tripod_length_factor = 0.35f;      // 35% for speed
+        float wave_length_factor = 0.25f;        // 25% for stability
+        float ripple_length_factor = 0.30f;      // 30% for balance
         float metachronal_length_factor = 0.28f; // 28% for smooth motion
-        float adaptive_length_factor = 0.30f;   // 30% base for adaptation
+        float adaptive_length_factor = 0.30f;    // 30% base for adaptation
 
         // Step height as percentage of robot height
-        float tripod_height_factor = 0.30f;    // 30% for obstacle clearance
-        float wave_height_factor = 0.20f;      // 20% for stability
-        float ripple_height_factor = 0.25f;    // 25% for balance
+        float tripod_height_factor = 0.30f;      // 30% for obstacle clearance
+        float wave_height_factor = 0.20f;        // 20% for stability
+        float ripple_height_factor = 0.25f;      // 25% for balance
         float metachronal_height_factor = 0.25f; // 25% for smooth motion
-        float adaptive_height_factor = 0.25f;   // 25% base for adaptation
+        float adaptive_height_factor = 0.25f;    // 25% base for adaptation
 
         // Safety limits as percentage of leg reach/height
-        float min_length_factor = 0.12f;       // 12% minimum step length
-        float max_length_factor = 0.50f;       // 50% maximum step length
-        float min_height_factor = 0.12f;       // 12% minimum step height
-        float max_height_factor = 0.40f;       // 40% maximum step height
+        float min_length_factor = 0.12f; // 12% minimum step length
+        float max_length_factor = 0.50f; // 50% maximum step length
+        float min_height_factor = 0.12f; // 12% minimum step height
+        float max_height_factor = 0.40f; // 40% maximum step height
     } gait_factors;
 };
 
@@ -156,6 +156,7 @@ class RobotModel {
     JointAngles inverseKinematics(int leg, const Point3D &p);
     Point3D forwardKinematics(int leg, const JointAngles &q) const;
     Eigen::Matrix3f analyticJacobian(int leg, const JointAngles &q) const;
+    Eigen::Matrix3f calculateJacobian(int leg, const JointAngles &q, const Point3D &target) const;
     Eigen::Matrix4f legTransform(int leg, const JointAngles &q) const;
     bool checkJointLimits(int leg, const JointAngles &q) const;
     float constrainAngle(float angle, float min_angle, float max_angle) const;

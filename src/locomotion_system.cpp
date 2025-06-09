@@ -30,10 +30,12 @@ LocomotionSystem::LocomotionSystem(const Parameters &params)
     body_position = Eigen::Vector3f(0.0f, 0.0f, params.robot_height);
     body_orientation = Eigen::Vector3f(0.0f, 0.0f, 0.0f);
 
-    // Initialize leg states
+    // Initialize leg states and phase offsets for tripod gait
     for (int i = 0; i < NUM_LEGS; i++) {
         leg_states[i] = STANCE_PHASE;
-        leg_phase_offsets[i] = (i % 2) * 0.5f; // Initialize with TRIPOD by default
+        // Tripod gait: legs 1,3,5 (indices 0,2,4) = group A (phase 0)
+        //              legs 2,4,6 (indices 1,3,5) = group B (phase 0.5)
+        leg_phase_offsets[i] = (i % 2) * 0.5f;
     }
 
     initializeDefaultPose();
@@ -186,6 +188,35 @@ bool LocomotionSystem::setGaitType(GaitType gait) {
         return false;
     current_gait = gait;
     gait_phase = 0.0f;
+
+    // Set phase offsets based on gait type
+    switch (gait) {
+    case TRIPOD_GAIT:
+        // Tripod: two groups of 3 legs, 180° out of phase
+        for (int i = 0; i < NUM_LEGS; i++) {
+            leg_phase_offsets[i] = (i % 2) * 0.5f;
+        }
+        break;
+    case WAVE_GAIT:
+        // Wave: each leg follows the previous with 1/6 phase delay
+        for (int i = 0; i < NUM_LEGS; i++) {
+            leg_phase_offsets[i] = i / 6.0f;
+        }
+        break;
+    case RIPPLE_GAIT:
+        // Ripple: similar to wave but with different timing
+        for (int i = 0; i < NUM_LEGS; i++) {
+            leg_phase_offsets[i] = (i * 2) / 12.0f;
+        }
+        break;
+    default:
+        // Default to tripod
+        for (int i = 0; i < NUM_LEGS; i++) {
+            leg_phase_offsets[i] = (i % 2) * 0.5f;
+        }
+        break;
+    }
+
     return walk_ctrl->setGaitType(gait);
 }
 
@@ -198,8 +229,13 @@ bool LocomotionSystem::planGaitSequence(float vx, float vy, float omega) {
 
 // Gait phase update
 void LocomotionSystem::updateGaitPhase() {
-    if (walk_ctrl)
+    if (walk_ctrl) {
         walk_ctrl->updateGaitPhase(dt);
+        // Synchronize gait phase - use cycle_frequency to determine progression rate
+        gait_phase += dt * cycle_frequency;
+        if (gait_phase >= 1.0f)
+            gait_phase -= 1.0f;
+    }
 }
 
 // Foot trajectory calculation
