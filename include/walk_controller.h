@@ -10,6 +10,7 @@ class WalkController {
     bool setGaitType(GaitType gait);
     bool planGaitSequence(float vx, float vy, float omega);
     void updateGaitPhase(float dt);
+    float getGaitPhase() const { return gait_phase; }
     Point3D footTrajectory(int leg, float phase, float step_height, float step_length,
                            float stance_duration, float swing_duration, float robot_height,
                            const float leg_phase_offsets[NUM_LEGS], LegState leg_states[NUM_LEGS],

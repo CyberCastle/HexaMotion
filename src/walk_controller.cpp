@@ -34,10 +34,15 @@ Point3D WalkController::footTrajectory(int leg_index, float phase, float step_he
     float base_x = p.hexagon_radius * cos(math_utils::degreesToRadians(base_angle));
     float base_y = p.hexagon_radius * sin(math_utils::degreesToRadians(base_angle));
 
-    // Calculate default foot position (extended leg)
-    float leg_reach = p.coxa_length + p.femur_length + p.tibia_length;
-    float default_foot_x = base_x + leg_reach * cos(math_utils::degreesToRadians(base_angle));
-    float default_foot_y = base_y + leg_reach * sin(math_utils::degreesToRadians(base_angle));
+    // Default foot position placed to keep the leg within reach even at low
+    // robot heights. Position the foot forward from the hip by the minimum
+    // horizontal distance allowed by the leg geometry.
+    float min_horiz = sqrtf(std::max(
+        (p.tibia_length - p.femur_length) * (p.tibia_length - p.femur_length) -
+            robot_height * robot_height,
+        0.0f));
+    float default_foot_x = base_x + p.coxa_length + min_horiz;
+    float default_foot_y = base_y;
 
     if (leg_phase < stance_duration) {
         leg_states[leg_index] = STANCE_PHASE;

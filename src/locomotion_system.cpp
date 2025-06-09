@@ -198,8 +198,10 @@ bool LocomotionSystem::planGaitSequence(float vx, float vy, float omega) {
 
 // Gait phase update
 void LocomotionSystem::updateGaitPhase() {
-    if (walk_ctrl)
+    if (walk_ctrl) {
         walk_ctrl->updateGaitPhase(dt);
+        gait_phase = walk_ctrl->getGaitPhase();
+    }
 }
 
 // Foot trajectory calculation
@@ -682,11 +684,20 @@ bool LocomotionSystem::performSelfTest() {
 void LocomotionSystem::initializeDefaultPose() {
     for (int i = 0; i < NUM_LEGS; i++) {
         float angle = i * 60.0f;
-        leg_positions[i].x = params.hexagon_radius * cos(math_utils::degreesToRadians(angle)) + params.coxa_length;
+        float min_horiz = sqrtf(std::max(
+            (params.tibia_length - params.femur_length) *
+                    (params.tibia_length - params.femur_length) -
+                params.robot_height * params.robot_height,
+            0.0f));
+        leg_positions[i].x = params.hexagon_radius * cos(math_utils::degreesToRadians(angle)) +
+                             params.coxa_length + min_horiz;
         leg_positions[i].y = params.hexagon_radius * sin(math_utils::degreesToRadians(angle));
         leg_positions[i].z = -params.robot_height;
 
-        joint_angles[i] = JointAngles(0, 45, -90); // Default angles
+        float coxa = model.constrainAngle(0.0f, params.coxa_angle_limits[0], params.coxa_angle_limits[1]);
+        float femur = model.constrainAngle(45.0f, params.femur_angle_limits[0], params.femur_angle_limits[1]);
+        float tibia = model.constrainAngle(-90.0f, params.tibia_angle_limits[0], params.tibia_angle_limits[1]);
+        joint_angles[i] = JointAngles(coxa, femur, tibia);
         leg_states[i] = STANCE_PHASE;
     }
 }

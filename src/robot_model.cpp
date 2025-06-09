@@ -42,34 +42,57 @@ void RobotModel::initializeDH() {
 }
 
 JointAngles RobotModel::inverseKinematics(int leg, const Point3D &p_target) {
+    // Transform target to leg coordinate frame
+    float base_angle = leg * 60.0f;
+    float cos_b = cos(math_utils::degreesToRadians(base_angle));
+    float sin_b = sin(math_utils::degreesToRadians(base_angle));
+
+    float x = p_target.x - params.hexagon_radius * cos_b;
+    float y = p_target.y - params.hexagon_radius * sin_b;
+    float z = p_target.z;
+
+    float xr = cos_b * x + sin_b * y;
+    float yr = -sin_b * x + cos_b * y;
+
     JointAngles q{};
-    q = JointAngles(0, 0, 0);
-    const uint8_t N = params.ik.max_iterations;
-    const float eps = params.ik.pos_threshold_mm;
+    q.coxa = math_utils::radiansToDegrees(atan2(yr, xr));
 
-    for (uint8_t it = 0; it < N; ++it) {
-        Point3D p_now = forwardKinematics(leg, q);
-        Eigen::Vector3f e(p_target.x - p_now.x,
-                          p_target.y - p_now.y,
-                          p_target.z - p_now.z);
+    float dx = sqrt(xr * xr + yr * yr) - params.coxa_length;
+    float dz = z;
 
-        if (e.norm() < eps)
-            return q;
+    float L1 = params.femur_length;
+    float L2 = params.tibia_length;
 
-        Eigen::Matrix3f J = analyticJacobian(leg, q);
-        const float lambda = params.ik.use_damping ? params.ik.damping_lambda : 0.0f;
-        Eigen::Matrix3f Z = (J * J.transpose() + lambda * lambda * Eigen::Matrix3f::Identity()).inverse();
-        Eigen::Vector3f dq = J.transpose() * Z * e;
+    float d = sqrt(dx * dx + dz * dz);
+    float min_d = fabs(L1 - L2) + 1e-3f;
+    float max_d = L1 + L2 - 1e-3f;
+    if (d < min_d) {
+        float scale = min_d / d;
+        dx *= scale;
+        dz *= scale;
+        d = min_d;
+    } else if (d > max_d) {
+        float scale = max_d / d;
+        dx *= scale;
+        dz *= scale;
+        d = max_d;
+    }
 
-        q.coxa += math_utils::radiansToDegrees(dq[0]);
-        q.femur += math_utils::radiansToDegrees(dq[1]);
-        q.tibia += math_utils::radiansToDegrees(dq[2]);
+    float cos_tibia = (dx * dx + dz * dz - L1 * L1 - L2 * L2) / (2.0f * L1 * L2);
+    cos_tibia = std::max(-1.0f, std::min(1.0f, cos_tibia));
+    float tibia = atan2(-sqrt(1.0f - cos_tibia * cos_tibia), cos_tibia);
 
-        if (params.ik.clamp_joints) {
-            q.coxa = constrainAngle(q.coxa, params.coxa_angle_limits[0], params.coxa_angle_limits[1]);
-            q.femur = constrainAngle(q.femur, params.femur_angle_limits[0], params.femur_angle_limits[1]);
-            q.tibia = constrainAngle(q.tibia, params.tibia_angle_limits[0], params.tibia_angle_limits[1]);
-        }
+    float k1 = L1 + L2 * cos(tibia);
+    float k2 = L2 * sin(tibia);
+    float femur = atan2(dz, dx) - atan2(k2, k1);
+
+    q.femur = math_utils::radiansToDegrees(femur);
+    q.tibia = math_utils::radiansToDegrees(tibia);
+
+    if (params.ik.clamp_joints) {
+        q.coxa = constrainAngle(q.coxa, params.coxa_angle_limits[0], params.coxa_angle_limits[1]);
+        q.femur = constrainAngle(q.femur, params.femur_angle_limits[0], params.femur_angle_limits[1]);
+        q.tibia = constrainAngle(q.tibia, params.tibia_angle_limits[0], params.tibia_angle_limits[1]);
     }
     return q;
 }
