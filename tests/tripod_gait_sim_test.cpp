@@ -374,11 +374,11 @@ int main() {
 
         // Show visual diagrams every 10 steps
         if (s % 10 == 0) {
-            printLegStateVisualization(sys);
-            printRobotDiagram(sys, distance_covered);
-            printServoAngleGraph(sys, s);
-            printTripodGaitPattern(sys, phase);
-            printDetailedRobotStatus(sys, distance_covered, s);
+            // printLegStateVisualization(sys);
+            //  printRobotDiagram(sys, distance_covered);
+            //  printServoAngleGraph(sys, s);
+            //  printTripodGaitPattern(sys, phase);
+            // printDetailedRobotStatus(sys, distance_covered, s);
             std::cout << std::endl;
         }
 
@@ -387,22 +387,22 @@ int main() {
     }
 
     // Final status
-    std::cout << std::endl
-              << "=========================================" << std::endl;
-    std::cout << "SIMULATION COMPLETED" << std::endl;
-    std::cout << "=========================================" << std::endl;
+    // std::cout << std::endl
+    //           << "=========================================" << std::endl;
+    // std::cout << "SIMULATION COMPLETED" << std::endl;
+    // std::cout << "=========================================" << std::endl;
 
-    if (!changed) {
-        std::cout << "⚠️  Warning: servo angles did not change during simulation" << std::endl;
-    } else {
-        std::cout << "✓ Servo angles changed correctly during simulation" << std::endl;
-    }
+    // if (!changed) {
+    //     std::cout << "⚠️  Warning: servo angles did not change during simulation" << std::endl;
+    // } else {
+    //     std::cout << "✓ Servo angles changed correctly during simulation" << std::endl;
+    // }
 
     // Final robot state
-    printLegStateVisualization(sys);
-    printRobotDiagram(sys, distance);
-    printServoAngleGraph(sys, steps);
-    printTripodGaitPattern(sys, 1.0f);
+    // printLegStateVisualization(sys);
+    // printRobotDiagram(sys, distance);
+    // printServoAngleGraph(sys, steps);
+    // printTripodGaitPattern(sys, 1.0f);
     printDetailedRobotStatus(sys, distance, steps);
 
     std::cout << std::endl
