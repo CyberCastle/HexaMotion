@@ -1,7 +1,10 @@
 #include "walk_controller.h"
 
 WalkController::WalkController(RobotModel &m)
-    : model(m), current_gait(TRIPOD_GAIT), gait_phase(0.0f) {}
+    : model(m), current_gait(TRIPOD_GAIT), gait_phase(0.0f), terrain_adaptation_(m) {
+    // Initialize terrain adaptation system
+    terrain_adaptation_.initialize();
+}
 
 bool WalkController::setGaitType(GaitType gait) {
     current_gait = gait;
@@ -23,6 +26,9 @@ Point3D WalkController::footTrajectory(int leg_index, float phase, float step_he
                                        float stance_duration, float swing_duration, float robot_height,
                                        const float leg_phase_offsets[NUM_LEGS], LegState leg_states[NUM_LEGS],
                                        IFSRInterface *fsr, IIMUInterface *imu) {
+    // Update terrain adaptation system
+    terrain_adaptation_.update(fsr, imu);
+
     float leg_phase = phase + leg_phase_offsets[leg_index];
     if (leg_phase >= 1.0f)
         leg_phase -= 1.0f;
@@ -70,6 +76,53 @@ Point3D WalkController::footTrajectory(int leg_index, float phase, float step_he
         trajectory.x = pos[0];
         trajectory.y = pos[1];
         trajectory.z = pos[2];
+
+        // Apply terrain adaptation for swing phase
+        trajectory = terrain_adaptation_.adaptTrajectoryForTerrain(leg_index, trajectory,
+                                                                   leg_states[leg_index], swing_progress);
     }
+
     return trajectory;
+}
+
+// Terrain adaptation methods
+void WalkController::enableRoughTerrainMode(bool enabled) {
+    terrain_adaptation_.setRoughTerrainMode(enabled);
+}
+
+void WalkController::enableForceNormalTouchdown(bool enabled) {
+    terrain_adaptation_.setForceNormalTouchdown(enabled);
+}
+
+void WalkController::enableGravityAlignedTips(bool enabled) {
+    terrain_adaptation_.setGravityAlignedTips(enabled);
+}
+
+void WalkController::setExternalTarget(int leg_index, const TerrainAdaptation::ExternalTarget &target) {
+    terrain_adaptation_.setExternalTarget(leg_index, target);
+}
+
+void WalkController::setExternalDefault(int leg_index, const TerrainAdaptation::ExternalTarget &default_pos) {
+    terrain_adaptation_.setExternalDefault(leg_index, default_pos);
+}
+
+// Terrain state accessors
+const TerrainAdaptation::WalkPlane &WalkController::getWalkPlane() const {
+    return terrain_adaptation_.getWalkPlane();
+}
+
+const TerrainAdaptation::ExternalTarget &WalkController::getExternalTarget(int leg_index) const {
+    return terrain_adaptation_.getExternalTarget(leg_index);
+}
+
+const TerrainAdaptation::StepPlane &WalkController::getStepPlane(int leg_index) const {
+    return terrain_adaptation_.getStepPlane(leg_index);
+}
+
+bool WalkController::hasTouchdownDetection(int leg_index) const {
+    return terrain_adaptation_.hasTouchdownDetection(leg_index);
+}
+
+Eigen::Vector3f WalkController::estimateGravity() const {
+    return terrain_adaptation_.estimateGravity();
 }
