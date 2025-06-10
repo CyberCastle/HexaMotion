@@ -18,6 +18,9 @@
  */
 class VelocityLimits {
   public:
+    /**
+     * @brief Velocity limits for a specific bearing.
+     */
     struct LimitValues {
         float linear_x;     // Maximum linear velocity in X direction (m/s)
         float linear_y;     // Maximum linear velocity in Y direction (m/s)
@@ -29,6 +32,9 @@ class VelocityLimits {
             : linear_x(lx), linear_y(ly), angular_z(az), acceleration(acc) {}
     };
 
+    /**
+     * @brief Map of velocity limits for 0-359 degree bearings.
+     */
     struct LimitMap {
         std::array<LimitValues, 360> limits; // Limits for each degree (0-359)
 
@@ -40,6 +46,9 @@ class VelocityLimits {
         }
     };
 
+    /**
+     * @brief Workspace parameters used for limit generation.
+     */
     struct WorkspaceConfig {
         float walkspace_radius; // Effective workspace radius for walking
         float stance_radius;    // Radius for angular velocity calculations
@@ -51,6 +60,9 @@ class VelocityLimits {
                             overshoot_x(0.0f), overshoot_y(0.0f), safety_margin(0.85f) {}
     };
 
+    /**
+     * @brief Gait parameters affecting limit calculations.
+     */
     struct GaitConfig {
         float frequency;          // Step frequency (Hz)
         float stance_ratio;       // Ratio of stance phase (0.0 - 1.0)

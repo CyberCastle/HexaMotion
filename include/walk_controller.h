@@ -5,41 +5,123 @@
 #include "terrain_adaptation.h"
 #include "velocity_limits.h"
 
+/**
+ * @brief High level walking controller handling gaits and terrain adaptation.
+ */
 class WalkController {
   public:
+    /**
+     * @brief Construct a walk controller.
+     * @param model Reference to the robot model used for kinematics.
+     */
     explicit WalkController(RobotModel &model);
 
+    /**
+     * @brief Select the active gait type.
+     * @param gait Desired gait enumeration value.
+     * @return True if the gait was set successfully.
+     */
     bool setGaitType(GaitType gait);
+
+    /**
+     * @brief Plan the next gait sequence given velocity commands.
+     * @param vx Linear velocity in X (m/s).
+     * @param vy Linear velocity in Y (m/s).
+     * @param omega Angular velocity around Z (rad/s).
+     * @return True if planning succeeded.
+     */
     bool planGaitSequence(float vx, float vy, float omega);
+
+    /**
+     * @brief Update internal gait phase progression.
+     * @param dt Time step in seconds.
+     */
     void updateGaitPhase(float dt);
 
     // Velocity limiting methods
+    /**
+     * @brief Get velocity limits for a given bearing.
+     * @param bearing_degrees Direction of travel in degrees.
+     * @return Calculated limit values.
+     */
     VelocityLimits::LimitValues getVelocityLimits(float bearing_degrees = 0.0f) const;
+
+    /**
+     * @brief Apply velocity limits to a commanded velocity vector.
+     * @param vx Desired X velocity.
+     * @param vy Desired Y velocity.
+     * @param omega Desired angular velocity.
+     * @return Limited velocity values.
+     */
     VelocityLimits::LimitValues applyVelocityLimits(float vx, float vy, float omega) const;
+
+    /**
+     * @brief Validate a velocity command against computed limits.
+     * @param vx Commanded X velocity.
+     * @param vy Commanded Y velocity.
+     * @param omega Commanded angular velocity.
+     * @return True if the command is within limits.
+     */
     bool validateVelocityCommand(float vx, float vy, float omega) const;
+
+    /**
+     * @brief Update velocity limit tables for new gait parameters.
+     * @param frequency Step frequency in Hz.
+     * @param stance_ratio Ratio of stance phase (0-1).
+     * @param time_to_max_stride Time to reach maximum stride length.
+     */
     void updateVelocityLimits(float frequency, float stance_ratio, float time_to_max_stride = 2.0f);
 
     // Velocity limiting configuration
+    /** Set workspace safety margin used for velocity limiting. */
     void setVelocitySafetyMargin(float margin);
+    /** Set scaling factor for angular velocity commands. */
     void setAngularVelocityScaling(float scaling);
+    /** Retrieve the current workspace configuration. */
     VelocityLimits::WorkspaceConfig getWorkspaceConfig() const;
+
+    /**
+     * @brief Calculate foot trajectory for a single leg.
+     * @param leg Index of the leg (0-5).
+     * @param phase Current gait phase (0-1).
+     * @param step_height Step height in mm.
+     * @param step_length Step length in mm.
+     * @param stance_duration Stance phase duration fraction.
+     * @param swing_duration Swing phase duration fraction.
+     * @param robot_height Current body height.
+     * @param leg_phase_offsets Phase offset array for each leg.
+     * @param leg_states Array of leg state values.
+     * @param fsr Interface to FSR sensors.
+     * @param imu Interface to IMU.
+     * @return Calculated foot position in world frame.
+     */
     Point3D footTrajectory(int leg, float phase, float step_height, float step_length,
                            float stance_duration, float swing_duration, float robot_height,
                            const float leg_phase_offsets[NUM_LEGS], LegState leg_states[NUM_LEGS],
                            IFSRInterface *fsr, IIMUInterface *imu);
 
     // Terrain adaptation methods
+    /** Enable or disable rough terrain mode. */
     void enableRoughTerrainMode(bool enabled);
+    /** Enable touchdown aligned with the terrain normal. */
     void enableForceNormalTouchdown(bool enabled);
+    /** Align foot tips with gravity during swing. */
     void enableGravityAlignedTips(bool enabled);
+    /** Set an external target for a specific leg. */
     void setExternalTarget(int leg_index, const TerrainAdaptation::ExternalTarget &target);
+    /** Set an external default position for a leg. */
     void setExternalDefault(int leg_index, const TerrainAdaptation::ExternalTarget &default_pos);
 
     // Terrain state accessors
+    /** Get the current estimated walk plane. */
     const TerrainAdaptation::WalkPlane &getWalkPlane() const;
+    /** Retrieve the external target for a leg if available. */
     const TerrainAdaptation::ExternalTarget &getExternalTarget(int leg_index) const;
+    /** Get the detected step plane for a specific leg. */
     const TerrainAdaptation::StepPlane &getStepPlane(int leg_index) const;
+    /** Check if touchdown detection is active for a leg. */
     bool hasTouchdownDetection(int leg_index) const;
+    /** Get the estimated gravity vector. */
     Eigen::Vector3f estimateGravity() const;
 
   private:
