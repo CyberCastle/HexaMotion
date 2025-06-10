@@ -56,9 +56,20 @@ Point3D WalkController::footTrajectory(int leg_index, float phase, float step_he
     } else {
         leg_states[leg_index] = SWING_PHASE;
         float swing_progress = (leg_phase - stance_duration) / swing_duration;
-        trajectory.x = default_foot_x + step_length * (swing_progress - 0.5f);
-        trajectory.y = default_foot_y;
-        trajectory.z = -robot_height + step_height * sin(M_PI * swing_progress);
+
+        Eigen::Vector3f ctrl[5];
+        float start_x = default_foot_x - step_length * 0.5f;
+        float end_x = default_foot_x + step_length * 0.5f;
+        float z_base = -robot_height;
+        ctrl[0] = Eigen::Vector3f(start_x, default_foot_y, z_base);
+        ctrl[1] = Eigen::Vector3f(start_x, default_foot_y, z_base + step_height * 0.5f);
+        ctrl[2] = Eigen::Vector3f((start_x + end_x) / 2.0f, default_foot_y, z_base + step_height);
+        ctrl[3] = Eigen::Vector3f(end_x, default_foot_y, z_base + step_height * 0.5f);
+        ctrl[4] = Eigen::Vector3f(end_x, default_foot_y, z_base);
+        Eigen::Vector3f pos = math_utils::quarticBezier(ctrl, swing_progress);
+        trajectory.x = pos[0];
+        trajectory.y = pos[1];
+        trajectory.z = pos[2];
     }
     return trajectory;
 }
