@@ -167,6 +167,13 @@ bool LocomotionSystem::setLegJointAngles(int leg, const JointAngles &q) {
     if (!servo_interface)
         return false;
 
+    bool within_limits = q.coxa >= params.coxa_angle_limits[0] &&
+                        q.coxa <= params.coxa_angle_limits[1] &&
+                        q.femur >= params.femur_angle_limits[0] &&
+                        q.femur <= params.femur_angle_limits[1] &&
+                        q.tibia >= params.tibia_angle_limits[0] &&
+                        q.tibia <= params.tibia_angle_limits[1];
+
     JointAngles clamped;
     clamped.coxa = constrainAngle(q.coxa, params.coxa_angle_limits[0],
                                   params.coxa_angle_limits[1]);
@@ -174,6 +181,9 @@ bool LocomotionSystem::setLegJointAngles(int leg, const JointAngles &q) {
                                    params.femur_angle_limits[1]);
     clamped.tibia = constrainAngle(q.tibia, params.tibia_angle_limits[0],
                                    params.tibia_angle_limits[1]);
+
+    if (!params.ik.clamp_joints && !within_limits)
+        return false;
 
     joint_angles[leg] = clamped; // internal state
     servo_interface->setJointAngle(leg, 0, clamped.coxa);
