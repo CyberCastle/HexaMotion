@@ -22,6 +22,48 @@ Eigen::Vector4f eulerToQuaternion(const Eigen::Vector3f &euler);
 Eigen::Vector4f quaternionMultiply(const Eigen::Vector4f &q1, const Eigen::Vector4f &q2);
 Eigen::Vector4f quaternionInverse(const Eigen::Vector4f &q);
 Eigen::Matrix4f dhTransform(float a, float alpha, float d, float theta);
+
+template <class T>
+inline T quadraticBezier(const T *points, double t) {
+    double s = 1.0 - t;
+    return points[0] * (s * s) + points[1] * (2.0 * t * s) + points[2] * (t * t);
+}
+
+template <class T>
+inline T cubicBezier(const T *points, double t) {
+    double s = 1.0 - t;
+    return points[0] * (s * s * s) +
+           points[1] * (3.0 * t * s * s) +
+           points[2] * (3.0 * t * t * s) +
+           points[3] * (t * t * t);
+}
+
+template <class T>
+inline T cubicBezierDot(const T *points, double t) {
+    double s = 1.0 - t;
+    return 3.0 * s * s * (points[1] - points[0]) +
+           6.0 * s * t * (points[2] - points[1]) +
+           3.0 * t * t * (points[3] - points[2]);
+}
+
+template <class T>
+inline T quarticBezier(const T *points, double t) {
+    double s = 1.0 - t;
+    return points[0] * (s * s * s * s) +
+           points[1] * (4.0 * t * s * s * s) +
+           points[2] * (6.0 * t * t * s * s) +
+           points[3] * (4.0 * t * t * t * s) +
+           points[4] * (t * t * t * t);
+}
+
+template <class T>
+inline T quarticBezierDot(const T *points, double t) {
+    double s = 1.0 - t;
+    return 4.0 * s * s * s * (points[1] - points[0]) +
+           12.0 * s * s * t * (points[2] - points[1]) +
+           12.0 * s * t * t * (points[3] - points[2]) +
+           4.0 * t * t * t * (points[4] - points[3]);
+}
 } // namespace math_utils
 
 #endif // MATH_UTILS_H
