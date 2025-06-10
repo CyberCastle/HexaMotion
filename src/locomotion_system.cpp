@@ -168,11 +168,11 @@ bool LocomotionSystem::setLegJointAngles(int leg, const JointAngles &q) {
         return false;
 
     bool within_limits = q.coxa >= params.coxa_angle_limits[0] &&
-                        q.coxa <= params.coxa_angle_limits[1] &&
-                        q.femur >= params.femur_angle_limits[0] &&
-                        q.femur <= params.femur_angle_limits[1] &&
-                        q.tibia >= params.tibia_angle_limits[0] &&
-                        q.tibia <= params.tibia_angle_limits[1];
+                         q.coxa <= params.coxa_angle_limits[1] &&
+                         q.femur >= params.femur_angle_limits[0] &&
+                         q.femur <= params.femur_angle_limits[1] &&
+                         q.tibia >= params.tibia_angle_limits[0] &&
+                         q.tibia <= params.tibia_angle_limits[1];
 
     JointAngles clamped;
     clamped.coxa = constrainAngle(q.coxa, params.coxa_angle_limits[0],
@@ -208,16 +208,24 @@ bool LocomotionSystem::setGaitType(GaitType gait) {
         }
         break;
     case WAVE_GAIT:
-        // Wave: each leg follows the previous with 1/6 phase delay
-        for (int i = 0; i < NUM_LEGS; i++) {
-            leg_phase_offsets[i] = i / 6.0f;
-        }
+        // Wave: OpenSHC-compatible phase offsets
+        // Based on offset_multiplier: [2,3,4,1,0,5] with base_offset=2, total_period=12
+        leg_phase_offsets[0] = 2.0f / 6.0f; // AR: mult=2 -> 0.333
+        leg_phase_offsets[1] = 3.0f / 6.0f; // BR: mult=3 -> 0.500
+        leg_phase_offsets[2] = 4.0f / 6.0f; // CR: mult=4 -> 0.667
+        leg_phase_offsets[3] = 1.0f / 6.0f; // CL: mult=1 -> 0.167
+        leg_phase_offsets[4] = 0.0f / 6.0f; // BL: mult=0 -> 0.000
+        leg_phase_offsets[5] = 5.0f / 6.0f; // AL: mult=5 -> 0.833
         break;
     case RIPPLE_GAIT:
-        // Ripple: similar to wave but with different timing
-        for (int i = 0; i < NUM_LEGS; i++) {
-            leg_phase_offsets[i] = (i * 2) / 12.0f;
-        }
+        // Ripple: OpenSHC-compatible phase offsets
+        // Based on offset_multiplier: [2,0,4,1,3,5] with base_offset=1, total_period=6
+        leg_phase_offsets[0] = 2.0f / 6.0f; // AR: mult=2 -> 0.333
+        leg_phase_offsets[1] = 0.0f / 6.0f; // BR: mult=0 -> 0.000
+        leg_phase_offsets[2] = 4.0f / 6.0f; // CR: mult=4 -> 0.667
+        leg_phase_offsets[3] = 1.0f / 6.0f; // CL: mult=1 -> 0.167
+        leg_phase_offsets[4] = 3.0f / 6.0f; // BL: mult=3 -> 0.500
+        leg_phase_offsets[5] = 5.0f / 6.0f; // AL: mult=5 -> 0.833
         break;
     default:
         // Default to tripod
