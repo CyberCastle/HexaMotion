@@ -30,7 +30,7 @@ locomotion_system_test: locomotion_system_test.cpp ../src/locomotion_system.cpp 
 state_controller_test: state_controller_test.cpp ../src/state_controller.cpp ../src/locomotion_system.cpp ../src/robot_model.cpp ../src/pose_controller.cpp ../src/walk_controller.cpp ../src/terrain_adaptation.cpp ../src/admittance_controller.cpp ../src/velocity_limits.cpp ../src/math_utils.cpp
 	$(CXX) $(CXXFLAGS) $^ -o $@
 
-tripod_gait_sim_test: tripod_gait_sim_test.cpp ../src/locomotion_system.cpp ../src/robot_model.cpp ../src/pose_controller.cpp ../src/walk_controller.cpp ../src/terrain_adaptation.cpp ../src/admittance_controller.cpp ../src/math_utils.cpp
+tripod_gait_sim_test: tripod_gait_sim_test.cpp ../src/state_controller.cpp ../src/locomotion_system.cpp ../src/robot_model.cpp ../src/pose_controller.cpp ../src/walk_controller.cpp ../src/terrain_adaptation.cpp ../src/admittance_controller.cpp ../src/velocity_limits.cpp ../src/math_utils.cpp
 	$(CXX) $(CXXFLAGS) $^ -o $@
 
 ik_debug_test: ik_debug_test.cpp ../src/locomotion_system.cpp ../src/robot_model.cpp ../src/pose_controller.cpp ../src/walk_controller.cpp ../src/terrain_adaptation.cpp ../src/admittance_controller.cpp ../src/math_utils.cpp
