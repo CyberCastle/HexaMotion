@@ -32,6 +32,11 @@ struct DummyServo : IServoInterface {
     bool enableTorque(int, int, bool) override { return true; }
 };
 
+// Alternative names for compatibility
+typedef DummyIMU MockIMU;
+typedef DummyFSR MockFSR;
+typedef DummyServo MockServo;
+
 inline Parameters createDefaultParameters() {
     Parameters params;
     params.hexagon_radius = 90.0f;

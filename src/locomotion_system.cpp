@@ -92,6 +92,11 @@ bool LocomotionSystem::initialize(IIMUInterface *imu, IFSRInterface *fsr, IServo
     return true;
 }
 
+// System status check
+bool LocomotionSystem::isSystemEnabled() const {
+    return system_enabled;
+}
+
 // System calibration
 bool LocomotionSystem::calibrateSystem() {
     if (!system_enabled)

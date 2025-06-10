@@ -109,6 +109,9 @@ class LocomotionSystem {
     bool initialize(IIMUInterface *imu, IFSRInterface *fsr, IServoInterface *servo);
     bool calibrateSystem();
 
+    // System status
+    bool isSystemEnabled() const;
+
     // Pose control
     bool setBodyPose(const Eigen::Vector3f &position, const Eigen::Vector3f &orientation);
     bool setLegPosition(int leg_index, const Point3D &position);

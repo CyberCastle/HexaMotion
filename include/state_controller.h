@@ -1,0 +1,550 @@
+#ifndef STATE_CONTROLLER_H
+#define STATE_CONTROLLER_H
+
+#include "admittance_controller.h"
+#include "locomotion_system.h"
+#include "model.h"
+#include "pose_controller.h"
+#include "walk_controller.h"
+#include <Arduino.h>
+#include <ArduinoEigen.h>
+
+// Maximum number of legs that can be manually controlled simultaneously
+#define MAX_MANUAL_LEGS 2
+#define PACK_TIME 2.0f        // Joint transition time during pack/unpack sequences (seconds)
+#define PROGRESS_COMPLETE 100 // Progress value indicating completion
+#define JOINT_TOLERANCE 0.1f  // Joint position tolerance for state detection
+#define THROTTLE_PERIOD 1.0f  // Throttle period for repeated messages
+
+////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+/// Designation for potential states of the entire top-level controller system.
+////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+enum SystemState {
+    SYSTEM_SUSPENDED,   ///< Controller system is temporarily suspended, waiting for user input
+    SYSTEM_OPERATIONAL, ///< Controller system is operational and running
+    SYSTEM_STATE_COUNT, ///< Misc enum defining number of System States
+};
+
+////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+/// Designation for potential states of the robot.
+////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+enum RobotState {
+    ROBOT_PACKED,       ///< The robot is in a 'packed' state with all joints at defined 'packed' positions
+    ROBOT_READY,        ///< The robot is in a 'ready' state with all joints at defined 'unpacked' positions
+    ROBOT_RUNNING,      ///< The robot is in a 'running' state. This state is where all posing and walking occurs
+    ROBOT_STATE_COUNT,  ///< Misc enum defining number of Robot States
+    ROBOT_UNKNOWN = -1, ///< The robot is in an initial 'unknown' state, controller will estimate an actual state from it
+    ROBOT_OFF = -2,     ///< The robot is in 'off' state. Only used as alternative to 'running' state for direct start up
+};
+
+////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+/// Designation for potential walk controller walk cycle states.
+////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+enum WalkState {
+    WALK_STARTING,    ///< The walk controller cycle is in 'starting' state (transitioning from 'stopped' to 'moving')
+    WALK_MOVING,      ///< The walk controller cycle is in a 'moving' state (the primary walking state)
+    WALK_STOPPING,    ///< The walk controller cycle is in a 'stopping' state (transitioning from 'moving' to 'stopped')
+    WALK_STOPPED,     ///< The walk controller cycle is in a 'stopped' state (state whilst velocity input is zero)
+    WALK_STATE_COUNT, ///< Misc enum defining number of Walk States
+};
+
+////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+/// Designation for potential individual leg step cycle states.
+////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+enum StepState {
+    STEP_SWING,        ///< The leg step cycle is in 'swing' state, the forward 'in air' progression of the step cycle
+    STEP_STANCE,       ///< The leg step cycle is in 'stance' state, the backward 'on ground' regression of the step cycle
+    STEP_FORCE_STANCE, ///< State used to force a 'stance' state in non-standard instances
+    STEP_FORCE_STOP,   ///< State used to force the step cycle to stop iterating
+    STEP_STATE_COUNT,  ///< Misc enum defining number of Step States
+};
+
+////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+/// Designation for potential leg states.
+////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+enum AdvancedLegState {
+    LEG_WALKING,                ///< The leg is in a 'walking' state - participates in walking cycle
+    LEG_MANUAL,                 ///< The leg is in a 'manual' state - able to move via manual manipulation inputs
+    LEG_STATE_COUNT,            ///< Misc enum defining number of LegStates
+    LEG_WALKING_TO_MANUAL = -1, ///< The leg is in 'walking to manual' state - transitioning from 'walking' to 'manual' state
+    LEG_MANUAL_TO_WALKING = -2, ///< The leg is in 'manual to walking' state - transitioning from 'manual' to 'walking' state
+};
+
+////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+/// Designation for potential manual body posing input modes.
+////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+enum PosingMode {
+    POSING_NONE,       ///< Mode allowing no manual body posing
+    POSING_X_Y,        ///< Mode allowing for manual posing of the robot body via x/y axis translation
+    POSING_PITCH_ROLL, ///< Mode allowing for manual posing of the robot body via pitch/roll rotation
+    POSING_Z_YAW,      ///< Mode allowing for manual posing of the robot body via z axis translation and yaw rotation
+    POSING_EXTERNAL,   ///< Mode allowing for posing input from external source
+    POSING_MODE_COUNT, ///< Misc enum defining number of Posing Modes
+};
+
+////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+/// Designation for potential cruise control modes.
+////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+enum CruiseControlMode {
+    CRUISE_CONTROL_OFF,           ///< Cruise control mode is off
+    CRUISE_CONTROL_ON,            ///< Cruise control mode is on
+    CRUISE_CONTROL_MODE_COUNT,    ///< Misc enum defining number of Cruise Control Modes
+    CRUISE_CONTROL_EXTERNAL = -1, ///< Cruise control mode is external
+};
+
+////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+/// Designation for potential posing states used in auto-posing.
+////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+enum PosingState {
+    POSE_POSING,             ///< State signifiying that auto-poser objects should start their posing cycle
+    POSE_STOP_POSING,        ///< State signifiying that auto-poser objects should end their posing cycle
+    POSE_POSING_COMPLETE,    ///< State signifiying that ALL auto-poser objects have completed their individual posing cycles
+    POSE_POSING_STATE_COUNT, ///< Misc enum defining number of Posing States
+};
+
+////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+/// Designation for potential manual pose reset input modes.
+////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+enum PoseResetMode {
+    POSE_RESET_NONE,           ///< State requesting no reseting of manual body posing is requested
+    POSE_RESET_Z_AND_YAW,      ///< State requesting manual body z-axis translation or yaw rotation posing to reset to zero
+    POSE_RESET_X_AND_Y,        ///< State requesting manual body x-axis or y-axis translation posing to reset to zero
+    POSE_RESET_PITCH_AND_ROLL, ///< State requesting manual body roll or pitch rotation posing to reset to zero
+    POSE_RESET_ALL,            ///< State requesting all manual body posing (in any axis) to reset to zero
+    POSE_RESET_IMMEDIATE_ALL,  ///< State forcing all manual body posing (in any axis) to reset to zero instantaneously
+    POSE_RESET_MODE_COUNT,     ///< Misc enum defining number of Pose-Reset States
+};
+
+////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+/// Designations for potential legs within the robot model - up to 6 legs for hexapod.
+////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+enum LegDesignation {
+    LEG_0,                 ///< 1st leg - The front right most leg of the robot
+    LEG_1,                 ///< 2nd leg - The leg following the 1st leg in a clockwise direction around the robot body
+    LEG_2,                 ///< 3rd leg - Middle right leg
+    LEG_3,                 ///< 4th leg - Rear right leg
+    LEG_4,                 ///< 5th leg - Rear left leg
+    LEG_5,                 ///< 6th leg - Middle left leg
+    LEG_DESIGNATION_COUNT, ///< Misc enum defining number of Leg Designations
+    LEG_UNDESIGNATED = -1, ///< Undesignated leg
+};
+
+////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+/// Sequence execution types for pose controller transitions.
+////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+enum SequenceType {
+    SEQUENCE_START_UP,  ///< Start-up sequence from ready to running
+    SEQUENCE_SHUT_DOWN, ///< Shut-down sequence from running to ready
+    SEQUENCE_PACK,      ///< Pack sequence to packed state
+    SEQUENCE_UNPACK,    ///< Unpack sequence from packed state
+    SEQUENCE_COUNT,     ///< Number of sequence types
+};
+
+////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+/// State transition progress tracking.
+////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+struct TransitionProgress {
+    int current_step = 0;
+    int total_steps = 0;
+    float completion_percentage = 0.0f;
+    bool is_complete = false;
+    bool has_error = false;
+    String error_message = "";
+};
+
+////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+/// State machine configuration parameters.
+////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+struct StateMachineConfig {
+    bool enable_startup_sequence = true; ///< Enable multi-step startup sequence
+    bool enable_direct_startup = false;  ///< Allow direct startup without sequences
+    float transition_timeout = 10.0f;    ///< Maximum time for state transitions (seconds)
+    float pack_unpack_time = 2.0f;       ///< Time for pack/unpack sequences (seconds)
+    bool enable_auto_posing = false;     ///< Enable automatic body posing
+    bool enable_manual_posing = true;    ///< Enable manual body posing
+    bool enable_cruise_control = true;   ///< Enable cruise control mode
+    int max_manual_legs = 2;             ///< Maximum number of manually controlled legs
+};
+
+////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+/// This class implements an equivalent state machine to OpenSHC's complex hierarchical state system.
+/// It manages system states, robot states, walk states, leg states, and various operational modes.
+/// The state machine coordinates transitions between different operational states and manages
+/// the interaction between different controllers (walk, pose, admittance).
+////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+class StateController {
+  public:
+    /**
+     * @brief Constructor for the StateController.
+     * @param locomotion Reference to the main locomotion system
+     * @param config Configuration for the state machine
+     */
+    StateController(LocomotionSystem &locomotion, const StateMachineConfig &config = StateMachineConfig());
+
+    /**
+     * @brief Destructor for the StateController.
+     */
+    ~StateController();
+
+    /**
+     * @brief Initialize the state controller.
+     * @return True if initialization successful
+     */
+    bool initialize();
+
+    /**
+     * @brief Main update loop for the state machine.
+     * This should be called regularly from the main control loop.
+     * @param dt Delta time since last update (seconds)
+     */
+    void update(float dt);
+
+    // ==============================
+    // STATE ACCESSORS
+    // ==============================
+
+    /**
+     * @brief Get the current system state.
+     * @return Current system state
+     */
+    inline SystemState getSystemState() const { return current_system_state_; }
+
+    /**
+     * @brief Get the current robot state.
+     * @return Current robot state
+     */
+    inline RobotState getRobotState() const { return current_robot_state_; }
+
+    /**
+     * @brief Get the current walk state.
+     * @return Current walk state
+     */
+    inline WalkState getWalkState() const { return current_walk_state_; }
+
+    /**
+     * @brief Get the current posing mode.
+     * @return Current posing mode
+     */
+    inline PosingMode getPosingMode() const { return current_posing_mode_; }
+
+    /**
+     * @brief Get the current cruise control mode.
+     * @return Current cruise control mode
+     */
+    inline CruiseControlMode getCruiseControlMode() const { return current_cruise_control_mode_; }
+
+    /**
+     * @brief Check if the state machine is initialized.
+     * @return True if initialized
+     */
+    inline bool isInitialized() const { return is_initialized_; }
+
+    /**
+     * @brief Check if the robot is ready for operation.
+     * @return True if robot is in ROBOT_RUNNING state
+     */
+    inline bool isReadyForOperation() const { return current_robot_state_ == ROBOT_RUNNING; }
+
+    // ==============================
+    // STATE SETTERS
+    // ==============================
+
+    /**
+     * @brief Request a system state transition.
+     * @param new_state Desired system state
+     * @return True if transition request accepted
+     */
+    bool requestSystemState(SystemState new_state);
+
+    /**
+     * @brief Request a robot state transition.
+     * @param new_state Desired robot state
+     * @return True if transition request accepted
+     */
+    bool requestRobotState(RobotState new_state);
+
+    /**
+     * @brief Set the posing mode.
+     * @param mode Desired posing mode
+     * @return True if mode change successful
+     */
+    bool setPosingMode(PosingMode mode);
+
+    /**
+     * @brief Set the cruise control mode.
+     * @param mode Desired cruise control mode
+     * @param velocity Cruise velocity (for CRUISE_CONTROL_ON mode)
+     * @return True if mode change successful
+     */
+    bool setCruiseControlMode(CruiseControlMode mode, const Eigen::Vector3f &velocity = Eigen::Vector3f::Zero());
+
+    /**
+     * @brief Set pose reset mode.
+     * @param mode Desired pose reset mode
+     */
+    void setPoseResetMode(PoseResetMode mode);
+
+    // ==============================
+    // LEG CONTROL
+    // ==============================
+
+    /**
+     * @brief Set the state of a specific leg.
+     * @param leg_index Index of the leg (0-5)
+     * @param state Desired leg state
+     * @return True if leg state change successful
+     */
+    bool setLegState(int leg_index, AdvancedLegState state);
+
+    /**
+     * @brief Get the state of a specific leg.
+     * @param leg_index Index of the leg (0-5)
+     * @return Current leg state
+     */
+    AdvancedLegState getLegState(int leg_index) const;
+
+    /**
+     * @brief Get the number of legs currently in manual mode.
+     * @return Number of manually controlled legs
+     */
+    int getManualLegCount() const;
+
+    // ==============================
+    // VELOCITY AND POSE CONTROL
+    // ==============================
+
+    /**
+     * @brief Set desired body velocity.
+     * @param linear_velocity Linear velocity [x, y] in mm/s
+     * @param angular_velocity Angular velocity in degrees/s
+     */
+    void setDesiredVelocity(const Eigen::Vector2f &linear_velocity, float angular_velocity);
+
+    /**
+     * @brief Set desired body pose.
+     * @param position Desired position [x, y, z] in mm
+     * @param orientation Desired orientation [roll, pitch, yaw] in degrees
+     */
+    void setDesiredPose(const Eigen::Vector3f &position, const Eigen::Vector3f &orientation);
+
+    /**
+     * @brief Set desired tip velocity for manual leg control.
+     * @param leg_index Index of the leg (0-5)
+     * @param velocity Desired tip velocity [x, y, z] in mm/s
+     */
+    void setLegTipVelocity(int leg_index, const Eigen::Vector3f &velocity);
+
+    // ==============================
+    // GAIT CONTROL
+    // ==============================
+
+    /**
+     * @brief Change the current gait type.
+     * @param gait Desired gait type
+     * @return True if gait change successful
+     */
+    bool changeGait(GaitType gait);
+
+    // ==============================
+    // STATUS AND DIAGNOSTICS
+    // ==============================
+
+    /**
+     * @brief Get the current transition progress.
+     * @return Transition progress information
+     */
+    TransitionProgress getTransitionProgress() const;
+
+    /**
+     * @brief Check if the state machine has any errors.
+     * @return True if there are errors
+     */
+    bool hasErrors() const;
+
+    /**
+     * @brief Check if the system is currently transitioning between states.
+     * @return True if transitioning
+     */
+    bool isTransitioning() const;
+
+    /**
+     * @brief Get the last error message.
+     * @return Error message string
+     */
+    String getLastErrorMessage() const;
+
+    /**
+     * @brief Get diagnostic information as a formatted string.
+     * @return Diagnostic string
+     */
+    String getDiagnosticInfo() const;
+
+    /**
+     * @brief Emergency stop - immediately halt all motion and transition to safe state.
+     */
+    void emergencyStop();
+
+    /**
+     * @brief Reset the state machine to initial state.
+     */
+    void reset();
+
+    /**
+     * @brief Clear error state.
+     */
+    void clearError();
+
+  private:
+    // ==============================
+    // PRIVATE MEMBERS
+    // ==============================
+
+    LocomotionSystem &locomotion_system_;
+    StateMachineConfig config_;
+
+    // Current states
+    SystemState current_system_state_;
+    RobotState current_robot_state_;
+    WalkState current_walk_state_;
+    PosingMode current_posing_mode_;
+    CruiseControlMode current_cruise_control_mode_;
+    PoseResetMode current_pose_reset_mode_;
+
+    // Desired states (for transitions)
+    SystemState desired_system_state_;
+    RobotState desired_robot_state_;
+
+    // Leg states
+    AdvancedLegState leg_states_[NUM_LEGS];
+    int manual_leg_count_;
+
+    // Transition management
+    bool is_transitioning_;
+    TransitionProgress transition_progress_;
+    unsigned long transition_start_time_;
+
+    // Control inputs
+    Eigen::Vector2f desired_linear_velocity_;
+    float desired_angular_velocity_;
+    Eigen::Vector3f desired_body_position_;
+    Eigen::Vector3f desired_body_orientation_;
+    Eigen::Vector3f leg_tip_velocities_[NUM_LEGS];
+
+    // Cruise control
+    Eigen::Vector3f cruise_velocity_;
+    unsigned long cruise_start_time_;
+
+    // Timing
+    unsigned long last_update_time_;
+    float dt_;
+
+    // Error handling
+    bool has_error_;
+    String last_error_message_;
+
+    // Initialization flag
+    bool is_initialized_;
+
+    // ==============================
+    // PRIVATE METHODS
+    // ==============================
+
+    /**
+     * @brief Update the main state machine logic.
+     */
+    void updateStateMachine();
+
+    /**
+     * @brief Handle system state transitions.
+     */
+    void handleSystemStateTransition();
+
+    /**
+     * @brief Handle robot state transitions.
+     */
+    void handleRobotStateTransition();
+
+    /**
+     * @brief Handle walk state updates.
+     */
+    void updateWalkState();
+
+    /**
+     * @brief Handle leg state transitions.
+     */
+    void handleLegStateTransitions();
+
+    /**
+     * @brief Update velocity control based on current mode.
+     */
+    void updateVelocityControl();
+
+    /**
+     * @brief Update pose control based on current mode.
+     */
+    void updatePoseControl();
+
+    /**
+     * @brief Execute startup sequence.
+     * @return Progress percentage (0-100)
+     */
+    int executeStartupSequence();
+
+    /**
+     * @brief Execute shutdown sequence.
+     * @return Progress percentage (0-100)
+     */
+    int executeShutdownSequence();
+
+    /**
+     * @brief Execute pack sequence.
+     * @return Progress percentage (0-100)
+     */
+    int executePackSequence();
+
+    /**
+     * @brief Execute unpack sequence.
+     * @return Progress percentage (0-100)
+     */
+    int executeUnpackSequence();
+
+    /**
+     * @brief Check if robot is in packed position.
+     * @return True if all joints are in packed positions
+     */
+    bool isRobotPacked() const;
+
+    /**
+     * @brief Check if robot is in ready position.
+     * @return True if all joints are in ready positions
+     */
+    bool isRobotReady() const;
+
+    /**
+     * @brief Validate state transition request.
+     * @param current_state Current state
+     * @param desired_state Desired state
+     * @return True if transition is valid
+     */
+    bool isValidStateTransition(RobotState current_state, RobotState desired_state) const;
+
+    /**
+     * @brief Set error state with message.
+     * @param message Error message
+     */
+    void setError(const String &message);
+
+    /**
+     * @brief Log debug information.
+     * @param message Debug message
+     */
+    void logDebug(const String &message);
+
+    /**
+     * @brief Calculate timeout for state transitions.
+     * @return Timeout in milliseconds
+     */
+    unsigned long calculateTransitionTimeout() const;
+};
+
+#endif // STATE_CONTROLLER_H

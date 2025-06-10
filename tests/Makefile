@@ -7,7 +7,7 @@ EIGEN_PATH := /usr/include/eigen3
 endif
 CXXFLAGS=-I../include -I. -I$(EIGEN_PATH) -std=c++17
 
-all: math_utils_test model_test pose_controller_test walk_controller_test admittance_controller_test locomotion_system_test tripod_gait_sim_test ik_debug_test height_range_test geometry_test ik_analytical_fix ik_coordinate_test coord_test joint_test ik_debug_detailed dls_validation_test ik_debug_analysis workspace_analysis actual_workspace_test comprehensive_ik_test angle_range_test edge_case_analysis angle_normalization_test terrain_adaptation_test velocity_limits_test
+all: math_utils_test model_test pose_controller_test walk_controller_test admittance_controller_test locomotion_system_test state_controller_test tripod_gait_sim_test ik_debug_test height_range_test geometry_test ik_analytical_fix ik_coordinate_test coord_test joint_test ik_debug_detailed dls_validation_test ik_debug_analysis workspace_analysis actual_workspace_test comprehensive_ik_test angle_range_test edge_case_analysis angle_normalization_test terrain_adaptation_test velocity_limits_test state_controller_runtime_test
 
 math_utils_test: math_utils_test.cpp ../src/math_utils.cpp
 	$(CXX) $(CXXFLAGS) $^ -o $@
@@ -25,6 +25,9 @@ admittance_controller_test: admittance_controller_test.cpp ../src/admittance_con
 	$(CXX) $(CXXFLAGS) $^ -o $@
 
 locomotion_system_test: locomotion_system_test.cpp ../src/locomotion_system.cpp ../src/robot_model.cpp ../src/pose_controller.cpp ../src/walk_controller.cpp ../src/terrain_adaptation.cpp ../src/admittance_controller.cpp ../src/math_utils.cpp
+	$(CXX) $(CXXFLAGS) $^ -o $@
+
+state_controller_test: state_controller_test.cpp ../src/state_controller.cpp ../src/locomotion_system.cpp ../src/robot_model.cpp ../src/pose_controller.cpp ../src/walk_controller.cpp ../src/terrain_adaptation.cpp ../src/admittance_controller.cpp ../src/velocity_limits.cpp ../src/math_utils.cpp
 	$(CXX) $(CXXFLAGS) $^ -o $@
 
 tripod_gait_sim_test: tripod_gait_sim_test.cpp ../src/locomotion_system.cpp ../src/robot_model.cpp ../src/pose_controller.cpp ../src/walk_controller.cpp ../src/terrain_adaptation.cpp ../src/admittance_controller.cpp ../src/math_utils.cpp
@@ -87,5 +90,8 @@ terrain_adaptation_test: terrain_adaptation_test.cpp ../src/terrain_adaptation.c
 velocity_limits_test: velocity_limits_test.cpp ../src/velocity_limits.cpp ../src/walk_controller.cpp ../src/terrain_adaptation.cpp ../src/robot_model.cpp ../src/math_utils.cpp
 	$(CXX) $(CXXFLAGS) $^ -o $@
 
+state_controller_runtime_test: state_controller_runtime_test.cpp ../src/state_controller.cpp ../src/locomotion_system.cpp ../src/robot_model.cpp ../src/pose_controller.cpp ../src/walk_controller.cpp ../src/terrain_adaptation.cpp ../src/admittance_controller.cpp ../src/velocity_limits.cpp ../src/math_utils.cpp
+	$(CXX) $(CXXFLAGS) $^ -o $@
+
 clean:
-	rm -f math_utils_test model_test pose_controller_test walk_controller_test admittance_controller_test locomotion_system_test tripod_gait_sim_test ik_debug_test height_range_test geometry_test ik_analytical_fix ik_coordinate_test coord_test joint_test ik_debug_detailed dls_validation_test ik_debug_analysis workspace_analysis actual_workspace_test comprehensive_ik_test test3_analysis angle_range_test edge_case_analysis angle_normalization_test terrain_adaptation_test velocity_limits_test
+	rm -f math_utils_test model_test pose_controller_test walk_controller_test admittance_controller_test locomotion_system_test state_controller_test tripod_gait_sim_test ik_debug_test height_range_test geometry_test ik_analytical_fix ik_coordinate_test coord_test joint_test ik_debug_detailed dls_validation_test ik_debug_analysis workspace_analysis actual_workspace_test comprehensive_ik_test test3_analysis angle_range_test edge_case_analysis angle_normalization_test terrain_adaptation_test velocity_limits_test state_controller_runtime_test
