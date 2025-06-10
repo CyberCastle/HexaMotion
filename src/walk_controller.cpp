@@ -1,9 +1,21 @@
 #include "walk_controller.h"
 
 WalkController::WalkController(RobotModel &m)
-    : model(m), current_gait(TRIPOD_GAIT), gait_phase(0.0f), terrain_adaptation_(m) {
+    : model(m), current_gait(TRIPOD_GAIT), gait_phase(0.0f),
+      terrain_adaptation_(m), velocity_limits_(m) {
     // Initialize terrain adaptation system
     terrain_adaptation_.initialize();
+
+    // Initialize velocity limits with default gait parameters
+    VelocityLimits::GaitConfig default_gait;
+    default_gait.frequency = 1.0f;
+    default_gait.stance_ratio = 0.6f;
+    default_gait.swing_ratio = 0.4f;
+    default_gait.time_to_max_stride = 2.0f;
+    velocity_limits_.generateLimits(default_gait);
+
+    // Initialize current velocities to zero
+    current_velocities_ = VelocityLimits::LimitValues();
 }
 
 bool WalkController::setGaitType(GaitType gait) {
@@ -125,4 +137,52 @@ bool WalkController::hasTouchdownDetection(int leg_index) const {
 
 Eigen::Vector3f WalkController::estimateGravity() const {
     return terrain_adaptation_.estimateGravity();
+}
+
+// Velocity limiting methods
+VelocityLimits::LimitValues WalkController::getVelocityLimits(float bearing_degrees) const {
+    return velocity_limits_.getLimit(bearing_degrees);
+}
+
+VelocityLimits::LimitValues WalkController::applyVelocityLimits(float vx, float vy, float omega) const {
+    // Calculate bearing from velocity components
+    float bearing = VelocityLimits::calculateBearing(vx, vy);
+
+    // Get limits for this bearing
+    VelocityLimits::LimitValues limits = velocity_limits_.getLimit(bearing);
+
+    // Apply limits to input velocities
+    VelocityLimits::LimitValues limited_velocities;
+    limited_velocities.linear_x = std::max(-limits.linear_x, std::min(limits.linear_x, vx));
+    limited_velocities.linear_y = std::max(-limits.linear_y, std::min(limits.linear_y, vy));
+    limited_velocities.angular_z = std::max(-limits.angular_z, std::min(limits.angular_z, omega));
+    limited_velocities.acceleration = limits.acceleration;
+
+    return limited_velocities;
+}
+
+bool WalkController::validateVelocityCommand(float vx, float vy, float omega) const {
+    return velocity_limits_.validateVelocityInputs(vx, vy, omega);
+}
+
+void WalkController::updateVelocityLimits(float frequency, float stance_ratio, float time_to_max_stride) {
+    VelocityLimits::GaitConfig gait_config;
+    gait_config.frequency = frequency;
+    gait_config.stance_ratio = stance_ratio;
+    gait_config.swing_ratio = 1.0f - stance_ratio;
+    gait_config.time_to_max_stride = time_to_max_stride;
+
+    velocity_limits_.updateGaitParameters(gait_config);
+}
+
+void WalkController::setVelocitySafetyMargin(float margin) {
+    velocity_limits_.setSafetyMargin(margin);
+}
+
+void WalkController::setAngularVelocityScaling(float scaling) {
+    velocity_limits_.setAngularVelocityScaling(scaling);
+}
+
+VelocityLimits::WorkspaceConfig WalkController::getWorkspaceConfig() const {
+    return velocity_limits_.getWorkspaceConfig();
 }
