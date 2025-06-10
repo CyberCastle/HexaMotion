@@ -5,6 +5,7 @@
 #include <cmath>
 #include <iomanip>
 #include <iostream>
+#include <memory>
 
 class VelocityLimitsTest {
   private:
