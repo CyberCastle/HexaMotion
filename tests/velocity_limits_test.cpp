@@ -67,11 +67,20 @@ class VelocityLimitsTest {
   public:
     void setUp() {
         // Initialize robot model with test parameters
-        Parameters params;
-        params.hexagon_radius = 0.1f;
-        params.coxa_length = 0.05f;
-        params.femur_length = 0.1f;
-        params.tibia_length = 0.15f;
+        Parameters params{};
+        params.hexagon_radius = 400;
+        params.coxa_length = 50;
+        params.femur_length = 101;
+        params.tibia_length = 208;
+        params.robot_height = 90;
+        params.control_frequency = 50;
+        params.coxa_angle_limits[0] = -65;
+        params.coxa_angle_limits[1] = 65;
+        params.femur_angle_limits[0] = -75;
+        params.femur_angle_limits[1] = 75;
+        params.tibia_angle_limits[0] = -45;
+        params.tibia_angle_limits[1] = 45;
+
         model = std::make_unique<RobotModel>(params);
 
         velocity_limits = std::make_unique<VelocityLimits>(*model);
