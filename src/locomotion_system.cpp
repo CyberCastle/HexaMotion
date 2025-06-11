@@ -404,7 +404,11 @@ bool LocomotionSystem::stopMovement() {
 bool LocomotionSystem::maintainOrientation(const Eigen::Vector3f &target_rpy) {
     if (!system_enabled || !admittance_ctrl)
         return false;
-    return admittance_ctrl->maintainOrientation(target_rpy, body_orientation, dt);
+    Point3D target(target_rpy.x(), target_rpy.y(), target_rpy.z());
+    Point3D current(body_orientation.x(), body_orientation.y(), body_orientation.z());
+    bool result = admittance_ctrl->maintainOrientation(target, current, dt);
+    body_orientation = Eigen::Vector3f(current.x, current.y, current.z);
+    return result;
 }
 
 void LocomotionSystem::reprojectStandingFeet() {
@@ -436,7 +440,9 @@ bool LocomotionSystem::correctBodyTilt() {
 Eigen::Vector3f LocomotionSystem::calculateOrientationError() {
     if (!admittance_ctrl)
         return Eigen::Vector3f::Zero();
-    return admittance_ctrl->orientationError(body_orientation);
+    Point3D current(body_orientation.x(), body_orientation.y(), body_orientation.z());
+    Point3D error = admittance_ctrl->orientationError(current);
+    return Eigen::Vector3f(error.x, error.y, error.z);
 }
 
 // Check stability margin
