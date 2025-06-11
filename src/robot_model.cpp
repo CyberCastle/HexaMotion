@@ -423,3 +423,17 @@ std::pair<float, float> RobotModel::calculateHeightRange() const {
 
     return {min_h, max_h};
 }
+
+Point3D RobotModel::getLegOrigin(int leg) const {
+    if (leg < 0 || leg >= NUM_LEGS) {
+        return Point3D(0, 0, 0);
+    }
+
+    // Calculate leg origin based on hexagon geometry
+    float angle = leg * M_PI / 3.0f; // 60 degrees between legs
+    float x = params.hexagon_radius * cos(angle);
+    float y = params.hexagon_radius * sin(angle);
+    float z = 0.0f; // At body level
+
+    return Point3D(x, y, z);
+}

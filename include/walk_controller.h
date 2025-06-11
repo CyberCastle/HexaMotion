@@ -101,27 +101,50 @@ class WalkController {
                            IFSRInterface *fsr, IIMUInterface *imu);
 
     // Terrain adaptation methods
-    /** Enable or disable rough terrain mode. */
-    void enableRoughTerrainMode(bool enabled);
-    /** Enable touchdown aligned with the terrain normal. */
+    /**
+     * @brief Enable rough terrain mode with advanced features
+     * @param enabled Whether to enable rough terrain mode
+     * @param force_normal_touchdown Force touchdown normal to terrain
+     * @param proactive_adaptation Use proactive terrain adaptation
+     */
+    void enableRoughTerrainMode(bool enabled, bool force_normal_touchdown = true,
+                                bool proactive_adaptation = true);
+
+    /**
+     * @brief Enable force normal touchdown mode
+     * @param enabled Whether to force normal touchdown to walk plane
+     */
     void enableForceNormalTouchdown(bool enabled);
-    /** Align foot tips with gravity during swing. */
+
+    /**
+     * @brief Enable gravity-aligned tips mode
+     * @param enabled Whether tips should align with gravity
+     */
     void enableGravityAlignedTips(bool enabled);
+
     /** Set an external target for a specific leg. */
     void setExternalTarget(int leg_index, const TerrainAdaptation::ExternalTarget &target);
     /** Set an external default position for a leg. */
     void setExternalDefault(int leg_index, const TerrainAdaptation::ExternalTarget &default_pos);
 
     // Terrain state accessors
-    /** Get the current estimated walk plane. */
+    /**
+     * @brief Get current walk plane estimation
+     * @return Current walk plane structure
+     */
     const TerrainAdaptation::WalkPlane &getWalkPlane() const;
+
     /** Retrieve the external target for a leg if available. */
     const TerrainAdaptation::ExternalTarget &getExternalTarget(int leg_index) const;
     /** Get the detected step plane for a specific leg. */
     const TerrainAdaptation::StepPlane &getStepPlane(int leg_index) const;
     /** Check if touchdown detection is active for a leg. */
     bool hasTouchdownDetection(int leg_index) const;
-    /** Get the estimated gravity vector. */
+
+    /**
+     * @brief Estimate gravity vector from IMU
+     * @return Estimated gravity vector
+     */
     Eigen::Vector3f estimateGravity() const;
 
   private:

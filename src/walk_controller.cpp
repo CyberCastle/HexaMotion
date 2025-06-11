@@ -98,8 +98,15 @@ Point3D WalkController::footTrajectory(int leg_index, float phase, float step_he
 }
 
 // Terrain adaptation methods
-void WalkController::enableRoughTerrainMode(bool enabled) {
+void WalkController::enableRoughTerrainMode(bool enabled, bool force_normal_touchdown,
+                                            bool proactive_adaptation) {
     terrain_adaptation_.setRoughTerrainMode(enabled);
+    terrain_adaptation_.setForceNormalTouchdown(force_normal_touchdown);
+
+    if (proactive_adaptation) {
+        // Enable proactive terrain adaptation features
+        terrain_adaptation_.setGravityAlignedTips(true);
+    }
 }
 
 void WalkController::enableForceNormalTouchdown(bool enabled) {

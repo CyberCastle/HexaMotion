@@ -18,6 +18,10 @@ Point3D rotatePoint(const Point3D &point, const Eigen::Vector3f &rotation);
 float distance3D(const Point3D &p1, const Point3D &p2);
 /** Check if a point is within a spherical reach. */
 bool isPointReachable(const Point3D &point, float max_reach);
+/** Magnitude of a 3D vector. */
+float magnitude(const Point3D &point);
+/** Distance between two 3D points (alias for distance3D). */
+float distance(const Point3D &p1, const Point3D &p2);
 
 /** Rotation matrix about X axis. */
 Eigen::Matrix3f rotationMatrixX(float angle);

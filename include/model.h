@@ -110,6 +110,37 @@ enum LegState {
 struct Point3D {
     float x, y, z;
     Point3D(float x = 0, float y = 0, float z = 0) : x(x), y(y), z(z) {}
+
+    // Operator overloads
+    Point3D operator+(const Point3D &other) const {
+        return Point3D(x + other.x, y + other.y, z + other.z);
+    }
+
+    Point3D operator-(const Point3D &other) const {
+        return Point3D(x - other.x, y - other.y, z - other.z);
+    }
+
+    Point3D operator*(float scalar) const {
+        return Point3D(x * scalar, y * scalar, z * scalar);
+    }
+
+    Point3D operator/(float scalar) const {
+        return Point3D(x / scalar, y / scalar, z / scalar);
+    }
+
+    Point3D &operator+=(const Point3D &other) {
+        x += other.x;
+        y += other.y;
+        z += other.z;
+        return *this;
+    }
+
+    Point3D &operator-=(const Point3D &other) {
+        x -= other.x;
+        y -= other.y;
+        z -= other.z;
+        return *this;
+    }
 };
 
 /**
@@ -219,6 +250,9 @@ class RobotModel {
      */
     std::pair<float, float> calculateHeightRange() const;
     const Parameters &getParams() const { return params; }
+
+    /** Get leg origin position in robot frame. */
+    Point3D getLegOrigin(int leg) const;
 
   private:
     const Parameters &params;

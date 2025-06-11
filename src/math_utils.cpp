@@ -38,6 +38,14 @@ float distance3D(const Point3D &p1, const Point3D &p2) {
                 (p1.z - p2.z) * (p1.z - p2.z));
 }
 
+float magnitude(const Point3D &point) {
+    return sqrt(point.x * point.x + point.y * point.y + point.z * point.z);
+}
+
+float distance(const Point3D &p1, const Point3D &p2) {
+    return distance3D(p1, p2);
+}
+
 bool isPointReachable(const Point3D &point, float max_reach) {
     float distance = sqrt(point.x * point.x + point.y * point.y + point.z * point.z);
     return distance <= max_reach;

@@ -2,26 +2,166 @@
 #define ADMITTANCE_CONTROLLER_H
 
 #include "model.h"
+#include "precision_config.h"
+#include <vector>
 
 /**
- * @brief Basic admittance controller for body stabilization.
+ * @brief Enhanced admittance controller with ODE integration
+ * Equivalent to OpenSHC's admittance control theory implementation
+ *
+ * Features configurable precision vs computational complexity:
+ * - Euler integration (fast, basic)
+ * - RK2 integration (balanced)
+ * - RK4 integration (accurate, slow)
+ * - Dynamic stiffness adjustment
+ * - Multi-leg coordination
  */
 class AdmittanceController {
   public:
     /**
-     * @brief Construct a new controller.
-     * @param model Reference to the robot model.
-     * @param imu   IMU sensor interface pointer.
-     * @param fsr   FSR sensor interface pointer.
+     * @brief Admittance parameters for virtual leg model
      */
-    AdmittanceController(RobotModel &model, IIMUInterface *imu, IFSRInterface *fsr);
+    struct AdmittanceParams {
+        float virtual_mass;      ///< Virtual mass (kg)
+        float virtual_damping;   ///< Damping coefficient
+        float virtual_stiffness; ///< Spring stiffness
+        Point3D velocity;        ///< Current velocity
+        Point3D acceleration;    ///< Current acceleration
+        Point3D applied_force;   ///< Applied force
+        Point3D position_delta;  ///< Position change from admittance
 
+        AdmittanceParams() : virtual_mass(0.5f), virtual_damping(2.0f),
+                             virtual_stiffness(100.0f), velocity(0, 0, 0),
+                             acceleration(0, 0, 0), applied_force(0, 0, 0), position_delta(0, 0, 0) {}
+    };
+
+    /**
+     * @brief ODE integration methods
+     */
+    enum IntegrationMethod {
+        EULER,         ///< First-order Euler (fastest)
+        RUNGE_KUTTA_2, ///< Second-order RK (balanced)
+        RUNGE_KUTTA_4  ///< Fourth-order RK (most accurate)
+    };
+
+    /**
+     * @brief Leg admittance state
+     */
+    struct LegAdmittanceState {
+        AdmittanceParams params;
+        Point3D equilibrium_position;
+        bool active;
+        float stiffness_scale; ///< Dynamic stiffness scaling
+
+        LegAdmittanceState() : equilibrium_position(0, 0, 0), active(true), stiffness_scale(1.0f) {}
+    };
+
+  private:
+    RobotModel &model_;
+    IIMUInterface *imu_;
+    IFSRInterface *fsr_;
+    ComputeConfig config_;
+    IntegrationMethod integration_method_;
+
+    // Per-leg admittance state
+    LegAdmittanceState leg_states_[NUM_LEGS];
+    float delta_time_;
+
+    // Dynamic stiffness parameters
+    bool dynamic_stiffness_enabled_;
+    float swing_stiffness_scaler_;
+    float load_stiffness_scaler_;
+    float step_clearance_;
+
+  public:
+    /**
+     * @brief Construct admittance controller
+     * @param model Reference to robot model
+     * @param imu IMU interface pointer
+     * @param fsr FSR interface pointer
+     * @param config Computational configuration
+     */
+    AdmittanceController(RobotModel &model, IIMUInterface *imu, IFSRInterface *fsr,
+                         ComputeConfig config = ComputeConfig::medium());
+
+    /**
+     * @brief Initialize admittance controller
+     */
+    void initialize();
+
+    /**
+     * @brief Set admittance parameters for specific leg
+     * @param leg_index Leg index (0-5)
+     * @param mass Virtual mass
+     * @param damping Damping coefficient
+     * @param stiffness Spring stiffness
+     */
+    void setLegAdmittance(int leg_index, float mass, float damping, float stiffness);
+
+    /**
+     * @brief Apply force to leg and integrate dynamics
+     * @param leg_index Leg index (0-5)
+     * @param applied_force Force vector
+     * @return Position delta from admittance response
+     */
+    Point3D applyForceAndIntegrate(int leg_index, const Point3D &applied_force);
+
+    /**
+     * @brief Update all legs simultaneously
+     * @param forces Applied forces for each leg
+     * @param position_deltas Output position deltas
+     */
+    void updateAllLegs(const Point3D forces[NUM_LEGS], Point3D position_deltas[NUM_LEGS]);
+
+    /**
+     * @brief Enable/disable dynamic stiffness adjustment
+     * @param enabled Whether to enable dynamic stiffness
+     * @param swing_scaler Stiffness scaling for swing legs
+     * @param load_scaler Stiffness scaling for loaded legs
+     */
+    void setDynamicStiffness(bool enabled, float swing_scaler = 0.5f, float load_scaler = 1.5f);
+
+    /**
+     * @brief Update dynamic stiffness based on gait phase
+     * @param leg_states Current leg states
+     * @param leg_positions Current leg positions
+     * @param step_clearance Current step clearance
+     */
+    void updateStiffness(const LegState leg_states[NUM_LEGS],
+                         const Point3D leg_positions[NUM_LEGS],
+                         float step_clearance);
+
+    /**
+     * @brief Get current leg admittance state
+     * @param leg_index Leg index (0-5)
+     * @return Leg admittance state
+     */
+    const LegAdmittanceState &getLegState(int leg_index) const;
+
+    /**
+     * @brief Reset leg dynamics
+     * @param leg_index Leg index (0-5)
+     */
+    void resetLegDynamics(int leg_index);
+
+    /**
+     * @brief Reset all leg dynamics
+     */
+    void resetAllDynamics();
+
+    /**
+     * @brief Set computational precision configuration
+     * @param config New configuration
+     */
+    void setPrecisionConfig(const ComputeConfig &config);
+
+    // Legacy compatibility methods
     /**
      * @brief Compute orientation error with respect to a target pose.
      * @param target Desired roll, pitch and yaw in degrees.
      * @return Difference between target and current orientation.
      */
-    Eigen::Vector3f orientationError(const Eigen::Vector3f &target);
+    Point3D orientationError(const Point3D &target);
 
     /**
      * @brief Maintain body orientation using a simple admittance filter.
@@ -30,7 +170,7 @@ class AdmittanceController {
      * @param dt      Time step in seconds.
      * @return True if the operation succeeded.
      */
-    bool maintainOrientation(const Eigen::Vector3f &target, Eigen::Vector3f &current, float dt);
+    bool maintainOrientation(const Point3D &target, Point3D &current, float dt);
 
     /**
      * @brief Check static stability from FSR readings.
@@ -41,9 +181,21 @@ class AdmittanceController {
     bool checkStability(const Point3D leg_pos[NUM_LEGS], const LegState leg_states[NUM_LEGS]);
 
   private:
-    RobotModel &model;
-    IIMUInterface *imu;
-    IFSRInterface *fsr;
+    void selectIntegrationMethod();
+    void initializeDefaultParameters();
+
+    // Admittance equation: M*a + D*v + K*x = F
+    Point3D calculateAcceleration(const AdmittanceParams &params, const Point3D &position_error);
+
+    // Integration methods
+    Point3D integrateEuler(int leg_index);
+    Point3D integrateRK2(int leg_index);
+    Point3D integrateRK4(int leg_index);
+
+    // Dynamic stiffness calculation
+    float calculateStiffnessScale(int leg_index, LegState leg_state,
+                                  const Point3D &leg_position);
+    void updateAdjacentLegStiffness(int swing_leg_index, float load_scaling);
 };
 
 #endif // ADMITTANCE_CONTROLLER_H

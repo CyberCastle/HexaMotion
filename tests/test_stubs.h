@@ -5,22 +5,89 @@
 #include <iostream>
 
 struct DummyIMU : IIMUInterface {
+    float test_roll = 0.0f, test_pitch = 0.0f, test_yaw = 0.0f;
+
     bool initialize() override { return true; }
     IMUData readIMU() override {
         IMUData data{};
-        data.roll = data.pitch = data.yaw = 0.f;
+        data.roll = test_roll;
+        data.pitch = test_pitch;
+        data.yaw = test_yaw;
+        data.accel_x = 0.0f;
+        data.accel_y = 0.0f;
+
+        // CRITICAL: This uses DIRECT convention (gravity vector directly)
+        // Real IMUs may use PHYSICS convention (acceleration opposing gravity)
+        // See docs/HARDWARE_INTEGRATION_CONSIDERATIONS.md for details
+        data.accel_z = -9.81f; // Gravity pointing down (direct convention)
+
         data.is_valid = true;
         return data;
     }
     bool calibrate() override { return true; }
     bool isConnected() override { return true; }
+
+    // Test helper method
+    void setRPY(float roll, float pitch, float yaw) {
+        test_roll = roll;
+        test_pitch = pitch;
+        test_yaw = yaw;
+    }
+
+    // NOTE: Real IMU implementation needs:
+    // 1. Convention detection (physics vs direct)
+    // 2. Bias calibration
+    // 3. Noise filtering
+    // 4. Temperature compensation
+    // 5. Error handling and validation
 };
 
 struct DummyFSR : IFSRInterface {
+    FSRData test_data[NUM_LEGS];
+
+    DummyFSR() {
+        for (int i = 0; i < NUM_LEGS; i++) {
+            // SIMPLIFIED: Pre-set contact data for testing
+            // Real FSR starts with no contact and requires calibration
+            test_data[i] = FSRData{5.0f, true, 0.0f};
+        }
+    }
+
     bool initialize() override { return true; }
-    FSRData readFSR(int) override { return FSRData{0.0f, true, 0.0f}; }
+    FSRData readFSR(int leg) override {
+        if (leg >= 0 && leg < NUM_LEGS) {
+            return test_data[leg];
+        }
+        // Real implementation needs error handling for invalid leg indices
+        return FSRData{0.0f, false, 0.0f};
+    }
     bool calibrateFSR(int) override { return true; }
-    float getRawReading(int) override { return 0.0f; }
+    float getRawReading(int leg) override {
+        if (leg >= 0 && leg < NUM_LEGS) {
+            // SIMPLIFIED: Returns processed pressure value
+            // Real implementation returns raw ADC reading requiring conversion
+            return test_data[leg].pressure;
+        }
+        return 0.0f;
+    }
+
+    // Test helper method
+    void setFSRData(int leg, float pressure, bool contact) {
+        if (leg >= 0 && leg < NUM_LEGS) {
+            test_data[leg].pressure = pressure;
+            test_data[leg].in_contact = contact;
+        }
+    }
+
+    // NOTE: Production FSR implementation needs:
+    // 1. Non-linear ADC to force conversion with calibration curve
+    // 2. Adaptive threshold for contact detection based on noise level
+    // 3. Baseline drift compensation for temperature/aging effects
+    // 4. Multi-sample filtering and debouncing for stable readings
+    // 5. Cross-talk prevention between adjacent leg sensors
+    // 6. Hysteresis compensation for loading/unloading differences
+    // 7. Periodic recalibration and health monitoring
+    // See docs/HARDWARE_INTEGRATION_CONSIDERATIONS.md for details
 };
 
 struct DummyServo : IServoInterface {
@@ -36,6 +103,10 @@ struct DummyServo : IServoInterface {
 typedef DummyIMU MockIMU;
 typedef DummyFSR MockFSR;
 typedef DummyServo MockServo;
+
+// Additional aliases for terrain adaptation tests
+typedef DummyIMU MockIMUInterface;
+typedef DummyFSR MockFSRInterface;
 
 inline Parameters createDefaultParameters() {
     Parameters params;
