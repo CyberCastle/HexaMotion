@@ -110,18 +110,18 @@ typedef DummyFSR MockFSRInterface;
 
 inline Parameters createDefaultParameters() {
     Parameters params;
-    params.hexagon_radius = 90.0f;
-    params.coxa_length = 52.0f;
-    params.femur_length = 66.0f;
-    params.tibia_length = 133.0f;
-    params.robot_height = 80.0f;
+    params.hexagon_radius = 400.0f;
+    params.coxa_length = 50.0f;
+    params.femur_length = 101.0f;
+    params.tibia_length = 208.0f;
+    params.robot_height = 90.0f;
     params.robot_weight = 2.0f;
     params.center_of_mass = Eigen::Vector3f(0, 0, 0);
-    params.coxa_angle_limits[0] = -45.0f;
-    params.coxa_angle_limits[1] = 45.0f;
-    params.femur_angle_limits[0] = -90.0f;
-    params.femur_angle_limits[1] = 90.0f;
-    params.tibia_angle_limits[0] = -135.0f;
+    params.coxa_angle_limits[0] = -65.0f;
+    params.coxa_angle_limits[1] = 65.0f;
+    params.femur_angle_limits[0] = -75.0f;
+    params.femur_angle_limits[1] = 75.0f;
+    params.tibia_angle_limits[0] = -45.0f;
     params.tibia_angle_limits[1] = 45.0f;
     params.max_velocity = 100.0f;
     params.max_angular_velocity = 45.0f;
