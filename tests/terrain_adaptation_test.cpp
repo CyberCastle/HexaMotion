@@ -18,12 +18,12 @@
  */
 
 // Mock FSR interface for testing
-class MockFSRInterface : public IFSRInterface {
+class TerrainFSRMock : public IFSRInterface {
   private:
     FSRData fsr_data_[NUM_LEGS];
 
   public:
-    MockFSRInterface() {
+    TerrainFSRMock() {
         for (int i = 0; i < NUM_LEGS; i++) {
             fsr_data_[i] = {0.0f, false, 0.0f};
         }
@@ -53,12 +53,12 @@ class MockFSRInterface : public IFSRInterface {
 };
 
 // Mock IMU interface for testing
-class MockIMUInterface : public IIMUInterface {
+class TerrainIMUMock : public IIMUInterface {
   private:
     IMUData imu_data_;
 
   public:
-    MockIMUInterface() {
+    TerrainIMUMock() {
         imu_data_ = {0.0f, 0.0f, 0.0f, 0.0f, -9.81f, 0.0f, 0.0f, 0.0f, 0.0f, true};
     }
 
@@ -104,8 +104,8 @@ void testTouchdownDetection() {
     TerrainAdaptation terrain_adaptation(model);
     terrain_adaptation.initialize();
 
-    MockFSRInterface fsr;
-    MockIMUInterface imu;
+    TerrainFSRMock fsr;
+    TerrainIMUMock imu;
 
     // Test touchdown event
     fsr.setFSRData(0, 15.0f, true); // Above touchdown threshold
@@ -135,8 +135,8 @@ void testWalkPlaneEstimation() {
     TerrainAdaptation terrain_adaptation(model);
     terrain_adaptation.initialize();
 
-    MockFSRInterface fsr;
-    MockIMUInterface imu;
+    TerrainFSRMock fsr;
+    TerrainIMUMock imu;
 
     // Simulate multiple touchdown events to build contact history
     for (int leg = 0; leg < 4; leg++) {
@@ -190,8 +190,8 @@ void testGravityEstimation() {
     TerrainAdaptation terrain_adaptation(model);
     terrain_adaptation.initialize();
 
-    MockFSRInterface fsr;
-    MockIMUInterface imu;
+    TerrainFSRMock fsr;
+    TerrainIMUMock imu;
 
     // Set tilted IMU data
     imu.setIMUData(0.1f, 0.2f, 0.0f, 1.0f, 2.0f, -8.81f);
@@ -217,8 +217,8 @@ void testTerrainTrajectoryAdaptation() {
     terrain_adaptation.initialize();
     terrain_adaptation.setRoughTerrainMode(true);
 
-    MockFSRInterface fsr;
-    MockIMUInterface imu;
+    TerrainFSRMock fsr;
+    TerrainIMUMock imu;
 
     // Base trajectory
     Point3D base_trajectory(400, 0, -90);
@@ -259,8 +259,8 @@ void testWalkControllerIntegration() {
     walk_controller.enableForceNormalTouchdown(true);
     walk_controller.enableGravityAlignedTips(true);
 
-    MockFSRInterface fsr;
-    MockIMUInterface imu;
+    TerrainFSRMock fsr;
+    TerrainIMUMock imu;
 
     // Test foot trajectory with terrain adaptation
     float leg_phase_offsets[NUM_LEGS] = {0.0f, 0.33f, 0.67f, 0.0f, 0.33f, 0.67f};
@@ -333,8 +333,8 @@ void testRoughTerrainModes() {
     terrain_adaptation.setForceNormalTouchdown(true);
     terrain_adaptation.setGravityAlignedTips(true);
 
-    MockFSRInterface fsr;
-    MockIMUInterface imu;
+    TerrainFSRMock fsr;
+    TerrainIMUMock imu;
 
     Point3D base_trajectory(400, 0, -90);
 

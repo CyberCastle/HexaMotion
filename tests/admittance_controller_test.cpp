@@ -17,8 +17,8 @@ int main() {
     DummyIMU imu;
     DummyFSR fsr;
     AdmittanceController ac(model, &imu, &fsr);
-    Eigen::Vector3f target(0, 0, 0);
-    Eigen::Vector3f current(0, 0, 0);
+    Point3D target(0, 0, 0);
+    Point3D current(0, 0, 0);
     assert(ac.maintainOrientation(target, current, 0.1f));
     LegState states[NUM_LEGS]{};
     Point3D legs[NUM_LEGS]{};
