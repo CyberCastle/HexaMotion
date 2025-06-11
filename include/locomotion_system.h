@@ -211,6 +211,12 @@ class LocomotionSystem {
     void adaptGaitToTerrain();
     void adjustStepParameters();
     void compensateForSlope();
+
+    // Advanced gait methods
+    void updateMetachronalPattern();
+    void updateAdaptivePattern();
+    bool shouldAdaptGaitPattern();
+    void calculateAdaptivePhaseOffsets();
 };
 
 #include "math_utils.h"

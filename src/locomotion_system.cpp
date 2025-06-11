@@ -232,6 +232,27 @@ bool LocomotionSystem::setGaitType(GaitType gait) {
         leg_phase_offsets[4] = 3.0f / 6.0f; // BL: mult=3 -> 0.500
         leg_phase_offsets[5] = 5.0f / 6.0f; // AL: mult=5 -> 0.833
         break;
+    case METACHRONAL_GAIT:
+        // Metachronal: Smooth wave-like progression clockwise
+        // Creates a flowing wave motion around the body perimeter
+        // Sequence: AR → BR → CR → CL → BL → AL (clockwise progression)
+        leg_phase_offsets[0] = 0.0f / 6.0f; // AR: 0.000 (starts first)
+        leg_phase_offsets[1] = 1.0f / 6.0f; // BR: 0.167
+        leg_phase_offsets[2] = 2.0f / 6.0f; // CR: 0.333
+        leg_phase_offsets[3] = 3.0f / 6.0f; // CL: 0.500
+        leg_phase_offsets[4] = 4.0f / 6.0f; // BL: 0.667
+        leg_phase_offsets[5] = 5.0f / 6.0f; // AL: 0.833
+        break;
+    case ADAPTIVE_GAIT:
+        // Adaptive: Dynamic pattern that changes based on conditions
+        // Starts with a stable base pattern similar to ripple but with adaptive spacing
+        leg_phase_offsets[0] = 1.0f / 8.0f; // AR: 0.125 (fine-tuned timing)
+        leg_phase_offsets[1] = 0.0f / 8.0f; // BR: 0.000 (anchor leg)
+        leg_phase_offsets[2] = 3.0f / 8.0f; // CR: 0.375
+        leg_phase_offsets[3] = 6.0f / 8.0f; // CL: 0.750
+        leg_phase_offsets[4] = 4.0f / 8.0f; // BL: 0.500
+        leg_phase_offsets[5] = 7.0f / 8.0f; // AL: 0.875
+        break;
     default:
         // Default to tripod
         for (int i = 0; i < NUM_LEGS; i++) {
@@ -241,6 +262,153 @@ bool LocomotionSystem::setGaitType(GaitType gait) {
     }
 
     return walk_ctrl->setGaitType(gait);
+}
+
+// Advanced gait methods
+void LocomotionSystem::updateMetachronalPattern() {
+    // Metachronal gait creates smooth wave-like motion
+    // The wave can flow in either direction for forward/backward movement
+
+    if (current_gait != METACHRONAL_GAIT)
+        return;
+
+    // Calculate wave direction based on movement command
+    bool reverse_wave = false;
+    if (walk_ctrl) {
+        // Check if we're moving backward (this is a simplified check)
+        // In a real implementation, you'd check the velocity commands
+        reverse_wave = false; // For now, always forward wave
+    }
+
+    if (reverse_wave) {
+        // Reverse wave pattern: AL → BL → CL → CR → BR → AR
+        leg_phase_offsets[0] = 5.0f / 6.0f; // AR: 0.833
+        leg_phase_offsets[1] = 4.0f / 6.0f; // BR: 0.667
+        leg_phase_offsets[2] = 3.0f / 6.0f; // CR: 0.500
+        leg_phase_offsets[3] = 2.0f / 6.0f; // CL: 0.333
+        leg_phase_offsets[4] = 1.0f / 6.0f; // BL: 0.167
+        leg_phase_offsets[5] = 0.0f / 6.0f; // AL: 0.000
+    } else {
+        // Forward wave pattern: AR → BR → CR → CL → BL → AL
+        leg_phase_offsets[0] = 0.0f / 6.0f; // AR: 0.000
+        leg_phase_offsets[1] = 1.0f / 6.0f; // BR: 0.167
+        leg_phase_offsets[2] = 2.0f / 6.0f; // CR: 0.333
+        leg_phase_offsets[3] = 3.0f / 6.0f; // CL: 0.500
+        leg_phase_offsets[4] = 4.0f / 6.0f; // BL: 0.667
+        leg_phase_offsets[5] = 5.0f / 6.0f; // AL: 0.833
+    }
+}
+
+void LocomotionSystem::updateAdaptivePattern() {
+    if (current_gait != ADAPTIVE_GAIT)
+        return;
+
+    // Check if we need to adapt the gait pattern
+    if (shouldAdaptGaitPattern()) {
+        calculateAdaptivePhaseOffsets();
+    }
+}
+
+bool LocomotionSystem::shouldAdaptGaitPattern() {
+    if (!system_enabled || !fsr_interface || !imu_interface) {
+        return false;
+    }
+
+    // Check terrain conditions
+    float avg_pressure = 0.0f;
+    int contact_count = 0;
+    float pressure_variance = 0.0f;
+
+    for (int i = 0; i < NUM_LEGS; i++) {
+        FSRData fsr_data = fsr_interface->readFSR(i);
+        if (fsr_data.in_contact) {
+            avg_pressure += fsr_data.pressure;
+            contact_count++;
+        }
+    }
+
+    if (contact_count == 0)
+        return false;
+
+    avg_pressure /= contact_count;
+
+    // Calculate pressure variance to detect uneven terrain
+    for (int i = 0; i < NUM_LEGS; i++) {
+        FSRData fsr_data = fsr_interface->readFSR(i);
+        if (fsr_data.in_contact) {
+            float diff = fsr_data.pressure - avg_pressure;
+            pressure_variance += diff * diff;
+        }
+    }
+    pressure_variance /= contact_count;
+
+    // Check IMU for slope/tilt
+    IMUData imu_data = imu_interface->readIMU();
+    float tilt_magnitude = sqrt(imu_data.roll * imu_data.roll + imu_data.pitch * imu_data.pitch);
+
+    // Adapt if terrain is uneven or tilted
+    bool high_variance = pressure_variance > (params.fsr_max_pressure * 0.1f);
+    bool significant_tilt = tilt_magnitude > 5.0f; // 5 degrees
+    bool high_pressure = avg_pressure > (params.fsr_max_pressure * 0.7f);
+
+    return high_variance || significant_tilt || high_pressure;
+}
+
+void LocomotionSystem::calculateAdaptivePhaseOffsets() {
+    if (!system_enabled || !fsr_interface || !imu_interface) {
+        return;
+    }
+
+    // Get sensor data
+    IMUData imu_data = imu_interface->readIMU();
+    float stability_index = calculateStabilityIndex();
+
+    // Base pattern (similar to ripple but more conservative)
+    float base_offsets[NUM_LEGS] = {
+        1.0f / 8.0f, // AR: 0.125
+        0.0f / 8.0f, // BR: 0.000 (anchor)
+        3.0f / 8.0f, // CR: 0.375
+        6.0f / 8.0f, // CL: 0.750
+        4.0f / 8.0f, // BL: 0.500
+        7.0f / 8.0f  // AL: 0.875
+    };
+
+    // Adaptation factors based on conditions
+    float tilt_magnitude = sqrt(imu_data.roll * imu_data.roll + imu_data.pitch * imu_data.pitch);
+
+    if (tilt_magnitude > 10.0f) {
+        // On steep slopes, use more conservative tripod-like pattern
+        float tripod_factor = (tilt_magnitude - 10.0f) / 20.0f; // 0-1 over 10-30 degrees
+        tripod_factor = std::min(tripod_factor, 1.0f);
+
+        for (int i = 0; i < NUM_LEGS; i++) {
+            float tripod_offset = (i % 2) * 0.5f;
+            leg_phase_offsets[i] = base_offsets[i] * (1.0f - tripod_factor) +
+                                   tripod_offset * tripod_factor;
+        }
+    } else if (stability_index < 0.3f) {
+        // Low stability - move toward wave gait pattern
+        float wave_offsets[NUM_LEGS] = {
+            2.0f / 6.0f, // AR: 0.333
+            3.0f / 6.0f, // BR: 0.500
+            4.0f / 6.0f, // CR: 0.667
+            1.0f / 6.0f, // CL: 0.167
+            0.0f / 6.0f, // BL: 0.000
+            5.0f / 6.0f  // AL: 0.833
+        };
+
+        float wave_factor = (0.3f - stability_index) / 0.3f; // 0-1 as stability decreases
+
+        for (int i = 0; i < NUM_LEGS; i++) {
+            leg_phase_offsets[i] = base_offsets[i] * (1.0f - wave_factor) +
+                                   wave_offsets[i] * wave_factor;
+        }
+    } else {
+        // Good conditions - use base adaptive pattern
+        for (int i = 0; i < NUM_LEGS; i++) {
+            leg_phase_offsets[i] = base_offsets[i];
+        }
+    }
 }
 
 // Gait sequence planning
@@ -555,6 +723,10 @@ bool LocomotionSystem::update() {
 
     // Update gait phase
     updateGaitPhase();
+
+    // Update advanced gait patterns
+    updateMetachronalPattern();
+    updateAdaptivePattern();
 
     // Calculate new leg positions
     for (int i = 0; i < NUM_LEGS; i++) {
