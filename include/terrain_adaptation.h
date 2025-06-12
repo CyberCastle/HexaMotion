@@ -2,7 +2,7 @@
 #define TERRAIN_ADAPTATION_H
 
 #include "HexaModel.h"
-#include <Eigen/Dense>
+#include <ArduinoEigen.h>
 #include <vector>
 
 /**
