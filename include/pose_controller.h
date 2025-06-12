@@ -1,7 +1,7 @@
 #ifndef POSE_CONTROLLER_H
 #define POSE_CONTROLLER_H
 
-#include "model.h"
+#include "HexaModel.h"
 
 /**
  * @brief Kinematic pose controller for body and legs.

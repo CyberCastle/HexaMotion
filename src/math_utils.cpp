@@ -1,5 +1,5 @@
 #include "math_utils.h"
-#include "model.h"
+#include "HexaModel.h"
 #include <math.h>
 
 // Utility function implementations

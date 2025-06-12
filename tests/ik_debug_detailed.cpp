@@ -1,4 +1,4 @@
-#include "model.h"
+#include "HexaModel.h"
 #include <cmath>
 #include <iomanip>
 #include <iostream>

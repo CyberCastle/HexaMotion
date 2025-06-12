@@ -1,9 +1,9 @@
 #ifndef STATE_CONTROLLER_H
 #define STATE_CONTROLLER_H
 
+#include "HexaModel.h"
 #include "admittance_controller.h"
 #include "locomotion_system.h"
-#include "model.h"
 #include "pose_controller.h"
 #include "walk_controller.h"
 #include <Arduino.h>

@@ -1,7 +1,7 @@
 #ifndef TERRAIN_ADAPTATION_H
 #define TERRAIN_ADAPTATION_H
 
-#include "model.h"
+#include "HexaModel.h"
 #include <Eigen/Dense>
 #include <vector>
 

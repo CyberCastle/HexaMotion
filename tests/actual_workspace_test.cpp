@@ -1,5 +1,5 @@
+#include "HexaModel.h"
 #include "math_utils.h"
-#include "model.h"
 #include <cmath>
 #include <iostream>
 #include <vector>

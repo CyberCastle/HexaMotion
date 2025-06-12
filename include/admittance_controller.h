@@ -1,7 +1,7 @@
 #ifndef ADMITTANCE_CONTROLLER_H
 #define ADMITTANCE_CONTROLLER_H
 
-#include "model.h"
+#include "HexaModel.h"
 #include "precision_config.h"
 #include <vector>
 

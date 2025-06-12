@@ -1,8 +1,8 @@
 #ifndef IMU_AUTO_POSE_H
 #define IMU_AUTO_POSE_H
 
+#include "HexaModel.h"
 #include "manual_pose_controller.h"
-#include "model.h"
 #include "precision_config.h"
 
 /**

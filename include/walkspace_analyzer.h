@@ -1,7 +1,7 @@
 #ifndef WALKSPACE_ANALYZER_H
 #define WALKSPACE_ANALYZER_H
 
-#include "model.h"
+#include "HexaModel.h"
 #include "precision_config.h"
 #include <map>
 #include <vector>

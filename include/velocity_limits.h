@@ -1,7 +1,7 @@
 #ifndef VELOCITY_LIMITS_H
 #define VELOCITY_LIMITS_H
 
-#include "model.h"
+#include "HexaModel.h"
 #include <algorithm>
 #include <array>
 #include <cmath>

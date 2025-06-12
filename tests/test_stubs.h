@@ -1,7 +1,7 @@
 #ifndef TEST_STUBS_H
 #define TEST_STUBS_H
 
-#include "../include/model.h"
+#include "../include/HexaModel.h"
 #include <iostream>
 
 struct DummyIMU : IIMUInterface {

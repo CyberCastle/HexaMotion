@@ -1,4 +1,4 @@
-#include "../include/model.h"
+#include "../include/HexaModel.h"
 #include <cassert>
 #include <iostream>
 

@@ -1,7 +1,7 @@
 #ifndef WALK_CONTROLLER_H
 #define WALK_CONTROLLER_H
 
-#include "model.h"
+#include "HexaModel.h"
 #include "terrain_adaptation.h"
 #include "velocity_limits.h"
 

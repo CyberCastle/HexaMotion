@@ -1,7 +1,7 @@
 #ifndef MANUAL_POSE_CONTROLLER_H
 #define MANUAL_POSE_CONTROLLER_H
 
-#include "model.h"
+#include "HexaModel.h"
 #include <map>
 
 /**

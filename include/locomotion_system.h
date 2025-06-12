@@ -43,8 +43,8 @@
 #ifndef LOCOMOTION_SYSTEM_H
 #define LOCOMOTION_SYSTEM_H
 
+#include "HexaModel.h"
 #include "admittance_controller.h"
-#include "model.h"
 #include "pose_controller.h"
 #include "walk_controller.h"
 #include <Arduino.h>

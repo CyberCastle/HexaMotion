@@ -1,4 +1,4 @@
-#include "model.h"
+#include "HexaModel.h"
 #include "velocity_limits.h"
 #include "walk_controller.h"
 #include <cassert>

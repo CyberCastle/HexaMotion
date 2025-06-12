@@ -1,4 +1,4 @@
-#include "model.h"
+#include "HexaModel.h"
 #include <limits>
 #include <math.h>
 #include <vector>
