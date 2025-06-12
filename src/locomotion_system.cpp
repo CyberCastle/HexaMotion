@@ -715,6 +715,11 @@ bool LocomotionSystem::update() {
     if (dt > 0.1f)
         dt = 0.1f;
 
+    // Update FSR sensors using AdvancedAnalog DMA
+    if (fsr_interface) {
+        fsr_interface->update();
+    }
+
     // Adapt gait and step parameters depending on terrain
     adaptGaitToTerrain();
     updateStepParameters();

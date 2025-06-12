@@ -36,13 +36,22 @@ class MyIMU : public IIMUInterface {
 
 class MyFSR : public IFSRInterface {
   public:
+    bool initialize() override { return true; }
     bool calibrateFSR(int leg_index) override { return true; }
     FSRData readFSR(int leg_index) override {
         FSRData data;
         // Read actual FSR data here
-        data.force = 0.0f;
+        data.pressure = 0.0f;
         data.in_contact = false;
+        data.contact_time = 0.0f;
         return data;
+    }
+    float getRawReading(int leg_index) override { return 0.0f; }
+    bool update() override {
+        // Update FSR readings using AdvancedAnalog DMA
+        // This method should trigger simultaneous ADC reads on all FSR channels
+        // and update internal registers with the latest values
+        return true;
     }
 };
 

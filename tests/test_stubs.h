@@ -71,6 +71,16 @@ struct DummyFSR : IFSRInterface {
         return 0.0f;
     }
 
+    bool update() override {
+        // SIMPLIFIED: In real implementation, this would:
+        // 1. Trigger AdvancedAnalog DMA to read all FSR channels simultaneously
+        // 2. Update internal ADC value registers for all legs
+        // 3. Apply calibration curves and noise filtering
+        // 4. Update contact detection states
+        // For simulation, just return success
+        return true;
+    }
+
     // Test helper method
     void setFSRData(int leg, float pressure, bool contact) {
         if (leg >= 0 && leg < NUM_LEGS) {

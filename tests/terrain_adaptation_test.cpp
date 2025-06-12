@@ -45,6 +45,12 @@ class TerrainFSRMock : public IFSRInterface {
         return {0.0f, false, 0.0f};
     }
 
+    bool update() override {
+        // Mock implementation of AdvancedAnalog DMA update
+        // In real implementation, this would trigger simultaneous ADC reads
+        return true;
+    }
+
     void setFSRData(int leg_index, float pressure, bool in_contact) {
         if (leg_index >= 0 && leg_index < NUM_LEGS) {
             fsr_data_[leg_index] = {pressure, in_contact, 0.0f};

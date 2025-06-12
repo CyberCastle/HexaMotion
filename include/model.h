@@ -194,6 +194,13 @@ class IFSRInterface {
     virtual bool calibrateFSR(int leg_index) = 0;
     /** Get raw ADC reading from a sensor. */
     virtual float getRawReading(int leg_index) = 0;
+    /**
+     * Update internal registers with ADC readings using AdvancedAnalog DMA.
+     * This method should trigger simultaneous reading of all FSR channels
+     * and update the internal ADC value registers. Called by the locomotion
+     * system during each update cycle for optimal sensor data synchronization.
+     */
+    virtual bool update() = 0;
 };
 
 class IServoInterface {

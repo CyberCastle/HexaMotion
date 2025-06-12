@@ -43,6 +43,11 @@ class ExampleFSR : public IFSRInterface {
     }
     bool calibrateFSR(int /*leg_index*/) override { return true; }
     float getRawReading(int /*leg_index*/) override { return 0.0f; }
+    bool update() override {
+        // Example implementation: Update FSR readings using AdvancedAnalog DMA
+        // In real implementation, this would trigger simultaneous ADC reads
+        return true;
+    }
 };
 
 /**
@@ -61,15 +66,19 @@ class ExampleServo : public IServoInterface {
     bool initialize() override { return true; }
 
     bool setJointAngle(int leg_index, int joint_index, float angle) override {
-        if (leg_index < 0 || leg_index >= NUM_LEGS) return false;
-        if (joint_index < 0 || joint_index >= DOF_PER_LEG) return false;
+        if (leg_index < 0 || leg_index >= NUM_LEGS)
+            return false;
+        if (joint_index < 0 || joint_index >= DOF_PER_LEG)
+            return false;
         angles[leg_index][joint_index] = angle;
         return true;
     }
 
     float getJointAngle(int leg_index, int joint_index) override {
-        if (leg_index < 0 || leg_index >= NUM_LEGS) return 0.0f;
-        if (joint_index < 0 || joint_index >= DOF_PER_LEG) return 0.0f;
+        if (leg_index < 0 || leg_index >= NUM_LEGS)
+            return 0.0f;
+        if (joint_index < 0 || joint_index >= DOF_PER_LEG)
+            return 0.0f;
         return angles[leg_index][joint_index];
     }
 
