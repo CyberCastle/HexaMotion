@@ -53,6 +53,18 @@
 
 // Main locomotion system class
 class LocomotionSystem {
+  public:
+    // Error control
+    enum ErrorCode {
+        NO_ERROR = 0,
+        IMU_ERROR = 1,
+        FSR_ERROR = 2,
+        SERVO_ERROR = 3,
+        KINEMATICS_ERROR = 4,
+        STABILITY_ERROR = 5,
+        PARAMETER_ERROR = 6
+    };
+
   private:
     // Robot parameters
     Parameters params;
@@ -88,6 +100,9 @@ class LocomotionSystem {
 
     // Kinematics matrices
     Eigen::MatrixXf dh_transforms[NUM_LEGS][DOF_PER_LEG];
+
+    // Error variables
+    ErrorCode last_error;
 
     RobotModel model;
     PoseController *pose_ctrl;
@@ -158,17 +173,6 @@ class LocomotionSystem {
     float calculateStabilityIndex();
     bool isStaticallyStable();
 
-    // Error control
-    enum ErrorCode {
-        NO_ERROR = 0,
-        IMU_ERROR = 1,
-        FSR_ERROR = 2,
-        SERVO_ERROR = 3,
-        KINEMATICS_ERROR = 4,
-        STABILITY_ERROR = 5,
-        PARAMETER_ERROR = 6
-    };
-
     ErrorCode getLastError() const { return last_error; }
     String getErrorMessage(ErrorCode error);
     bool handleError(ErrorCode error);
@@ -195,9 +199,6 @@ class LocomotionSystem {
     bool performSelfTest();
 
   private:
-    // Error variables
-    ErrorCode last_error;
-
     // Helper methods
     float constrainAngle(float angle, float min_angle, float max_angle);
     bool validateParameters();

@@ -62,8 +62,8 @@ class IMUAutoPose {
   private:
     RobotModel &model_;
     IIMUInterface *imu_;
-    ComputeConfig config_;
     ManualPoseController &pose_controller_;
+    ComputeConfig config_;
 
     AutoPoseMode current_mode_;
     IMUPoseParams params_;
