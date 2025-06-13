@@ -39,7 +39,7 @@ class AdmittanceController {
      * @brief ODE integration methods
      */
     enum IntegrationMethod {
-        EULER,         ///< First-order Euler (fastest)
+        EULER_METHOD,  ///< First-order Euler (fastest)
         RUNGE_KUTTA_2, ///< Second-order RK (balanced)
         RUNGE_KUTTA_4  ///< Fourth-order RK (most accurate)
     };

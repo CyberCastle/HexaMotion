@@ -35,7 +35,7 @@ Point3D AdmittanceController::applyForceAndIntegrate(int leg_index, const Point3
     Point3D position_delta;
 
     switch (integration_method_) {
-    case EULER:
+    case EULER_METHOD:
         position_delta = integrateEuler(leg_index);
         break;
     case RUNGE_KUTTA_2:
@@ -127,7 +127,7 @@ void AdmittanceController::setPrecisionConfig(const ComputeConfig &config) {
 void AdmittanceController::selectIntegrationMethod() {
     switch (config_.precision) {
     case PRECISION_LOW:
-        integration_method_ = EULER;
+        integration_method_ = EULER_METHOD;
         break;
     case PRECISION_MEDIUM:
         integration_method_ = RUNGE_KUTTA_2;
