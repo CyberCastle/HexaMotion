@@ -182,7 +182,6 @@ class IMUAutoPose {
     void updateAdaptiveGains();
 
     // Utility functions
-    Point3D quaternionToEuler(float qw, float qx, float qy, float qz);
     Point3D normalizeAngles(const Point3D &angles);
     bool withinDeadzone(const Point3D &error);
 };

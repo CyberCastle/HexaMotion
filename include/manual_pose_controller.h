@@ -35,13 +35,17 @@ class ManualPoseController {
     struct PoseState {
         Point3D body_position;           ///< Body position offset
         Point3D body_rotation;           ///< Body rotation (roll, pitch, yaw) in radians
+        Eigen::Vector4f body_quaternion; ///< Body orientation as quaternion [w, x, y, z]
         Point3D leg_positions[NUM_LEGS]; ///< Individual leg positions
         float body_height;               ///< Body height above ground
         float pose_blend_factor;         ///< Blending factor for pose transitions
         bool pose_active;                ///< Whether pose is actively applied
+        bool use_quaternion;             ///< Whether to use quaternion or Euler angles
 
         PoseState() : body_position(0, 0, 0), body_rotation(0, 0, 0),
-                      body_height(100.0f), pose_blend_factor(1.0f), pose_active(false) {
+                      body_quaternion(1, 0, 0, 0), // Identity quaternion
+                      body_height(100.0f), pose_blend_factor(1.0f),
+                      pose_active(false), use_quaternion(false) {
             for (int i = 0; i < NUM_LEGS; i++) {
                 leg_positions[i] = Point3D(0, 0, 0);
             }
@@ -112,19 +116,41 @@ class ManualPoseController {
     void processInput(float x, float y, float z);
 
     /**
+     * @brief Set pose using quaternion for orientation
+     * @param position Body position offset
+     * @param quaternion Body orientation as quaternion [w, x, y, z]
+     * @param blend_factor Blending factor for smooth transitions
+     */
+    void setPoseQuaternion(const Point3D &position, const Eigen::Vector4f &quaternion, float blend_factor = 1.0f);
+
+    /**
+     * @brief Interpolate to target pose using quaternions
+     * @param target_pos Target position
+     * @param target_quat Target quaternion
+     * @param speed Interpolation speed (0.0 to 1.0)
+     */
+    void interpolateToQuaternionPose(const Point3D &target_pos, const Eigen::Vector4f &target_quat, float speed);
+
+    /**
+     * @brief Convert current Euler rotation to quaternion
+     * @return Current orientation as quaternion
+     */
+    Eigen::Vector4f getCurrentQuaternion() const;
+
+    /**
+     * @brief Update pose state to use quaternions instead of Euler angles
+     * @param use_quat Whether to use quaternion representation
+     */
+    void setUseQuaternion(bool use_quat);
+
+    /**
      * @brief Process input with additional parameters
      * @param x X-axis input
      * @param y Y-axis input
      * @param z Z-axis input
-     * @param aux Auxiliary parameter (leg index, blend factor, etc.)
+     * @param aux Auxiliary parameter
      */
     void processInputExtended(float x, float y, float z, float aux);
-
-    /**
-     * @brief Set input scaling factors
-     * @param scaling Input scaling configuration
-     */
-    void setInputScaling(const InputScaling &scaling) { input_scaling_ = scaling; }
 
     /**
      * @brief Get current pose state

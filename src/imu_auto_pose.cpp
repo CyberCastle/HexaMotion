@@ -298,30 +298,6 @@ void IMUAutoPose::updateAdaptiveGains() {
     }
 }
 
-Point3D IMUAutoPose::quaternionToEuler(float qw, float qx, float qy, float qz) {
-    // Convert quaternion to Euler angles (roll, pitch, yaw)
-    Point3D euler;
-
-    // Roll (x-axis rotation)
-    float sinr_cosp = 2 * (qw * qx + qy * qz);
-    float cosr_cosp = 1 - 2 * (qx * qx + qy * qy);
-    euler.x = atan2(sinr_cosp, cosr_cosp);
-
-    // Pitch (y-axis rotation)
-    float sinp = 2 * (qw * qy - qz * qx);
-    if (abs(sinp) >= 1)
-        euler.y = copysign(M_PI / 2, sinp); // Use 90 degrees if out of range
-    else
-        euler.y = asin(sinp);
-
-    // Yaw (z-axis rotation)
-    float siny_cosp = 2 * (qw * qz + qx * qy);
-    float cosy_cosp = 1 - 2 * (qy * qy + qz * qz);
-    euler.z = atan2(siny_cosp, cosy_cosp);
-
-    return euler;
-}
-
 Point3D IMUAutoPose::normalizeAngles(const Point3D &angles) {
     Point3D normalized;
 

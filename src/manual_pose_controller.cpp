@@ -311,3 +311,106 @@ Point3D ManualPoseController::calculateDefaultLegPosition(int leg_index, float h
         radius * sin(angle),
         -height);
 }
+
+void ManualPoseController::setPoseQuaternion(const Point3D &position, const Eigen::Vector4f &quaternion, float blend_factor) {
+    target_pose_.body_position = position;
+    target_pose_.body_quaternion = quaternion;
+    target_pose_.pose_blend_factor = blend_factor;
+    target_pose_.use_quaternion = true;
+    target_pose_.pose_active = true;
+
+    // Update Euler representation for compatibility
+    target_pose_.body_rotation = math_utils::quaternionToEulerPoint3D(quaternion);
+
+    // Also update current pose immediately for consistency
+    current_pose_.body_position = position;
+    current_pose_.body_quaternion = quaternion;
+    current_pose_.pose_blend_factor = blend_factor;
+    current_pose_.use_quaternion = true;
+    current_pose_.pose_active = true;
+    current_pose_.body_rotation = math_utils::quaternionToEulerPoint3D(quaternion);
+}
+
+void ManualPoseController::interpolateToQuaternionPose(const Point3D &target_pos, const Eigen::Vector4f &target_quat, float speed) {
+    if (!smooth_transitions_ || speed >= 1.0f) {
+        setPoseQuaternion(target_pos, target_quat, 1.0f);
+        current_pose_ = target_pose_;
+        return;
+    }
+
+    // Clamp speed
+    speed = std::max(0.0f, std::min(1.0f, speed));
+
+    // Linear interpolation for position
+    current_pose_.body_position.x += speed * (target_pos.x - current_pose_.body_position.x);
+    current_pose_.body_position.y += speed * (target_pos.y - current_pose_.body_position.y);
+    current_pose_.body_position.z += speed * (target_pos.z - current_pose_.body_position.z);
+
+    // Spherical linear interpolation for quaternion
+    Eigen::Vector4f current_quat = getCurrentQuaternion();
+
+    // Simple SLERP implementation
+    float dot = current_quat[0] * target_quat[0] + current_quat[1] * target_quat[1] +
+                current_quat[2] * target_quat[2] + current_quat[3] * target_quat[3];
+
+    // Take shorter path
+    Eigen::Vector4f target_adjusted = target_quat;
+    if (dot < 0.0f) {
+        target_adjusted = -target_quat;
+        dot = -dot;
+    }
+
+    // Linear interpolation for very close quaternions
+    if (dot > 0.9995f) {
+        current_pose_.body_quaternion = current_quat + speed * (target_adjusted - current_quat);
+        // Normalize
+        float norm = sqrt(current_pose_.body_quaternion[0] * current_pose_.body_quaternion[0] +
+                          current_pose_.body_quaternion[1] * current_pose_.body_quaternion[1] +
+                          current_pose_.body_quaternion[2] * current_pose_.body_quaternion[2] +
+                          current_pose_.body_quaternion[3] * current_pose_.body_quaternion[3]);
+        if (norm > 0.0f) {
+            current_pose_.body_quaternion = current_pose_.body_quaternion / norm;
+        }
+    } else {
+        // Spherical interpolation
+        float theta_0 = acos(std::abs(dot));
+        float sin_theta_0 = sin(theta_0);
+        float theta = theta_0 * speed;
+        float sin_theta = sin(theta);
+
+        float s0 = cos(theta) - dot * sin_theta / sin_theta_0;
+        float s1 = sin_theta / sin_theta_0;
+
+        current_pose_.body_quaternion = s0 * current_quat + s1 * target_adjusted;
+    }
+
+    current_pose_.use_quaternion = true;
+    current_pose_.pose_active = true;
+
+    // Update Euler representation for compatibility
+    current_pose_.body_rotation = math_utils::quaternionToEulerPoint3D(current_pose_.body_quaternion);
+}
+
+Eigen::Vector4f ManualPoseController::getCurrentQuaternion() const {
+    if (current_pose_.use_quaternion) {
+        return current_pose_.body_quaternion;
+    } else {
+        // Convert from Euler angles
+        return math_utils::eulerPoint3DToQuaternion(current_pose_.body_rotation);
+    }
+}
+
+void ManualPoseController::setUseQuaternion(bool use_quat) {
+    if (use_quat && !current_pose_.use_quaternion) {
+        // Convert current Euler to quaternion
+        current_pose_.body_quaternion = math_utils::eulerPoint3DToQuaternion(current_pose_.body_rotation);
+        target_pose_.body_quaternion = math_utils::eulerPoint3DToQuaternion(target_pose_.body_rotation);
+    } else if (!use_quat && current_pose_.use_quaternion) {
+        // Convert current quaternion to Euler
+        current_pose_.body_rotation = math_utils::quaternionToEulerPoint3D(current_pose_.body_quaternion);
+        target_pose_.body_rotation = math_utils::quaternionToEulerPoint3D(target_pose_.body_quaternion);
+    }
+
+    current_pose_.use_quaternion = use_quat;
+    target_pose_.use_quaternion = use_quat;
+}

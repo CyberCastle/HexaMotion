@@ -160,4 +160,23 @@ Eigen::Matrix3f rotationMatrixZ(float angle) {
     return R;
 }
 
+// Pose system quaternion utilities
+Eigen::Vector3f point3DToVector3f(const Point3D &point) {
+    return Eigen::Vector3f(point.x, point.y, point.z);
+}
+
+Point3D vector3fToPoint3D(const Eigen::Vector3f &vec) {
+    return Point3D(vec[0], vec[1], vec[2]);
+}
+
+Eigen::Vector4f eulerPoint3DToQuaternion(const Point3D &euler_degrees) {
+    Eigen::Vector3f euler_vec = point3DToVector3f(euler_degrees);
+    return eulerToQuaternion(euler_vec);
+}
+
+Point3D quaternionToEulerPoint3D(const Eigen::Vector4f &quaternion) {
+    Eigen::Vector3f euler_vec = quaternionToEuler(quaternion);
+    return vector3fToPoint3D(euler_vec);
+}
+
 } // namespace math_utils

@@ -40,6 +40,16 @@ Eigen::Vector4f eulerToQuaternion(const Eigen::Vector3f &euler);
 Eigen::Vector4f quaternionMultiply(const Eigen::Vector4f &q1, const Eigen::Vector4f &q2);
 /** Invert a quaternion. */
 Eigen::Vector4f quaternionInverse(const Eigen::Vector4f &q);
+
+/** Convert Point3D to Eigen::Vector3f for quaternion operations. */
+Eigen::Vector3f point3DToVector3f(const Point3D &point);
+/** Convert Eigen::Vector3f to Point3D for pose operations. */
+Point3D vector3fToPoint3D(const Eigen::Vector3f &vec);
+/** Convert Point3D Euler angles to quaternion using centralized functions. */
+Eigen::Vector4f eulerPoint3DToQuaternion(const Point3D &euler_degrees);
+/** Convert quaternion to Point3D Euler angles using centralized functions. */
+Point3D quaternionToEulerPoint3D(const Eigen::Vector4f &quaternion);
+
 /** Denavit-Hartenberg transform matrix helper. */
 Eigen::Matrix4f dhTransform(float a, float alpha, float d, float theta);
 
