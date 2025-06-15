@@ -183,8 +183,10 @@ Point3D AdmittanceController::integrateRK2(int leg_index) {
     Point3D k1_v = initial_acc * delta_time_;
     Point3D k1_a = calculateAcceleration(params, state.equilibrium_position) * delta_time_;
 
-    // K2
-    params.velocity = initial_vel + k1_v * 0.5f;
+    // K2 - Use temporary velocity for acceleration calculation
+    Point3D temp_vel = initial_vel + k1_v * 0.5f;
+    AdmittanceParams temp_params = params;
+    temp_params.velocity = temp_vel;
     Point3D k2_v = (initial_acc + k1_a * 0.5f) * delta_time_;
 
     // Update final values
@@ -205,18 +207,21 @@ Point3D AdmittanceController::integrateRK4(int leg_index) {
     Point3D k1_v = initial_acc * delta_time_;
     Point3D k1_a = calculateAcceleration(params, state.equilibrium_position) * delta_time_;
 
-    // K2
-    params.velocity = initial_vel + k1_v * 0.5f;
+    // K2 - Use temporary parameters
+    AdmittanceParams temp_params_k2 = params;
+    temp_params_k2.velocity = initial_vel + k1_v * 0.5f;
     Point3D k2_v = (initial_acc + k1_a * 0.5f) * delta_time_;
-    Point3D k2_a = calculateAcceleration(params, state.equilibrium_position) * delta_time_;
+    Point3D k2_a = calculateAcceleration(temp_params_k2, state.equilibrium_position) * delta_time_;
 
-    // K3
-    params.velocity = initial_vel + k2_v * 0.5f;
+    // K3 - Use temporary parameters
+    AdmittanceParams temp_params_k3 = params;
+    temp_params_k3.velocity = initial_vel + k2_v * 0.5f;
     Point3D k3_v = (initial_acc + k2_a * 0.5f) * delta_time_;
-    Point3D k3_a = calculateAcceleration(params, state.equilibrium_position) * delta_time_;
+    Point3D k3_a = calculateAcceleration(temp_params_k3, state.equilibrium_position) * delta_time_;
 
-    // K4
-    params.velocity = initial_vel + k3_v;
+    // K4 - Use temporary parameters
+    AdmittanceParams temp_params_k4 = params;
+    temp_params_k4.velocity = initial_vel + k3_v;
     Point3D k4_v = (initial_acc + k3_a) * delta_time_;
 
     // Final update
