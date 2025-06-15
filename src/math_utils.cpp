@@ -51,6 +51,11 @@ bool isPointReachable(const Point3D &point, float max_reach) {
     return distance <= max_reach;
 }
 
+bool isPointReachable(const Point3D &point, float min_reach, float max_reach) {
+    float distance = sqrt(point.x * point.x + point.y * point.y + point.z * point.z);
+    return distance >= min_reach && distance <= max_reach;
+}
+
 Eigen::Vector4f quaternionMultiply(const Eigen::Vector4f &q1, const Eigen::Vector4f &q2) {
     Eigen::Vector4f result;
     result[0] = q1[0] * q2[0] - q1[1] * q2[1] - q1[2] * q2[2] - q1[3] * q2[3];

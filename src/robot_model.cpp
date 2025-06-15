@@ -62,25 +62,24 @@ JointAngles RobotModel::inverseKinematics(int leg, const Point3D &p_target) {
     local_target.y = p_target.y - base_y;
     local_target.z = p_target.z;
 
-    // Quick workspace check - only reject targets that are clearly impossible
-    float target_distance = sqrt(local_target.x * local_target.x + local_target.y * local_target.y + local_target.z * local_target.z);
+    // Quick workspace check using centralized reachability function
     float max_reach = params.coxa_length + params.femur_length + params.tibia_length;
     float min_reach = std::abs(params.femur_length - params.tibia_length);
 
-    // Only reject if target is significantly outside workspace (allow some margin for numerical precision)
-    if (target_distance > max_reach * 1.02f) { // Reduced from 1.05f to be less conservative
-        // Target clearly too far - return pose pointing toward target but at max reach with valid joint limits
+    // Check workspace bounds using centralized function (allow margin for numerical precision)
+    if (!math_utils::isPointReachable(local_target, min_reach * 0.9f, max_reach * 1.02f)) {
         float coxa_angle = atan2(local_target.y, local_target.x) * 180.0f / M_PI;
         coxa_angle = constrainAngle(coxa_angle, params.coxa_angle_limits[0], params.coxa_angle_limits[1]);
-        // Use a valid extended pose within joint limits
-        return JointAngles(coxa_angle, -45.0f, 60.0f); // Constrained extended pose
-    }
 
-    if (target_distance < min_reach * 0.9f) { // Reduced from 0.8f to be less conservative
-        // Target clearly too close - return retracted pose within joint limits
-        float coxa_angle = atan2(local_target.y, local_target.x) * 180.0f / M_PI;
-        coxa_angle = constrainAngle(coxa_angle, params.coxa_angle_limits[0], params.coxa_angle_limits[1]);
-        return JointAngles(coxa_angle, 30.0f, -60.0f); // Constrained retracted pose
+        // Determine if target is too far or too close
+        float target_distance = math_utils::magnitude(local_target);
+        if (target_distance > max_reach * 1.02f) {
+            // Target too far - return extended pose within joint limits
+            return JointAngles(coxa_angle, -45.0f, 60.0f); // Constrained extended pose
+        } else {
+            // Target too close - return retracted pose within joint limits
+            return JointAngles(coxa_angle, 30.0f, -60.0f); // Constrained retracted pose
+        }
     }
 
     /*

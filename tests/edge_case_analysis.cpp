@@ -28,17 +28,17 @@ int main() {
     Point3D problem_target(653.851, -8.00533e-06, -183.141);
     std::cout << "Target: (" << problem_target.x << ", " << problem_target.y << ", " << problem_target.z << ")" << std::endl;
 
-    // Check if this target is reachable
-    float target_distance = sqrt(problem_target.x * problem_target.x +
-                                 problem_target.y * problem_target.y +
-                                 problem_target.z * problem_target.z);
+    // Check if this target is reachable using centralized function
     float max_reach = p.coxa_length + p.femur_length + p.tibia_length;
     float min_reach = std::abs(p.femur_length - p.tibia_length);
+
+    float target_distance = math_utils::magnitude(problem_target);
+    bool reachable = math_utils::isPointReachable(problem_target, min_reach, max_reach);
 
     std::cout << "Target distance: " << target_distance << "mm" << std::endl;
     std::cout << "Max reach: " << max_reach << "mm" << std::endl;
     std::cout << "Min reach: " << min_reach << "mm" << std::endl;
-    std::cout << "Target reachable: " << (target_distance <= max_reach && target_distance >= min_reach ? "YES" : "NO") << std::endl;
+    std::cout << "Target reachable: " << (reachable ? "YES" : "NO") << std::endl;
 
     JointAngles ik_result = model.inverseKinematics(0, problem_target);
     std::cout << "IK result: (" << ik_result.coxa << "°, "

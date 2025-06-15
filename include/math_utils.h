@@ -16,8 +16,10 @@ float normalizeAngle(float angle);
 Point3D rotatePoint(const Point3D &point, const Eigen::Vector3f &rotation);
 /** Euclidean distance between two points. */
 float distance3D(const Point3D &p1, const Point3D &p2);
-/** Check if a point is within a spherical reach. */
+/** Check if a point is within a spherical reach (simple max reach check). */
 bool isPointReachable(const Point3D &point, float max_reach);
+/** Check if a point is within spherical reach bounds (min and max reach). */
+bool isPointReachable(const Point3D &point, float min_reach, float max_reach);
 /** Magnitude of a 3D vector. */
 float magnitude(const Point3D &point);
 /** Distance between two 3D points (alias for distance3D). */
