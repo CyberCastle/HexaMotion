@@ -19,8 +19,9 @@ Las interfaces `IIMUInterface`, `IFSRInterface` e `IServoInterface` deben implem
 ## Desarrollo
 
 -   Clonar el repositorio completo, incluyendo todos los submódulos.
--   Al momento de implementar alguna funcionalidad, analizar la carpeta OpenSHC antes,
+-   Al momento de implementar o modificar alguna funcionalidad, analizar la carpeta OpenSHC antes,
     de tal forma que la implementación sea equivalente a la de OpenSHC.
+-   Para probar cambios, ejecutar las pruebas dentro de la carpeta test.
 
 ## Pruebas
 
