@@ -129,7 +129,7 @@ String toArduinoString(const std::string &str) {
 // ==============================
 
 StateController::StateController(LocomotionSystem &locomotion, const StateMachineConfig &config)
-    : locomotion_system_(locomotion), config_(config), current_system_state_(SystemState::SYSTEM_SUSPENDED), current_robot_state_(RobotState::ROBOT_UNKNOWN), current_walk_state_(WalkState::WALK_STOPPED), current_posing_mode_(PosingMode::POSING_NONE), current_cruise_control_mode_(CruiseControlMode::CRUISE_CONTROL_OFF), current_pose_reset_mode_(PoseResetMode::POSE_RESET_NONE), desired_system_state_(SystemState::SYSTEM_SUSPENDED), desired_robot_state_(RobotState::ROBOT_UNKNOWN), manual_leg_count_(0), is_transitioning_(false), desired_linear_velocity_(Eigen::Vector2f::Zero()), desired_angular_velocity_(0.0f), desired_body_position_(Eigen::Vector3f::Zero()), desired_body_orientation_(Eigen::Vector3f::Zero()), cruise_velocity_(Eigen::Vector3f::Zero()), cruise_start_time_(0), last_update_time_(0), dt_(0.02f), has_error_(false), is_initialized_(false) {
+    : locomotion_system_(locomotion), config_(config), current_system_state_(SystemState::SYSTEM_SUSPENDED), current_robot_state_(RobotState::ROBOT_UNKNOWN), current_walk_state_(WalkState::WALK_STOPPED), current_posing_mode_(PosingMode::POSING_NONE), current_cruise_control_mode_(CruiseControlMode::CRUISE_CONTROL_OFF), current_pose_reset_mode_(PoseResetMode::POSE_RESET_NONE), desired_system_state_(SystemState::SYSTEM_SUSPENDED), desired_robot_state_(RobotState::ROBOT_UNKNOWN), manual_leg_count_(0), is_transitioning_(false), desired_linear_velocity_(Eigen::Vector2f::Zero()), desired_angular_velocity_(0.0f), desired_body_position_(Eigen::Vector3f::Zero()), desired_body_orientation_(Eigen::Vector3f::Zero()), cruise_velocity_(Eigen::Vector3f::Zero()), cruise_start_time_(0), cruise_end_time_(0), last_update_time_(0), dt_(0.02f), has_error_(false), is_initialized_(false) {
 
     // Initialize leg states
     for (int i = 0; i < NUM_LEGS; i++) {
@@ -298,12 +298,36 @@ bool StateController::setCruiseControlMode(CruiseControlMode mode, const Eigen::
     current_cruise_control_mode_ = mode;
 
     if (mode == CruiseControlMode::CRUISE_CONTROL_ON) {
-        cruise_velocity_ = velocity;
+        // If velocity is provided (non-zero), use it as cruise velocity
+        if (velocity.norm() > 0.001f) {
+            cruise_velocity_ = velocity;
+            logDebug("Cruise control enabled with specified velocity: [" +
+                     toArduinoString(toString(velocity.x())) + ", " +
+                     toArduinoString(toString(velocity.y())) + ", " +
+                     toArduinoString(toString(velocity.z())) + "]");
+        } else {
+            // Save current velocity input as cruise velocity (equivalent to OpenSHC behavior)
+            cruise_velocity_.x() = desired_linear_velocity_.x();
+            cruise_velocity_.y() = desired_linear_velocity_.y();
+            cruise_velocity_.z() = desired_angular_velocity_;
+            logDebug("Cruise control enabled with current velocity: [" +
+                     toArduinoString(toString(cruise_velocity_.x())) + ", " +
+                     toArduinoString(toString(cruise_velocity_.y())) + ", " +
+                     toArduinoString(toString(cruise_velocity_.z())) + "]");
+        }
         cruise_start_time_ = millis();
-        logDebug("Cruise control enabled with velocity: [" +
-                 toArduinoString(toString(velocity.x())) + ", " + toArduinoString(toString(velocity.y())) + ", " + toArduinoString(toString(velocity.z())) + "]");
+
+        // Set end time if time limit is configured (equivalent to OpenSHC cruise_control_time_limit)
+        if (config_.cruise_control_time_limit > 0.0f) {
+            cruise_end_time_ = cruise_start_time_ + (unsigned long)(config_.cruise_control_time_limit * 1000.0f);
+            logDebug("Cruise control time limit set to " + toArduinoString(toString(config_.cruise_control_time_limit)) + " seconds");
+        } else {
+            cruise_end_time_ = 0; // No time limit
+        }
     } else {
         cruise_velocity_ = Eigen::Vector3f::Zero();
+        cruise_start_time_ = 0;
+        cruise_end_time_ = 0;
         logDebug("Cruise control disabled");
     }
 
@@ -707,29 +731,51 @@ void StateController::handleLegStateTransitions() {
 }
 
 void StateController::updateVelocityControl() {
-    if (current_cruise_control_mode_ == CruiseControlMode::CRUISE_CONTROL_ON) {
-        // Use cruise control velocity
-        locomotion_system_.walkForward(cruise_velocity_.x());
-        // Note: Angular velocity and y-axis velocity would need additional methods
+    float linear_x, linear_y, angular_z;
+
+    // Check if cruise control should be used (equivalent to OpenSHC cruise control logic)
+    bool use_cruise_control = (current_cruise_control_mode_ == CruiseControlMode::CRUISE_CONTROL_ON);
+
+    // Check cruise control time limit (equivalent to OpenSHC cruise_control_time_limit check)
+    if (use_cruise_control && cruise_end_time_ > 0) {
+        unsigned long current_time = millis();
+        if (current_time >= cruise_end_time_) {
+            // Time limit exceeded, disable cruise control
+            logDebug("Cruise control time limit exceeded, disabling");
+            current_cruise_control_mode_ = CruiseControlMode::CRUISE_CONTROL_OFF;
+            cruise_velocity_ = Eigen::Vector3f::Zero();
+            use_cruise_control = false;
+        }
+    }
+
+    if (use_cruise_control) {
+        // Use cruise control velocity - equivalent to OpenSHC cruise control behavior
+        linear_x = cruise_velocity_.x();
+        linear_y = cruise_velocity_.y();
+        angular_z = cruise_velocity_.z();
+
+        logDebug("Using cruise velocity: [" +
+                 toArduinoString(toString(linear_x)) + ", " +
+                 toArduinoString(toString(linear_y)) + ", " +
+                 toArduinoString(toString(angular_z)) + "]");
     } else {
         // Use direct velocity input
-        if (desired_linear_velocity_.norm() > 0.01f || abs(desired_angular_velocity_) > 0.01f) {
-            float forward_velocity = desired_linear_velocity_.x();
+        linear_x = desired_linear_velocity_.x();
+        linear_y = desired_linear_velocity_.y();
+        angular_z = desired_angular_velocity_;
+    }
 
-            if (forward_velocity > 0.01f) {
-                locomotion_system_.walkForward(forward_velocity);
-            } else if (forward_velocity < -0.01f) {
-                locomotion_system_.walkBackward(-forward_velocity);
-            }
-
-            if (abs(desired_angular_velocity_) > 0.01f) {
-                locomotion_system_.turnInPlace(desired_angular_velocity_);
-            }
-
-            if (abs(desired_linear_velocity_.y()) > 0.01f) {
-                locomotion_system_.walkSideways(abs(desired_linear_velocity_.y()), desired_linear_velocity_.y() > 0);
-            }
+    // Apply velocity control using combined gait planning (equivalent to OpenSHC walker_->updateWalk())
+    if (abs(linear_x) > 0.01f || abs(linear_y) > 0.01f || abs(angular_z) > 0.01f) {
+        // Use planGaitSequence for combined movement (x, y, angular)
+        if (!locomotion_system_.planGaitSequence(linear_x, linear_y, angular_z)) {
+            logError("Failed to plan gait sequence for velocity control");
+            has_error_ = true;
+            last_error_message_ = "Velocity control gait planning failed";
         }
+    } else {
+        // Stop movement when all velocities are near zero
+        locomotion_system_.stopMovement();
     }
 }
 
@@ -895,6 +941,11 @@ void StateController::clearError() {
 void StateController::logDebug(const String &message) {
     // In a real implementation, this would use a proper logging system
     Serial.println("[StateController] " + message);
+}
+
+void StateController::logError(const String &message) {
+    // In a real implementation, this would use a proper logging system
+    Serial.println("[StateController ERROR] " + message);
 }
 
 unsigned long StateController::calculateTransitionTimeout() const {

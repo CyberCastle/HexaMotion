@@ -156,14 +156,15 @@ struct TransitionProgress {
 /// State machine configuration parameters.
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 struct StateMachineConfig {
-    bool enable_startup_sequence = true; ///< Enable multi-step startup sequence
-    bool enable_direct_startup = false;  ///< Allow direct startup without sequences
-    float transition_timeout = 10.0f;    ///< Maximum time for state transitions (seconds)
-    float pack_unpack_time = 2.0f;       ///< Time for pack/unpack sequences (seconds)
-    bool enable_auto_posing = false;     ///< Enable automatic body posing
-    bool enable_manual_posing = true;    ///< Enable manual body posing
-    bool enable_cruise_control = true;   ///< Enable cruise control mode
-    int max_manual_legs = 2;             ///< Maximum number of manually controlled legs
+    bool enable_startup_sequence = true;    ///< Enable multi-step startup sequence
+    bool enable_direct_startup = false;     ///< Allow direct startup without sequences
+    float transition_timeout = 10.0f;       ///< Maximum time for state transitions (seconds)
+    float pack_unpack_time = 2.0f;          ///< Time for pack/unpack sequences (seconds)
+    bool enable_auto_posing = false;        ///< Enable automatic body posing
+    bool enable_manual_posing = true;       ///< Enable manual body posing
+    bool enable_cruise_control = true;      ///< Enable cruise control mode
+    float cruise_control_time_limit = 0.0f; ///< Time limit for cruise control (0 = unlimited)
+    int max_manual_legs = 2;                ///< Maximum number of manually controlled legs
 };
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -232,6 +233,47 @@ class StateController {
      * @return Current cruise control mode
      */
     inline CruiseControlMode getCruiseControlMode() const { return current_cruise_control_mode_; }
+
+    /**
+     * @brief Get the current cruise control velocity.
+     * @return Current cruise velocity vector (x, y, angular_z)
+     */
+    inline Eigen::Vector3f getCruiseVelocity() const { return cruise_velocity_; }
+
+    /**
+     * @brief Get the cruise control start time.
+     * @return Start time in milliseconds
+     */
+    inline unsigned long getCruiseStartTime() const { return cruise_start_time_; }
+
+    /**
+     * @brief Get the cruise control remaining time.
+     * @return Remaining time in seconds (0 if unlimited)
+     */
+    float getCruiseRemainingTime() const {
+        if (cruise_end_time_ == 0 || current_cruise_control_mode_ != CruiseControlMode::CRUISE_CONTROL_ON) {
+            return 0.0f; // Unlimited or not active
+        }
+        unsigned long current_time = millis();
+        if (current_time >= cruise_end_time_) {
+            return 0.0f; // Expired
+        }
+        return (cruise_end_time_ - current_time) / 1000.0f;
+    }
+
+    /**
+     * @brief Check if cruise control is active and within time limit.
+     * @return True if cruise control is currently active
+     */
+    bool isCruiseControlActive() const {
+        if (current_cruise_control_mode_ != CruiseControlMode::CRUISE_CONTROL_ON) {
+            return false;
+        }
+        if (cruise_end_time_ == 0) {
+            return true; // No time limit
+        }
+        return millis() < cruise_end_time_;
+    }
 
     /**
      * @brief Check if the state machine is initialized.
@@ -334,6 +376,12 @@ class StateController {
      */
     void setLegTipVelocity(int leg_index, const Eigen::Vector3f &velocity);
 
+    /**
+     * @brief Update velocity control based on current mode.
+     * This method is exposed for testing purposes.
+     */
+    void updateVelocityControl();
+
     // ==============================
     // GAIT CONTROL
     // ==============================
@@ -433,6 +481,7 @@ class StateController {
     // Cruise control
     Eigen::Vector3f cruise_velocity_;
     unsigned long cruise_start_time_;
+    unsigned long cruise_end_time_; ///< End time for cruise control (when time limit is set)
 
     // Timing
     unsigned long last_update_time_;
@@ -473,11 +522,6 @@ class StateController {
      * @brief Handle leg state transitions.
      */
     void handleLegStateTransitions();
-
-    /**
-     * @brief Update velocity control based on current mode.
-     */
-    void updateVelocityControl();
 
     /**
      * @brief Update pose control based on current mode.
@@ -539,6 +583,12 @@ class StateController {
      * @param message Debug message
      */
     void logDebug(const String &message);
+
+    /**
+     * @brief Log error information.
+     * @param message Error message
+     */
+    void logError(const String &message);
 
     /**
      * @brief Calculate timeout for state transitions.
