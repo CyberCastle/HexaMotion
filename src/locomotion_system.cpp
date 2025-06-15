@@ -275,9 +275,25 @@ void LocomotionSystem::updateMetachronalPattern() {
     // Calculate wave direction based on movement command
     bool reverse_wave = false;
     if (walk_ctrl) {
-        // Check if we're moving backward (this is a simplified check)
-        // In a real implementation, you'd check the velocity commands
-        reverse_wave = false; // For now, always forward wave
+        // Get current velocity commands to determine movement direction
+        const auto &velocities = walk_ctrl->getCurrentVelocities();
+
+        // Check if we're moving backward based on velocity commands
+        // Consider backward movement if X velocity is negative (robot coordinate frame)
+        // Also account for purely lateral or rotational movements
+        float threshold = 0.001f; // Small threshold to avoid noise
+
+        if (abs(velocities.linear_x) > threshold) {
+            // Primary movement is in X direction
+            reverse_wave = (velocities.linear_x < 0.0f);
+        } else if (abs(velocities.angular_z) > threshold) {
+            // Primarily rotational movement - use angular direction
+            // Negative angular velocity (clockwise) can be considered "reverse"
+            reverse_wave = (velocities.angular_z < 0.0f);
+        } else {
+            // For lateral movement or stationary, maintain forward wave pattern
+            reverse_wave = false;
+        }
     }
 
     if (reverse_wave) {

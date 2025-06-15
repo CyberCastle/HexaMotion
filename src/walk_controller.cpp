@@ -24,7 +24,19 @@ bool WalkController::setGaitType(GaitType gait) {
     return true;
 }
 
-bool WalkController::planGaitSequence(float, float, float) {
+bool WalkController::planGaitSequence(float vx, float vy, float omega) {
+    // Store current velocity commands for gait pattern decisions
+    current_velocities_.linear_x = vx;
+    current_velocities_.linear_y = vy;
+    current_velocities_.angular_z = omega;
+
+    // Apply velocity limits and validation
+    if (!validateVelocityCommand(vx, vy, omega)) {
+        // If commanded velocities exceed limits, apply constraints
+        VelocityLimits::LimitValues limited = applyVelocityLimits(vx, vy, omega);
+        current_velocities_ = limited;
+    }
+
     return true;
 }
 
@@ -188,6 +200,10 @@ void WalkController::setVelocitySafetyMargin(float margin) {
 
 void WalkController::setAngularVelocityScaling(float scaling) {
     velocity_limits_.setAngularVelocityScaling(scaling);
+}
+
+const VelocityLimits::LimitValues &WalkController::getCurrentVelocities() const {
+    return current_velocities_;
 }
 
 VelocityLimits::WorkspaceConfig WalkController::getWorkspaceConfig() const {

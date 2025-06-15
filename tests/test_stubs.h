@@ -2,7 +2,9 @@
 #define TEST_STUBS_H
 
 #include "../include/HexaModel.h"
+#include <cmath>
 #include <iostream>
+#include <random>
 
 struct DummyIMU : IIMUInterface {
     float test_roll = 0.0f, test_pitch = 0.0f, test_yaw = 0.0f;
@@ -109,10 +111,86 @@ struct DummyServo : IServoInterface {
     bool enableTorque(int, int, bool) override { return true; }
 };
 
+// Progressive servo simulator that starts with random positions and gradually moves
+struct ProgressiveServo : IServoInterface {
+    float current_angles[NUM_LEGS][3];
+    float target_angles[NUM_LEGS][3];
+    std::mt19937 rng;
+    std::uniform_real_distribution<float> noise_dist;
+    std::uniform_real_distribution<float> init_dist;
+    bool initialized = false;
+    int update_count = 0;
+
+    ProgressiveServo() : rng(std::random_device{}()),
+                         noise_dist(-0.2f, 0.2f),
+                         init_dist(-15.0f, 15.0f) {
+        // Initialize with random but realistic starting positions
+        for (int leg = 0; leg < NUM_LEGS; leg++) {
+            // Start with varied angles that aren't the default standing pose
+            current_angles[leg][0] = init_dist(rng);          // Coxa: -15 to +15°
+            current_angles[leg][1] = 25.0f + init_dist(rng);  // Femur: 10 to 40°
+            current_angles[leg][2] = -55.0f + init_dist(rng); // Tibia: -70 to -40°
+
+            // Targets start the same as current
+            target_angles[leg][0] = current_angles[leg][0];
+            target_angles[leg][1] = current_angles[leg][1];
+            target_angles[leg][2] = current_angles[leg][2];
+        }
+    }
+
+    bool initialize() override {
+        initialized = true;
+        return true;
+    }
+
+    bool setJointAngle(int leg, int joint, float angle) override {
+        if (leg >= 0 && leg < NUM_LEGS && joint >= 0 && joint < 3) {
+            // Set new target angle
+            target_angles[leg][joint] = angle;
+
+            // Move current angle progressively toward target (simulate servo movement)
+            float diff = target_angles[leg][joint] - current_angles[leg][joint];
+
+            // Move 20% of the way to target each update, with some noise
+            current_angles[leg][joint] += diff * 0.2f + noise_dist(rng);
+
+            return true;
+        }
+        return false;
+    }
+
+    float getJointAngle(int leg, int joint) override {
+        if (leg >= 0 && leg < NUM_LEGS && joint >= 0 && joint < 3) {
+            // Add small noise to simulate real servo feedback
+            return current_angles[leg][joint] + noise_dist(rng) * 0.05f;
+        }
+        return 0.0f;
+    }
+
+    // Simulate servo progression each update cycle
+    void updateServoPositions() {
+        update_count++;
+        for (int leg = 0; leg < NUM_LEGS; leg++) {
+            for (int joint = 0; joint < 3; joint++) {
+                // Continue moving toward targets
+                float diff = target_angles[leg][joint] - current_angles[leg][joint];
+                if (std::abs(diff) > 0.1f) {
+                    current_angles[leg][joint] += diff * 0.15f + noise_dist(rng) * 0.1f;
+                }
+            }
+        }
+    }
+
+    bool setJointSpeed(int, int, float) override { return true; }
+    bool isJointMoving(int, int) override { return false; }
+    bool enableTorque(int, int, bool) override { return true; }
+};
+
 // Alternative names for compatibility
 typedef DummyIMU MockIMU;
 typedef DummyFSR MockFSR;
 typedef DummyServo MockServo;
+typedef ProgressiveServo RealisticServo; // Alias for backward compatibility
 
 // Additional aliases for terrain adaptation tests
 typedef DummyIMU MockIMUInterface;

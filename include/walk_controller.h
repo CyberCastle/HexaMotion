@@ -147,6 +147,12 @@ class WalkController {
      */
     Eigen::Vector3f estimateGravity() const;
 
+    /**
+     * @brief Get current velocity commands for gait pattern decisions
+     * @return Current velocity values stored from last planGaitSequence call
+     */
+    const VelocityLimits::LimitValues &getCurrentVelocities() const;
+
   private:
     RobotModel &model;
     GaitType current_gait;
