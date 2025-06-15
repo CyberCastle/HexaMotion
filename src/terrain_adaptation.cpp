@@ -189,6 +189,7 @@ void TerrainAdaptation::updateWalkPlaneEstimation() {
     }
 }
 
+// TODO: implementar método getCurrentAngles donde corresponda
 void TerrainAdaptation::detectTouchdownEvents(int leg_index, const FSRData &fsr_data) {
     StepPlane &step_plane = step_planes_[leg_index];
 
@@ -301,6 +302,7 @@ Point3D TerrainAdaptation::applyReactiveAdaptation(int leg_index, const Point3D 
     return adapted;
 }
 
+// TODO: (Simplified implementation)
 Point3D TerrainAdaptation::forceNormalTouchdown(int leg_index, const Point3D &trajectory) {
     if (!current_walk_plane_.valid)
         return trajectory;

@@ -278,6 +278,7 @@ float IMUAutoPose::calculateConfidence(const Point3D &orientation_error) {
     return confidence;
 }
 
+// TODO: (Simplified implementation)
 void IMUAutoPose::updateAdaptiveGains() {
     // Estimate terrain roughness from IMU variance
     // (Simplified implementation)

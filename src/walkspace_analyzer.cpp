@@ -153,6 +153,7 @@ void WalkspaceAnalyzer::calculateLegWorkspaceBounds(int leg_index) {
     bounds.max_angle = 180.0f;
 }
 
+// TODO: Method not yet implemented
 void WalkspaceAnalyzer::generateWalkspaceForLeg(int leg_index) {
     // This method calculates the detailed workspace for a specific leg
     // Implementation depends on precision level
@@ -181,6 +182,7 @@ Point3D WalkspaceAnalyzer::calculateCenterOfMass(const Point3D leg_positions[NUM
     return com;
 }
 
+// TODO: (Simplified implementation)
 float WalkspaceAnalyzer::calculateStabilityMargin(const Point3D leg_positions[NUM_LEGS]) {
     // Simplified stability margin calculation
     // In a full implementation, this would calculate the distance from COM to support polygon edges
@@ -195,6 +197,7 @@ float WalkspaceAnalyzer::calculateStabilityMargin(const Point3D leg_positions[NU
     return min_distance;
 }
 
+// TODO: (Simplified implementation)
 void WalkspaceAnalyzer::calculateSupportPolygon(const Point3D leg_positions[NUM_LEGS],
                                                 std::vector<Point3D> &polygon) {
     polygon.clear();

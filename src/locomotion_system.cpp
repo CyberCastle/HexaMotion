@@ -667,6 +667,7 @@ float LocomotionSystem::calculateStabilityIndex() {
     Eigen::Vector2f cop = calculateCenterOfPressure();
     float stability_index = 1.0f;
 
+    // TODO: (Simplified implementation)
     // Distance to closest edge of the support polygon
     // Simplified implementation
     float min_edge_distance = 1000.0f;
