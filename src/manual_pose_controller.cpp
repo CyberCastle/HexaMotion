@@ -157,15 +157,28 @@ bool ManualPoseController::applyPose(const PoseState &pose, Point3D leg_position
         // Apply body position offset
         Point3D offset_pos = default_pos + pose.body_position;
 
-        // Apply body rotation (simplified - would need proper transformation matrix)
-        // For now, just apply as small rotational offsets
-        float cos_yaw = cos(pose.body_rotation.z);
-        float sin_yaw = sin(pose.body_rotation.z);
-
+        // Apply complete body rotation using proper transformation matrix
         Point3D rotated_pos;
-        rotated_pos.x = offset_pos.x * cos_yaw - offset_pos.y * sin_yaw;
-        rotated_pos.y = offset_pos.x * sin_yaw + offset_pos.y * cos_yaw;
-        rotated_pos.z = offset_pos.z;
+        if (pose.use_quaternion) {
+            // Use quaternion rotation for more accurate transformation
+            Eigen::Vector3f pos_vec(offset_pos.x, offset_pos.y, offset_pos.z);
+
+            // Convert quaternion to rotation matrix and apply
+            Eigen::Vector4f q = pose.body_quaternion;
+            float w = q[0], x = q[1], y = q[2], z = q[3];
+
+            Eigen::Matrix3f rot_matrix;
+            rot_matrix << 1 - 2 * (y * y + z * z), 2 * (x * y - w * z), 2 * (x * z + w * y),
+                2 * (x * y + w * z), 1 - 2 * (x * x + z * z), 2 * (y * z - w * x),
+                2 * (x * z - w * y), 2 * (y * z + w * x), 1 - 2 * (x * x + y * y);
+
+            Eigen::Vector3f rotated_vec = rot_matrix * pos_vec;
+            rotated_pos = Point3D(rotated_vec[0], rotated_vec[1], rotated_vec[2]);
+        } else {
+            // Use Euler angle rotation with complete 3D transformation
+            Eigen::Vector3f rotation_rad(pose.body_rotation.x, pose.body_rotation.y, pose.body_rotation.z);
+            rotated_pos = math_utils::rotatePoint(offset_pos, rotation_rad);
+        }
 
         // Apply individual leg adjustments
         leg_positions[i] = rotated_pos + pose.leg_positions[i];
