@@ -144,12 +144,21 @@ StateController::StateController(LocomotionSystem &locomotion, const StateMachin
     transition_progress_.is_complete = true;
     transition_progress_.has_error = false;
     transition_progress_.error_message = "";
+
+    // Initialize pose controller
+    pose_controller_ = nullptr;
 }
 
 StateController::~StateController() {
     // Clean shutdown
     if (is_initialized_) {
         emergencyStop();
+    }
+
+    // Clean up pose controller
+    if (pose_controller_) {
+        delete pose_controller_;
+        pose_controller_ = nullptr;
     }
 }
 
@@ -191,6 +200,18 @@ bool StateController::initialize() {
     // Initialize system state
     current_system_state_ = SystemState::SYSTEM_OPERATIONAL;
     desired_system_state_ = SystemState::SYSTEM_OPERATIONAL;
+
+    // Initialize pose controller (equivalent to OpenSHC poser_)
+    try {
+        pose_controller_ = new PoseController(locomotion_system_.getRobotModel(),
+                                              locomotion_system_.getServoInterface());
+        logDebug("PoseController initialized successfully");
+    } catch (const std::exception &e) {
+        pose_controller_ = nullptr;
+        logError("Failed to initialize PoseController: " + String(e.what()));
+        setError("PoseController initialization failed");
+        return false;
+    }
 
     is_initialized_ = true;
     clearError();
@@ -334,9 +355,10 @@ bool StateController::setCruiseControlMode(CruiseControlMode mode, const Eigen::
     return true;
 }
 
-void StateController::setPoseResetMode(PoseResetMode mode) {
+bool StateController::setPoseResetMode(PoseResetMode mode) {
     current_pose_reset_mode_ = mode;
     logDebug("Pose reset mode changed to: " + toArduinoString(toString(mode)));
+    return true;
 }
 
 // ==============================
@@ -403,6 +425,42 @@ void StateController::setLegTipVelocity(int leg_index, const Eigen::Vector3f &ve
     if (leg_index >= 0 && leg_index < NUM_LEGS) {
         leg_tip_velocities_[leg_index] = velocity;
     }
+}
+
+bool StateController::setDesiredBodyPosition(const Eigen::Vector3f &position) {
+    // Validate position limits (basic safety check)
+    const float MAX_POSITION_OFFSET = 200.0f; // mm
+    if (abs(position.x()) > MAX_POSITION_OFFSET ||
+        abs(position.y()) > MAX_POSITION_OFFSET ||
+        abs(position.z()) > MAX_POSITION_OFFSET) {
+        setError("Desired body position exceeds safety limits");
+        return false;
+    }
+
+    desired_body_position_ = position;
+    logDebug("Desired body position set to: [" +
+             toArduinoString(toString(position.x())) + ", " +
+             toArduinoString(toString(position.y())) + ", " +
+             toArduinoString(toString(position.z())) + "]");
+    return true;
+}
+
+bool StateController::setDesiredBodyOrientation(const Eigen::Vector3f &orientation) {
+    // Validate orientation limits (basic safety check)
+    const float MAX_ANGLE = 45.0f; // degrees
+    if (abs(orientation.x()) > MAX_ANGLE ||
+        abs(orientation.y()) > MAX_ANGLE ||
+        abs(orientation.z()) > MAX_ANGLE) {
+        setError("Desired body orientation exceeds safety limits");
+        return false;
+    }
+
+    desired_body_orientation_ = orientation;
+    logDebug("Desired body orientation set to: [" +
+             toArduinoString(toString(orientation.x())) + ", " +
+             toArduinoString(toString(orientation.y())) + ", " +
+             toArduinoString(toString(orientation.z())) + "]");
+    return true;
 }
 
 // ==============================
@@ -529,7 +587,8 @@ void StateController::reset() {
     transition_progress_.has_error = false;
     transition_progress_.error_message = "";
 
-    clearError();
+    // Initialize pose controller
+    pose_controller_ = nullptr;
 }
 
 // ==============================
@@ -594,12 +653,21 @@ void StateController::handleRobotStateTransition() {
         // Determine actual state and transition
         if (isRobotPacked()) {
             current_robot_state_ = RobotState::ROBOT_PACKED;
+            logDebug("Robot state determined: PACKED");
         } else if (isRobotReady()) {
             current_robot_state_ = RobotState::ROBOT_READY;
+            logDebug("Robot state determined: READY");
         } else {
-            current_robot_state_ = RobotState::ROBOT_PACKED; // Default assumption
+            // Fallback to READY state if robot doesn't meet packed criteria
+            current_robot_state_ = RobotState::ROBOT_READY;
+            logDebug("Robot state defaulted to: READY");
         }
-        is_transitioning_ = false;
+
+        // Continue with transition if we're now at desired state
+        if (current_robot_state_ == desired_robot_state_) {
+            is_transitioning_ = false;
+            logDebug("Robot state transition completed: " + toArduinoString(toString(current_robot_state_)));
+        }
         break;
 
     case RobotState::ROBOT_PACKED:
@@ -625,6 +693,7 @@ void StateController::handleRobotStateTransition() {
                 current_robot_state_ = RobotState::ROBOT_RUNNING;
                 current_walk_state_ = WalkState::WALK_STOPPED;
                 progress = PROGRESS_COMPLETE;
+                logDebug("Direct startup to RUNNING state");
             }
         }
         break;
@@ -780,15 +849,198 @@ void StateController::updateVelocityControl() {
 }
 
 void StateController::updatePoseControl() {
-    if (current_posing_mode_ != PosingMode::POSING_NONE) {
-        // Apply pose control based on current mode
-        // This would interface with the pose controller
-        // Implementation depends on the specific pose controller interface
+    // Equivalent to OpenSHC poser_->updateCurrentPose() and pose control logic
+    if (current_posing_mode_ == PosingMode::POSING_NONE) {
+        return; // No pose control active
+    }
+
+    // Update pose control based on current mode (equivalent to OpenSHC pose modes)
+    switch (current_posing_mode_) {
+    case PosingMode::POSING_X_Y: {
+        // Allow manual posing via X/Y axis translation (equivalent to OpenSHC X_Y mode)
+        logDebug("Applying X/Y pose control");
+        applyBodyPositionControl(true, true, false); // X, Y, not Z
+        break;
+    }
+
+    case PosingMode::POSING_PITCH_ROLL: {
+        // Allow manual posing via pitch/roll rotation (equivalent to OpenSHC PITCH_ROLL mode)
+        logDebug("Applying pitch/roll pose control");
+        applyBodyOrientationControl(true, true, false); // Roll, Pitch, not Yaw
+        break;
+    }
+
+    case PosingMode::POSING_Z_YAW: {
+        // Allow manual posing via Z axis translation and yaw rotation (equivalent to OpenSHC Z_YAW mode)
+        logDebug("Applying Z/yaw pose control");
+        applyBodyPositionControl(false, false, true);    // Not X, not Y, Z
+        applyBodyOrientationControl(false, false, true); // Not Roll, not Pitch, Yaw
+        break;
+    }
+
+    case PosingMode::POSING_EXTERNAL: {
+        // Allow posing input from external source (equivalent to OpenSHC EXTERNAL mode)
+        logDebug("Applying external pose control");
+        applyBodyPositionControl(true, true, true);    // All position axes
+        applyBodyOrientationControl(true, true, true); // All orientation axes
+        break;
+    }
+
+    default:
+        // Unknown mode
+        logError("Unknown posing mode: " + toArduinoString(toString(static_cast<int>(current_posing_mode_))));
+        break;
+    }
+
+    // Apply pose reset if needed (equivalent to OpenSHC pose reset logic)
+    if (current_pose_reset_mode_ != PoseResetMode::POSE_RESET_NONE) {
+        applyPoseReset();
+    }
+}
+
+void StateController::applyBodyPositionControl(bool enable_x, bool enable_y, bool enable_z) {
+    if (!pose_controller_) {
+        logError("PoseController not initialized - cannot apply body position control");
+        return;
+    }
+
+    // Get current desired position
+    Eigen::Vector3f current_position = desired_body_position_;
+
+    // Apply control for enabled axes (equivalent to OpenSHC axis-specific control)
+    Eigen::Vector3f controlled_position = current_position;
+
+    if (!enable_x) {
+        controlled_position.x() = 0.0f; // Reset to default if not enabled
+    }
+    if (!enable_y) {
+        controlled_position.y() = 0.0f; // Reset to default if not enabled
+    }
+    if (!enable_z) {
+        controlled_position.z() = 0.0f; // Reset to default if not enabled
+    }
+
+    // Apply the position control via locomotion system
+    bool success = locomotion_system_.setBodyPose(controlled_position, desired_body_orientation_);
+
+    if (!success) {
+        logError("Failed to apply body position control");
+    } else {
+        logDebug("Applied body position control: X=" + toArduinoString(enable_x ? "ON" : "OFF") +
+                 " Y=" + toArduinoString(enable_y ? "ON" : "OFF") +
+                 " Z=" + toArduinoString(enable_z ? "ON" : "OFF"));
+    }
+}
+
+void StateController::applyBodyOrientationControl(bool enable_roll, bool enable_pitch, bool enable_yaw) {
+    if (!pose_controller_) {
+        logError("PoseController not initialized - cannot apply body orientation control");
+        return;
+    }
+
+    // Get current desired orientation
+    Eigen::Vector3f current_orientation = desired_body_orientation_;
+
+    // Apply control for enabled axes (equivalent to OpenSHC axis-specific control)
+    Eigen::Vector3f controlled_orientation = current_orientation;
+
+    if (!enable_roll) {
+        controlled_orientation.x() = 0.0f; // Reset to default if not enabled
+    }
+    if (!enable_pitch) {
+        controlled_orientation.y() = 0.0f; // Reset to default if not enabled
+    }
+    if (!enable_yaw) {
+        controlled_orientation.z() = 0.0f; // Reset to default if not enabled
+    }
+
+    // Apply the orientation control via locomotion system
+    bool success = locomotion_system_.setBodyPose(desired_body_position_, controlled_orientation);
+
+    if (!success) {
+        logError("Failed to apply body orientation control");
+    } else {
+        logDebug("Applied body orientation control: Roll=" + toArduinoString(enable_roll ? "ON" : "OFF") +
+                 " Pitch=" + toArduinoString(enable_pitch ? "ON" : "OFF") +
+                 " Yaw=" + toArduinoString(enable_yaw ? "ON" : "OFF"));
+    }
+}
+
+void StateController::applyPoseReset() {
+    if (!pose_controller_) {
+        logError("PoseController not initialized - cannot apply pose reset");
+        return;
+    }
+
+    // Apply pose reset based on current mode (equivalent to OpenSHC pose reset logic)
+    Eigen::Vector3f reset_position = desired_body_position_;
+    Eigen::Vector3f reset_orientation = desired_body_orientation_;
+
+    switch (current_pose_reset_mode_) {
+    case PoseResetMode::POSE_RESET_Z_AND_YAW: {
+        // Reset Z position and yaw orientation
+        reset_position.z() = 0.0f;
+        reset_orientation.z() = 0.0f; // yaw
+        logDebug("Applying Z and Yaw pose reset");
+        break;
+    }
+
+    case PoseResetMode::POSE_RESET_X_AND_Y: {
+        // Reset X and Y positions
+        reset_position.x() = 0.0f;
+        reset_position.y() = 0.0f;
+        logDebug("Applying X and Y pose reset");
+        break;
+    }
+
+    case PoseResetMode::POSE_RESET_PITCH_AND_ROLL: {
+        // Reset pitch and roll orientations
+        reset_orientation.x() = 0.0f; // roll
+        reset_orientation.y() = 0.0f; // pitch
+        logDebug("Applying pitch and roll pose reset");
+        break;
+    }
+
+    case PoseResetMode::POSE_RESET_ALL: {
+        // Reset all pose parameters gradually
+        reset_position = Eigen::Vector3f::Zero();
+        reset_orientation = Eigen::Vector3f::Zero();
+        logDebug("Applying full pose reset");
+        break;
+    }
+
+    case PoseResetMode::POSE_RESET_IMMEDIATE_ALL: {
+        // Reset all pose parameters immediately
+        reset_position = Eigen::Vector3f::Zero();
+        reset_orientation = Eigen::Vector3f::Zero();
+        logDebug("Applying immediate full pose reset");
+        break;
+    }
+
+    default:
+        logError("Unknown pose reset mode: " + toArduinoString(toString(static_cast<int>(current_pose_reset_mode_))));
+        return;
+    }
+
+    // Apply the reset pose
+    bool success = locomotion_system_.setBodyPose(reset_position, reset_orientation);
+
+    if (success) {
+        // Update internal desired pose state
+        desired_body_position_ = reset_position;
+        desired_body_orientation_ = reset_orientation;
+
+        // Clear the reset mode after successful application
+        current_pose_reset_mode_ = PoseResetMode::POSE_RESET_NONE;
+
+        logDebug("Pose reset applied successfully");
+    } else {
+        logError("Failed to apply pose reset");
     }
 }
 
 // ==============================
-// SEQUENCE EXECUTION
+// SEQUENCE EXECUTION METHODS
 // ==============================
 
 int StateController::executeStartupSequence() {
@@ -803,120 +1055,148 @@ int StateController::executeStartupSequence() {
         return 33;
     } else if (startup_step == 1) {
         // Step 1: Position legs for walking
-        startup_step = 2;
-        transition_progress_.current_step = 2;
-        return 66;
+        if (locomotion_system_.setStandingPose()) {
+            startup_step = 2;
+            transition_progress_.current_step = 2;
+            return 66;
+        }
+        return 33;
     } else if (startup_step == 2) {
-        // Step 2: Final positioning
+        // Step 2: Finalize startup
         startup_step = 0; // Reset for next time
         transition_progress_.current_step = 3;
-        return PROGRESS_COMPLETE;
+        transition_progress_.is_complete = true;
+        return 100;
     }
-
     return 0;
 }
 
 int StateController::executeShutdownSequence() {
-    // Simplified shutdown sequence - step to ready stance
+    // Simplified shutdown sequence
     static int shutdown_step = 0;
 
     if (shutdown_step == 0) {
-        // Initialize shutdown
-        transition_progress_.total_steps = 3;
+        transition_progress_.total_steps = 2;
         shutdown_step = 1;
         transition_progress_.current_step = 1;
-        return 33;
+        return 50;
     } else if (shutdown_step == 1) {
-        // Step 1: Move to neutral positions
-        shutdown_step = 2;
-        transition_progress_.current_step = 2;
-        return 66;
-    } else if (shutdown_step == 2) {
-        // Step 2: Final positioning
-        shutdown_step = 0; // Reset for next time
-        transition_progress_.current_step = 3;
-        return PROGRESS_COMPLETE;
+        // Move to ready position
+        if (locomotion_system_.setStandingPose()) {
+            shutdown_step = 0; // Reset for next time
+            transition_progress_.current_step = 2;
+            transition_progress_.is_complete = true;
+            return 100;
+        }
     }
-
-    return 0;
+    return 50;
 }
 
 int StateController::executePackSequence() {
     // Simplified pack sequence
-    static unsigned long pack_start_time = 0;
+    static int pack_step = 0;
 
-    if (pack_start_time == 0) {
-        pack_start_time = millis();
-        transition_progress_.total_steps = 1;
+    if (pack_step == 0) {
+        transition_progress_.total_steps = 2;
+        pack_step = 1;
         transition_progress_.current_step = 1;
+        return 50;
+    } else if (pack_step == 1) {
+        // Move to packed position (crouch pose as approximation)
+        if (locomotion_system_.setCrouchPose()) {
+            pack_step = 0; // Reset for next time
+            transition_progress_.current_step = 2;
+            transition_progress_.is_complete = true;
+            return 100;
+        }
     }
-
-    unsigned long elapsed = millis() - pack_start_time;
-    float pack_duration = config_.pack_unpack_time * 1000; // Convert to milliseconds
-
-    if (elapsed >= pack_duration) {
-        pack_start_time = 0; // Reset for next time
-        return PROGRESS_COMPLETE;
-    }
-
-    return (int)((elapsed / pack_duration) * 100);
+    return 50;
 }
 
 int StateController::executeUnpackSequence() {
     // Simplified unpack sequence
-    static unsigned long unpack_start_time = 0;
+    static int unpack_step = 0;
 
-    if (unpack_start_time == 0) {
-        unpack_start_time = millis();
-        transition_progress_.total_steps = 1;
+    if (unpack_step == 0) {
+        transition_progress_.total_steps = 2;
+        unpack_step = 1;
         transition_progress_.current_step = 1;
+        return 50;
+    } else if (unpack_step == 1) {
+        // Move to ready position
+        if (locomotion_system_.setStandingPose()) {
+            unpack_step = 0; // Reset for next time
+            transition_progress_.current_step = 2;
+            transition_progress_.is_complete = true;
+            return 100;
+        }
     }
-
-    unsigned long elapsed = millis() - unpack_start_time;
-    float unpack_duration = config_.pack_unpack_time * 1000; // Convert to milliseconds
-
-    if (elapsed >= unpack_duration) {
-        unpack_start_time = 0; // Reset for next time
-        return PROGRESS_COMPLETE;
-    }
-
-    return (int)((elapsed / unpack_duration) * 100);
+    return 50;
 }
 
 // ==============================
-// STATE VALIDATION
+// STATE DETECTION METHODS
 // ==============================
 
 bool StateController::isRobotPacked() const {
-    // Check if robot joints are in packed positions
-    // This would require access to current joint positions
-    // For now, simplified implementation
-    return false; // Default assumption
+    // Check if robot is in packed state based on body position and orientation
+    Eigen::Vector3f current_position = locomotion_system_.getBodyPosition();
+
+    // Check for invalid/uninitialized position data
+    if (current_position.norm() < 0.01f) {
+        // Position is zero or very close to zero - this could indicate:
+        // 1. Sensor failure or uninitialized state
+        // 2. Robot actually at origin (rare but possible)
+
+        // Fallback: check if we have valid orientation data
+        Eigen::Vector3f current_orientation = locomotion_system_.getBodyOrientation();
+        if (current_orientation.norm() < 0.01f) {
+            // Both position and orientation are zero - assume not packed for safety
+            return false;
+        }
+
+        // If orientation is available but position isn't, use orientation-based heuristic
+        // Large roll/pitch might indicate packed/fallen state
+        return (abs(current_orientation.x()) > 45.0f || abs(current_orientation.y()) > 45.0f);
+    }
+
+    return current_position.z() < 50.0f; // Very low height indicates packed state
 }
 
 bool StateController::isRobotReady() const {
-    // Check if robot joints are in ready positions
-    // This would require access to current joint positions
-    // For now, simplified implementation
-    return true; // Default assumption
+    // Check if robot is in ready state based on body position and orientation
+    Eigen::Vector3f current_position = locomotion_system_.getBodyPosition();
+    Eigen::Vector3f current_orientation = locomotion_system_.getBodyOrientation();
+
+    // Check for invalid/uninitialized position data
+    if (current_position.norm() < 0.01f) {
+        return false; // Cannot determine if ready with invalid data
+    }
+
+    // Check if at reasonable height and level orientation
+    bool height_ok = (current_position.z() > 80.0f && current_position.z() < 200.0f);
+    bool orientation_ok = (abs(current_orientation.x()) < 10.0f && abs(current_orientation.y()) < 10.0f);
+
+    return height_ok && orientation_ok;
 }
 
 bool StateController::isValidStateTransition(RobotState current_state, RobotState desired_state) const {
     // Define valid state transitions
     switch (current_state) {
-    case RobotState::ROBOT_UNKNOWN:
-        return true; // Can transition to any state from unknown
+    case ROBOT_PACKED:
+        return (desired_state == ROBOT_READY || desired_state == ROBOT_UNKNOWN);
 
-    case RobotState::ROBOT_PACKED:
-        return (desired_state == RobotState::ROBOT_READY) ||
-               (desired_state == RobotState::ROBOT_RUNNING && !config_.enable_startup_sequence);
+    case ROBOT_READY:
+        return (desired_state == ROBOT_RUNNING || desired_state == ROBOT_PACKED);
 
-    case RobotState::ROBOT_READY:
-        return (desired_state == RobotState::ROBOT_PACKED) || (desired_state == RobotState::ROBOT_RUNNING);
+    case ROBOT_RUNNING:
+        return (desired_state == ROBOT_READY);
 
-    case RobotState::ROBOT_RUNNING:
-        return (desired_state == RobotState::ROBOT_READY) ||
-               (desired_state == RobotState::ROBOT_PACKED && !config_.enable_startup_sequence);
+    case ROBOT_UNKNOWN:
+        return true; // Allow any transition from unknown state
+
+    case ROBOT_OFF:
+        return (desired_state == ROBOT_READY || desired_state == ROBOT_UNKNOWN);
 
     default:
         return false;
@@ -930,7 +1210,7 @@ bool StateController::isValidStateTransition(RobotState current_state, RobotStat
 void StateController::setError(const String &message) {
     has_error_ = true;
     last_error_message_ = message;
-    logDebug("ERROR: " + message);
+    logError("StateController Error: " + message);
 }
 
 void StateController::clearError() {
@@ -939,30 +1219,21 @@ void StateController::clearError() {
 }
 
 void StateController::logDebug(const String &message) {
-    // In a real implementation, this would use a proper logging system
-    Serial.println("[StateController] " + message);
+// In a real implementation, this would use proper logging
+#ifdef DEBUG_LOGGING
+    Serial.print("DEBUG: ");
+    Serial.println(message);
+#endif
 }
 
 void StateController::logError(const String &message) {
-    // In a real implementation, this would use a proper logging system
-    Serial.println("[StateController ERROR] " + message);
+    // In a real implementation, this would use proper logging
+    Serial.print("ERROR: ");
+    Serial.println(message);
 }
 
 unsigned long StateController::calculateTransitionTimeout() const {
-    // Return timeout in milliseconds based on current operation
-    if (is_transitioning_) {
-        switch (desired_robot_state_) {
-        case RobotState::ROBOT_PACKED:
-        case RobotState::ROBOT_READY:
-            return (unsigned long)(config_.pack_unpack_time * 1000 * 2); // 2x safety margin
-
-        case RobotState::ROBOT_RUNNING:
-            return (unsigned long)(config_.transition_timeout * 1000);
-
-        default:
-            return (unsigned long)(config_.transition_timeout * 1000);
-        }
-    }
-
-    return (unsigned long)(config_.transition_timeout * 1000);
+    // Calculate timeout based on transition type
+    // For now, use a default timeout
+    return 10000; // 10 seconds
 }

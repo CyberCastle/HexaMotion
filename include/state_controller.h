@@ -229,6 +229,12 @@ class StateController {
     inline PosingMode getPosingMode() const { return current_posing_mode_; }
 
     /**
+     * @brief Get the current pose reset mode.
+     * @return Current pose reset mode
+     */
+    inline PoseResetMode getPoseResetMode() const { return current_pose_reset_mode_; }
+
+    /**
      * @brief Get the current cruise control mode.
      * @return Current cruise control mode
      */
@@ -323,8 +329,9 @@ class StateController {
     /**
      * @brief Set pose reset mode.
      * @param mode Desired pose reset mode
+     * @return True if mode was set successfully
      */
-    void setPoseResetMode(PoseResetMode mode);
+    bool setPoseResetMode(PoseResetMode mode);
 
     // ==============================
     // LEG CONTROL
@@ -381,6 +388,32 @@ class StateController {
      * This method is exposed for testing purposes.
      */
     void updateVelocityControl();
+
+    /**
+     * @brief Set desired body position for pose control.
+     * @param position Desired body position (x, y, z)
+     * @return True if position is valid and set
+     */
+    bool setDesiredBodyPosition(const Eigen::Vector3f &position);
+
+    /**
+     * @brief Set desired body orientation for pose control.
+     * @param orientation Desired body orientation (roll, pitch, yaw in degrees)
+     * @return True if orientation is valid and set
+     */
+    bool setDesiredBodyOrientation(const Eigen::Vector3f &orientation);
+
+    /**
+     * @brief Get current body position.
+     * @return Current body position
+     */
+    inline Eigen::Vector3f getDesiredBodyPosition() const { return desired_body_position_; }
+
+    /**
+     * @brief Get current body orientation.
+     * @return Current body orientation
+     */
+    inline Eigen::Vector3f getDesiredBodyOrientation() const { return desired_body_orientation_; }
 
     // ==============================
     // GAIT CONTROL
@@ -494,6 +527,9 @@ class StateController {
     // Initialization flag
     bool is_initialized_;
 
+    // Pose control
+    PoseController *pose_controller_;
+
     // ==============================
     // PRIVATE METHODS
     // ==============================
@@ -595,6 +631,27 @@ class StateController {
      * @return Timeout in milliseconds
      */
     unsigned long calculateTransitionTimeout() const;
+
+    /**
+     * @brief Apply body position control for specific axes.
+     * @param enable_x Enable X-axis control
+     * @param enable_y Enable Y-axis control
+     * @param enable_z Enable Z-axis control
+     */
+    void applyBodyPositionControl(bool enable_x, bool enable_y, bool enable_z);
+
+    /**
+     * @brief Apply body orientation control for specific axes.
+     * @param enable_roll Enable roll control
+     * @param enable_pitch Enable pitch control
+     * @param enable_yaw Enable yaw control
+     */
+    void applyBodyOrientationControl(bool enable_roll, bool enable_pitch, bool enable_yaw);
+
+    /**
+     * @brief Apply pose reset based on current reset mode.
+     */
+    void applyPoseReset();
 };
 
 #endif // STATE_CONTROLLER_H

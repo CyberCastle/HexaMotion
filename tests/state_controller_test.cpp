@@ -29,6 +29,10 @@ class StateControllerTest {
         setupParameters();
         locomotion = new LocomotionSystem(params);
         locomotion->initialize(&imu, &fsr, &servo);
+
+        // Set the robot to a valid standing pose for proper state detection
+        // This ensures the body position is at a reasonable height for testing
+        locomotion->setStandingPose();
     }
 
     ~StateControllerTest() {

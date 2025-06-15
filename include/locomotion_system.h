@@ -179,6 +179,9 @@ class LocomotionSystem {
 
     // Getters
     const Parameters &getParameters() const { return params; }
+    RobotModel &getRobotModel() { return model; }
+    const RobotModel &getRobotModel() const { return model; }
+    IServoInterface *getServoInterface() { return servo_interface; }
     Eigen::Vector3f getBodyPosition() const { return body_position; }
     Eigen::Vector3f getBodyOrientation() const { return body_orientation; }
     LegState getLegState(int leg_index) const { return leg_states[leg_index]; }
