@@ -263,7 +263,8 @@ class RobotModel {
 
   private:
     const Parameters &params;
-    float dh[NUM_LEGS][DOF_PER_LEG][4];
+    // DH parameter table: [leg][joint][param] where param = [a, alpha, d, theta_offset]
+    float dh_transforms[NUM_LEGS][DOF_PER_LEG][4];
 };
 
 #endif // MODEL_H

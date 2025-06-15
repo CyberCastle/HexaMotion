@@ -96,10 +96,7 @@ class LocomotionSystem {
     // Control variables
     bool system_enabled;
     unsigned long last_update_time;
-    float dt; // Delta time
-
-    // Kinematics matrices
-    Eigen::MatrixXf dh_transforms[NUM_LEGS][DOF_PER_LEG];
+    float dt; // Delta time since last update (seconds)
 
     // Error variables
     ErrorCode last_error;

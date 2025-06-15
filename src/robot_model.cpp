@@ -9,35 +9,37 @@ RobotModel::RobotModel(const Parameters &p) : params(p) {
 
 void RobotModel::initializeDH() {
     bool custom = false;
+    // Check if custom DH parameters are provided
     for (int l = 0; l < NUM_LEGS; ++l) {
         for (int j = 0; j < DOF_PER_LEG; ++j) {
             for (int k = 0; k < 4; ++k) {
-                dh[l][j][k] = params.dh_parameters[l][j][k];
+                dh_transforms[l][j][k] = params.dh_parameters[l][j][k];
                 if (params.dh_parameters[l][j][k] != 0.0f)
                     custom = true;
             }
         }
     }
 
+    // Use default DH parameters if no custom parameters provided
     if (!custom) {
         for (int l = 0; l < NUM_LEGS; ++l) {
-            // Joint 1 (coxa): vertical axis
-            dh[l][0][0] = 0.0f;   // a0
-            dh[l][0][1] = -90.0f; // alpha0 rotate to femur axis
-            dh[l][0][2] = 0.0f;   // d1
-            dh[l][0][3] = 0.0f;   // theta1 offset
+            // Joint 1 (coxa): vertical axis rotation
+            dh_transforms[l][0][0] = 0.0f;   // a0 - link length
+            dh_transforms[l][0][1] = -90.0f; // alpha0 - rotate to femur axis
+            dh_transforms[l][0][2] = 0.0f;   // d1 - link offset
+            dh_transforms[l][0][3] = 0.0f;   // theta1 offset - joint angle offset
 
-            // Joint 2 (femur): pitch axis
-            dh[l][1][0] = params.coxa_length; // translation along rotated x
-            dh[l][1][1] = 0.0f;               // alpha1
-            dh[l][1][2] = 0.0f;               // d2
-            dh[l][1][3] = 0.0f;               // theta2 offset
+            // Joint 2 (femur): pitch axis rotation
+            dh_transforms[l][1][0] = params.coxa_length; // a1 - translation along rotated x
+            dh_transforms[l][1][1] = 0.0f;               // alpha1 - twist angle
+            dh_transforms[l][1][2] = 0.0f;               // d2 - link offset
+            dh_transforms[l][1][3] = 0.0f;               // theta2 offset - joint angle offset
 
-            // Joint 3 (tibia): pitch axis
-            dh[l][2][0] = params.femur_length; // translation along femur
-            dh[l][2][1] = 0.0f;                // alpha2
-            dh[l][2][2] = 0.0f;                // d3
-            dh[l][2][3] = 0.0f;                // theta3 offset
+            // Joint 3 (tibia): pitch axis rotation
+            dh_transforms[l][2][0] = params.femur_length; // a2 - translation along femur
+            dh_transforms[l][2][1] = 0.0f;                // alpha2 - twist angle
+            dh_transforms[l][2][2] = 0.0f;                // d3 - link offset
+            dh_transforms[l][2][3] = 0.0f;                // theta3 offset - joint angle offset
         }
     }
 }
@@ -273,11 +275,12 @@ Eigen::Matrix4f RobotModel::legTransform(int leg_index, const JointAngles &q) co
     const float joint_deg[DOF_PER_LEG] = {q.coxa, q.femur, q.tibia};
 
     for (int j = 0; j < DOF_PER_LEG; ++j) {
-        float a = dh[leg_index][j][0];
-        float alpha = dh[leg_index][j][1];
-        float d = dh[leg_index][j][2];
-        float theta0 = dh[leg_index][j][3];
-        float theta = theta0 + joint_deg[j];
+        // Extract DH parameters for this joint
+        float a = dh_transforms[leg_index][j][0];      // link length
+        float alpha = dh_transforms[leg_index][j][1];  // twist angle
+        float d = dh_transforms[leg_index][j][2];      // link offset
+        float theta0 = dh_transforms[leg_index][j][3]; // joint angle offset
+        float theta = theta0 + joint_deg[j];           // total joint angle
         T *= math_utils::dhTransform(a, alpha, d, theta);
     }
     T *= math_utils::dhTransform(params.tibia_length, 0.0f, 0.0f, 0.0f);
@@ -301,13 +304,14 @@ Eigen::Matrix3f RobotModel::calculateJacobian(int leg, const JointAngles &q, con
 
     const float joint_deg[DOF_PER_LEG] = {q.coxa, q.femur, q.tibia};
 
-    // Build transforms step by step
+    // Build transforms step by step using DH parameters
     for (int j = 0; j < DOF_PER_LEG; ++j) {
-        float a = dh[leg][j][0];
-        float alpha = dh[leg][j][1];
-        float d = dh[leg][j][2];
-        float theta0 = dh[leg][j][3];
-        float theta = theta0 + joint_deg[j];
+        // Extract DH parameters for this joint
+        float a = dh_transforms[leg][j][0];      // link length
+        float alpha = dh_transforms[leg][j][1];  // twist angle
+        float d = dh_transforms[leg][j][2];      // link offset
+        float theta0 = dh_transforms[leg][j][3]; // joint angle offset
+        float theta = theta0 + joint_deg[j];     // total joint angle
 
         transforms[j + 1] = transforms[j] * math_utils::dhTransform(a, alpha, d, theta);
     }
