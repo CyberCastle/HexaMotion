@@ -14,7 +14,7 @@ AdmittanceController::AdmittanceController(RobotModel &model, IIMUInterface *imu
     : model_(model), imu_(imu), fsr_(fsr), config_(config),
       dynamic_stiffness_enabled_(false), swing_stiffness_scaler_(0.5f),
       load_stiffness_scaler_(1.5f), step_clearance_(40.0f),
-      current_time_(0.0), use_derivative_based_integration_(false) {
+      current_time_(0.0) {
     delta_time_ = config_.getDeltaTime();
     selectIntegrationMethod();
 
@@ -45,29 +45,11 @@ Point3D AdmittanceController::applyForceAndIntegrate(int leg_index, const Point3
     LegAdmittanceState &state = leg_states_[leg_index];
     state.params.applied_force = applied_force;
 
-    Point3D position_delta;
+    // Store external force for derivative calculation
+    external_forces_[leg_index] = applied_force;
 
-    // Choose integration approach based on configuration
-    if (use_derivative_based_integration_) {
-        // Store external force for derivative calculation
-        external_forces_[leg_index] = applied_force;
-
-        // Use physics-accurate derivative-based integration
-        position_delta = integrateDerivatives(leg_index);
-    } else {
-        // Use traditional simplified integration methods
-        switch (integration_method_) {
-        case EULER_METHOD:
-            position_delta = integrateEuler(leg_index);
-            break;
-        case RUNGE_KUTTA_2:
-            position_delta = integrateRK2(leg_index);
-            break;
-        case RUNGE_KUTTA_4:
-            position_delta = integrateRK4(leg_index);
-            break;
-        }
-    }
+    // Always use derivative-based integration with math_utils functions
+    Point3D position_delta = integrateDerivatives(leg_index);
 
     state.params.position_delta = position_delta;
     return position_delta;
@@ -78,10 +60,8 @@ void AdmittanceController::updateAllLegs(const Point3D forces[NUM_LEGS], Point3D
         position_deltas[i] = applyForceAndIntegrate(i, forces[i]);
     }
 
-    // Update time for derivative-based integration
-    if (use_derivative_based_integration_) {
-        current_time_ += delta_time_;
-    }
+    // Update time for integration
+    current_time_ += delta_time_;
 }
 
 void AdmittanceController::setDynamicStiffness(bool enabled, float swing_scaler, float load_scaler) {
@@ -173,7 +153,12 @@ void AdmittanceController::initializeDefaultParameters() {
         leg_states_[i].params.virtual_stiffness = 100.0f; // Medium stiffness
         leg_states_[i].active = true;
         leg_states_[i].stiffness_scale = 1.0f;
+
+        // Initialize state vectors for derivative-based integration
+        leg_dynamics_state_[i] = math_utils::StateVector<Point3D>(Point3D(0, 0, 0), Point3D(0, 0, 0));
+        external_forces_[i] = Point3D(0, 0, 0);
     }
+    current_time_ = 0.0;
 }
 
 Point3D AdmittanceController::calculateAcceleration(const AdmittanceParams &params, const Point3D &position_error) {
@@ -185,80 +170,6 @@ Point3D AdmittanceController::calculateAcceleration(const AdmittanceParams &para
     Point3D total_force = params.applied_force + spring_force + damping_force;
 
     return total_force * (1.0f / params.virtual_mass);
-}
-
-Point3D AdmittanceController::integrateEuler(int leg_index) {
-    LegAdmittanceState &state = leg_states_[leg_index];
-    AdmittanceParams &params = state.params;
-
-    // For simplified integration, use equilibrium position as approximation
-    // This is the "simplified" approach mentioned in the original comment
-    Point3D position_error = state.equilibrium_position;
-
-    params.acceleration = calculateAcceleration(params, position_error);
-    params.velocity = params.velocity + params.acceleration * delta_time_;
-    Point3D position_delta = params.velocity * delta_time_;
-
-    return position_delta;
-}
-
-Point3D AdmittanceController::integrateRK2(int leg_index) {
-    LegAdmittanceState &state = leg_states_[leg_index];
-    AdmittanceParams &params = state.params;
-
-    Point3D initial_vel = params.velocity;
-    Point3D initial_acc = params.acceleration;
-
-    // K1
-    Point3D k1_v = initial_acc * delta_time_;
-    Point3D k1_a = calculateAcceleration(params, state.equilibrium_position) * delta_time_;
-
-    // K2 - Use temporary velocity for acceleration calculation
-    Point3D temp_vel = initial_vel + k1_v * 0.5f;
-    AdmittanceParams temp_params = params;
-    temp_params.velocity = temp_vel;
-    Point3D k2_v = (initial_acc + k1_a * 0.5f) * delta_time_;
-
-    // Update final values
-    params.velocity = initial_vel + k2_v;
-    params.acceleration = calculateAcceleration(params, state.equilibrium_position);
-
-    return params.velocity * delta_time_;
-}
-
-Point3D AdmittanceController::integrateRK4(int leg_index) {
-    LegAdmittanceState &state = leg_states_[leg_index];
-    AdmittanceParams &params = state.params;
-
-    Point3D initial_vel = params.velocity;
-    Point3D initial_acc = params.acceleration;
-
-    // K1
-    Point3D k1_v = initial_acc * delta_time_;
-    Point3D k1_a = calculateAcceleration(params, state.equilibrium_position) * delta_time_;
-
-    // K2 - Use temporary parameters
-    AdmittanceParams temp_params_k2 = params;
-    temp_params_k2.velocity = initial_vel + k1_v * 0.5f;
-    Point3D k2_v = (initial_acc + k1_a * 0.5f) * delta_time_;
-    Point3D k2_a = calculateAcceleration(temp_params_k2, state.equilibrium_position) * delta_time_;
-
-    // K3 - Use temporary parameters
-    AdmittanceParams temp_params_k3 = params;
-    temp_params_k3.velocity = initial_vel + k2_v * 0.5f;
-    Point3D k3_v = (initial_acc + k2_a * 0.5f) * delta_time_;
-    Point3D k3_a = calculateAcceleration(temp_params_k3, state.equilibrium_position) * delta_time_;
-
-    // K4 - Use temporary parameters
-    AdmittanceParams temp_params_k4 = params;
-    temp_params_k4.velocity = initial_vel + k3_v;
-    Point3D k4_v = (initial_acc + k3_a) * delta_time_;
-
-    // Final update
-    params.velocity = initial_vel + (k1_v + k2_v * 2.0f + k3_v * 2.0f + k4_v) * (1.0f / 6.0f);
-    params.acceleration = calculateAcceleration(params, state.equilibrium_position);
-
-    return params.velocity * delta_time_;
 }
 
 float AdmittanceController::calculateStiffnessScale(int leg_index, LegState leg_state,
@@ -321,31 +232,8 @@ bool AdmittanceController::checkStability(const Point3D leg_pos[NUM_LEGS], const
 }
 
 // ==============================
-// DERIVATIVE-BASED INTEGRATION
+// DERIVATIVE-BASED INTEGRATION USING math_utils
 // ==============================
-
-void AdmittanceController::setDerivativeBasedIntegration(bool enabled) {
-    use_derivative_based_integration_ = enabled;
-
-    // Initialize state vectors when enabling derivative integration
-    if (enabled) {
-        for (int i = 0; i < NUM_LEGS; i++) {
-            // For derivative-based integration, we'll track position error from equilibrium
-            // This requires access to current leg positions which should be provided
-            // by the locomotion system during operation
-            leg_dynamics_state_[i] = math_utils::StateVector<Point3D>(
-                Point3D(0, 0, 0), // initial position error
-                Point3D(0, 0, 0)  // initial velocity
-            );
-            external_forces_[i] = Point3D(0, 0, 0);
-        }
-        current_time_ = 0.0;
-    }
-}
-
-bool AdmittanceController::isDerivativeBasedIntegration() const {
-    return use_derivative_based_integration_;
-}
 
 Point3D AdmittanceController::integrateDerivatives(int leg_index) {
     if (leg_index < 0 || leg_index >= NUM_LEGS) {
@@ -367,7 +255,7 @@ Point3D AdmittanceController::integrateDerivatives(int leg_index) {
     params.external_force = external_forces_[leg_index];
     params.equilibrium = state.equilibrium_position;
 
-    // Choose integration method based on precision configuration
+    // Choose integration method based on precision configuration using math_utils functions
     math_utils::StateVector<Point3D> new_state;
 
     switch (config_.precision) {

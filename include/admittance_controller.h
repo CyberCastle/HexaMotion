@@ -169,18 +169,6 @@ class AdmittanceController {
      */
     void setPrecisionConfig(const ComputeConfig &config);
 
-    /**
-     * @brief Enable derivative-based integration for high precision control
-     * @param enabled Whether to use derivative-based integration
-     */
-    void setDerivativeBasedIntegration(bool enabled);
-
-    /**
-     * @brief Get if derivative-based integration is enabled
-     * @return True if using derivative-based integration
-     */
-    bool isDerivativeBasedIntegration() const;
-
     // Legacy compatibility methods
     /**
      * @brief Compute orientation error with respect to a target pose.
@@ -210,15 +198,10 @@ class AdmittanceController {
     void selectIntegrationMethod();
     void initializeDefaultParameters();
 
-    // Traditional admittance equation: M*a + D*v + K*x = F
+    // Admittance equation calculation
     Point3D calculateAcceleration(const AdmittanceParams &params, const Point3D &position_error);
 
-    // Traditional integration methods (simplified)
-    Point3D integrateEuler(int leg_index);
-    Point3D integrateRK2(int leg_index);
-    Point3D integrateRK4(int leg_index);
-
-    // Derivative-based integration (physics-accurate)
+    // Derivative-based integration using math_utils functions
     Point3D integrateDerivatives(int leg_index);
 
     // Derivative function for admittance system
@@ -231,7 +214,6 @@ class AdmittanceController {
     math_utils::StateVector<Point3D> leg_dynamics_state_[NUM_LEGS];
     Point3D external_forces_[NUM_LEGS];
     double current_time_;
-    bool use_derivative_based_integration_;
 
     // Dynamic stiffness calculation
     float calculateStiffnessScale(int leg_index, LegState leg_state,

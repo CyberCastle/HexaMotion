@@ -1,10 +1,12 @@
 /**
- * @file example_derivative_admittance.ino
+ * @file derivative_admittance_example.ino
  * @brief Example usage of derivative-based admittance control
  *
- * This example demonstrates how to enable and configure the physics-accurate
- * derivative-based admittance control system, equivalent to OpenSHC's approach
- * but with configurable precision levels.
+ * This example demonstrates the physics-accurate derivative-based
+ * admittance control system using math_utils functions for integration.
+ *
+ * All admittance control now uses standardized Runge-Kutta and Euler
+ * methods from math_utils to avoid code duplication.
  *
  * Based on AGENTS.md guidelines for HexaMotion development.
  */
@@ -77,9 +79,7 @@ void setup() {
     AdmittanceController controller(model, &imu, &fsr, ComputeConfig::high());
     controller.initialize();
 
-    // Enable derivative-based integration (physics-accurate)
-    controller.setDerivativeBasedIntegration(true);
-    Serial.println("✓ Derivative-based integration enabled");
+    Serial.println("✓ Derivative-based integration using math_utils functions");
 
     // Configure virtual leg dynamics
     float virtual_mass = 0.5f;        // 500g virtual mass per leg
@@ -127,7 +127,6 @@ void setup() {
     for (int i = 0; i < 3; i++) {
         AdmittanceController test_controller(model, &imu, &fsr, configs[i]);
         test_controller.initialize();
-        test_controller.setDerivativeBasedIntegration(true);
         test_controller.setLegAdmittance(0, 0.5f, 2.0f, 100.0f);
 
         Point3D test_force(0, 0, -5.0f);
@@ -172,47 +171,36 @@ void setup() {
     Serial.println(swing_delta.z, 6);
 
     // ==============================
-    // EXAMPLE 4: Traditional vs Derivative Comparison
+    // EXAMPLE 4: Precision Levels Performance
     // ==============================
-    Serial.println("\n--- Example 4: Traditional vs Derivative Methods ---");
+    Serial.println("\n--- Example 4: Integration Method Performance ---");
 
-    // Traditional simplified method
-    AdmittanceController traditional(model, &imu, &fsr, ComputeConfig::medium());
-    traditional.initialize();
-    traditional.setDerivativeBasedIntegration(false); // Use traditional simplified method
-    traditional.setLegAdmittance(0, 0.5f, 2.0f, 100.0f);
+    // Test different precision levels to show math_utils integration methods
+    for (int i = 0; i < 3; i++) {
+        AdmittanceController precision_test(model, &imu, &fsr, configs[i]);
+        precision_test.initialize();
+        precision_test.setLegAdmittance(0, 0.5f, 2.0f, 100.0f);
 
-    // Derivative-based method
-    AdmittanceController derivative(model, &imu, &fsr, ComputeConfig::medium());
-    derivative.initialize();
-    derivative.setDerivativeBasedIntegration(true); // Use physics-accurate method
-    derivative.setLegAdmittance(0, 0.5f, 2.0f, 100.0f);
+        // Apply multiple forces to show integration behavior
+        Point3D cumulative_delta(0, 0, 0);
+        Point3D test_force(0, 0, -3.0f);
 
-    // Apply identical forces
-    Point3D test_force(0, 0, -8.0f);
-    Point3D traditional_delta = traditional.applyForceAndIntegrate(0, test_force);
-    Point3D derivative_delta = derivative.applyForceAndIntegrate(0, test_force);
+        for (int step = 0; step < 5; step++) {
+            Point3D step_delta = precision_test.applyForceAndIntegrate(0, test_force);
+            cumulative_delta = cumulative_delta + step_delta;
+        }
 
-    Serial.println("Comparison for 8N downward force:");
-    Serial.print("  Traditional (simplified): Δz = ");
-    Serial.println(traditional_delta.z, 6);
-    Serial.print("  Derivative (physics):     Δz = ");
-    Serial.println(derivative_delta.z, 6);
-
-    float difference = std::abs(derivative_delta.z - traditional_delta.z);
-    float percentage = (difference / std::abs(derivative_delta.z)) * 100.0f;
-    Serial.print("  Difference: ");
-    Serial.print(difference, 6);
-    Serial.print(" (");
-    Serial.print(percentage, 1);
-    Serial.println("%)");
+        Serial.print(precision_names[i]);
+        Serial.print(" cumulative response: Δz = ");
+        Serial.println(cumulative_delta.z, 6);
+    }
 
     Serial.println("\n=== Example Complete ===");
     Serial.println("The derivative-based admittance control provides:");
     Serial.println("• Physics-accurate differential equation solving");
-    Serial.println("• Configurable precision (Euler/RK2/RK4)");
+    Serial.println("• Configurable precision (Euler/RK2/RK4) via math_utils");
     Serial.println("• Better numerical stability");
-    Serial.println("• Equivalent functionality to OpenSHC admittance");
+    Serial.println("• No code duplication - uses standardized math functions");
     Serial.println("• Compatible with existing HexaMotion architecture");
 }
 
@@ -228,8 +216,8 @@ void loop() {
     static int counter = 0;
     if (counter % 10 == 0) {
         Serial.println("Real-time admittance control would run here...");
-        Serial.println("Use ComputeConfig::high() for maximum precision");
-        Serial.println("Use setDerivativeBasedIntegration(true) for physics accuracy");
+        Serial.println("Use ComputeConfig::high() for maximum precision with RK4");
+        Serial.println("All integration uses standardized math_utils functions");
     }
     counter++;
 }

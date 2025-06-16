@@ -3,7 +3,10 @@
  * @brief Test for derivative-based admittance control implementation
  *
  * This test validates the physics-accurate derivative-based integration
- * against the simplified traditional methods.
+ * using the math_utils functions for Runge-Kutta and Euler methods.
+ *
+ * All integration now uses the standardized math_utils functions to avoid
+ * code duplication and ensure consistency across the codebase.
  */
 
 #include "admittance_controller.h"
@@ -55,10 +58,6 @@ class AdmittanceDerivativesTest {
         AdmittanceController controller(model, &imu_, &fsr_, ComputeConfig::high());
         controller.initialize();
 
-        // Enable derivative-based integration
-        controller.setDerivativeBasedIntegration(true);
-        assert(controller.isDerivativeBasedIntegration() == true);
-
         // Set up realistic admittance parameters
         float mass = 0.5f;        // 500g virtual mass
         float damping = 2.0f;     // Light damping
@@ -91,7 +90,7 @@ class AdmittanceDerivativesTest {
     }
 
     void testPrecisionComparison() {
-        std::cout << "Testing precision comparison (Traditional vs Derivative)..." << std::endl;
+        std::cout << "Testing precision comparison across different computation configs..." << std::endl;
 
         // Test with different precision levels
         ComputeConfig configs[] = {
@@ -104,35 +103,24 @@ class AdmittanceDerivativesTest {
         for (int i = 0; i < 3; i++) {
             RobotModel model(params_);
 
-            // Traditional method
-            AdmittanceController traditional(model, &imu_, &fsr_, configs[i]);
-            traditional.initialize();
-            traditional.setDerivativeBasedIntegration(false);
-
-            // Derivative method
-            AdmittanceController derivative(model, &imu_, &fsr_, configs[i]);
-            derivative.initialize();
-            derivative.setDerivativeBasedIntegration(true);
+            // Create controller with specific precision config
+            AdmittanceController controller(model, &imu_, &fsr_, configs[i]);
+            controller.initialize();
 
             // Set same parameters
-            traditional.setLegAdmittance(0, 0.5f, 2.0f, 100.0f);
-            derivative.setLegAdmittance(0, 0.5f, 2.0f, 100.0f);
+            controller.setLegAdmittance(0, 0.5f, 2.0f, 100.0f);
 
             // Apply same force
             Point3D force(0, 0, -5.0f);
-            Point3D delta_traditional = traditional.applyForceAndIntegrate(0, force);
-            Point3D delta_derivative = derivative.applyForceAndIntegrate(0, force);
+            Point3D delta = controller.applyForceAndIntegrate(0, force);
 
             std::cout << "  " << config_names[i] << " precision:" << std::endl;
-            std::cout << "    Traditional: (" << delta_traditional.x << ", "
-                      << delta_traditional.y << ", " << delta_traditional.z << ")" << std::endl;
-            std::cout << "    Derivative:  (" << delta_derivative.x << ", "
-                      << delta_derivative.y << ", " << delta_derivative.z << ")" << std::endl;
+            std::cout << "    Result delta: (" << delta.x << ", "
+                      << delta.y << ", " << delta.z << ")" << std::endl;
 
-            // Both should give reasonable results (relaxed thresholds)
-            // Note: Traditional method may give smaller initial responses
-            assert(std::abs(delta_traditional.z) > 0.000001f || std::abs(delta_derivative.z) > 0.000001f);
-            assert(std::abs(delta_derivative.z) > 0.000001f);
+            // Should give reasonable results
+            assert(std::abs(delta.z) > 0.000001f);
+            assert(std::abs(delta.z) < 10.0f);
         }
 
         std::cout << "  ✓ Precision comparison completed" << std::endl;
@@ -144,7 +132,6 @@ class AdmittanceDerivativesTest {
         RobotModel model(params_);
         AdmittanceController controller(model, &imu_, &fsr_, ComputeConfig::high());
         controller.initialize();
-        controller.setDerivativeBasedIntegration(true);
 
         // Set basic admittance parameters first
         controller.setLegAdmittance(0, 0.5f, 2.0f, 100.0f);
@@ -175,7 +162,6 @@ class AdmittanceDerivativesTest {
         RobotModel model(params_);
         AdmittanceController controller(model, &imu_, &fsr_, ComputeConfig::high());
         controller.initialize();
-        controller.setDerivativeBasedIntegration(true);
 
         // Test with extreme parameters to check stability
         controller.setLegAdmittance(0, 0.1f, 10.0f, 1000.0f); // High stiffness, high damping
