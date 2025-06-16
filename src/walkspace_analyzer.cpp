@@ -293,6 +293,7 @@ float WalkspaceAnalyzer::calculateStabilityMargin(const Point3D leg_positions[NU
     // Calculate minimum distance from COM to polygon edges
     float min_distance = 1000.0f;
 
+    // TODO: Hay varias palabra simples... la implemnetación está correcta?
     // For simplicity, calculate distance to each support point
     // A full implementation would calculate distance to polygon edges
     for (const auto &support_point : support_polygon) {
@@ -305,6 +306,7 @@ float WalkspaceAnalyzer::calculateStabilityMargin(const Point3D leg_positions[NU
     return min_distance * safety_factor;
 }
 
+// TODO: Hay varias palabra simples... la implemnetación está correcta?
 void WalkspaceAnalyzer::calculateSupportPolygon(const Point3D leg_positions[NUM_LEGS],
                                                 std::vector<Point3D> &polygon) {
     polygon.clear();

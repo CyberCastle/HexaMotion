@@ -301,6 +301,7 @@ Point3D TerrainAdaptation::applyReactiveAdaptation(int leg_index, const Point3D 
     return adapted;
 }
 
+// TODO: Read comment
 Point3D TerrainAdaptation::forceNormalTouchdown(int leg_index, const Point3D &trajectory) {
     if (!current_walk_plane_.valid)
         return trajectory;

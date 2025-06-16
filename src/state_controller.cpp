@@ -1042,7 +1042,7 @@ void StateController::applyPoseReset() {
 // ==============================
 // SEQUENCE EXECUTION METHODS
 // ==============================
-
+// TODO: Is a simplified sequence? Check
 int StateController::executeStartupSequence() {
     // Simplified startup sequence - step to walking stance
     static int startup_step = 0;
@@ -1071,6 +1071,7 @@ int StateController::executeStartupSequence() {
     return 0;
 }
 
+// TODO: Is a simplified sequence? Check
 int StateController::executeShutdownSequence() {
     // Simplified shutdown sequence
     static int shutdown_step = 0;
