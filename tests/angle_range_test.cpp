@@ -27,14 +27,14 @@ int main() {
 
     // Test various targets and check if angles exceed limits
     std::vector<Point3D> test_targets = {
-        {759, 0, 0},      // Horizontal straight
-        {600, 300, -50},  // Forward-right, down
-        {400, 400, -100}, // Diagonal, down
-        {200, 500, 50},   // Near, right, up
-        {700, -200, -30}, // Forward-left, down
-        {300, -400, 80},  // Near-left, up
-        {500, 0, -150},   // Forward, far down
-        {450, 350, 100}   // Forward-right, up
+        Point3D{759, 0, 0},      // Horizontal straight
+        Point3D{600, 300, -50},  // Forward-right, down
+        Point3D{400, 400, -100}, // Diagonal, down
+        Point3D{200, 500, 50},   // Near, right, up
+        Point3D{700, -200, -30}, // Forward-left, down
+        Point3D{300, -400, 80},  // Near-left, up
+        Point3D{500, 0, -150},   // Forward, far down
+        Point3D{450, 350, 100}   // Forward-right, up
     };
 
     int violations = 0;

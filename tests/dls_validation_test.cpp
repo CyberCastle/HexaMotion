@@ -34,13 +34,13 @@ int main() {
 
     // Test configurations
     JointAngles test_configs[] = {
-        {0.0f, -45.0f, 90.0f},   // Original failing case
-        {30.0f, -30.0f, 60.0f},  // Moderate angles
-        {-45.0f, 45.0f, -90.0f}, // Negative angles
-        {0.0f, -60.0f, 120.0f},  // More extreme bending
-        {90.0f, 0.0f, 0.0f},     // Pure rotation
-        {0.0f, 0.0f, 0.0f},      // Straight leg
-        {-30.0f, -75.0f, 135.0f} // Near limits
+        JointAngles{0.0f, -45.0f, 90.0f},   // Original failing case
+        JointAngles{30.0f, -30.0f, 60.0f},  // Moderate angles
+        JointAngles{-45.0f, 45.0f, -90.0f}, // Negative angles
+        JointAngles{0.0f, -60.0f, 120.0f},  // More extreme bending
+        JointAngles{90.0f, 0.0f, 0.0f},     // Pure rotation
+        JointAngles{0.0f, 0.0f, 0.0f},      // Straight leg
+        JointAngles{-30.0f, -75.0f, 135.0f} // Near limits
     };
 
     int num_tests = sizeof(test_configs) / sizeof(test_configs[0]);

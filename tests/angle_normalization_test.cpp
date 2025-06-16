@@ -50,12 +50,12 @@ int main() {
     // Test IK with targets that are definitely reachable
     std::cout << "\n=== IK Reachable Targets Test ===" << std::endl;
     std::vector<Point3D> reachable_targets = {
-        {550, 100, 0},    // Target in first quadrant
-        {500, 150, -30},  // Target in first quadrant with Z
-        {450, -100, 20},  // Target in fourth quadrant
-        {500, -150, -40}, // Target in fourth quadrant with Z
-        {600, 50, -60},   // Forward-right
-        {600, -50, -60}   // Forward-left
+        Point3D{550, 100, 0},    // Target in first quadrant
+        Point3D{500, 150, -30},  // Target in first quadrant with Z
+        Point3D{450, -100, 20},  // Target in fourth quadrant
+        Point3D{500, -150, -40}, // Target in fourth quadrant with Z
+        Point3D{600, 50, -60},   // Forward-right
+        Point3D{600, -50, -60}   // Forward-left
     };
 
     int valid_solutions = 0;
