@@ -111,63 +111,117 @@ class LocomotionSystem {
     void reprojectStandingFeet();
 
   public:
-    // Constructor
+    /**
+     * @brief Construct a locomotion system with the given parameters.
+     * @param params Physical and control parameters for the robot.
+     */
     LocomotionSystem(const Parameters &params);
 
-    // Destructor
+    /**
+     * @brief Destructor releases allocated controllers.
+     */
     ~LocomotionSystem();
 
-    // Initialization
+    /**
+     * @brief Initialize hardware interfaces.
+     *
+     * @param imu   IMU interface implementation.
+     * @param fsr   FSR interface implementation.
+     * @param servo Servo interface implementation.
+     * @return True on successful initialization.
+     */
     bool initialize(IIMUInterface *imu, IFSRInterface *fsr, IServoInterface *servo);
+
+    /**
+     * @brief Run calibration sequence for sensors and servos.
+     * @return True if calibration succeeds.
+     */
     bool calibrateSystem();
 
-    // System status
+    /**
+     * @brief Check if the locomotion system is enabled.
+     * @return True when the system is running.
+     */
     bool isSystemEnabled() const;
 
     // Pose control
+    /** Set the full body pose. */
     bool setBodyPose(const Eigen::Vector3f &position, const Eigen::Vector3f &orientation);
+    /** Move one leg to a position in world coordinates. */
     bool setLegPosition(int leg_index, const Point3D &position);
+    /** Command the default standing pose. */
     bool setStandingPose();
+    /** Command a crouched pose for shutdown. */
     bool setCrouchPose();
 
     // Inverse kinematics
+    /** Compute joint angles for a desired leg tip position. */
     JointAngles calculateInverseKinematics(int leg_index, const Point3D &target_position);
+    /** Compute tip position from current joint angles. */
     Point3D calculateForwardKinematics(int leg_index, const JointAngles &angles);
 
     // Jacobian calculation
+    /**
+     * @brief Calculate the geometric Jacobian for a leg.
+     */
     Eigen::MatrixXf calculateJacobian(int leg_index, const JointAngles &angles);
+    /**
+     * @brief Calculate the analytic Jacobian for a leg.
+     */
     Eigen::Matrix3f calculateAnalyticJacobian(int leg_index, const JointAngles &q);
 
     // Denavit-Hartenberg transforms
+    /** Compute a DH transform matrix. */
     Eigen::Matrix4f calculateDHTransform(float a, float alpha, float d, float theta);
+    /** Compute the transform from body to leg tip. */
     Eigen::Matrix4f calculateLegTransform(int leg_index, const JointAngles &angles);
 
     // Gait planner
+    /** Select the active gait type. */
     bool setGaitType(GaitType gait);
+    /** Plan the next gait step from desired velocities. */
     bool planGaitSequence(float velocity_x, float velocity_y, float angular_velocity);
+    /** Update internal gait phase counters. */
     void updateGaitPhase();
+    /** Compute foot trajectory for a leg at given phase. */
     Point3D calculateFootTrajectory(int leg_index, float phase);
 
     // Locomotion control
+    /** Start walking forward indefinitely. */
     bool walkForward(float velocity);
+    /** Start walking backward indefinitely. */
     bool walkBackward(float velocity);
+    /** Rotate the robot in place indefinitely. */
     bool turnInPlace(float angular_velocity);
+    /** Walk laterally to one side indefinitely. */
     bool walkSideways(float velocity, bool right_direction = true);
+    /** Walk forward for a fixed duration. */
     bool walkForward(float velocity, float duration);
+    /** Walk backward for a fixed duration. */
     bool walkBackward(float velocity, float duration);
+    /** Rotate in place for a fixed duration. */
     bool turnInPlace(float angular_velocity, float duration);
+    /** Walk sideways for a fixed duration. */
     bool walkSideways(float velocity, float duration, bool right_direction = true);
+    /** Immediately stop all leg motion. */
     bool stopMovement();
 
     // Orientation control
+    /** Maintain a desired body orientation. */
     bool maintainOrientation(const Eigen::Vector3f &target_orientation);
+    /** Level the body if tilt is detected. */
     bool correctBodyTilt();
+    /** Compute orientation error between desired and current pose. */
     Eigen::Vector3f calculateOrientationError();
 
     // Stability analysis
+    /** Verify that current pose maintains stability margin. */
     bool checkStabilityMargin();
+    /** Calculate center of pressure under the robot. */
     Eigen::Vector2f calculateCenterOfPressure();
+    /** Compute a numeric stability index. */
     float calculateStabilityIndex();
+    /** Check if the robot is statically stable. */
     bool isStaticallyStable();
 
     ErrorCode getLastError() const { return last_error; }
@@ -175,6 +229,7 @@ class LocomotionSystem {
     bool handleError(ErrorCode error);
 
     // System update
+    /** Update all controllers and state machines. */
     bool update();
 
     // Getters
@@ -192,11 +247,15 @@ class LocomotionSystem {
     float getStepLength() const;
 
     // Setters
+    /** Replace the current parameter set. */
     bool setParameters(const Parameters &new_params);
+    /** Set the control loop frequency. */
     bool setControlFrequency(float frequency);
+    /** Configure step height and length. */
     bool setStepParameters(float height, float length);
 
     // Diagnostics
+    /** Execute a basic hardware self-test. */
     bool performSelfTest();
 
   private:

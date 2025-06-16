@@ -1,4 +1,9 @@
 #include "state_controller.h"
+
+/**
+ * @file state_controller.cpp
+ * @brief Implements the high-level state machine.
+ */
 #include <sstream>
 
 // Helper functions to convert enums to strings for logging

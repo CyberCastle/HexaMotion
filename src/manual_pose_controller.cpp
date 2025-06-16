@@ -1,4 +1,9 @@
 #include "manual_pose_controller.h"
+
+/**
+ * @file manual_pose_controller.cpp
+ * @brief Implements manual pose control utilities.
+ */
 #include "math_utils.h"
 #include <algorithm>
 #include <cmath>

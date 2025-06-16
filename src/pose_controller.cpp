@@ -1,5 +1,10 @@
 #include "pose_controller.h"
 
+/**
+ * @file pose_controller.cpp
+ * @brief Implementation of the kinematic pose controller.
+ */
+
 PoseController::PoseController(RobotModel &m, IServoInterface *s)
     : model(m), servos(s) {}
 

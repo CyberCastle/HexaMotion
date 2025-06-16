@@ -1,4 +1,9 @@
 #include "velocity_limits.h"
+
+/**
+ * @file velocity_limits.cpp
+ * @brief Helper functions for validating commanded velocities.
+ */
 #include "math_utils.h"
 #include <algorithm>
 #include <cmath>

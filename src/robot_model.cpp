@@ -1,4 +1,9 @@
 #include "HexaModel.h"
+
+/**
+ * @file robot_model.cpp
+ * @brief Implementation of the kinematic robot model.
+ */
 #include <limits>
 #include <math.h>
 #include <vector>

@@ -1,4 +1,9 @@
 #include "imu_auto_pose.h"
+
+/**
+ * @file imu_auto_pose.cpp
+ * @brief Automatic pose adjustments using IMU data.
+ */
 #include "math_utils.h"
 #include <algorithm>
 #include <cmath>

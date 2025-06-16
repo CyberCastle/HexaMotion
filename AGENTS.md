@@ -1,33 +1,32 @@
 # AGENT Instructions
 
-Este archivo define las pautas para colaborar en HexaMotion.
+This file defines the guidelines for contributing to HexaMotion.
 
-## Objetivo
+## Objective
 
-Esta librería proporciona control de locomoción para un robot hexápodo basado en Arduino Giga R1. El cuerpo del robot es un hexágono con las patas separadas 60° entre sí, estando cada pata conformada por 3 articulaciones , para otrogar 3DOF Incluye cinemática inversa con parámetros DH y jacobianos, control de orientación y pose, planificador de marchas y manejo de errores. Las interfaces `IIMUInterface`, `IFSRInterface` e `IServoInterface` deben implementarse para conectar el IMU, los sensores FSR y los servos inteligentes.
+This library provides locomotion control for a hexapod robot based on the Arduino Giga R1. The robot body forms a hexagon with legs spaced 60° apart, each leg having three joints for 3DOF. It includes inverse kinematics using DH parameters and Jacobians, orientation and pose control, gait planning and error handling. The interfaces `IIMUInterface`, `IFSRInterface` and `IServoInterface` must be implemented to connect the IMU, FSR sensors and smart servos.
 
-## Estilo de código
+## Code Style
 
--   Utilizar C++17.
--   Indentación de 4 espacios sin tabulaciones.
--   Colocar la llave de apertura en la misma línea que la declaración.
--   Documentar funciones públicas con comentarios estilo Doxygen (`/** ... */`).
+-   Use C++17.
+-   Four-space indentation with no tabs.
+-   Place the opening brace on the same line as the declaration.
+-   Document public functions using Doxygen-style comments (`/** ... */`).
 
-## Desarrollo
+## Development
 
--   Clonar el repositorio completo, incluyendo todos los submódulos.
--   Los archivos asociados a la implementación HexaMotion están exclusivamente en las carpetas src e include.
--   La carpeta tests está solamwente el código para validar las correcciones.
--   En la carpeta OpenSHC está el código en la cual se basa la implementación de OpenSHC
--   Al momento de implementar o modificar alguna funcionalidad, analizar la carpeta OpenSHC antes,
-    de tal forma que la implementación sea equivalente a la de OpenSHC.
--   Para probar cambios, ejecutar las pruebas dentro de la carpeta test.
+-   Clone the repository with all submodules.
+-   Implementation files live exclusively in the `src` and `include` directories.
+-   The `tests` folder only contains code for validating fixes.
+-   The `OpenSHC` directory holds the reference code used as a base for HexaMotion.
+-   When implementing or modifying functionality, review the `OpenSHC` folder first so the implementation remains equivalent.
+-   To test changes, run the tests inside the `tests` folder.
 
-## Pruebas
+## Testing
 
--   Antes de enviar cambios, ejecutar las pruebas unitarias.
--   Instalar la dependencia Eigen ejecutando `tests/setup.sh` si es necesario.
--   Construir las pruebas con `make` dentro del directorio `tests`.
+-   Run the unit tests before submitting changes.
+-   Install the Eigen dependency by running `tests/setup.sh` if needed.
+-   Build the tests with `make` inside the `tests` directory.
 
 ```bash
 cd tests
@@ -35,11 +34,11 @@ cd tests
 make
 ```
 
-Cada ejecutable de prueba puede ejecutarse de forma individual.
+Each test executable can be run individually.
 
-### Parámetros de prueba
+### Test Parameters
 
-Usar la siguiente configuración de `Parameters` en los archivos de prueba:
+Use the following `Parameters` configuration in the test files:
 
 ```cpp
 Parameters p{};
@@ -57,12 +56,12 @@ p.tibia_angle_limits[0] = -45;
 p.tibia_angle_limits[1] = 45;
 ```
 
-## Mensajes de commit
+## Commit Messages
 
--   Usar tiempo imperativo en inglés. Ejemplos: "Add new gait option".
--   Mantener el resumen por debajo de 72 caracteres.
+-   Use imperative mood in English. Example: "Add new gait option".
+-   Keep the summary under 72 characters.
 
-## Solicitudes de extracción
+## Pull Requests
 
--   Incluir un resumen de los cambios realizados.
--   Mencionar cualquier limitación conocida o pasos adicionales.
+-   Include a summary of the changes made.
+-   Mention any known limitations or additional steps.
