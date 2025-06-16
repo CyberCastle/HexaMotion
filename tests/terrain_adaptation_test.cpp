@@ -71,6 +71,12 @@ class TerrainIMUMock : public IIMUInterface {
     bool initialize() override { return true; }
     bool calibrate() override { return true; }
     bool isConnected() override { return true; }
+    bool setIMUMode(IMUMode) override { return true; }
+    IMUMode getIMUMode() const override { return IMU_MODE_RAW_DATA; }
+    bool hasAbsolutePositioning() const override { return true; }
+    bool getCalibrationStatus(uint8_t *, uint8_t *, uint8_t *, uint8_t *) override { return true; }
+    bool runSelfTest() override { return true; }
+    bool resetOrientation() override { return true; }
 
     IMUData readIMU() override {
         return imu_data_;

@@ -98,10 +98,11 @@ int main() {
     };
 
     TestCase test_cases[] = {
-        {{0.0f, -45.0f, 90.0f}, "Test 1 (working)"},
-        {{-45.0f, 45.0f, -90.0f}, "Test 3 (failing)"},
-        {{90.0f, 0.0f, 0.0f}, "Test 5 (failing)"},
-        {{0.0f, 0.0f, 0.0f}, "Test 6 (failing)"}};
+        {JointAngles{0.0f, -45.0f, 90.0f}, "Test 1 (working)"},
+        {JointAngles{-45.0f, 45.0f, -90.0f}, "Test 3 (failing)"},
+        {JointAngles{90.0f, 0.0f, 0.0f}, "Test 5 (failing)"},
+        {JointAngles{0.0f, 0.0f, 0.0f}, "Test 6 (failing)"}
+    };
 
     for (const TestCase &test : test_cases) {
         Point3D target = model.forwardKinematics(0, test.config);
