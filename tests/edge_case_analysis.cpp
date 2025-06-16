@@ -69,10 +69,10 @@ int main() {
     // Test some valid reachable targets
     std::cout << "\n=== Valid Reachable Targets ===" << std::endl;
     std::vector<Point3D> valid_targets = {
-        {759, 0, 0},     // Straight
-        {600, 0, -50},   // Forward down
-        {500, 200, 0},   // Forward right
-        {450, -150, 100} // Forward left up
+        Point3D{759, 0, 0},     // Straight
+        Point3D{600, 0, -50},   // Forward down
+        Point3D{500, 200, 0},   // Forward right
+        Point3D{450, -150, 100} // Forward left up
     };
 
     for (size_t i = 0; i < valid_targets.size(); ++i) {

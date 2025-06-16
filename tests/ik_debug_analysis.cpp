@@ -33,8 +33,8 @@ int main() {
 
     // Test the failing cases
     JointAngles failing_configs[] = {
-        {-45.0f, 45.0f, -90.0f}, // Test 3
-        {90.0f, 0.0f, 0.0f}      // Test 5
+        JointAngles{-45.0f, 45.0f, -90.0f}, // Test 3
+        JointAngles{90.0f, 0.0f, 0.0f}      // Test 5
     };
 
     for (int i = 0; i < 2; i++) {
@@ -80,9 +80,9 @@ int main() {
 
     // Test some positions that should work well
     Point3D test_positions[] = {
-        {600.0f, 100.0f, -100.0f}, // Moderate reach
-        {500.0f, 200.0f, 0.0f},    // Different angle
-        {450.0f, 0.0f, -50.0f}     // Straight ahead
+        Point3D{600.0f, 100.0f, -100.0f}, // Moderate reach
+        Point3D{500.0f, 200.0f, 0.0f},    // Different angle
+        Point3D{450.0f, 0.0f, -50.0f}     // Straight ahead
     };
 
     for (int i = 0; i < 3; i++) {
