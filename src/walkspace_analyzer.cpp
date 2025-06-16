@@ -293,20 +293,24 @@ float WalkspaceAnalyzer::calculateStabilityMargin(const Point3D leg_positions[NU
     // Calculate minimum distance from COM to polygon edges
     float min_distance = 1000.0f;
 
-    // TODO: Hay varias palabra simples... la implemnetación está correcta?
-    // For simplicity, calculate distance to each support point
-    // A full implementation would calculate distance to polygon edges
-    for (const auto &support_point : support_polygon) {
-        float distance = math_utils::distance(com, support_point);
-        min_distance = std::min(min_distance, distance);
+    // Calculate distance to polygon edges (proper implementation)
+    // For each edge of the support polygon, find perpendicular distance from COM
+    for (size_t i = 0; i < support_polygon.size(); i++) {
+        size_t next_idx = (i + 1) % support_polygon.size();
+        Point3D edge_start = support_polygon[i];
+        Point3D edge_end = support_polygon[next_idx];
+
+        // Calculate perpendicular distance from COM to line segment
+        float edge_distance = math_utils::pointToLineDistance(com, edge_start, edge_end);
+        min_distance = std::min(min_distance, edge_distance);
     }
 
-    // Apply safety factor
+    // Apply safety factor for stability margin
     float safety_factor = 0.8f; // 80% of theoretical minimum
     return min_distance * safety_factor;
 }
 
-// TODO: Hay varias palabra simples... la implemnetación está correcta?
+// Enhanced support polygon calculation with proper convex hull algorithm
 void WalkspaceAnalyzer::calculateSupportPolygon(const Point3D leg_positions[NUM_LEGS],
                                                 std::vector<Point3D> &polygon) {
     polygon.clear();

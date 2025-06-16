@@ -179,4 +179,36 @@ Point3D quaternionToEulerPoint3D(const Eigen::Vector4f &quaternion) {
     return vector3fToPoint3D(euler_vec);
 }
 
+float pointToLineDistance(const Point3D &point, const Point3D &line_start, const Point3D &line_end) {
+    // Calculate the vector from line_start to line_end
+    Point3D line_vec = Point3D(line_end.x - line_start.x, line_end.y - line_start.y, line_end.z - line_start.z);
+
+    // Calculate the vector from line_start to the point
+    Point3D point_vec = Point3D(point.x - line_start.x, point.y - line_start.y, point.z - line_start.z);
+
+    // Calculate the length squared of the line vector
+    float line_length_sq = line_vec.x * line_vec.x + line_vec.y * line_vec.y + line_vec.z * line_vec.z;
+
+    // Handle degenerate case where line_start == line_end
+    if (line_length_sq < 1e-6f) {
+        return distance(point, line_start);
+    }
+
+    // Calculate the projection of point_vec onto line_vec
+    float dot_product = point_vec.x * line_vec.x + point_vec.y * line_vec.y + point_vec.z * line_vec.z;
+    float t = dot_product / line_length_sq;
+
+    // Clamp t to [0, 1] to ensure we're on the line segment
+    t = std::max(0.0f, std::min(1.0f, t));
+
+    // Calculate the closest point on the line segment
+    Point3D closest_point = Point3D(
+        line_start.x + t * line_vec.x,
+        line_start.y + t * line_vec.y,
+        line_start.z + t * line_vec.z);
+
+    // Return the distance from the point to the closest point on the line
+    return distance(point, closest_point);
+}
+
 } // namespace math_utils

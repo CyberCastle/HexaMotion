@@ -24,6 +24,8 @@ bool isPointReachable(const Point3D &point, float min_reach, float max_reach);
 float magnitude(const Point3D &point);
 /** Distance between two 3D points (alias for distance3D). */
 float distance(const Point3D &p1, const Point3D &p2);
+/** Calculate perpendicular distance from point to line segment. */
+float pointToLineDistance(const Point3D &point, const Point3D &line_start, const Point3D &line_end);
 
 /** Rotation matrix about X axis. */
 Eigen::Matrix3f rotationMatrixX(float angle);
