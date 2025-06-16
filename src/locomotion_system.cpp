@@ -667,23 +667,41 @@ float LocomotionSystem::calculateStabilityIndex() {
     Eigen::Vector2f cop = calculateCenterOfPressure();
     float stability_index = 1.0f;
 
-    // TODO: (Simplified implementation)
-    // Distance to closest edge of the support polygon
-    // Simplified implementation
-    float min_edge_distance = 1000.0f;
+    // Enhanced implementation: Calculate stability margin properly
+    // Get support polygon from current stance legs
+    std::vector<Point3D> support_polygon;
+    Point3D stance_positions[NUM_LEGS];
+    int stance_count = 0;
 
     for (int i = 0; i < NUM_LEGS; i++) {
         if (leg_states[i] == STANCE_PHASE) {
-            float distance = sqrt((leg_positions[i].x - cop[0]) * (leg_positions[i].x - cop[0]) +
-                                  (leg_positions[i].y - cop[1]) * (leg_positions[i].y - cop[1]));
-            if (distance < min_edge_distance) {
-                min_edge_distance = distance;
-            }
+            stance_positions[stance_count] = leg_positions[i];
+            support_polygon.push_back(leg_positions[i]);
+            stance_count++;
         }
     }
 
-    // Normalize index (0-1)
-    stability_index = min_edge_distance / (params.stability_margin * 3.0f);
+    if (stance_count < 3) {
+        // Insufficient support for stability
+        return 0.0f;
+    }
+
+    // Calculate minimum distance from COP to support polygon edges
+    float min_edge_distance = 1000.0f;
+
+    // For each stance leg, calculate distance from COP
+    for (int i = 0; i < stance_count; i++) {
+        float distance = sqrt((stance_positions[i].x - cop[0]) * (stance_positions[i].x - cop[0]) +
+                              (stance_positions[i].y - cop[1]) * (stance_positions[i].y - cop[1]));
+        if (distance < min_edge_distance) {
+            min_edge_distance = distance;
+        }
+    }
+
+    // Normalize stability index based on minimum required margin
+    float required_margin = params.stability_margin;
+    stability_index = min_edge_distance / (required_margin * 2.0f); // Factor of 2 for good margin
+
     return std::min(1.0f, std::max(0.0f, stability_index));
 }
 

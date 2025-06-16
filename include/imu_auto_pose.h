@@ -35,12 +35,14 @@ class IMUAutoPose {
         float inclination_gain;    ///< Inclination compensation gain
         float response_speed;      ///< Response speed (0-1)
         float deadzone_degrees;    ///< Deadzone for small tilts
+        float stabilization_gain;  ///< Stabilization gain for rough terrain
         bool gravity_compensation; ///< Enable gravity compensation
         bool adaptive_gains;       ///< Use adaptive gain adjustment
 
         IMUPoseParams() : orientation_gain(0.5f), inclination_gain(0.3f),
                           response_speed(0.1f), deadzone_degrees(2.0f),
-                          gravity_compensation(true), adaptive_gains(false) {}
+                          stabilization_gain(1.0f), gravity_compensation(true),
+                          adaptive_gains(false) {}
     };
 
     /**
@@ -81,6 +83,7 @@ class IMUAutoPose {
     // Adaptive control
     float terrain_roughness_estimate_;
     bool walking_detected_;
+    Point3D previous_acceleration_; ///< Previous acceleration for variance calculation
 
   public:
     /**

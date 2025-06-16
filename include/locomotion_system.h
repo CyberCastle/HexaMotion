@@ -186,6 +186,7 @@ class LocomotionSystem {
     Eigen::Vector3f getBodyOrientation() const { return body_orientation; }
     LegState getLegState(int leg_index) const { return leg_states[leg_index]; }
     JointAngles getJointAngles(int leg_index) const { return joint_angles[leg_index]; }
+    JointAngles getCurrentAngles(int leg_index) const { return joint_angles[leg_index]; }
     Point3D getLegPosition(int leg_index) const { return leg_positions[leg_index]; }
     float getStepHeight() const { return step_height; }
     float getStepLength() const;

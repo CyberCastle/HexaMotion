@@ -278,25 +278,53 @@ float IMUAutoPose::calculateConfidence(const Point3D &orientation_error) {
     return confidence;
 }
 
-// TODO: (Simplified implementation)
 void IMUAutoPose::updateAdaptiveGains() {
-    // Estimate terrain roughness from IMU variance
-    // (Simplified implementation)
+    // Enhanced terrain roughness estimation from IMU variance
     float orientation_variance = abs(current_state_.orientation_error.x) +
-                                 abs(current_state_.orientation_error.y);
+                                 abs(current_state_.orientation_error.y) +
+                                 abs(current_state_.orientation_error.z);
 
-    terrain_roughness_estimate_ = terrain_roughness_estimate_ * 0.9f + orientation_variance * 0.1f;
+    // Update terrain roughness estimate with exponential smoothing
+    float alpha = 0.1f; // Smoothing factor
+    terrain_roughness_estimate_ = terrain_roughness_estimate_ * (1.0f - alpha) + orientation_variance * alpha;
 
-    // Adjust gains based on terrain roughness
-    if (terrain_roughness_estimate_ > 0.1f) {
-        // Rough terrain - reduce gains for stability
-        params_.orientation_gain *= 0.95f;
+    // Get current IMU data for acceleration variance calculation
+    IMUData current_imu_data = imu_->readIMU();
+
+    // Calculate acceleration variance for additional terrain assessment
+    float accel_variance = abs(current_imu_data.accel_x - previous_acceleration_.x) +
+                           abs(current_imu_data.accel_y - previous_acceleration_.y) +
+                           abs(current_imu_data.accel_z - previous_acceleration_.z);
+
+    // Store current acceleration for next iteration
+    previous_acceleration_.x = current_imu_data.accel_x;
+    previous_acceleration_.y = current_imu_data.accel_y;
+    previous_acceleration_.z = current_imu_data.accel_z;
+
+    // Combine orientation and acceleration variance for terrain assessment
+    float combined_roughness = terrain_roughness_estimate_ * 0.7f + accel_variance * 0.3f;
+
+    // Adaptive gain adjustment based on terrain conditions
+    if (combined_roughness > 0.15f) {
+        // Very rough terrain - prioritize stability
+        params_.orientation_gain *= 0.92f;
+        params_.response_speed *= 0.90f;
+        params_.stabilization_gain *= 1.05f; // Increase stabilization
+    } else if (combined_roughness > 0.08f) {
+        // Moderately rough terrain - balanced approach
+        params_.orientation_gain *= 0.96f;
         params_.response_speed *= 0.95f;
     } else {
         // Smooth terrain - can increase responsiveness
-        params_.orientation_gain = std::min(1.0f, params_.orientation_gain * 1.02f);
+        params_.orientation_gain = std::min(1.0f, params_.orientation_gain * 1.01f);
         params_.response_speed = std::min(1.0f, params_.response_speed * 1.02f);
+        params_.stabilization_gain = std::max(0.5f, params_.stabilization_gain * 0.98f);
     }
+
+    // Apply bounds to prevent instability
+    params_.orientation_gain = std::max(0.1f, std::min(1.0f, params_.orientation_gain));
+    params_.response_speed = std::max(0.1f, std::min(1.0f, params_.response_speed));
+    params_.stabilization_gain = std::max(0.5f, std::min(2.0f, params_.stabilization_gain));
 }
 
 Point3D IMUAutoPose::normalizeAngles(const Point3D &angles) {
