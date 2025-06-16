@@ -2,6 +2,7 @@
     "files.associations": {
         "*.py": "python",
         "__locale": "cpp",
-        "random": "cpp"
+        "random": "cpp",
+        "__node_handle": "cpp"
     }
 }
