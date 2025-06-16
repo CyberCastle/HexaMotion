@@ -117,6 +117,116 @@ inline T quarticBezierDot(const T *points, double t) {
            12.0 * s * t * t * (points[3] - points[2]) +
            4.0 * t * t * t * (points[4] - points[3]);
 }
+
+/**
+ * @brief State vector for numerical integration
+ */
+template <typename T>
+struct StateVector {
+    T position; ///< Position component
+    T velocity; ///< Velocity component
+
+    StateVector() = default;
+    StateVector(const T &pos, const T &vel) : position(pos), velocity(vel) {}
+
+    StateVector operator+(const StateVector &other) const {
+        return StateVector(position + other.position, velocity + other.velocity);
+    }
+
+    StateVector operator*(double scalar) const {
+        return StateVector(position * scalar, velocity * scalar);
+    }
+};
+
+/**
+ * @brief Function type for differential equation derivatives
+ * @tparam T Vector type (Point3D, Eigen::Vector3f, etc.)
+ * @param state Current state vector [position, velocity]
+ * @param t Current time
+ * @param params User-defined parameters
+ * @return Derivative vector [velocity, acceleration]
+ */
+template <typename T>
+using DerivativeFunction = StateVector<T> (*)(const StateVector<T> &state, double t, void *params);
+
+/**
+ * @brief Runge-Kutta 4th order integration for differential equations
+ * @tparam T Vector type supporting arithmetic operations
+ * @param derivative_func Function computing derivatives
+ * @param initial_state Initial state [position, velocity]
+ * @param t0 Initial time
+ * @param dt Time step
+ * @param params User-defined parameters for derivative function
+ * @return New state after time step
+ */
+template <typename T>
+StateVector<T> rungeKutta4(DerivativeFunction<T> derivative_func,
+                           const StateVector<T> &initial_state,
+                           double t0, double dt, void *params) {
+    // k1 = f(t, y)
+    StateVector<T> k1 = derivative_func(initial_state, t0, params) * dt;
+
+    // k2 = f(t + dt/2, y + k1/2)
+    StateVector<T> state_k2 = initial_state + k1 * 0.5;
+    StateVector<T> k2 = derivative_func(state_k2, t0 + dt / 2.0, params) * dt;
+
+    // k3 = f(t + dt/2, y + k2/2)
+    StateVector<T> state_k3 = initial_state + k2 * 0.5;
+    StateVector<T> k3 = derivative_func(state_k3, t0 + dt / 2.0, params) * dt;
+
+    // k4 = f(t + dt, y + k3)
+    StateVector<T> state_k4 = initial_state + k3;
+    StateVector<T> k4 = derivative_func(state_k4, t0 + dt, params) * dt;
+
+    // y_{n+1} = y_n + (dt/6)(k1 + 2k2 + 2k3 + k4)
+    StateVector<T> result = initial_state + (k1 + k2 * 2.0 + k3 * 2.0 + k4) * (1.0 / 6.0);
+
+    return result;
+}
+
+/**
+ * @brief Runge-Kutta 2nd order (midpoint method) integration
+ * @tparam T Vector type supporting arithmetic operations
+ * @param derivative_func Function computing derivatives
+ * @param initial_state Initial state [position, velocity]
+ * @param t0 Initial time
+ * @param dt Time step
+ * @param params User-defined parameters
+ * @return New state after time step
+ */
+template <typename T>
+StateVector<T> rungeKutta2(DerivativeFunction<T> derivative_func,
+                           const StateVector<T> &initial_state,
+                           double t0, double dt, void *params) {
+    // k1 = f(t, y)
+    StateVector<T> k1 = derivative_func(initial_state, t0, params) * dt;
+
+    // k2 = f(t + dt/2, y + k1/2)
+    StateVector<T> state_k2 = initial_state + k1 * 0.5;
+    StateVector<T> k2 = derivative_func(state_k2, t0 + dt / 2.0, params) * dt;
+
+    // y_{n+1} = y_n + k2
+    return initial_state + k2;
+}
+
+/**
+ * @brief Forward Euler integration (first-order)
+ * @tparam T Vector type supporting arithmetic operations
+ * @param derivative_func Function computing derivatives
+ * @param initial_state Initial state [position, velocity]
+ * @param t0 Initial time
+ * @param dt Time step
+ * @param params User-defined parameters
+ * @return New state after time step
+ */
+template <typename T>
+StateVector<T> forwardEuler(DerivativeFunction<T> derivative_func,
+                            const StateVector<T> &initial_state,
+                            double t0, double dt, void *params) {
+    StateVector<T> derivatives = derivative_func(initial_state, t0, params);
+    return initial_state + derivatives * dt;
+}
+
 } // namespace math_utils
 
 #endif // MATH_UTILS_H

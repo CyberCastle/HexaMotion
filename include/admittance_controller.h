@@ -36,6 +36,20 @@ class AdmittanceController {
     };
 
     /**
+     * @brief Parameters for derivative function in admittance equation
+     */
+    struct AdmittanceDerivativeParams {
+        float mass;             ///< Virtual mass
+        float damping;          ///< Damping coefficient
+        float stiffness;        ///< Spring stiffness
+        Point3D external_force; ///< External force applied
+        Point3D equilibrium;    ///< Equilibrium position
+
+        AdmittanceDerivativeParams() : mass(0.5f), damping(2.0f), stiffness(100.0f),
+                                       external_force(0, 0, 0), equilibrium(0, 0, 0) {}
+    };
+
+    /**
      * @brief ODE integration methods
      */
     enum IntegrationMethod {
@@ -155,6 +169,18 @@ class AdmittanceController {
      */
     void setPrecisionConfig(const ComputeConfig &config);
 
+    /**
+     * @brief Enable derivative-based integration for high precision control
+     * @param enabled Whether to use derivative-based integration
+     */
+    void setDerivativeBasedIntegration(bool enabled);
+
+    /**
+     * @brief Get if derivative-based integration is enabled
+     * @return True if using derivative-based integration
+     */
+    bool isDerivativeBasedIntegration() const;
+
     // Legacy compatibility methods
     /**
      * @brief Compute orientation error with respect to a target pose.
@@ -184,13 +210,28 @@ class AdmittanceController {
     void selectIntegrationMethod();
     void initializeDefaultParameters();
 
-    // Admittance equation: M*a + D*v + K*x = F
+    // Traditional admittance equation: M*a + D*v + K*x = F
     Point3D calculateAcceleration(const AdmittanceParams &params, const Point3D &position_error);
 
-    // Integration methods
+    // Traditional integration methods (simplified)
     Point3D integrateEuler(int leg_index);
     Point3D integrateRK2(int leg_index);
     Point3D integrateRK4(int leg_index);
+
+    // Derivative-based integration (physics-accurate)
+    Point3D integrateDerivatives(int leg_index);
+
+    // Derivative function for admittance system
+    static math_utils::StateVector<Point3D> admittanceDerivatives(
+        const math_utils::StateVector<Point3D> &state,
+        double t,
+        void *params);
+
+    // Current state tracking for derivative integration
+    math_utils::StateVector<Point3D> leg_dynamics_state_[NUM_LEGS];
+    Point3D external_forces_[NUM_LEGS];
+    double current_time_;
+    bool use_derivative_based_integration_;
 
     // Dynamic stiffness calculation
     float calculateStiffnessScale(int leg_index, LegState leg_state,
