@@ -80,6 +80,16 @@ struct DummyIMU : IIMUInterface {
     bool runSelfTest() override { return true; }
     bool resetOrientation() override { return true; }
 
+    bool update() override {
+        // PARALLEL SENSOR READING: For parallel implementation, this would:
+        // 1. Trigger non-blocking IMU data acquisition
+        // 2. Update internal data registers with latest readings
+        // 3. Synchronize with FSR sensor updates for coherent timing
+        // 4. Handle sensor-specific optimizations (e.g., BNO055 burst reads)
+        // For simulation, just return success
+        return true;
+    }
+
     // Test helper
     void enableAbsoluteMode(bool enable) { has_absolute_ = enable; }
     void enableAbsolutePositioning(bool enable) { has_absolute_ = enable; }

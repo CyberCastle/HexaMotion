@@ -185,6 +185,14 @@ class BNO055IMU : public IIMUInterface {
         simulated_yaw_ = 0;
         return true;
     }
+
+    bool update() override {
+        // BNO055 parallel sensor update implementation
+        // This would trigger non-blocking sensor data acquisition
+        // and update internal registers for synchronized operation
+        // Simulated for demonstration purposes
+        return true;
+    }
 };
 
 // Example FSR implementation (simplified)

@@ -62,7 +62,8 @@ class LocomotionSystem {
         SERVO_ERROR = 3,
         KINEMATICS_ERROR = 4,
         STABILITY_ERROR = 5,
-        PARAMETER_ERROR = 6
+        PARAMETER_ERROR = 6,
+        SENSOR_ERROR = 7 // General sensor communication error
     };
 
   private:
@@ -238,6 +239,9 @@ class LocomotionSystem {
     // System update
     /** Update all controllers and state machines. */
     bool update();
+
+    /** Update FSR and IMU sensors in parallel for optimal performance. */
+    bool updateSensorsParallel();
 
     // Getters
     const Parameters &getParameters() const { return params; }

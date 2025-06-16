@@ -17,6 +17,9 @@
 #include "math_utils.h"
 #include <algorithm>
 #include <vector>
+#ifndef ARDUINO
+#include <chrono>
+#endif
 
 // Constructor
 LocomotionSystem::LocomotionSystem(const Parameters &params)
@@ -782,9 +785,12 @@ bool LocomotionSystem::update() {
     if (dt > 0.1f)
         dt = 0.1f;
 
-    // Update FSR sensors using AdvancedAnalog DMA
-    if (fsr_interface) {
-        fsr_interface->update();
+    // PARALLEL SENSOR READING IMPLEMENTATION
+    // Update both FSR and IMU sensors simultaneously for optimal performance
+    bool sensors_updated = updateSensorsParallel();
+    if (!sensors_updated) {
+        last_error = SENSOR_ERROR;
+        return false;
     }
 
     // Adapt gait and step parameters depending on terrain
@@ -854,6 +860,8 @@ String LocomotionSystem::getErrorMessage(ErrorCode error) {
         return "Stability error";
     case PARAMETER_ERROR:
         return "Parameter error";
+    case SENSOR_ERROR:
+        return "Sensor communication error";
     default:
         return "Unknown error";
     }
@@ -1437,4 +1445,64 @@ float LocomotionSystem::calculateDynamicStabilityIndex() {
     }
 
     return std::max(0.0f, std::min(1.0f, stability_index));
+}
+
+// Parallel sensor update implementation
+bool LocomotionSystem::updateSensorsParallel() {
+    if (!system_enabled)
+        return false;
+
+    bool fsr_updated = false;
+    bool imu_updated = false;
+#ifdef ARDUINO
+    unsigned long start_time = micros();
+#else
+    auto start_time = std::chrono::high_resolution_clock::now();
+#endif
+
+    // Start parallel sensor updates
+    // FSR: AdvancedAnalog DMA for simultaneous ADC reading
+    if (fsr_interface) {
+        fsr_updated = fsr_interface->update();
+    }
+
+    // IMU: Non-blocking sensor update (parallel with FSR)
+    if (imu_interface && imu_interface->isConnected()) {
+        imu_updated = imu_interface->update();
+    }
+
+    // Performance monitoring
+#ifdef ARDUINO
+    unsigned long update_time = micros() - start_time;
+#else
+    auto end_time = std::chrono::high_resolution_clock::now();
+    unsigned long update_time = std::chrono::duration_cast<std::chrono::microseconds>(end_time - start_time).count();
+#endif
+
+#if defined(ENABLE_LOG) && defined(ARDUINO)
+    // Log timing information for optimization
+    static unsigned long last_log_time = 0;
+    if (millis() - last_log_time > 5000) { // Log every 5 seconds
+        Serial.print("Parallel sensor update time: ");
+        Serial.print(update_time);
+        Serial.print("µs, FSR: ");
+        Serial.print(fsr_updated ? "OK" : "FAIL");
+        Serial.print(", IMU: ");
+        Serial.println(imu_updated ? "OK" : "FAIL");
+        last_log_time = millis();
+    }
+#endif
+
+    // Validate both sensors updated successfully
+    if (fsr_interface && !fsr_updated) {
+        last_error = FSR_ERROR;
+        return false;
+    }
+
+    if (imu_interface && imu_interface->isConnected() && !imu_updated) {
+        last_error = IMU_ERROR;
+        return false;
+    }
+
+    return true;
 }

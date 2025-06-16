@@ -87,6 +87,13 @@ class ExampleIMU : public IIMUInterface {
     bool runSelfTest() override { return true; }
     bool resetOrientation() override { return true; }
 
+    bool update() override {
+        // Example implementation: Update IMU readings for parallel operation
+        // In real implementation, this would trigger non-blocking sensor reads
+        // and update internal data registers for synchronized operation with FSR
+        return true;
+    }
+
     // Helper method to simulate an advanced IMU like BNO055
     void enableAbsolutePositioning(bool enable) {
         has_absolute_positioning_ = enable;

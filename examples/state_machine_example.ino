@@ -93,6 +93,12 @@ class MyIMU : public IIMUInterface {
     bool runSelfTest() override { return true; }
     bool resetOrientation() override { return true; }
 
+    bool update() override {
+        // Update IMU readings for parallel sensor operation
+        // This method enables synchronized reading with FSR sensors
+        return true;
+    }
+
     // Helper to simulate BNO055 capabilities
     void enableAbsoluteMode(bool enable) { supports_absolute_ = enable; }
 };

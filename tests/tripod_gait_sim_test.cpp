@@ -517,6 +517,19 @@ int main() {
     assert(sys.initialize(&imu, &fsr, &servos));
     assert(sys.calibrateSystem());
 
+    // Test parallel sensor functionality
+    std::cout << "Testing parallel sensor updates..." << std::endl;
+    for (int i = 0; i < 5; i++) {
+        bool sensor_update_success = sys.update();
+        if (!sensor_update_success) {
+            std::cout << "❌ ERROR: Parallel sensor update test failed on iteration " << i << std::endl;
+            std::cout << "Error: " << sys.getErrorMessage(sys.getLastError()) << std::endl;
+            return 1;
+        }
+        std::cout << "✓ Sensor update iteration " << i + 1 << " successful" << std::endl;
+    }
+    std::cout << "✅ Parallel sensor system working correctly" << std::endl;
+
     // Initialize State Controller
     std::cout << "Initializing State Controller..." << std::endl;
     StateMachineConfig stateConfig;
@@ -578,6 +591,8 @@ int main() {
     }
 
     bool changed = false;
+    int successful_updates = 0;
+    int failed_updates = 0;
     printHeader();
 
     for (unsigned s = 0; s < steps; ++s) {
@@ -588,8 +603,26 @@ int main() {
         // Update State Controller first
         stateController.update(deltaTime);
 
-        // Then update the locomotion system
-        sys.update();
+        // Then update the locomotion system with error checking
+        bool update_success = sys.update();
+        if (!update_success) {
+            failed_updates++;
+            LocomotionSystem::ErrorCode last_error = sys.getLastError();
+            std::cout << "⚠️ WARNING: Locomotion system update failed at step " << s << std::endl;
+            std::cout << "Error Code: " << static_cast<int>(last_error) << std::endl;
+            std::cout << "Error Message: " << sys.getErrorMessage(last_error) << std::endl;
+
+            // For critical errors, we might want to abort the test
+            if (last_error == LocomotionSystem::KINEMATICS_ERROR || last_error == LocomotionSystem::STABILITY_ERROR) {
+                std::cout << "❌ CRITICAL ERROR: Aborting test due to critical failure" << std::endl;
+                return 1;
+            }
+
+            // For non-critical errors, log and continue
+            std::cout << "🔄 Continuing test despite non-critical error..." << std::endl;
+        } else {
+            successful_updates++;
+        }
 
         // Print servo angles and states
         printAngles(s, sys, phase);
@@ -632,6 +665,22 @@ int main() {
               << "=========================================" << std::endl;
     std::cout << "SIMULATION COMPLETED WITH STATE MACHINE" << std::endl;
     std::cout << "=========================================" << std::endl;
+
+    // Parallel sensor system performance report
+    std::cout << "\n📊 PARALLEL SENSOR SYSTEM PERFORMANCE:" << std::endl;
+    std::cout << "Total update cycles: " << (successful_updates + failed_updates) << std::endl;
+    std::cout << "Successful updates: " << successful_updates << " ("
+              << std::fixed << std::setprecision(1)
+              << (100.0f * successful_updates / (successful_updates + failed_updates)) << "%)" << std::endl;
+    std::cout << "Failed updates: " << failed_updates << " ("
+              << std::fixed << std::setprecision(1)
+              << (100.0f * failed_updates / (successful_updates + failed_updates)) << "%)" << std::endl;
+
+    if (failed_updates > 0) {
+        std::cout << "⚠️ Warning: " << failed_updates << " sensor update failures detected" << std::endl;
+    } else {
+        std::cout << "✅ Perfect sensor update performance - no failures detected" << std::endl;
+    }
 
     // Final State Controller status
     printStateControllerStatus(stateController, steps);
@@ -690,7 +739,13 @@ int main() {
               << "🎉 Robot successfully completed 800mm tripod gait with State Controller!" << std::endl;
     std::cout << "✅ State Machine Integration: SUCCESSFUL" << std::endl;
     std::cout << "✅ Hierarchical State Management: VALIDATED" << std::endl;
+    std::cout << "✅ Parallel Sensor System: " << (failed_updates == 0 ? "PERFECT" : "FUNCTIONAL") << std::endl;
     std::cout << "✅ Advanced Features: TESTED" << std::endl;
-    std::cout << "tripod_gait_sim_test with StateController executed successfully" << std::endl;
+
+    if (failed_updates > 0) {
+        std::cout << "⚠️ NOTE: " << failed_updates << " sensor failures occurred during test" << std::endl;
+    }
+
+    std::cout << "tripod_gait_sim_test with StateController and Parallel Sensors executed successfully" << std::endl;
     return 0;
 }

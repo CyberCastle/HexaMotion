@@ -19,6 +19,17 @@
 // Test robot model and interfaces
 class MockIMU : public IIMUInterface {
   public:
+    bool initialize() override { return true; }
+    bool calibrate() override { return true; }
+    bool isConnected() override { return true; }
+    bool setIMUMode(IMUMode mode) override { return true; }
+    IMUMode getIMUMode() const override { return IMU_MODE_RAW_DATA; }
+    bool hasAbsolutePositioning() const override { return false; }
+    bool getCalibrationStatus(uint8_t *s, uint8_t *g, uint8_t *a, uint8_t *m) override { return true; }
+    bool runSelfTest() override { return true; }
+    bool resetOrientation() override { return true; }
+    bool update() override { return true; } // Parallel sensor reading support
+
     IMUData readIMU() override {
         return {0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f};
     }
@@ -26,6 +37,11 @@ class MockIMU : public IIMUInterface {
 
 class MockFSR : public IFSRInterface {
   public:
+    bool initialize() override { return true; }
+    bool calibrateFSR(int leg_index) override { return true; }
+    float getRawReading(int leg_index) override { return 5.0f; }
+    bool update() override { return true; } // AdvancedAnalog DMA support
+
     FSRData readFSR(int leg_index) override {
         return {true, 5.0f}; // Simulate contact
     }
@@ -33,6 +49,7 @@ class MockFSR : public IFSRInterface {
 
 class MockServo : public IServoInterface {
   public:
+    bool initialize() override { return true; }
     void setJointAngle(int leg_index, int joint_index, float angle) override {}
     float getJointAngle(int leg_index, int joint_index) override { return 0.0f; }
     void enableJoint(int leg_index, int joint_index, bool enable) override {}

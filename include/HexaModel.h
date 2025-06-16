@@ -233,6 +233,15 @@ class IIMUInterface {
 
     /** Reset sensor orientation (if supported). */
     virtual bool resetOrientation() = 0;
+
+    /**
+     * Update internal registers with sensor readings for parallel operation.
+     * This method should trigger non-blocking reading of all IMU channels
+     * and update internal data registers. Called by the locomotion
+     * system during each update cycle for optimal sensor synchronization.
+     * @return true if update was successful, false on error
+     */
+    virtual bool update() = 0;
 };
 
 class IFSRInterface {
