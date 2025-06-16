@@ -38,27 +38,34 @@ class IMUAutoPose {
         float stabilization_gain;  ///< Stabilization gain for rough terrain
         bool gravity_compensation; ///< Enable gravity compensation
         bool adaptive_gains;       ///< Use adaptive gain adjustment
+        bool use_absolute_data;    ///< Use IMU's absolute positioning if available
+        bool prefer_sensor_fusion; ///< Prefer sensor's built-in fusion over library algorithms
 
         IMUPoseParams() : orientation_gain(0.5f), inclination_gain(0.3f),
                           response_speed(0.1f), deadzone_degrees(2.0f),
                           stabilization_gain(1.0f), gravity_compensation(true),
-                          adaptive_gains(false) {}
+                          adaptive_gains(false), use_absolute_data(true),
+                          prefer_sensor_fusion(true) {}
     };
 
     /**
      * @brief Auto-pose state information
      */
     struct AutoPoseState {
-        Point3D gravity_vector;    ///< Estimated gravity direction
-        Point3D inclination_angle; ///< Surface inclination (roll, pitch, yaw)
-        Point3D orientation_error; ///< Current orientation error
-        Point3D correction_pose;   ///< Calculated correction pose
-        bool pose_active;          ///< Whether auto-pose is active
-        float confidence;          ///< Pose correction confidence (0-1)
+        Point3D gravity_vector;     ///< Estimated gravity direction
+        Point3D inclination_angle;  ///< Surface inclination (roll, pitch, yaw)
+        Point3D orientation_error;  ///< Current orientation error
+        Point3D correction_pose;    ///< Calculated correction pose
+        bool pose_active;           ///< Whether auto-pose is active
+        float confidence;           ///< Pose correction confidence (0-1)
+        bool using_absolute_data;   ///< Whether using IMU's absolute positioning
+        uint8_t calibration_status; ///< IMU calibration status (0-3)
+        IMUMode active_mode;        ///< Current IMU operation mode
 
         AutoPoseState() : gravity_vector(0, 0, -9.81f), inclination_angle(0, 0, 0),
                           orientation_error(0, 0, 0), correction_pose(0, 0, 0),
-                          pose_active(false), confidence(0.0f) {}
+                          pose_active(false), confidence(0.0f), using_absolute_data(false),
+                          calibration_status(0), active_mode(IMU_MODE_RAW_DATA) {}
     };
 
   private:
@@ -166,6 +173,32 @@ class IMUAutoPose {
      */
     void resetFilters();
 
+    /**
+     * @brief Configure IMU operation mode and preferences
+     * @param use_absolute_data Whether to use absolute positioning if available
+     * @param prefer_fusion Whether to prefer sensor fusion over raw data
+     * @return True if configuration was successful
+     */
+    bool configureIMUMode(bool use_absolute_data, bool prefer_fusion);
+
+    /**
+     * @brief Get IMU calibration status
+     * @return Calibration status (0-3, 3=fully calibrated)
+     */
+    uint8_t getIMUCalibrationStatus() const;
+
+    /**
+     * @brief Check if IMU is using absolute positioning
+     * @return True if using absolute positioning data
+     */
+    bool isUsingAbsoluteData() const;
+
+    /**
+     * @brief Get current IMU operation mode
+     * @return Current IMU mode
+     */
+    IMUMode getIMUMode() const;
+
   private:
     void updateIMUData();
     void updateGravityEstimate(const IMUData &imu_data);
@@ -178,6 +211,12 @@ class IMUAutoPose {
     void updateLevelMode();
     void updateInclinationMode();
     void updateAdaptiveMode();
+
+    // IMU mode management
+    void initializeIMUMode();
+    void updateWithAbsoluteData(const IMUData &imu_data);
+    void updateWithRawData(const IMUData &imu_data);
+    void updateCalibrationStatus(const IMUData &imu_data);
 
     // Filtering and processing
     Point3D lowPassFilter(const Point3D &input, const Point3D &previous, float alpha);

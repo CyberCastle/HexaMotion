@@ -358,9 +358,33 @@ bool LocomotionSystem::shouldAdaptGaitPattern() {
     }
     pressure_variance /= contact_count;
 
-    // Check IMU for slope/tilt
+    // Check IMU for slope/tilt with enhanced precision
     IMUData imu_data = imu_interface->readIMU();
-    float tilt_magnitude = sqrt(imu_data.roll * imu_data.roll + imu_data.pitch * imu_data.pitch);
+    float tilt_magnitude;
+
+    // Use enhanced orientation data if available (e.g., BNO055)
+    if (imu_data.has_absolute_capability && imu_data.absolute_data.absolute_orientation_valid) {
+        // More precise tilt calculation using absolute orientation
+        tilt_magnitude = sqrt(
+            imu_data.absolute_data.absolute_roll * imu_data.absolute_data.absolute_roll +
+            imu_data.absolute_data.absolute_pitch * imu_data.absolute_data.absolute_pitch);
+
+        // Also check for dynamic motion using linear acceleration
+        if (imu_data.absolute_data.linear_acceleration_valid) {
+            float dynamic_motion = sqrt(
+                imu_data.absolute_data.linear_accel_x * imu_data.absolute_data.linear_accel_x +
+                imu_data.absolute_data.linear_accel_y * imu_data.absolute_data.linear_accel_y +
+                imu_data.absolute_data.linear_accel_z * imu_data.absolute_data.linear_accel_z);
+
+            // Consider dynamic motion in adaptation decision
+            if (dynamic_motion > 3.0f) { // m/s² threshold for dynamic adaptation
+                return true;             // Force adaptation during high acceleration
+            }
+        }
+    } else {
+        // Fallback to basic IMU data
+        tilt_magnitude = sqrt(imu_data.roll * imu_data.roll + imu_data.pitch * imu_data.pitch);
+    }
 
     // Adapt if terrain is uneven or tilted
     bool high_variance = pressure_variance > (params.fsr_max_pressure * 0.1f);
@@ -1097,16 +1121,48 @@ float LocomotionSystem::calculateLegReach(int leg_index) {
 }
 
 void LocomotionSystem::adjustStepParameters() {
-    // Adjust parameters according to terrain conditions
+    // Enhanced step parameter adjustment with absolute positioning support
     IMUData imu_data = imu_interface->readIMU();
     if (!imu_data.is_valid)
         return;
 
-    // If slope is large reduce step size
-    float total_tilt = sqrt(imu_data.roll * imu_data.roll + imu_data.pitch * imu_data.pitch);
-    if (total_tilt > 15.0f) {
-        step_height *= 0.8f;
-        step_length *= 0.7f;
+    float total_tilt;
+    float stability_factor = 1.0f;
+
+    // Use enhanced data for more precise adjustment
+    if (imu_data.has_absolute_capability && imu_data.absolute_data.absolute_orientation_valid) {
+        // More precise tilt calculation using absolute orientation
+        total_tilt = sqrt(
+            imu_data.absolute_data.absolute_roll * imu_data.absolute_data.absolute_roll +
+            imu_data.absolute_data.absolute_pitch * imu_data.absolute_data.absolute_pitch);
+
+        // Consider dynamic stability using linear acceleration
+        if (imu_data.absolute_data.linear_acceleration_valid) {
+            float dynamic_instability = sqrt(
+                imu_data.absolute_data.linear_accel_x * imu_data.absolute_data.linear_accel_x +
+                imu_data.absolute_data.linear_accel_y * imu_data.absolute_data.linear_accel_y);
+
+            // Reduce step parameters during dynamic instability
+            if (dynamic_instability > 2.0f) {
+                stability_factor = std::max(0.6f, 1.0f - (dynamic_instability - 2.0f) / 5.0f);
+            }
+        }
+
+        // Enhanced slope-based adjustment
+        if (total_tilt > 10.0f) {
+            float slope_factor = std::max(0.5f, 1.0f - (total_tilt - 10.0f) / 30.0f);
+            step_height *= slope_factor * stability_factor;
+            step_length *= slope_factor * stability_factor;
+        }
+    } else {
+        // Fallback to basic IMU data
+        total_tilt = sqrt(imu_data.roll * imu_data.roll + imu_data.pitch * imu_data.pitch);
+
+        // Original logic for basic IMU
+        if (total_tilt > 15.0f) {
+            step_height *= 0.8f;
+            step_length *= 0.7f;
+        }
     }
 
     // Limit parameters
@@ -1122,9 +1178,50 @@ void LocomotionSystem::compensateForSlope() {
     if (!imu_data.is_valid)
         return;
 
-    // Compensate tilt by adjusting body position
-    float roll_compensation = -imu_data.roll * 0.5f; // Compensation factor
-    float pitch_compensation = -imu_data.pitch * 0.5f;
+    float roll_compensation, pitch_compensation;
+
+    // Enhanced slope compensation using absolute positioning data
+    if (imu_data.has_absolute_capability && imu_data.absolute_data.absolute_orientation_valid) {
+        // Use absolute orientation for more precise compensation
+        roll_compensation = -imu_data.absolute_data.absolute_roll * 0.6f; // Enhanced compensation
+        pitch_compensation = -imu_data.absolute_data.absolute_pitch * 0.6f;
+
+        // Additional quaternion-based compensation for complex terrain
+        if (imu_data.absolute_data.quaternion_valid) {
+            // Extract more sophisticated orientation information from quaternion
+            float qw = imu_data.absolute_data.quaternion_w;
+            float qx = imu_data.absolute_data.quaternion_x;
+            float qy = imu_data.absolute_data.quaternion_y;
+            float qz = imu_data.absolute_data.quaternion_z;
+
+            // Calculate terrain-aligned compensation using quaternion
+            float quat_roll = atan2(2.0f * (qw * qx + qy * qz), 1.0f - 2.0f * (qx * qx + qy * qy)) * 180.0f / M_PI;
+            float quat_pitch = asin(2.0f * (qw * qy - qz * qx)) * 180.0f / M_PI;
+
+            // Blend quaternion and Euler compensations for robustness
+            roll_compensation = 0.7f * roll_compensation + 0.3f * (-quat_roll * 0.6f);
+            pitch_compensation = 0.7f * pitch_compensation + 0.3f * (-quat_pitch * 0.6f);
+        }
+
+        // Dynamic adjustment based on linear acceleration
+        if (imu_data.absolute_data.linear_acceleration_valid) {
+            float dynamic_factor = 1.0f;
+            float lateral_accel = sqrt(
+                imu_data.absolute_data.linear_accel_x * imu_data.absolute_data.linear_accel_x +
+                imu_data.absolute_data.linear_accel_y * imu_data.absolute_data.linear_accel_y);
+
+            // Reduce compensation during high lateral acceleration
+            if (lateral_accel > 1.5f) {
+                dynamic_factor = std::max(0.4f, 1.0f - (lateral_accel - 1.5f) / 3.0f);
+                roll_compensation *= dynamic_factor;
+                pitch_compensation *= dynamic_factor;
+            }
+        }
+    } else {
+        // Fallback to basic IMU compensation
+        roll_compensation = -imu_data.roll * 0.5f; // Compensation factor
+        pitch_compensation = -imu_data.pitch * 0.5f;
+    }
 
     // Adjust body orientation
     body_orientation[0] += roll_compensation * dt;
@@ -1152,14 +1249,58 @@ float LocomotionSystem::getStepLength() const {
         }
     }
 
-    // Slope adjustment if IMU is present
+    // Enhanced slope adjustment using absolute positioning data
     float terrain_factor = 1.0f;
     if (imu_interface && imu_interface->isConnected()) {
         IMUData imu_data = imu_interface->readIMU();
         if (imu_data.is_valid) {
-            float total_tilt = sqrt(imu_data.roll * imu_data.roll + imu_data.pitch * imu_data.pitch);
-            if (total_tilt > 10.0f) {
-                terrain_factor = std::max(0.6f, 1.0f - (total_tilt - 10.0f) / 20.0f);
+            float total_tilt;
+
+            // Use enhanced orientation data for more precise terrain assessment
+            if (imu_data.has_absolute_capability && imu_data.absolute_data.absolute_orientation_valid) {
+                total_tilt = sqrt(
+                    imu_data.absolute_data.absolute_roll * imu_data.absolute_data.absolute_roll +
+                    imu_data.absolute_data.absolute_pitch * imu_data.absolute_data.absolute_pitch);
+
+                // Additional terrain complexity assessment using quaternion
+                if (imu_data.absolute_data.quaternion_valid) {
+                    // Calculate terrain complexity using quaternion derivatives
+                    float qw = imu_data.absolute_data.quaternion_w;
+                    float qx = imu_data.absolute_data.quaternion_x;
+                    float qy = imu_data.absolute_data.quaternion_y;
+                    float qz = imu_data.absolute_data.quaternion_z;
+
+                    // Assess terrain complexity based on quaternion non-uniformity
+                    float complexity = abs(qx) + abs(qy) + abs(qz);
+                    if (complexity > 0.4f) { // Complex terrain indicator
+                        terrain_factor *= std::max(0.6f, 1.0f - (complexity - 0.4f) / 0.6f);
+                    }
+                }
+
+                // Dynamic motion consideration
+                if (imu_data.absolute_data.linear_acceleration_valid) {
+                    float motion_magnitude = sqrt(
+                        imu_data.absolute_data.linear_accel_x * imu_data.absolute_data.linear_accel_x +
+                        imu_data.absolute_data.linear_accel_y * imu_data.absolute_data.linear_accel_y +
+                        imu_data.absolute_data.linear_accel_z * imu_data.absolute_data.linear_accel_z);
+
+                    // Reduce step length during high dynamic motion
+                    if (motion_magnitude > 2.5f) {
+                        terrain_factor *= std::max(0.5f, 1.0f - (motion_magnitude - 2.5f) / 5.0f);
+                    }
+                }
+
+                // Enhanced slope calculation
+                if (total_tilt > 8.0f) { // Lower threshold for absolute data
+                    terrain_factor *= std::max(0.5f, 1.0f - (total_tilt - 8.0f) / 25.0f);
+                }
+            } else {
+                // Fallback to basic IMU data
+                total_tilt = sqrt(imu_data.roll * imu_data.roll + imu_data.pitch * imu_data.pitch);
+
+                if (total_tilt > 10.0f) {
+                    terrain_factor = std::max(0.6f, 1.0f - (total_tilt - 10.0f) / 20.0f);
+                }
             }
         }
     }
@@ -1172,4 +1313,77 @@ float LocomotionSystem::getStepLength() const {
     calculated_step_length = std::max(min_safe_step, std::min(max_safe_step, calculated_step_length));
 
     return calculated_step_length;
+}
+
+float LocomotionSystem::calculateDynamicStabilityIndex() {
+    // Enhanced stability analysis using absolute positioning data
+    if (!imu_interface || !imu_interface->isConnected())
+        return calculateStabilityIndex(); // Fallback to basic stability
+
+    IMUData imu_data = imu_interface->readIMU();
+    if (!imu_data.is_valid)
+        return 0.5f; // Neutral stability
+
+    float stability_index = 1.0f;
+
+    // Enhanced stability calculation using absolute positioning
+    if (imu_data.has_absolute_capability && imu_data.absolute_data.absolute_orientation_valid) {
+        // Orientation stability from absolute data
+        float orientation_stability = 1.0f;
+        float total_tilt = sqrt(
+            imu_data.absolute_data.absolute_roll * imu_data.absolute_data.absolute_roll +
+            imu_data.absolute_data.absolute_pitch * imu_data.absolute_data.absolute_pitch);
+
+        if (total_tilt > 5.0f) {
+            orientation_stability = std::max(0.2f, 1.0f - (total_tilt - 5.0f) / 30.0f);
+        }
+
+        // Dynamic motion stability from linear acceleration
+        float motion_stability = 1.0f;
+        if (imu_data.absolute_data.linear_acceleration_valid) {
+            float acceleration_magnitude = sqrt(
+                imu_data.absolute_data.linear_accel_x * imu_data.absolute_data.linear_accel_x +
+                imu_data.absolute_data.linear_accel_y * imu_data.absolute_data.linear_accel_y +
+                imu_data.absolute_data.linear_accel_z * imu_data.absolute_data.linear_accel_z);
+
+            // High acceleration reduces stability
+            if (acceleration_magnitude > 1.0f) {
+                motion_stability = std::max(0.3f, 1.0f - (acceleration_magnitude - 1.0f) / 4.0f);
+            }
+        }
+
+        // Quaternion-based rotational stability
+        float rotational_stability = 1.0f;
+        if (imu_data.absolute_data.quaternion_valid) {
+            float qw = imu_data.absolute_data.quaternion_w;
+            float qx = imu_data.absolute_data.quaternion_x;
+            float qy = imu_data.absolute_data.quaternion_y;
+            float qz = imu_data.absolute_data.quaternion_z;
+
+            // Calculate rotational deviation from level position
+            float rotational_deviation = sqrt(qx * qx + qy * qy + qz * qz);
+            if (rotational_deviation > 0.2f) {
+                rotational_stability = std::max(0.4f, 1.0f - (rotational_deviation - 0.2f) / 0.6f);
+            }
+        }
+
+        // Combine stability factors
+        stability_index = orientation_stability * motion_stability * rotational_stability;
+
+        // Calibration status affects confidence in stability calculation
+        if (imu_data.absolute_data.calibration_status < 2) {
+            stability_index = 0.5f * stability_index + 0.5f * calculateStabilityIndex();
+        }
+    } else {
+        // Fallback to basic stability calculation
+        stability_index = calculateStabilityIndex();
+    }
+
+    // Include FSR-based stability if available
+    if (fsr_interface) {
+        float fsr_stability = calculateStabilityIndex();                 // Basic FSR stability
+        stability_index = 0.7f * stability_index + 0.3f * fsr_stability; // Blend IMU and FSR
+    }
+
+    return std::max(0.0f, std::min(1.0f, stability_index));
 }

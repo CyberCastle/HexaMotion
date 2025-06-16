@@ -221,6 +221,8 @@ class LocomotionSystem {
     Eigen::Vector2f calculateCenterOfPressure();
     /** Compute a numeric stability index. */
     float calculateStabilityIndex();
+    /** Enhanced stability calculation using absolute positioning data. */
+    float calculateDynamicStabilityIndex();
     /** Check if the robot is statically stable. */
     bool isStaticallyStable();
 

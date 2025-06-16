@@ -35,6 +35,9 @@ void IMUAutoPose::initialize() {
         break;
     }
 
+    // Initialize IMU mode
+    initializeIMUMode();
+
     resetFilters();
 }
 
@@ -129,12 +132,21 @@ void IMUAutoPose::updateIMUData() {
 
     IMUData imu_data = imu_->readIMU();
 
-    // Update gravity estimate
-    updateGravityEstimate(imu_data);
+    // Update calibration status
+    updateCalibrationStatus(imu_data);
 
-    // Update orientation from IMU
-    Point3D current_orientation(imu_data.roll, imu_data.pitch, imu_data.yaw);
-    orientation_filter_ = lowPassFilter(current_orientation, orientation_filter_, filter_alpha_);
+    // Use absolute data if available and enabled, otherwise use raw data
+    if (imu_data.has_absolute_capability && params_.use_absolute_data &&
+        imu_data.absolute_data.absolute_orientation_valid) {
+        updateWithAbsoluteData(imu_data);
+        current_state_.using_absolute_data = true;
+    } else {
+        updateWithRawData(imu_data);
+        current_state_.using_absolute_data = false;
+    }
+
+    // Update state information
+    current_state_.active_mode = imu_data.mode;
 
     // Calculate inclination and errors
     updateInclinationEstimate();
@@ -259,6 +271,109 @@ void IMUAutoPose::updateAdaptiveMode() {
     }
 
     current_state_.pose_active = true;
+}
+
+// IMU Mode Management and Absolute Positioning Support
+
+void IMUAutoPose::initializeIMUMode() {
+    if (!imu_)
+        return;
+
+    // Check if IMU supports absolute positioning
+    if (imu_->hasAbsolutePositioning()) {
+        // Configure IMU mode based on preferences
+        if (params_.use_absolute_data) {
+            if (params_.prefer_sensor_fusion) {
+                imu_->setIMUMode(IMU_MODE_ABSOLUTE_POS);
+            } else {
+                imu_->setIMUMode(IMU_MODE_FUSION);
+            }
+        } else {
+            imu_->setIMUMode(IMU_MODE_RAW_DATA);
+        }
+    } else {
+        // Fallback to raw data mode for basic IMUs
+        imu_->setIMUMode(IMU_MODE_RAW_DATA);
+    }
+}
+
+void IMUAutoPose::updateWithAbsoluteData(const IMUData &imu_data) {
+    // Use IMU's absolute orientation calculations
+    Point3D absolute_orientation(
+        imu_data.absolute_data.absolute_roll,
+        imu_data.absolute_data.absolute_pitch,
+        imu_data.absolute_data.absolute_yaw);
+
+    // Apply filtering - less aggressive since sensor data is already processed
+    float abs_filter_alpha = filter_alpha_ * 0.5f; // Use lighter filtering
+    orientation_filter_ = lowPassFilter(absolute_orientation, orientation_filter_, abs_filter_alpha);
+
+    // Use linear acceleration for gravity estimate if available
+    if (imu_data.absolute_data.linear_acceleration_valid) {
+        Point3D linear_accel(
+            imu_data.absolute_data.linear_accel_x,
+            imu_data.absolute_data.linear_accel_y,
+            imu_data.absolute_data.linear_accel_z);
+
+        // For BNO055 and similar sensors, gravity is already removed from linear acceleration
+        // We need to reconstruct gravity vector from absolute orientation
+        float roll_rad = math_utils::degreesToRadians(imu_data.absolute_data.absolute_roll);
+        float pitch_rad = math_utils::degreesToRadians(imu_data.absolute_data.absolute_pitch);
+
+        // Calculate gravity vector from orientation
+        Point3D gravity_from_orientation(
+            sin(pitch_rad) * 9.81f,
+            -sin(roll_rad) * cos(pitch_rad) * 9.81f,
+            -cos(roll_rad) * cos(pitch_rad) * 9.81f);
+
+        gravity_filter_ = lowPassFilter(gravity_from_orientation, gravity_filter_, abs_filter_alpha);
+    } else {
+        // Fallback to raw acceleration data
+        updateGravityEstimate(imu_data);
+    }
+
+    current_state_.gravity_vector = gravity_filter_;
+}
+
+void IMUAutoPose::updateWithRawData(const IMUData &imu_data) {
+    // Use traditional processing with raw IMU data
+    updateGravityEstimate(imu_data);
+
+    // Update orientation from raw IMU data
+    Point3D current_orientation(imu_data.roll, imu_data.pitch, imu_data.yaw);
+    orientation_filter_ = lowPassFilter(current_orientation, orientation_filter_, filter_alpha_);
+}
+
+void IMUAutoPose::updateCalibrationStatus(const IMUData &imu_data) {
+    if (imu_data.has_absolute_capability) {
+        current_state_.calibration_status = imu_data.absolute_data.calibration_status;
+    } else {
+        // For basic IMUs, assume calibrated if data is valid
+        current_state_.calibration_status = imu_data.is_valid ? 3 : 0;
+    }
+}
+
+bool IMUAutoPose::configureIMUMode(bool use_absolute_data, bool prefer_fusion) {
+    if (!imu_)
+        return false;
+
+    params_.use_absolute_data = use_absolute_data;
+    params_.prefer_sensor_fusion = prefer_fusion;
+
+    initializeIMUMode();
+    return true;
+}
+
+uint8_t IMUAutoPose::getIMUCalibrationStatus() const {
+    return current_state_.calibration_status;
+}
+
+bool IMUAutoPose::isUsingAbsoluteData() const {
+    return current_state_.using_absolute_data;
+}
+
+IMUMode IMUAutoPose::getIMUMode() const {
+    return current_state_.active_mode;
 }
 
 Point3D IMUAutoPose::lowPassFilter(const Point3D &input, const Point3D &previous, float alpha) {

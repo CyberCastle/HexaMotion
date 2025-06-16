@@ -152,13 +152,43 @@ struct JointAngles {
 };
 
 /**
+ * @brief IMU operation modes for different sensor capabilities
+ */
+enum IMUMode {
+    IMU_MODE_RAW_DATA,    ///< Use raw sensor data with library algorithms
+    IMU_MODE_FUSION,      ///< Use sensor's built-in sensor fusion
+    IMU_MODE_ABSOLUTE_POS ///< Use sensor's absolute position calculations (e.g., BNO055)
+};
+
+/**
+ * @brief Absolute position data from advanced IMUs
+ */
+struct IMUAbsoluteData {
+    float absolute_roll, absolute_pitch, absolute_yaw;            ///< Absolute orientation in degrees
+    float linear_accel_x, linear_accel_y, linear_accel_z;         ///< Linear acceleration (gravity removed)
+    float quaternion_w, quaternion_x, quaternion_y, quaternion_z; ///< Orientation quaternion
+    bool absolute_orientation_valid;                              ///< Whether absolute orientation is valid
+    bool linear_acceleration_valid;                               ///< Whether linear acceleration is valid
+    bool quaternion_valid;                                        ///< Whether quaternion data is valid
+    uint8_t calibration_status;                                   ///< Overall calibration status (0-3, 3=fully calibrated)
+    uint8_t system_status;                                        ///< System status from sensor
+    uint8_t self_test_result;                                     ///< Self test result
+};
+
+/**
  * @brief Inertial measurement unit readings.
  */
 struct IMUData {
-    float roll, pitch, yaw;
-    float accel_x, accel_y, accel_z;
-    float gyro_x, gyro_y, gyro_z;
-    bool is_valid;
+    // Basic IMU data (always available)
+    float roll, pitch, yaw;          ///< Euler angles in degrees
+    float accel_x, accel_y, accel_z; ///< Raw acceleration in m/s²
+    float gyro_x, gyro_y, gyro_z;    ///< Angular velocity in rad/s
+    bool is_valid;                   ///< Basic data validity
+
+    // Extended data for advanced IMUs
+    IMUAbsoluteData absolute_data; ///< Absolute position data (when available)
+    IMUMode mode;                  ///< Current operation mode
+    bool has_absolute_capability;  ///< Whether IMU supports absolute positioning
 };
 
 /**
@@ -173,14 +203,36 @@ struct FSRData {
 class IIMUInterface {
   public:
     virtual ~IIMUInterface() = default;
+
     /** Initialize the IMU hardware. */
     virtual bool initialize() = 0;
+
     /** Retrieve current IMU data. */
     virtual IMUData readIMU() = 0;
+
     /** Calibrate the IMU sensors. */
     virtual bool calibrate() = 0;
+
     /** Check if the IMU is connected. */
     virtual bool isConnected() = 0;
+
+    /** Set IMU operation mode (raw data, fusion, or absolute positioning). */
+    virtual bool setIMUMode(IMUMode mode) = 0;
+
+    /** Get current IMU operation mode. */
+    virtual IMUMode getIMUMode() const = 0;
+
+    /** Check if IMU supports absolute positioning (like BNO055). */
+    virtual bool hasAbsolutePositioning() const = 0;
+
+    /** Get calibration status for different sensor components (0-3, 3=fully calibrated). */
+    virtual bool getCalibrationStatus(uint8_t *system, uint8_t *gyro, uint8_t *accel, uint8_t *mag) = 0;
+
+    /** Trigger sensor self-test (if supported). */
+    virtual bool runSelfTest() = 0;
+
+    /** Reset sensor orientation (if supported). */
+    virtual bool resetOrientation() = 0;
 };
 
 class IFSRInterface {

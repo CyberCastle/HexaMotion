@@ -38,6 +38,11 @@ void TerrainAdaptation::update(IFSRInterface *fsr_interface, IIMUInterface *imu_
     IMUData imu_data = imu_interface->readIMU();
     if (imu_data.is_valid) {
         updateGravityEstimation(imu_data);
+
+        // Enhanced terrain analysis using absolute positioning data
+        if (imu_data.has_absolute_capability) {
+            updateAdvancedTerrainAnalysis(imu_data);
+        }
     }
 
     // Update per-leg terrain detection
@@ -256,14 +261,32 @@ void TerrainAdaptation::updateGravityEstimation(const IMUData &imu_data) {
     if (!imu_data.is_valid)
         return;
 
-    // Low-pass filter for gravity estimation
+    // Enhanced gravity estimation with absolute positioning support
+    Eigen::Vector3f accel_gravity;
     const float alpha = 0.98f; // Filter coefficient
 
-    // Convert acceleration to gravity estimate (negate because gravity points down)
-    Eigen::Vector3f accel_gravity(-imu_data.accel_x, -imu_data.accel_y, -imu_data.accel_z);
+    // Use advanced IMU data if available (e.g., BNO055)
+    if (imu_data.has_absolute_capability && imu_data.absolute_data.absolute_orientation_valid) {
+        // Calculate gravity vector from absolute orientation (more accurate)
+        float roll_rad = imu_data.absolute_data.absolute_roll * M_PI / 180.0f;
+        float pitch_rad = imu_data.absolute_data.absolute_pitch * M_PI / 180.0f;
 
-    // Apply low-pass filter
-    gravity_estimate_ = alpha * gravity_estimate_ + (1.0f - alpha) * accel_gravity;
+        // Gravity vector from absolute orientation
+        accel_gravity = Eigen::Vector3f(
+            sin(pitch_rad) * 9.81f,
+            -sin(roll_rad) * cos(pitch_rad) * 9.81f,
+            -cos(roll_rad) * cos(pitch_rad) * 9.81f);
+
+        // Use lighter filtering for processed absolute data
+        gravity_estimate_ = alpha * 1.5f * gravity_estimate_ + (1.0f - alpha * 1.5f) * accel_gravity;
+    } else {
+        // Fallback to traditional method with raw acceleration
+        // Convert acceleration to gravity estimate (negate because gravity points down)
+        accel_gravity = Eigen::Vector3f(-imu_data.accel_x, -imu_data.accel_y, -imu_data.accel_z);
+
+        // Apply standard low-pass filter
+        gravity_estimate_ = alpha * gravity_estimate_ + (1.0f - alpha) * accel_gravity;
+    }
 
     // Normalize to expected gravity magnitude
     float magnitude = gravity_estimate_.norm();
@@ -376,4 +399,76 @@ Point3D TerrainAdaptation::projectOntoWalkPlane(const Point3D &point) {
 
 bool TerrainAdaptation::hasValidFootContactData() const {
     return foot_contact_history_.size() >= 3 && current_walk_plane_.valid;
+}
+
+void TerrainAdaptation::updateAdvancedTerrainAnalysis(const IMUData &imu_data) {
+    // Enhanced terrain analysis using absolute positioning capabilities
+    if (!imu_data.absolute_data.absolute_orientation_valid)
+        return;
+
+    // Dynamic motion detection using linear acceleration (gravity-free)
+    if (imu_data.absolute_data.linear_acceleration_valid) {
+        Eigen::Vector3f linear_accel(
+            imu_data.absolute_data.linear_accel_x,
+            imu_data.absolute_data.linear_accel_y,
+            imu_data.absolute_data.linear_accel_z);
+
+        float motion_magnitude = linear_accel.norm();
+
+        // Detect significant dynamic motion that affects terrain analysis
+        if (motion_magnitude > 2.0f) { // m/s² threshold for significant motion
+            // Reduce confidence in terrain detection during high acceleration
+            for (int i = 0; i < NUM_LEGS; i++) {
+                step_planes_[i].confidence *= 0.8f;
+            }
+        }
+    }
+
+    // Enhanced slope detection using quaternion data
+    if (imu_data.absolute_data.quaternion_valid) {
+        // Use quaternion for more accurate terrain orientation
+        Eigen::Vector4f quat(
+            imu_data.absolute_data.quaternion_w,
+            imu_data.absolute_data.quaternion_x,
+            imu_data.absolute_data.quaternion_y,
+            imu_data.absolute_data.quaternion_z);
+
+        // Calculate terrain normal from quaternion (more precise than Euler angles)
+        float norm = quat.norm();
+        if (norm > 0.1f) {
+            quat = quat / norm; // Normalize quaternion
+
+            // Extract terrain normal from quaternion rotation
+            Eigen::Vector3f terrain_normal(
+                2.0f * (quat[1] * quat[3] - quat[0] * quat[2]),
+                2.0f * (quat[2] * quat[3] + quat[0] * quat[1]),
+                quat[0] * quat[0] - quat[1] * quat[1] - quat[2] * quat[2] + quat[3] * quat[3]);
+
+            // Update terrain slope analysis
+            float slope_angle = acos(abs(terrain_normal[2])) * 180.0f / M_PI;
+
+            // Adjust all step planes based on quaternion-derived terrain analysis
+            if (slope_angle > 15.0f) { // Significant slope detected
+                for (int i = 0; i < NUM_LEGS; i++) {
+                    if (step_planes_[i].valid) {
+                        // Enhance normal calculation with quaternion data
+                        step_planes_[i].normal.x = 0.7f * step_planes_[i].normal.x + 0.3f * terrain_normal[0];
+                        step_planes_[i].normal.y = 0.7f * step_planes_[i].normal.y + 0.3f * terrain_normal[1];
+                        step_planes_[i].normal.z = 0.7f * step_planes_[i].normal.z + 0.3f * terrain_normal[2];
+
+                        // Increase confidence for quaternion-enhanced data
+                        step_planes_[i].confidence = std::min(1.0f, step_planes_[i].confidence * 1.1f);
+                    }
+                }
+            }
+        }
+    }
+
+    // Calibration status consideration
+    if (imu_data.absolute_data.calibration_status < 2) {
+        // Reduce confidence in advanced features if IMU is not well calibrated
+        for (int i = 0; i < NUM_LEGS; i++) {
+            step_planes_[i].confidence *= 0.9f;
+        }
+    }
 }

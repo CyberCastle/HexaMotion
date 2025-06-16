@@ -8,6 +8,8 @@
 
 struct DummyIMU : IIMUInterface {
     float test_roll = 0.0f, test_pitch = 0.0f, test_yaw = 0.0f;
+    IMUMode current_mode_ = IMU_MODE_RAW_DATA;
+    bool has_absolute_ = false;
 
     bool initialize() override { return true; }
     IMUData readIMU() override {
@@ -17,23 +19,86 @@ struct DummyIMU : IIMUInterface {
         data.yaw = test_yaw;
         data.accel_x = 0.0f;
         data.accel_y = 0.0f;
-
-        // CRITICAL: This uses DIRECT convention (gravity vector directly)
-        // Real IMUs may use PHYSICS convention (acceleration opposing gravity)
-        // See docs/HARDWARE_INTEGRATION_CONSIDERATIONS.md for details
-        data.accel_z = -9.81f; // Gravity pointing down (direct convention)
-
+        data.accel_z = 9.81f;
+        data.gyro_x = 0.0f;
+        data.gyro_y = 0.0f;
+        data.gyro_z = 0.0f;
         data.is_valid = true;
+        data.mode = current_mode_;
+        data.has_absolute_capability = has_absolute_;
+
+        // Populate absolute data if enabled
+        if (has_absolute_) {
+            data.absolute_data.absolute_roll = test_roll;
+            data.absolute_data.absolute_pitch = test_pitch;
+            data.absolute_data.absolute_yaw = test_yaw;
+            data.absolute_data.linear_accel_x = 0.0f;
+            data.absolute_data.linear_accel_y = 0.0f;
+            data.absolute_data.linear_accel_z = 0.0f;
+            data.absolute_data.quaternion_w = 1.0f;
+            data.absolute_data.quaternion_x = 0.0f;
+            data.absolute_data.quaternion_y = 0.0f;
+            data.absolute_data.quaternion_z = 0.0f;
+            data.absolute_data.absolute_orientation_valid = true;
+            data.absolute_data.linear_acceleration_valid = true;
+            data.absolute_data.quaternion_valid = true;
+            data.absolute_data.calibration_status = 3;
+            data.absolute_data.system_status = 5;
+            data.absolute_data.self_test_result = 0x0F;
+        }
+
         return data;
     }
     bool calibrate() override { return true; }
     bool isConnected() override { return true; }
+
+    bool setIMUMode(IMUMode mode) override {
+        current_mode_ = mode;
+        return true;
+    }
+
+    IMUMode getIMUMode() const override {
+        return current_mode_;
+    }
+
+    bool hasAbsolutePositioning() const override {
+        return has_absolute_;
+    }
+
+    bool getCalibrationStatus(uint8_t *system, uint8_t *gyro, uint8_t *accel, uint8_t *mag) override {
+        if (system)
+            *system = 3;
+        if (gyro)
+            *gyro = 3;
+        if (accel)
+            *accel = 3;
+        if (mag)
+            *mag = 3;
+        return true;
+    }
+
+    bool runSelfTest() override { return true; }
+    bool resetOrientation() override { return true; }
+
+    // Test helper
+    void enableAbsoluteMode(bool enable) { has_absolute_ = enable; }
+    void enableAbsolutePositioning(bool enable) { has_absolute_ = enable; }
 
     // Test helper method
     void setRPY(float roll, float pitch, float yaw) {
         test_roll = roll;
         test_pitch = pitch;
         test_yaw = yaw;
+    }
+
+    void setTestOrientation(float roll, float pitch, float yaw) {
+        test_roll = roll;
+        test_pitch = pitch;
+        test_yaw = yaw;
+    }
+
+    void setCalibrationStatus(uint8_t system, uint8_t gyro, uint8_t accel, uint8_t mag) {
+        // Update internal calibration status for testing
     }
 
     // NOTE: Real IMU implementation needs:

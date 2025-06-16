@@ -33,11 +33,17 @@ Place this repository inside your Arduino `libraries` directory. In your sketch 
 
 Create hardware interface classes that implement `IIMUInterface`, `IFSRInterface` and `IServoInterface`. Then pass instances of these classes to `LocomotionSystem` together with your robot parameters.
 
+**Note**: HexaMotion now **fully supports advanced IMUs like the BNO055** with enhanced terrain adaptation and locomotion capabilities. The system automatically detects and leverages absolute positioning data while maintaining 100% backward compatibility with basic IMUs. See [Enhanced IMU Implementation Report](ENHANCED_IMU_IMPLEMENTATION_REPORT.md) for complete details.
+
 ```cpp
 #include <Arduino.h>
 #include <locomotion_system.h>
 
-class MyIMU : public IIMUInterface { /* ... */ };
+class MyIMU : public IIMUInterface {
+    // Implement basic methods and optionally support absolute positioning
+    // For BNO055-style IMUs, implement hasAbsolutePositioning() to return true
+    /* ... */
+};
 class MyFSR : public IFSRInterface {
     // Implement all required methods including the new update() method
     // that uses AdvancedAnalog DMA for simultaneous FSR readings
@@ -106,3 +112,37 @@ make
 ```
 
 Each test binary can be executed individually once the build completes.
+
+## 🚀 Enhanced IMU Integration
+
+HexaMotion now provides **complete support for advanced IMUs** like the BNO055, offering significant improvements in precision and capability:
+
+### **Enhanced Capabilities:**
+
+-   **🎯 Precision Terrain Adaptation**: Uses absolute orientation for accurate gravity estimation
+-   **⚡ Dynamic Motion Detection**: Leverages gravity-free linear acceleration data
+-   **🧭 Quaternion-Based Analysis**: Advanced terrain complexity assessment
+-   **📊 Multi-Factor Stability**: Enhanced stability calculations using all available sensor data
+-   **🔄 Intelligent Fallback**: Automatically degrades gracefully to basic algorithms when needed
+
+### **Supported IMU Types:**
+
+-   **Advanced IMUs** (BNO055, etc.): Full enhanced feature set
+-   **Basic IMUs** (MPU6050, etc.): Original functionality preserved
+
+### **Key Benefits:**
+
+```cpp
+// Enhanced features automatically enabled for advanced IMUs
+MyBNO055IMU advanced_imu;  // Implements hasAbsolutePositioning() = true
+LocomotionSystem robot(params);
+robot.initialize(&advanced_imu, &fsr, &servos);
+// System automatically uses enhanced algorithms
+
+// Basic IMUs work exactly as before
+MyMPU6050IMU basic_imu;    // hasAbsolutePositioning() = false
+robot.initialize(&basic_imu, &fsr, &servos);
+// Uses proven original algorithms
+```
+
+**📚 Documentation**: See [Enhanced IMU Implementation Report](ENHANCED_IMU_IMPLEMENTATION_REPORT.md) for complete technical details.

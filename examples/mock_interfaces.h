@@ -8,10 +8,18 @@
  * @brief Example IMU interface returning mock data.
  */
 class ExampleIMU : public IIMUInterface {
+  private:
+    IMUMode current_mode_;
+    bool has_absolute_positioning_;
+
   public:
+    ExampleIMU() : current_mode_(IMU_MODE_RAW_DATA), has_absolute_positioning_(false) {}
+
     bool initialize() override { return true; }
+
     IMUData readIMU() override {
         IMUData data{};
+        // Basic IMU data (always available)
         data.roll = 0.0f;
         data.pitch = 0.0f;
         data.yaw = 0.0f;
@@ -22,10 +30,70 @@ class ExampleIMU : public IIMUInterface {
         data.gyro_y = 0.0f;
         data.gyro_z = 0.0f;
         data.is_valid = true;
+        data.mode = current_mode_;
+        data.has_absolute_capability = has_absolute_positioning_;
+
+        // Absolute data (if supported)
+        if (has_absolute_positioning_) {
+            data.absolute_data.absolute_roll = 0.0f;
+            data.absolute_data.absolute_pitch = 0.0f;
+            data.absolute_data.absolute_yaw = 0.0f;
+            data.absolute_data.linear_accel_x = 0.0f;
+            data.absolute_data.linear_accel_y = 0.0f;
+            data.absolute_data.linear_accel_z = 0.0f;
+            data.absolute_data.quaternion_w = 1.0f;
+            data.absolute_data.quaternion_x = 0.0f;
+            data.absolute_data.quaternion_y = 0.0f;
+            data.absolute_data.quaternion_z = 0.0f;
+            data.absolute_data.absolute_orientation_valid = true;
+            data.absolute_data.linear_acceleration_valid = true;
+            data.absolute_data.quaternion_valid = true;
+            data.absolute_data.calibration_status = 3;  // Fully calibrated
+            data.absolute_data.system_status = 5;       // System running normally
+            data.absolute_data.self_test_result = 0x0F; // All tests passed
+        }
+
         return data;
     }
+
     bool calibrate() override { return true; }
     bool isConnected() override { return true; }
+
+    bool setIMUMode(IMUMode mode) override {
+        current_mode_ = mode;
+        return true;
+    }
+
+    IMUMode getIMUMode() const override {
+        return current_mode_;
+    }
+
+    bool hasAbsolutePositioning() const override {
+        return has_absolute_positioning_;
+    }
+
+    bool getCalibrationStatus(uint8_t *system, uint8_t *gyro, uint8_t *accel, uint8_t *mag) override {
+        if (system)
+            *system = 3;
+        if (gyro)
+            *gyro = 3;
+        if (accel)
+            *accel = 3;
+        if (mag)
+            *mag = 3;
+        return true;
+    }
+
+    bool runSelfTest() override { return true; }
+    bool resetOrientation() override { return true; }
+
+    // Helper method to simulate an advanced IMU like BNO055
+    void enableAbsolutePositioning(bool enable) {
+        has_absolute_positioning_ = enable;
+        if (enable && current_mode_ == IMU_MODE_RAW_DATA) {
+            current_mode_ = IMU_MODE_ABSOLUTE_POS;
+        }
+    }
 };
 
 /**

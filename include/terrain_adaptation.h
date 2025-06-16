@@ -162,6 +162,12 @@ class TerrainAdaptation {
     Eigen::Vector3f estimateGravity() const { return gravity_estimate_; }
 
     /**
+     * @brief Get current gravity vector estimate
+     * @return Gravity vector estimate
+     */
+    Eigen::Vector3f getGravityVector() const { return gravity_estimate_; }
+
+    /**
      * @brief Adapt foot trajectory for terrain-aware stepping
      * @param leg_index Leg index (0-5)
      * @param base_trajectory Base trajectory from gait controller
@@ -205,6 +211,12 @@ class TerrainAdaptation {
      * @param imu_data IMU sensor data
      */
     void updateGravityEstimation(const IMUData &imu_data);
+
+    /**
+     * @brief Enhanced terrain analysis using absolute positioning data
+     * @param imu_data IMU sensor data with absolute positioning capability
+     */
+    void updateAdvancedTerrainAnalysis(const IMUData &imu_data);
 
     /**
      * @brief Apply proactive terrain adaptation using step plane data
