@@ -169,9 +169,10 @@ Point3D AdmittanceController::integrateEuler(int leg_index) {
     LegAdmittanceState &state = leg_states_[leg_index];
     AdmittanceParams &params = state.params;
 
-    Point3D position_error = state.equilibrium_position; // Simplified
-    params.acceleration = calculateAcceleration(params, position_error);
+    Point3D current_position = model_.getLeg(leg_index).getCurrentTipPosition();
+    Point3D position_error = current_position - state.equilibrium_position;
 
+    params.acceleration = calculateAcceleration(params, position_error);
     params.velocity = params.velocity + params.acceleration * delta_time_;
     Point3D position_delta = params.velocity * delta_time_;
 
