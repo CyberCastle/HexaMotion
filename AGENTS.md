@@ -16,6 +16,9 @@ Esta librería proporciona control de locomoción para un robot hexápodo basado
 ## Desarrollo
 
 -   Clonar el repositorio completo, incluyendo todos los submódulos.
+-   Los archivos asociados a la implementación HexaMotion están exclusivamente en las carpetas src e include.
+-   La carpeta tests está solamwente el código para validar las correcciones.
+-   En la carpeta OpenSHC está el código en la cual se basa la implementación de OpenSHC
 -   Al momento de implementar o modificar alguna funcionalidad, analizar la carpeta OpenSHC antes,
     de tal forma que la implementación sea equivalente a la de OpenSHC.
 -   Para probar cambios, ejecutar las pruebas dentro de la carpeta test.
