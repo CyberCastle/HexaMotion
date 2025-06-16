@@ -4,10 +4,7 @@
 #include <cassert>
 #include <cmath>
 #include <iostream>
-
-#include <cassert>
-#include <cmath>
-#include <iostream>
+#include <memory>
 
 class PoseControlTest {
   private:
@@ -20,16 +17,7 @@ class PoseControlTest {
   public:
     PoseControlTest() {
         // Create test parameters
-        Parameters params;
-        params.hexagon_radius = 100.0f;
-        params.coxa_length = 50.0f;
-        params.femur_length = 100.0f;
-        params.tibia_length = 120.0f;
-        params.robot_height = 120.0f;
-        params.max_velocity = 200.0f;
-        params.max_angular_velocity = 90.0f;
-        params.stability_margin = 30.0f;
-        params.control_frequency = 50.0f;
+        Parameters params = createDefaultParameters();
 
         // Create locomotion system
         locomotion_system_ = std::make_unique<LocomotionSystem>(params);

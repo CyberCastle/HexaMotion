@@ -41,21 +41,7 @@ class StateControllerTest {
     }
 
     void setupParameters() {
-        params.hexagon_radius = 150;
-        params.coxa_length = 50;
-        params.femur_length = 100;
-        params.tibia_length = 120;
-        params.robot_height = 80;
-        params.robot_weight = 2.5f;
-        params.control_frequency = 50;
-
-        // Set joint limits (required)
-        params.coxa_angle_limits[0] = -90;
-        params.coxa_angle_limits[1] = 90;
-        params.femur_angle_limits[0] = -90;
-        params.femur_angle_limits[1] = 90;
-        params.tibia_angle_limits[0] = -90;
-        params.tibia_angle_limits[1] = 90;
+        params = createDefaultParameters();
     }
 
     void assert_test(bool condition, const std::string &test_name) {
