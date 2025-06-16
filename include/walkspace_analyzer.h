@@ -6,6 +6,10 @@
 #include <map>
 #include <vector>
 
+// OpenSHC-compatible type definitions (must be before class declaration)
+typedef std::map<int, float> Workplane;       // bearing -> radius
+typedef std::map<float, Workplane> Workspace; // height -> Workplane
+
 /**
  * @brief Walkspace analysis system equivalent to OpenSHC implementation
  *
@@ -47,7 +51,10 @@ class WalkspaceAnalyzer {
 
     // Workspace geometry
     WorkspaceBounds leg_workspace_[NUM_LEGS];
-    std::map<int, float> walkspace_map_; // Bearing -> radius mapping
+    std::map<int, float> walkspace_map_; // Bearing -> radius mapping (legacy)
+
+    // Enhanced workspace storage with height layers (OpenSHC-compatible)
+    Workspace leg_workspaces_[NUM_LEGS]; // 3D workspace per leg
 
     // Analysis parameters
     static constexpr int BEARING_STEP = 5;                // Degrees
@@ -112,6 +119,29 @@ class WalkspaceAnalyzer {
      * @return Map of bearing to radius values
      */
     const std::map<int, float> &getWalkspaceMap() const { return walkspace_map_; }
+
+    /**
+     * @brief Get workplane at specific height with interpolation
+     * @param leg_index Leg index (0-5)
+     * @param height Height above workspace origin (mm)
+     * @return Interpolated workplane at specified height
+     */
+    Workplane getWorkplane(int leg_index, float height) const;
+
+    /**
+     * @brief Get full 3D workspace for specific leg
+     * @param leg_index Leg index (0-5)
+     * @return Complete workspace with all height layers
+     */
+    Workspace getLegWorkspace(int leg_index) const;
+
+    /**
+     * @brief Check if position is reachable using workplane interpolation
+     * @param leg_index Leg index (0-5)
+     * @param position Target position in robot frame
+     * @return True if position is reachable according to workplane data
+     */
+    bool isPositionReachableWithWorkplane(int leg_index, const Point3D &position) const;
 
   private:
     void calculateLegWorkspaceBounds(int leg_index);
