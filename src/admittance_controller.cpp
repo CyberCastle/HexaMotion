@@ -1,4 +1,10 @@
 #include "admittance_controller.h"
+
+/**
+ * @file admittance_controller.cpp
+ * @brief Implements the admittance-based compliance controller.
+ */
+
 #include "math_utils.h"
 #include <algorithm>
 #include <cmath>

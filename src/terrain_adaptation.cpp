@@ -1,4 +1,9 @@
 #include "terrain_adaptation.h"
+
+/**
+ * @file terrain_adaptation.cpp
+ * @brief Implementation of terrain adaptation algorithms.
+ */
 #include "math_utils.h"
 #include <algorithm>
 #include <cmath>

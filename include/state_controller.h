@@ -167,12 +167,13 @@ struct StateMachineConfig {
     int max_manual_legs = 2;                ///< Maximum number of manually controlled legs
 };
 
-////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-/// This class implements an equivalent state machine to OpenSHC's complex hierarchical state system.
-/// It manages system states, robot states, walk states, leg states, and various operational modes.
-/// The state machine coordinates transitions between different operational states and manages
-/// the interaction between different controllers (walk, pose, admittance).
-////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+/**
+ * @brief Equivalent hierarchical state machine to OpenSHC.
+ *
+ * Manages system, robot, walk and leg states as well as various
+ * operational modes. The controller coordinates transitions and
+ * interacts with the walk, pose and admittance controllers.
+ */
 class StateController {
   public:
     /**

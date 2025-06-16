@@ -1,195 +1,195 @@
-# Corrección de Errores de Cinemática Inversa y Validación de Posiciones Angulares
+# Correction of inverse kinematics errors and validation of angular positions
 
-## Descripción del Problema
+## Description of the problem
 
-El sistema de locomoción del robot hexápodo presentaba violaciones en los límites de ángulos de las articulaciones, donde los ángulos excedían los límites configurados de ±65° (coxa), ±75° (fémur), y ±45° (tibia), con violaciones que alcanzaban valores superiores a 90° según las salidas de las pruebas.
+The hexapod robot locomotion system presented violations in the limits of angles of the joints, where the angles exceeded the configured limits of ± 65 ° (Coxa), ± 75 ° (femur), and ± 45 ° (tibia), with violations that reached values ​​greater than 90 ° according to the outputs of the tests.
 
-## Proceso de Investigación y Corrección
+## Research and correction process
 
-### Paso 1: Análisis Inicial del Sistema de Restricciones
+### Step 1: Initial analysis of the restriction system
 
-**Acción:** Investigar el pipeline de aplicación de restricciones en el sistema de locomoción.
+** Action: ** Investigate the Pipeline for the application of restrictions in the locomotion system.
 
-**Hallazgos:**
+** Findings: **
 
--   El sistema implementa correctamente la aplicación de restricciones en la función `setLegJointAngles()`
--   Utiliza el método `constrainAngle()` para limitar los ángulos dentro de los rangos permitidos
--   El pipeline de restricciones funciona: `setLegPosition()` → `setLegJointAngles()` → `constrainAngle()` → almacena valores limitados
+- The system correctly implements the application of restrictions in the `setlegjintangles ()`
+- Use the `Constrainangle ()` method to limit angles within the permitted ranges
+- The restriction pipeline works: `setlegposition ()` → `setlegjointangles ()` → `constrainangle ()` → stores limited values
 
-**Archivos examinados:**
+** Examined files: **
 
--   `src/locomotion_system.cpp` - Contiene la lógica de aplicación de restricciones
--   `src/robot_model.cpp` - Implementa `constrainAngle()` y `normalizeAngle()`
--   `src/pose_controller.cpp` - Aplicación adicional de restricciones en control de pose
+- `SRC/Locomotion_system.CPP` - Contains the logic of restriction application
+- `SRC/Robot_Model.cpp` - Implement` Constrainangle () `and` normalizeangle () `
+- `SRC/Pose_Controller.CPP` - Additional application of restrictions in pose control
 
-### Paso 2: Identificación de la Causa Raíz
+### Step 2: Root cause identification
 
-**Problema encontrado:** La prueba principal de simulación utilizaba límites de articulación incorrectos (±90° para todas las articulaciones) en lugar de los límites apropiados del estilo CSIRO.
+** problem found: ** The main simulation test used incorrect articulation limits (± 90 ° for all joints) instead of the appropriate limits of the CSIRO style.
 
-**Archivo problemático:** `/Users/cybercastle/tmp/HexaMotion/tests/tripod_gait_sim_test.cpp`
+** PROBLEM SHIP: ** `/USERS/CyberCastle/TMP/Hexamotion/Tests/tripod_gait_sim_test.cpp`
 
-**Código problemático identificado:**
+** Identified problem code: **
 
-```cpp
-// Límites incorrectos (demasiado permisivos)
-p.coxa_angle_limits[0] = -90;   // Debería ser -65
-p.coxa_angle_limits[1] = 90;    // Debería ser 65
-p.femur_angle_limits[0] = -90;  // Debería ser -75
-p.femur_angle_limits[1] = 90;   // Debería ser 75
-p.tibia_angle_limits[0] = -90;  // Debería ser -45
-p.tibia_angle_limits[1] = 90;   // Debería ser 45
-```
+`` CPP
+// Incorrect limits (too permissive)
+p.coxa_angle_limits [0] = -90;// should be -65
+p.coxa_angle_limits [1] = 90;// should be 65
+p.femur_angle_limits [0] = -90;// should be -75
+p.femur_angle_limits [1] = 90;// should be 75
+p.tibia_angle_limits [0] = -90;// should be -45
+p.tibia_angle_limits [1] = 90;// should be 45
+``
 
-### Paso 3: Corrección de los Parámetros de Configuración
+### Step 3: Correction of configuration parameters
 
-**Acción:** Actualizar el archivo de prueba con los límites correctos de articulación estilo CSIRO.
+** Action: ** Update the trial file with the correct limits of articulation CSIRO.
 
-**Cambios realizados en `tripod_gait_sim_test.cpp` (líneas 292-302):**
+** Changes made in `tripod_gait_sim_test.cpp` (lines 292-302): **
 
-```cpp
-// Límites corregidos para articulaciones estilo CSIRO
-p.coxa_angle_limits[0] = -65;   // Cambio de -90 a -65
-p.coxa_angle_limits[1] = 65;    // Cambio de 90 a 65
-p.femur_angle_limits[0] = -75;  // Cambio de -90 a -75
-p.femur_angle_limits[1] = 75;   // Cambio de 90 a 75
-p.tibia_angle_limits[0] = -45;  // Cambio de -90 a -45
-p.tibia_angle_limits[1] = 45;   // Cambio de 90 a 45
-```
+`` CPP
+// Corrected limits for CSIRO style joints
+p.coxa_angle_limits [0] = -65;// Change from -90 to -65
+p.coxa_angle_limits [1] = 65;// Change from 90 to 65
+p.femur_angle_limits [0] = -75;// Change from -90 to -75
+p.femur_angle_limits [1] = 75;// Change from 90 to 75
+p.tibia_angle_limits [0] = -45;// Change from -90 to -45
+p.tibia_angle_limits [1] = 45;// Change from 90 to 45
+``
 
-**Justificación:**
+**Justification:**
 
--   **Coxa (±65°):** Rango realista para la articulación de cadera que permite movimiento lateral adecuado
--   **Fémur (±75°):** Rango que permite elevación y descenso efectivo de las patas
--   **Tibia (±45°):** Rango conservador que evita colisiones y mantiene estabilidad estructural
+- ** Coxa (± 65 °): ** Realistic range for hip joint that allows adequate lateral movement
+- ** femur (± 75 °): ** range that allows effective elevation and descent from the legs
+- ** Tibia (± 45 °): ** Conservative range that avoids collisions and maintains structural stability
 
-### Paso 4: Mejora del Sistema de Monitoreo
+### Step 4: Improvement of the monitoring system
 
-**Mejoras implementadas:**
+** Improvements implemented: **
 
-1. **Función de visualización de dimensiones del robot:**
+1. ** Robot dimensions visualization function: **
 
-```cpp
-void printRobotDimensions(const RobotModelParameters& p) {
-    std::cout << "\n=== DIMENSIONES DEL ROBOT ===" << std::endl;
-    std::cout << "Longitud Coxa:     " << std::setw(6) << p.coxa_length << " mm" << std::endl;
-    std::cout << "Longitud Fémur:    " << std::setw(6) << p.femur_length << " mm" << std::endl;
-    std::cout << "Longitud Tibia:    " << std::setw(6) << p.tibia_length << " mm" << std::endl;
-    // ... más detalles
+`` CPP
+Void Printrobotdimensions (consta robotmodelparameters & p) {
+STD :: cout << "\ n === Robot dimensions ===" << STD :: endl;
+STD :: COUT << "COXA LENGTH:" << STD :: SETW (6) << P.coxa_length << "mm" << STD :: Endl;
+STD :: cout << "femur length:" << std :: Setw (6) << p.femur_length << "mm" << STD :: endl;
+STD :: COUT << "WARE LENGTH:" << STD :: SETW (6) << P.TIBIA_LENGTH << "MM" << STD :: Endl;
+// ... more details
 }
-```
+``
 
-2. **Función mejorada de estado detallado del robot:**
+2. ** Improved Robot Detailed Function: **
 
-```cpp
-void printDetailedRobotStatus(const LocomotionSystem& ls, const RobotModelParameters& p) {
-    // Incluye resumen de dimensiones y estados de articulaciones
-    // con valores calculados como alcance máximo y radio de trabajo
+`` CPP
+Void printoiledrobotstatus (const locomotionsystem & ls, consta robotmodelparameters & p) {
+// Includes summary of dimensions and states of joints
+// with values ​​calculated as maximum scope and work radio
 }
-```
+``
 
-### Paso 5: Verificación del Sistema
+### Step 5: System verification
 
-**Prueba ejecutada:** Ejecutar la prueba corregida para confirmar que las violaciones de ángulos de articulación están ahora correctamente restringidas.
+** Executed test: ** Execute the corrected test to confirm that articulation angles violations are now correctly restricted.
 
-**Resultado:** Los ángulos permanecen dentro de los límites especificados, confirmando que el sistema de restricciones funciona correctamente con los parámetros apropiados.
+** Result: ** The angles remain within the specified limits, confirming that the restriction system works correctly with the appropriate parameters.
 
-## Análisis del Sistema de Restricciones
+## Restriction system analysis
 
-### Arquitectura del Sistema de Restricciones
+### Restriction system architecture
 
-El sistema implementa un pipeline de múltiples capas para la aplicación de restricciones:
+The system implements a multi -layer pipeline for the application of restrictions:
 
-1. **Capa de Entrada:** `setLegPosition()` recibe posiciones cartesianas objetivo
-2. **Capa de Cinemática Inversa:** Calcula ángulos de articulación necesarios
-3. **Capa de Restricciones:** `setLegJointAngles()` aplica `constrainAngle()` a cada articulación
-4. **Capa de Almacenamiento:** Guarda valores restringidos en `joint_angles[leg]`
+1. ** Input layer: ** `Setlegposition ()` Receive Cartesian positions target
+2. ** Inverse kinematics layer: ** Calculate necessary articulation angles
+3. ** Layer of Restrictions: ** `Setlegjointangles ()` Applies `Constrainangle ()` To each joint
+4. ** Storage layer: ** Saves restricted values ​​in `Joint_angles [leg]`
 
-### Función de Restricción de Ángulos
+### ANGLES RESTRICTION FUNCTION
 
-```cpp
-double constrainAngle(double angle, double min_angle, double max_angle) {
-    if (angle < min_angle) return min_angle;
-    if (angle > max_angle) return max_angle;
-    return angle;
+`` CPP
+Double Constrainangle (Double Angle, Double Min_angle, Double Max_angle) {
+ifle <min_angle) return min_angle;
+If (Angle> Max_angle) Return Max_angle;
+Return Angle;
 }
-```
+``
 
-**Características:**
+**Characteristics:**
 
--   Implementación simple y efectiva de clamping
--   Aplicación consistente en todo el sistema
--   Sin efectos secundarios o modificaciones de estado inesperadas
+- Simple and effective clamping implementation
+- Application consisting of the entire system
+- No unexpected state modifications or state modifications
 
-## Lecciones Aprendidas
+## Lessons learned
 
-### 1. **Importancia de la Configuración Correcta**
+### 1. ** Importance of the correct configuration **
 
-El sistema de restricciones funcionaba correctamente desde el principio. El problema real era que la configuración de prueba utilizaba límites demasiado permisivos que no reflejaban las limitaciones físicas reales del robot.
+The restriction system worked correctly from the beginning.The real problem was that the test configuration used too permissive limits that did not reflect the real physical limitations of the robot.
 
-### 2. **Validación de Parámetros**
+### 2. ** Validation of parameters **
 
-Es crucial validar que los parámetros de configuración reflejen las especificaciones reales del hardware, especialmente en sistemas robóticos donde las limitaciones físicas son críticas para la operación segura.
+It is crucial to validate that the configuration parameters reflect the real hardware specifications, especially in robotic systems where physical limitations are critical for safe operation.
 
-### 3. **Separación de Responsabilidades**
+### 3. ** Separation of responsibilities **
 
-El diseño correcto separa claramente:
+The correct design clearly separates:
 
--   **Algoritmos de cinemática:** Cálculo de ángulos necesarios
--   **Sistema de restricciones:** Aplicación de límites físicos
--   **Configuración:** Parámetros específicos del robot
+- ** Cinematics algorithms: ** Calculation of necessary angles
+- ** Restriction system: ** Application of physical limits
+- ** Configuration: ** Specific robot parameters
 
-## Recomendaciones para el Futuro
+## Recommendations for the future
 
-### 1. **Validación Automática de Configuración**
+### 1. ** Automatic configuration validation **
 
-Implementar verificaciones automáticas que validen que los parámetros de configuración están dentro de rangos realistas:
+Implement automatic checks that validate that configuration parameters are within realistic ranges:
 
-```cpp
-bool validateRobotParameters(const RobotModelParameters& p) {
-    // Verificar que los límites de ángulos son realistas
-    if (abs(p.coxa_angle_limits[0]) > 90 || abs(p.coxa_angle_limits[1]) > 90) {
-        std::cerr << "Advertencia: Límites de coxa excesivos" << std::endl;
-        return false;
-    }
-    // ... más validaciones
-    return true;
+`` CPP
+BOOL VALIDATEROBOTPARAMERERS (CONST ROBOTMODELPARAMEERS & P) {
+// Verify that angles limits are realistic
+if (abs (p.coxa_angle_limits [0])> 90 || ABS (P.coxa_angle_limits [1])> 90) {
+STD :: Cer << "Warning: Excessive Coxa Limits" << STD :: Endl;
+return false;
 }
-```
+// ... more validations
+Return True;
+}
+``
 
-### 2. **Documentación de Especificaciones**
+### 2. ** SPECIFICATION DOCUMENTATION **
 
-Crear documentación clara que especifique:
+Create clear documentation that specifies:
 
--   Límites de articulación recomendados para diferentes tipos de robot
--   Justificación técnica para cada rango de movimiento
--   Procedimientos de calibración y validación
+- Recommended articulation limits for different types of robot
+- Technical justification for each movement range
+- Calibration and validation procedures
 
-### 3. **Pruebas de Integración Mejoradas**
+### 3. ** Improved Integration Tests **
 
-Desarrollar pruebas que específicamente validen:
+Develop evidence that specifically validates:
 
--   Que los límites de configuración son apropiados para el hardware
--   Que el sistema de restricciones funciona correctamente bajo diversas condiciones
--   Que no hay discrepancias entre configuración y implementación
+- That configuration limits are appropriate for hardware
+- That the restriction system works correctly under various conditions
+- There are no discrepancies between configuration and implementation
 
-## Archivos Modificados
+## Modified files
 
-### Archivos Principales:
+### Main files:
 
--   **`tests/tripod_gait_sim_test.cpp`:** Corrección de parámetros de límites de articulación y adición de visualización de dimensiones
--   **Archivos de análisis:** Múltiples archivos de prueba examinados para verificar el sistema de restricciones
+- ** `Tests/tripod_gait_sim_test.cpp`: ** Correction of articulation limits parameters and addition of dimensions of dimensions
+- ** Analysis files: ** Multiple test files examined to verify the restriction system
 
-### Archivos de Sistema (verificados, no modificados):
+### System files (verified, not modified):
 
--   **`src/locomotion_system.cpp`:** Sistema de restricciones funcional
--   **`src/robot_model.cpp`:** Implementaciones de `constrainAngle()` y `normalizeAngle()`
--   **`src/pose_controller.cpp`:** Restricciones adicionales en control de pose
+- ** `SRC/Locomotion_system.CPP`: ** Functional Restriction System
+- ** `src/robot_model.cpp`: ** Implementations of` constrainangle () `and` normalizeangle () `
+- ** `src/pose_controller.cpp`: ** Additional restrictions in pose control
 
-## Conclusión
+## Conclusion
 
-La solución exitosa de este problema demostró que a menudo los "errores de algoritmo" pueden ser en realidad problemas de configuración. El sistema de cinemática inversa y restricciones funcionaba correctamente, pero estaba siendo probado con parámetros inapropiados que no reflejaban las limitaciones físicas reales del robot.
+The successful solution of this problem showed that often the "algorithm errors" can actually be configuration problems.The reverse cinematics system and restrictions worked properly, but was being tested with inappropriate parameters that did not reflect the real physical limitations of the robot.
 
-La corrección fue relativamente simple una vez identificada la causa raíz: cambiar los límites de ±90° a los valores realistas de ±65° (coxa), ±75° (fémur), y ±45° (tibia). Esto permitió que el sistema de restricciones funcionara como estaba diseñado, manteniendo todos los ángulos dentro de rangos seguros y operativos.
+The correction was relatively simple once the root cause was identified: change the limits of ± 90 ° to the realistic values ​​of ± 65 ° (Coxa), ± 75 ° (femur), and ± 45 ° (tibia).This allowed the restriction system to function as designed, maintaining all angles within safe and operational ranges.
 
-**Fecha de documentación:** 9 de junio de 2025
-**Estado:** Problema resuelto y sistema verificado
+** Documentation date: ** June 9, 2025
+** STATE: ** SOLVED PROBLEM AND VERIFIED SYSTEM
