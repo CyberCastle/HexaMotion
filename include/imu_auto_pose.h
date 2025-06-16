@@ -220,12 +220,12 @@ class IMUAutoPose {
 
     // Filtering and processing
     Point3D lowPassFilter(const Point3D &input, const Point3D &previous, float alpha);
-    float calculateConfidence(const Point3D &orientation_error);
+    float calculateConfidence(const Point3D &orientation_error) const;
     void updateAdaptiveGains();
 
     // Utility functions
     Point3D normalizeAngles(const Point3D &angles);
-    bool withinDeadzone(const Point3D &error);
+    bool withinDeadzone(const Point3D &error) const;
 };
 
 #endif // IMU_AUTO_POSE_H

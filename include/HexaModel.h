@@ -109,7 +109,7 @@ enum LegState {
  */
 struct Point3D {
     float x, y, z;
-    Point3D(float x = 0, float y = 0, float z = 0) : x(x), y(y), z(z) {}
+    explicit Point3D(float x = 0, float y = 0, float z = 0) : x(x), y(y), z(z) {}
 
     // Operator overloads
     Point3D operator+(const Point3D &other) const {
@@ -148,7 +148,7 @@ struct Point3D {
  */
 struct JointAngles {
     float coxa, femur, tibia;
-    JointAngles(float c = 0, float f = 0, float t = 0) : coxa(c), femur(f), tibia(t) {}
+    explicit JointAngles(float c = 0, float f = 0, float t = 0) : coxa(c), femur(f), tibia(t) {}
 };
 
 /**

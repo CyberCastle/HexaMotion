@@ -162,8 +162,7 @@ StateController::~StateController() {
 
     // Clean up pose controller
     if (pose_controller_) {
-        delete pose_controller_;
-        pose_controller_ = nullptr;
+        pose_controller_.reset();
     }
 }
 
@@ -208,11 +207,11 @@ bool StateController::initialize() {
 
     // Initialize pose controller (equivalent to OpenSHC poser_)
     try {
-        pose_controller_ = new PoseController(locomotion_system_.getRobotModel(),
-                                              locomotion_system_.getServoInterface());
+        pose_controller_ = std::make_unique<PoseController>(locomotion_system_.getRobotModel(),
+                                                            locomotion_system_.getServoInterface());
         logDebug("PoseController initialized successfully");
     } catch (const std::exception &e) {
-        pose_controller_ = nullptr;
+        pose_controller_.reset();
         logError("Failed to initialize PoseController: " + String(e.what()));
         setError("PoseController initialization failed");
         return false;

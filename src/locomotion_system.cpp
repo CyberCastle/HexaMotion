@@ -24,10 +24,10 @@ LocomotionSystem::LocomotionSystem(const Parameters &params)
       current_gait(TRIPOD_GAIT), gait_phase(0.0f), step_height(30.0f), step_length(50.0f),
       stance_duration(0.5f), swing_duration(0.5f), cycle_frequency(2.0f),
       system_enabled(false), last_update_time(0), dt(0.02f), last_error(NO_ERROR),
-      model(params), pose_ctrl(nullptr), walk_ctrl(nullptr), admittance_ctrl(nullptr) {
+      model(params), pose_ctrl(nullptr), walk_ctrl(nullptr), admittance_ctrl(nullptr),
+      body_position(0.0f, 0.0f, params.robot_height) {
 
-    // Initialize body position
-    body_position = Eigen::Vector3f(0.0f, 0.0f, params.robot_height);
+    // Initialize body orientation
     body_orientation = Eigen::Vector3f(0.0f, 0.0f, 0.0f);
 
     // Initialize leg states and phase offsets for tripod gait
@@ -616,6 +616,10 @@ bool LocomotionSystem::maintainOrientation(const Eigen::Vector3f &target_rpy) {
     Point3D current(body_orientation.x(), body_orientation.y(), body_orientation.z());
     bool result = admittance_ctrl->maintainOrientation(target, current, dt);
     body_orientation = Eigen::Vector3f(current.x, current.y, current.z);
+
+    // Reproject standing feet to maintain contact during orientation changes
+    reprojectStandingFeet();
+
     return result;
 }
 
@@ -744,6 +748,10 @@ bool LocomotionSystem::setBodyPose(const Eigen::Vector3f &position, const Eigen:
     }
     body_position = position;
     body_orientation = orientation;
+
+    // Reproject standing feet to maintain contact during pose changes
+    reprojectStandingFeet();
+
     return true;
 }
 
@@ -784,6 +792,9 @@ bool LocomotionSystem::update() {
     updateStepParameters();
     adjustStepParameters();
     compensateForSlope();
+
+    // Update leg contact states from FSR sensors
+    updateLegStates();
 
     // Update gait phase
     updateGaitPhase();
@@ -979,15 +990,55 @@ void LocomotionSystem::updateLegStates() {
     if (!fsr_interface)
         return;
 
+    static float contact_history[NUM_LEGS][3] = {{0}}; // 3-sample history for filtering
+    static int history_index = 0;
+
+    // Update circular buffer index
+    history_index = (history_index + 1) % 3;
+
     for (int i = 0; i < NUM_LEGS; ++i) {
         FSRData fsr = fsr_interface->readFSR(i);
-        leg_states[i] = fsr.in_contact ? STANCE_PHASE : SWING_PHASE;
+
+        // Store contact value in history (1.0 for contact, 0.0 for no contact)
+        contact_history[i][history_index] = fsr.in_contact ? 1.0f : 0.0f;
+
+        // Calculate filtered contact using 3-sample average
+        float contact_average = (contact_history[i][0] + contact_history[i][1] + contact_history[i][2]) / 3.0f;
+
+        // Hysteresis thresholds to prevent chattering
+        const float CONTACT_THRESHOLD = 0.7f; // Need 70% confidence for contact
+        const float RELEASE_THRESHOLD = 0.3f; // Need 30% confidence for release
+
+        LegState current_state = leg_states[i];
+
+        // State transition logic with hysteresis
+        if (current_state == SWING_PHASE && contact_average > CONTACT_THRESHOLD) {
+            leg_states[i] = STANCE_PHASE;
+        } else if (current_state == STANCE_PHASE && contact_average < RELEASE_THRESHOLD) {
+            leg_states[i] = SWING_PHASE;
+        }
+        // Otherwise maintain current state
+
+        // Additional validation: Don't allow contact during planned swing phase
+        // Only validate during active movement (non-zero gait phase progression)
+        if (cycle_frequency > 0.0f) {
+            // Check if leg should be in swing based on gait phase
+            float leg_phase = fmod(gait_phase + leg_phase_offsets[i], 1.0f);
+            bool should_be_swinging = (leg_phase > stance_duration);
+
+            if (should_be_swinging && leg_states[i] == STANCE_PHASE) {
+                // Only override if pressure is very low (potential sensor error)
+                if (fsr.pressure < 10.0f) { // Low pressure threshold
+                    leg_states[i] = SWING_PHASE;
+                }
+            }
+        }
     }
 }
 
 void LocomotionSystem::updateStepParameters() {
     // Calculate leg reach and robot dimensions
-    float leg_reach = params.coxa_length + params.femur_length + params.tibia_length;
+    float leg_reach = calculateLegReach(); // Use standardized function
     float robot_height = params.robot_height;
 
     // Adjust step parameters depending on gait type using parametrizable factors
@@ -1116,7 +1167,7 @@ bool LocomotionSystem::setControlFrequency(float frequency) {
     return true;
 }
 
-float LocomotionSystem::calculateLegReach(int leg_index) {
+float LocomotionSystem::calculateLegReach() const {
     return params.coxa_length + params.femur_length + params.tibia_length;
 }
 
@@ -1205,14 +1256,13 @@ void LocomotionSystem::compensateForSlope() {
 
         // Dynamic adjustment based on linear acceleration
         if (imu_data.absolute_data.linear_acceleration_valid) {
-            float dynamic_factor = 1.0f;
             float lateral_accel = sqrt(
                 imu_data.absolute_data.linear_accel_x * imu_data.absolute_data.linear_accel_x +
                 imu_data.absolute_data.linear_accel_y * imu_data.absolute_data.linear_accel_y);
 
             // Reduce compensation during high lateral acceleration
             if (lateral_accel > 1.5f) {
-                dynamic_factor = std::max(0.4f, 1.0f - (lateral_accel - 1.5f) / 3.0f);
+                float dynamic_factor = std::max(0.4f, 1.0f - (lateral_accel - 1.5f) / 3.0f);
                 roll_compensation *= dynamic_factor;
                 pitch_compensation *= dynamic_factor;
             }
@@ -1230,6 +1280,9 @@ void LocomotionSystem::compensateForSlope() {
     // Clamp compensation
     body_orientation[0] = constrainAngle(body_orientation[0], -15.0f, 15.0f);
     body_orientation[1] = constrainAngle(body_orientation[1], -15.0f, 15.0f);
+
+    // Reproject standing feet after slope compensation changes body orientation
+    reprojectStandingFeet();
 }
 
 float LocomotionSystem::getStepLength() const {
@@ -1237,7 +1290,7 @@ float LocomotionSystem::getStepLength() const {
     float base_step_length = step_length;
 
     // Adjustment factors based on robot parameters
-    float leg_reach = params.coxa_length + params.femur_length + params.tibia_length;
+    float leg_reach = calculateLegReach(); // Use standardized function
     float max_safe_step = leg_reach * params.gait_factors.max_length_factor;
 
     // Stability adjustment - reduce step if stability is low
@@ -1265,7 +1318,6 @@ float LocomotionSystem::getStepLength() const {
                 // Additional terrain complexity assessment using quaternion
                 if (imu_data.absolute_data.quaternion_valid) {
                     // Calculate terrain complexity using quaternion derivatives
-                    float qw = imu_data.absolute_data.quaternion_w;
                     float qx = imu_data.absolute_data.quaternion_x;
                     float qy = imu_data.absolute_data.quaternion_y;
                     float qz = imu_data.absolute_data.quaternion_z;
@@ -1355,7 +1407,6 @@ float LocomotionSystem::calculateDynamicStabilityIndex() {
         // Quaternion-based rotational stability
         float rotational_stability = 1.0f;
         if (imu_data.absolute_data.quaternion_valid) {
-            float qw = imu_data.absolute_data.quaternion_w;
             float qx = imu_data.absolute_data.quaternion_x;
             float qy = imu_data.absolute_data.quaternion_y;
             float qz = imu_data.absolute_data.quaternion_z;

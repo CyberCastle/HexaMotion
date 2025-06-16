@@ -310,11 +310,6 @@ void IMUAutoPose::updateWithAbsoluteData(const IMUData &imu_data) {
 
     // Use linear acceleration for gravity estimate if available
     if (imu_data.absolute_data.linear_acceleration_valid) {
-        Point3D linear_accel(
-            imu_data.absolute_data.linear_accel_x,
-            imu_data.absolute_data.linear_accel_y,
-            imu_data.absolute_data.linear_accel_z);
-
         // For BNO055 and similar sensors, gravity is already removed from linear acceleration
         // We need to reconstruct gravity vector from absolute orientation
         float roll_rad = math_utils::degreesToRadians(imu_data.absolute_data.absolute_roll);
@@ -383,7 +378,7 @@ Point3D IMUAutoPose::lowPassFilter(const Point3D &input, const Point3D &previous
         previous.z + alpha * (input.z - previous.z));
 }
 
-float IMUAutoPose::calculateConfidence(const Point3D &orientation_error) {
+float IMUAutoPose::calculateConfidence(const Point3D &orientation_error) const {
     // Calculate confidence based on error magnitude and IMU data quality
     float error_magnitude = math_utils::magnitude(orientation_error);
     float max_error = math_utils::degreesToRadians(45.0f); // Maximum reasonable error
@@ -458,7 +453,7 @@ Point3D IMUAutoPose::normalizeAngles(const Point3D &angles) {
     return normalized;
 }
 
-bool IMUAutoPose::withinDeadzone(const Point3D &error) {
+bool IMUAutoPose::withinDeadzone(const Point3D &error) const {
     float deadzone_rad = math_utils::degreesToRadians(params_.deadzone_degrees);
 
     return (abs(error.x) < deadzone_rad &&

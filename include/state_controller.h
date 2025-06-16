@@ -8,6 +8,7 @@
 #include "walk_controller.h"
 #include <Arduino.h>
 #include <ArduinoEigen.h>
+#include <memory>
 
 // Maximum number of legs that can be manually controlled simultaneously
 #define MAX_MANUAL_LEGS 2
@@ -529,7 +530,7 @@ class StateController {
     bool is_initialized_;
 
     // Pose control
-    PoseController *pose_controller_;
+    std::unique_ptr<PoseController> pose_controller_;
 
     // ==============================
     // PRIVATE METHODS

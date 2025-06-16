@@ -81,7 +81,7 @@ class VelocityLimits {
 
     // Workspace generation and calculation
     void calculateWorkspace(const GaitConfig &gait_config);
-    WorkspaceConfig getWorkspaceConfig() const { return workspace_config_; }
+    const WorkspaceConfig &getWorkspaceConfig() const { return workspace_config_; }
 
     // Velocity scaling and validation
     LimitValues scaleVelocityLimits(const LimitValues &input_velocities,

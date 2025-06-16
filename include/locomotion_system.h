@@ -108,14 +108,13 @@ class LocomotionSystem {
 
     Point3D transformWorldToBody(const Point3D &p_world) const;
     bool setLegJointAngles(int leg_index, const JointAngles &q);
-    void reprojectStandingFeet();
 
   public:
     /**
      * @brief Construct a locomotion system with the given parameters.
      * @param params Physical and control parameters for the robot.
      */
-    LocomotionSystem(const Parameters &params);
+    explicit LocomotionSystem(const Parameters &params);
 
     /**
      * @brief Destructor releases allocated controllers.
@@ -230,6 +229,12 @@ class LocomotionSystem {
     String getErrorMessage(ErrorCode error);
     bool handleError(ErrorCode error);
 
+    // Leg state management
+    /** Update leg contact states based on FSR sensor readings. */
+    void updateLegStates();
+    /** Reproject standing feet positions during body orientation changes. */
+    void reprojectStandingFeet();
+
     // System update
     /** Update all controllers and state machines. */
     bool update();
@@ -265,10 +270,9 @@ class LocomotionSystem {
     float constrainAngle(float angle, float min_angle, float max_angle);
     bool validateParameters();
     void initializeDefaultPose();
-    void updateLegStates();
     void updateStepParameters();
     bool checkJointLimits(int leg_index, const JointAngles &angles);
-    float calculateLegReach(int leg_index);
+    float calculateLegReach() const;
 
     // Adaptive control
     void adaptGaitToTerrain();

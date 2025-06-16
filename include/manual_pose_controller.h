@@ -223,9 +223,9 @@ class ManualPoseController {
     void handleCombinedInput(float x, float y, float z);
 
     // Pose validation and constraints
-    void constrainTranslation(Point3D &translation);
-    void constrainRotation(Point3D &rotation);
-    void constrainHeight(float &height);
+    void constrainTranslation(Point3D &translation) const;
+    void constrainRotation(Point3D &rotation) const;
+    void constrainHeight(float &height) const;
     void constrainLegPosition(int leg_index, Point3D &position);
 
     // Pose interpolation utilities

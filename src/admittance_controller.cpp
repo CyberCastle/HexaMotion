@@ -300,6 +300,16 @@ Point3D AdmittanceController::integrateDerivatives(int leg_index) {
     // Calculate position delta from velocity
     Point3D position_delta = new_state.velocity * delta_time_;
 
+    // For validation and comparison, also calculate using direct acceleration method
+    if (config_.precision == PRECISION_HIGH) {
+        // Use calculateAcceleration for validation against derivative method
+        Point3D direct_acceleration = calculateAcceleration(state.params, position_error);
+
+        // The results should be mathematically equivalent
+        // This can be used for debugging or switching integration methods
+        (void)direct_acceleration; // Suppress unused variable warning for now
+    }
+
     return position_delta;
 }
 

@@ -10,7 +10,8 @@
 
 ManualPoseController::ManualPoseController(RobotModel &model)
     : model_(model), current_mode_(POSE_TRANSLATION), interpolation_speed_(0.1f),
-      smooth_transitions_(true) {
+      smooth_transitions_(true),
+      pose_limits_{Point3D(200.0f, 200.0f, 100.0f), Point3D(0.5f, 0.5f, 0.5f), 50.0f, 200.0f, 300.0f} {
 }
 
 void ManualPoseController::initialize() {
@@ -263,7 +264,7 @@ void ManualPoseController::handleCombinedInput(float x, float y, float z) {
     handleRotationInput(x * 0.4f, y * 0.4f, z);
 }
 
-void ManualPoseController::constrainTranslation(Point3D &translation) {
+void ManualPoseController::constrainTranslation(Point3D &translation) const {
     translation.x = std::max(-pose_limits_.translation_limits.x,
                              std::min(pose_limits_.translation_limits.x, translation.x));
     translation.y = std::max(-pose_limits_.translation_limits.y,
@@ -272,7 +273,7 @@ void ManualPoseController::constrainTranslation(Point3D &translation) {
                              std::min(pose_limits_.translation_limits.z, translation.z));
 }
 
-void ManualPoseController::constrainRotation(Point3D &rotation) {
+void ManualPoseController::constrainRotation(Point3D &rotation) const {
     rotation.x = std::max(-pose_limits_.rotation_limits.x,
                           std::min(pose_limits_.rotation_limits.x, rotation.x));
     rotation.y = std::max(-pose_limits_.rotation_limits.y,
@@ -281,7 +282,7 @@ void ManualPoseController::constrainRotation(Point3D &rotation) {
                           std::min(pose_limits_.rotation_limits.z, rotation.z));
 }
 
-void ManualPoseController::constrainHeight(float &height) {
+void ManualPoseController::constrainHeight(float &height) const {
     height = std::max(pose_limits_.height_min, std::min(pose_limits_.height_max, height));
 }
 

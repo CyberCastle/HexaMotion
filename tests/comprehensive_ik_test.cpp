@@ -37,29 +37,29 @@ int main() {
     // Test a range of realistic joint configurations
     std::vector<JointAngles> realistic_configs = {
         // Basic poses
-        {0.0f, -30.0f, 60.0f},  // Mild bend
-        {0.0f, -45.0f, 90.0f},  // Standard bend (was our original test)
-        {0.0f, -60.0f, 120.0f}, // Deep bend
+        JointAngles(0.0f, -30.0f, 60.0f),  // Mild bend
+        JointAngles(0.0f, -45.0f, 90.0f),  // Standard bend (was our original test)
+        JointAngles(0.0f, -60.0f, 120.0f), // Deep bend
 
         // Angled poses
-        {30.0f, -30.0f, 60.0f},  // Side + mild bend
-        {45.0f, -45.0f, 90.0f},  // Side + standard bend
-        {-30.0f, -30.0f, 60.0f}, // Other side + mild bend
-        {-45.0f, -45.0f, 90.0f}, // Other side + standard bend
+        JointAngles(30.0f, -30.0f, 60.0f),  // Side + mild bend
+        JointAngles(45.0f, -45.0f, 90.0f),  // Side + standard bend
+        JointAngles(-30.0f, -30.0f, 60.0f), // Other side + mild bend
+        JointAngles(-45.0f, -45.0f, 90.0f), // Other side + standard bend
 
         // Extended poses
-        {0.0f, -15.0f, 30.0f},   // Extended forward
-        {90.0f, -15.0f, 30.0f},  // Extended side
-        {180.0f, -15.0f, 30.0f}, // Extended back
-        {-90.0f, -15.0f, 30.0f}, // Extended other side
+        JointAngles(0.0f, -15.0f, 30.0f),   // Extended forward
+        JointAngles(90.0f, -15.0f, 30.0f),  // Extended side
+        JointAngles(180.0f, -15.0f, 30.0f), // Extended back
+        JointAngles(-90.0f, -15.0f, 30.0f), // Extended other side
 
         // Retracted poses
-        {0.0f, -75.0f, 150.0f},  // Retracted forward
-        {90.0f, -75.0f, 150.0f}, // Retracted side
+        JointAngles(0.0f, -75.0f, 150.0f),  // Retracted forward
+        JointAngles(90.0f, -75.0f, 150.0f), // Retracted side
 
         // Edge cases within limits
-        {0.0f, -89.0f, 179.0f},   // Near joint limits
-        {179.0f, -89.0f, 179.0f}, // Multiple limits
+        JointAngles(0.0f, -89.0f, 179.0f),   // Near joint limits
+        JointAngles(179.0f, -89.0f, 179.0f), // Multiple limits
     };
 
     int total_tests = realistic_configs.size();

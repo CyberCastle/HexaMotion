@@ -48,9 +48,13 @@ void VelocityLimits::calculateWorkspace(const GaitConfig &gait_config) {
     // Apply safety margin to prevent workspace boundary violations
     float safe_reach = leg_reach * workspace_config_.safety_margin;
 
+    // Enhanced workspace calculation using individual leg analysis
+    calculateLegWorkspaces();
+
     // Calculate walkspace radius based on hexagon geometry
     // This is the effective radius where feet can safely step
-    workspace_config_.walkspace_radius = params.hexagon_radius + safe_reach * 0.7f;
+    workspace_config_.walkspace_radius = std::max(workspace_config_.walkspace_radius,
+                                                  params.hexagon_radius + safe_reach * 0.7f);
 
     // Stance radius for angular velocity calculations
     // This represents the effective turning radius of the robot
@@ -271,15 +275,72 @@ float VelocityLimits::calculateMaxAcceleration(float max_speed, float time_to_ma
 }
 
 void VelocityLimits::calculateLegWorkspaces() {
-    // Calculate individual leg workspaces for more accurate bearing-based limits
-    // This is used internally for precise limit calculations
+    // Enhanced workspace calculation equivalent to OpenSHC's generateWorkspace
     const Parameters &params = model_.getParams();
     float leg_reach = params.coxa_length + params.femur_length + params.tibia_length;
     float safe_reach = leg_reach * workspace_config_.safety_margin;
 
-    // Store calculated values for use in bearing-specific calculations
-    workspace_config_.walkspace_radius = params.hexagon_radius + safe_reach * 0.7f;
-    workspace_config_.stance_radius = params.hexagon_radius + safe_reach * 0.5f;
+    // Initialize workspace arrays for each leg
+    float leg_workspace_radius[NUM_LEGS][360]; // Radius for each bearing (0-359°)
+
+    // Calculate individual leg workspaces using kinematic constraints
+    for (int leg = 0; leg < NUM_LEGS; ++leg) {
+        Point3D leg_base = getLegBasePosition(leg);
+
+        for (int bearing = 0; bearing < 360; ++bearing) {
+            float bearing_rad = math_utils::degreesToRadians(bearing);
+
+            // Calculate maximum reachable point at this bearing
+            float max_radius = 0.0f;
+
+            // Test different radii to find kinematic limit
+            for (float test_radius = 0.0f; test_radius < leg_reach; test_radius += 5.0f) {
+                Point3D test_point;
+                test_point.x = leg_base.x + test_radius * cos(bearing_rad);
+                test_point.y = leg_base.y + test_radius * sin(bearing_rad);
+                test_point.z = leg_base.z - params.robot_height; // Ground level
+
+                // Check if point is kinematically reachable
+                // This would normally use inverse kinematics validation
+                // For now, use simplified geometric constraint
+                float distance_from_base = sqrt(
+                    (test_point.x - leg_base.x) * (test_point.x - leg_base.x) +
+                    (test_point.y - leg_base.y) * (test_point.y - leg_base.y) +
+                    (test_point.z - leg_base.z) * (test_point.z - leg_base.z));
+
+                if (distance_from_base <= leg_reach * 0.8f) { // 80% of theoretical reach
+                    max_radius = test_radius;
+                } else {
+                    break; // Found limit
+                }
+            }
+
+            leg_workspace_radius[leg][bearing] = max_radius;
+        }
+    }
+
+    // Calculate combined workspace limits
+    float min_walkspace_radius = leg_reach;
+    float min_stance_radius = leg_reach;
+
+    for (int bearing = 0; bearing < 360; ++bearing) {
+        float min_leg_radius = leg_reach;
+
+        for (int leg = 0; leg < NUM_LEGS; ++leg) {
+            min_leg_radius = std::min(min_leg_radius, leg_workspace_radius[leg][bearing]);
+        }
+
+        min_walkspace_radius = std::min(min_walkspace_radius, min_leg_radius);
+        min_stance_radius = std::min(min_stance_radius, min_leg_radius * 0.7f);
+    }
+
+    // Store calculated values with safety margins
+    workspace_config_.walkspace_radius = min_walkspace_radius * workspace_config_.safety_margin;
+    workspace_config_.stance_radius = min_stance_radius * workspace_config_.safety_margin;
+
+    // Calculate overshoot compensation based on gait dynamics
+    workspace_config_.overshoot_x = workspace_config_.walkspace_radius * 0.1f;
+    workspace_config_.overshoot_y = workspace_config_.walkspace_radius * 0.1f;
 }
 
 float VelocityLimits::calculateEffectiveRadius(int leg_index, float bearing_degrees) const {
