@@ -5,13 +5,7 @@
 int main() {
     std::cout << "=== FINAL VALIDATION: METACHRONAL & ADAPTIVE GAIT FUNCTIONALITY ===" << std::endl;
 
-    Parameters p{};
-    p.hexagon_radius = 400;
-    p.coxa_length = 50;
-    p.femur_length = 101;
-    p.tibia_length = 208;
-    p.robot_height = 150;
-    p.control_frequency = 50;
+    Parameters p = createDefaultParameters();
 
     LocomotionSystem sys(p);
     DummyIMU imu;

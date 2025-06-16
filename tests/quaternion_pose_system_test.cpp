@@ -9,18 +9,7 @@ int main() {
     std::cout << "=== Test Quaternion-based Pose System ===" << std::endl;
 
     // Initialize test environment
-    Parameters params{};
-    params.hexagon_radius = 200;
-    params.coxa_length = 50;
-    params.femur_length = 100;
-    params.tibia_length = 150;
-    params.robot_height = 100;
-    params.coxa_angle_limits[0] = -90;
-    params.coxa_angle_limits[1] = 90;
-    params.femur_angle_limits[0] = -90;
-    params.femur_angle_limits[1] = 90;
-    params.tibia_angle_limits[0] = -90;
-    params.tibia_angle_limits[1] = 90;
+    Parameters params = createDefaultParameters();
 
     RobotModel model(params);
     DummyServo servos;
