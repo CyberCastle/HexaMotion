@@ -24,14 +24,11 @@
 // Constructor
 LocomotionSystem::LocomotionSystem(const Parameters &params)
     : params(params), imu_interface(nullptr), fsr_interface(nullptr), servo_interface(nullptr),
+      body_position(0.0f, 0.0f, params.robot_height), body_orientation(0.0f, 0.0f, 0.0f),
       current_gait(TRIPOD_GAIT), gait_phase(0.0f), step_height(30.0f), step_length(50.0f),
       stance_duration(0.5f), swing_duration(0.5f), cycle_frequency(2.0f),
       system_enabled(false), last_update_time(0), dt(0.02f), last_error(NO_ERROR),
-      model(params), pose_ctrl(nullptr), walk_ctrl(nullptr), admittance_ctrl(nullptr),
-      body_position(0.0f, 0.0f, params.robot_height) {
-
-    // Initialize body orientation
-    body_orientation = Eigen::Vector3f(0.0f, 0.0f, 0.0f);
+      model(params), pose_ctrl(nullptr), walk_ctrl(nullptr), admittance_ctrl(nullptr) {
 
     // Initialize leg states and phase offsets for tripod gait
     for (int i = 0; i < NUM_LEGS; i++) {
@@ -1483,14 +1480,18 @@ bool LocomotionSystem::updateSensorsParallel() {
     // Log timing information for optimization
     static unsigned long last_log_time = 0;
     if (millis() - last_log_time > 5000) { // Log every 5 seconds
+        last_log_time = millis();
+        // Log update timing for performance analysis
         Serial.print("Parallel sensor update time: ");
         Serial.print(update_time);
         Serial.print("µs, FSR: ");
         Serial.print(fsr_updated ? "OK" : "FAIL");
         Serial.print(", IMU: ");
         Serial.println(imu_updated ? "OK" : "FAIL");
-        last_log_time = millis();
     }
+#else
+    // Suppress unused variable warning when logging is disabled
+    (void)update_time;
 #endif
 
     // Validate both sensors updated successfully

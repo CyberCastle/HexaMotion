@@ -9,9 +9,9 @@
 #include <cmath>
 
 ManualPoseController::ManualPoseController(RobotModel &model)
-    : model_(model), current_mode_(POSE_TRANSLATION), interpolation_speed_(0.1f),
-      smooth_transitions_(true),
-      pose_limits_{Point3D(200.0f, 200.0f, 100.0f), Point3D(0.5f, 0.5f, 0.5f), 50.0f, 200.0f, 300.0f} {
+    : model_(model), current_mode_(POSE_TRANSLATION),
+      pose_limits_{Point3D(200.0f, 200.0f, 100.0f), Point3D(0.5f, 0.5f, 0.5f), 50.0f, 200.0f, 300.0f},
+      interpolation_speed_(0.1f), smooth_transitions_(true) {
 }
 
 void ManualPoseController::initialize() {
