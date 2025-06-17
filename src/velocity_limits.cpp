@@ -278,7 +278,7 @@ void VelocityLimits::calculateLegWorkspaces() {
     // Enhanced workspace calculation equivalent to OpenSHC's generateWorkspace
     const Parameters &params = model_.getParams();
     float leg_reach = params.coxa_length + params.femur_length + params.tibia_length;
-    // Note: safe_reach calculation is kept for future enhancement but currently unused
+    // TODO: safe_reach calculation is kept for future enhancement but currently unused
     // float safe_reach = leg_reach * workspace_config_.safety_margin;
 
     // Initialize workspace arrays for each leg
