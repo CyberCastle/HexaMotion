@@ -278,8 +278,8 @@ void VelocityLimits::calculateLegWorkspaces() {
     // Enhanced workspace calculation equivalent to OpenSHC's generateWorkspace
     const Parameters &params = model_.getParams();
     float leg_reach = params.coxa_length + params.femur_length + params.tibia_length;
-    // TODO: safe_reach calculation is kept for future enhancement but currently unused
-    // float safe_reach = leg_reach * workspace_config_.safety_margin;
+    // Apply safety margin to workspace calculations (equivalent to OpenSHC's safety factor)
+    float safe_reach = leg_reach * workspace_config_.safety_margin;
 
     // Initialize workspace arrays for each leg
     float leg_workspace_radius[NUM_LEGS][360]; // Radius for each bearing (0-359°)
@@ -309,7 +309,7 @@ void VelocityLimits::calculateLegWorkspaces() {
                     (test_point.y - leg_base.y) * (test_point.y - leg_base.y) +
                     (test_point.z - leg_base.z) * (test_point.z - leg_base.z));
 
-                if (distance_from_base <= leg_reach * 0.8f) { // 80% of theoretical reach
+                if (distance_from_base <= safe_reach) { // Use configurable safety margin
                     max_radius = test_radius;
                 } else {
                     break; // Found limit
