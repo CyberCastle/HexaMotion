@@ -174,11 +174,10 @@ bool StateController::initialize() {
     logDebug("Initializing StateController...");
 
     // Check if locomotion system is available
-    // Note: Commented out until isSystemEnabled is added to LocomotionSystem
-    // if (!locomotion_system_.isSystemEnabled()) {
-    //     setError("Locomotion system not enabled");
-    //     return false;
-    // }
+    if (!locomotion_system_.isSystemEnabled()) {
+        setError("Locomotion system not enabled");
+        return false;
+    }
 
     // Initialize timing
     last_update_time_ = millis();
