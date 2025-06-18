@@ -73,6 +73,52 @@ void loop() {
 }
 ```
 
+## 🔧 Servo Interface Changes
+
+HexaMotion now requires **simultaneous control of servo position and speed** for better motor control and smoother movement:
+
+### **New Combined Interface:**
+
+```cpp
+class MyServo : public IServoInterface {
+public:
+    bool initialize() override { return true; }
+
+    // NEW: Primary method - sets angle and speed together
+    bool setJointAngleAndSpeed(int leg_index, int joint_index, float angle, float speed) override {
+        // Your servo control code here
+        // angle: target position in degrees
+        // speed: movement speed (0.1-3.0, where 1.0 is normal speed)
+        return sendServoCommand(leg_index, joint_index, angle, speed);
+    }
+
+    float getJointAngle(int leg_index, int joint_index) override {
+        return readServoPosition(leg_index, joint_index);
+    }
+
+    bool isJointMoving(int leg_index, int joint_index) override { return false; }
+    bool enableTorque(int leg_index, int joint_index, bool enable) override { return true; }
+};
+```
+
+### **Key Changes:**
+
+-   **`setJointAngleAndSpeed()`** is now the **only** method for servo control
+-   **`setJointAngle()`** and **`setJointSpeed()`** have been **removed**
+-   Position and speed **must be set together** - no separate control
+-   Default servo speed can be configured in `Parameters::default_servo_speed`
+
+### **Migration Guide:**
+
+```cpp
+// OLD - separate calls (no longer available)
+servo->setJointAngle(leg, joint, 45.0f);
+servo->setJointSpeed(leg, joint, 1.5f);
+
+// NEW - combined call (required)
+servo->setJointAngleAndSpeed(leg, joint, 45.0f, 1.5f);
+```
+
 Make sure the joint limit arrays (`coxa_angle_limits`, `femur_angle_limits` and
 `tibia_angle_limits`) are populated with valid ranges before creating the
 `LocomotionSystem` instance. If these values remain at their defaults the system

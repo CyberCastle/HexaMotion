@@ -140,12 +140,14 @@ class ExampleServo : public IServoInterface {
 
     bool initialize() override { return true; }
 
-    bool setJointAngle(int leg_index, int joint_index, float angle) override {
+    bool setJointAngleAndSpeed(int leg_index, int joint_index, float angle, float speed) override {
         if (leg_index < 0 || leg_index >= NUM_LEGS)
             return false;
         if (joint_index < 0 || joint_index >= DOF_PER_LEG)
             return false;
         angles[leg_index][joint_index] = angle;
+        // Speed parameter is acknowledged but not used in this mock implementation
+        (void)speed;
         return true;
     }
 
@@ -157,7 +159,6 @@ class ExampleServo : public IServoInterface {
         return angles[leg_index][joint_index];
     }
 
-    bool setJointSpeed(int /*leg_index*/, int /*joint_index*/, float /*speed*/) override { return true; }
     bool isJointMoving(int /*leg_index*/, int /*joint_index*/) override { return false; }
     bool enableTorque(int /*leg_index*/, int /*joint_index*/, bool /*enable*/) override { return true; }
 

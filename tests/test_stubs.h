@@ -179,9 +179,8 @@ struct DummyFSR : IFSRInterface {
 
 struct DummyServo : IServoInterface {
     bool initialize() override { return true; }
-    bool setJointAngle(int, int, float) override { return true; }
+    bool setJointAngleAndSpeed(int, int, float, float) override { return true; }
     float getJointAngle(int, int) override { return 0.0f; }
-    bool setJointSpeed(int, int, float) override { return true; }
     bool isJointMoving(int, int) override { return false; }
     bool enableTorque(int, int, bool) override { return true; }
 };
@@ -218,16 +217,18 @@ struct ProgressiveServo : IServoInterface {
         return true;
     }
 
-    bool setJointAngle(int leg, int joint, float angle) override {
+    bool setJointAngleAndSpeed(int leg, int joint, float angle, float speed) override {
         if (leg >= 0 && leg < NUM_LEGS && joint >= 0 && joint < 3) {
             // Set new target angle
             target_angles[leg][joint] = angle;
 
-            // Move current angle progressively toward target (simulate servo movement)
+            // Use speed to adjust movement rate (simulate servo speed control)
             float diff = target_angles[leg][joint] - current_angles[leg][joint];
+            float movement_rate = 0.2f * speed;                             // Base rate scaled by speed parameter
+            movement_rate = std::max(0.05f, std::min(1.0f, movement_rate)); // Clamp to reasonable range
 
-            // Move 20% of the way to target each update, with some noise
-            current_angles[leg][joint] += diff * 0.2f + noise_dist(rng);
+            // Move toward target with speed-adjusted rate, plus some noise
+            current_angles[leg][joint] += diff * movement_rate + noise_dist(rng);
 
             return true;
         }
@@ -256,7 +257,6 @@ struct ProgressiveServo : IServoInterface {
         }
     }
 
-    bool setJointSpeed(int, int, float) override { return true; }
     bool isJointMoving(int, int) override { return false; }
     bool enableTorque(int, int, bool) override { return true; }
 };

@@ -21,9 +21,13 @@ bool PoseController::setBodyPose(const Eigen::Vector3f &position, const Eigen::V
             return false;
         joint_q[i] = angles;
         leg_pos[i] = new_leg_world;
-        if (servos)
-            for (int j = 0; j < DOF_PER_LEG; ++j)
-                servos->setJointAngle(i, j, j == 0 ? angles.coxa : (j == 1 ? angles.femur : angles.tibia));
+        if (servos) {
+            float speed = model.getParams().default_servo_speed;
+            for (int j = 0; j < DOF_PER_LEG; ++j) {
+                float angle = (j == 0 ? angles.coxa : (j == 1 ? angles.femur : angles.tibia));
+                servos->setJointAngleAndSpeed(i, j, angle, speed);
+            }
+        }
     }
     return true;
 }
@@ -42,10 +46,13 @@ bool PoseController::setLegPosition(int leg_index, const Point3D &position,
     leg_pos[leg_index] = model.forwardKinematics(leg_index, angles);
     joint_q[leg_index] = angles;
 
-    if (servos)
-        for (int j = 0; j < DOF_PER_LEG; ++j)
-            servos->setJointAngle(leg_index, j,
-                                  j == 0 ? angles.coxa : (j == 1 ? angles.femur : angles.tibia));
+    if (servos) {
+        float speed = model.getParams().default_servo_speed;
+        for (int j = 0; j < DOF_PER_LEG; ++j) {
+            float angle = (j == 0 ? angles.coxa : (j == 1 ? angles.femur : angles.tibia));
+            servos->setJointAngleAndSpeed(leg_index, j, angle, speed);
+        }
+    }
 
     return true;
 }

@@ -126,16 +126,23 @@ class MyFSR : public IFSRInterface {
 
 class MyServo : public IServoInterface {
   public:
-    bool moveServo(int leg_index, int joint_index, float angle) override {
-        // Send actual servo commands here
+    bool initialize() override { return true; }
+    bool setJointAngleAndSpeed(int leg_index, int joint_index, float angle, float speed) override {
+        // Send actual servo commands here with both angle and speed
+        (void)leg_index;
+        (void)joint_index;
+        (void)angle;
+        (void)speed;
         return true;
     }
-    float readServoPosition(int leg_index, int joint_index) override {
+    float getJointAngle(int leg_index, int joint_index) override {
         // Read actual servo positions here
+        (void)leg_index;
+        (void)joint_index;
         return 0.0f;
     }
-    bool enableTorque(int leg_index, int joint_index) override { return true; }
-    bool disableTorque(int leg_index, int joint_index) override { return true; }
+    bool isJointMoving(int leg_index, int joint_index) override { return false; }
+    bool enableTorque(int leg_index, int joint_index, bool enable) override { return true; }
 };
 
 // Global objects

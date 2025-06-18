@@ -215,9 +215,8 @@ class ExampleFSR : public IFSRInterface {
 class ExampleServo : public IServoInterface {
   public:
     bool initialize() override { return true; }
-    bool setJointAngle(int /*leg_index*/, int /*joint_index*/, float /*angle*/) override { return true; }
+    bool setJointAngleAndSpeed(int /*leg_index*/, int /*joint_index*/, float /*angle*/, float /*speed*/) override { return true; }
     float getJointAngle(int /*leg_index*/, int /*joint_index*/) override { return 0.0f; }
-    bool setJointSpeed(int /*leg_index*/, int /*joint_index*/, float /*speed*/) override { return true; }
     bool isJointMoving(int /*leg_index*/, int /*joint_index*/) override { return false; }
     bool enableTorque(int /*leg_index*/, int /*joint_index*/, bool /*enable*/) override { return true; }
 };

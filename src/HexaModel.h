@@ -39,6 +39,7 @@ struct Parameters {
     float max_angular_velocity;
     float stability_margin;
     float control_frequency;
+    float default_servo_speed = 1.0f; ///< Default servo movement speed (0.1-3.0, where 1.0 is normal speed)
 
     /**
      * @brief Inverse kinematics solver settings.
@@ -269,12 +270,21 @@ class IServoInterface {
     virtual ~IServoInterface() = default;
     /** Initialize servo communication. */
     virtual bool initialize() = 0;
-    /** Set a joint angle in degrees. */
-    virtual bool setJointAngle(int leg_index, int joint_index, float angle) = 0;
+
+    /**
+     * Set a joint's angular position and velocity simultaneously.
+     * This is the primary method for servo control - both parameters must be set together.
+     * @param leg_index Index of the leg (0-5)
+     * @param joint_index Index of the joint within leg (0-2: coxa, femur, tibia)
+     * @param angle Target angular position in degrees
+     * @param speed Movement velocity/speed for reaching the target position
+     * @return true if command was successfully sent to servo
+     */
+    virtual bool setJointAngleAndSpeed(int leg_index, int joint_index, float angle, float speed) = 0;
+
     /** Retrieve the current joint angle. */
     virtual float getJointAngle(int leg_index, int joint_index) = 0;
-    /** Set the servo speed. */
-    virtual bool setJointSpeed(int leg_index, int joint_index, float speed) = 0;
+
     /** Check if a joint is currently moving. */
     virtual bool isJointMoving(int leg_index, int joint_index) = 0;
     /** Enable or disable torque on a joint. */

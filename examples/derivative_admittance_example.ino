@@ -50,10 +50,16 @@ class MockFSR : public IFSRInterface {
 class MockServo : public IServoInterface {
   public:
     bool initialize() override { return true; }
-    void setJointAngle(int leg_index, int joint_index, float angle) override {}
+    bool setJointAngleAndSpeed(int leg_index, int joint_index, float angle, float speed) override {
+        (void)leg_index;
+        (void)joint_index;
+        (void)angle;
+        (void)speed;
+        return true;
+    }
     float getJointAngle(int leg_index, int joint_index) override { return 0.0f; }
-    void enableJoint(int leg_index, int joint_index, bool enable) override {}
-    bool isJointEnabled(int leg_index, int joint_index) override { return true; }
+    bool isJointMoving(int leg_index, int joint_index) override { return false; }
+    bool enableTorque(int leg_index, int joint_index, bool enable) override { return true; }
 };
 
 void setup() {

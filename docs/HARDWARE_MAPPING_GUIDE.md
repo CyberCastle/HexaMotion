@@ -223,7 +223,7 @@ public:
         return true;
     }
 
-    bool setJointAngle(int leg_index, int joint_index, float angle) override {
+    bool setJointAngleAndSpeed(int leg_index, int joint_index, float angle, float speed) override {
         if (leg_index < 0 || leg_index >= NUM_LEGS) return false;
         if (joint_index < 0 || joint_index >= DOF_PER_LEG) return false;
 
@@ -232,8 +232,15 @@ public:
         // Convert from library angles to servo angles
         float servo_angle = convertLibraryToServoAngle(leg_index, joint_index, angle);
 
+        // Apply speed control if servo supports it (e.g., Dynamixel servos)
+        // For standard hobby servos, speed parameter may be ignored
+        // Example for Dynamixel: setGoalPosition(servo_id, servo_angle); setMovingSpeed(servo_id, speed);
+
         servos[servo_id].write(servo_angle);
         current_angles[leg_index][joint_index] = angle;
+
+        // Store speed for potential use in advanced servo control
+        // current_speeds[leg_index][joint_index] = speed;
 
         return true;
     }

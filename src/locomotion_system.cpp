@@ -198,9 +198,10 @@ bool LocomotionSystem::setLegJointAngles(int leg, const JointAngles &q) {
         return false;
 
     joint_angles[leg] = clamped; // internal state
-    servo_interface->setJointAngle(leg, 0, clamped.coxa);
-    servo_interface->setJointAngle(leg, 1, clamped.femur);
-    servo_interface->setJointAngle(leg, 2, clamped.tibia);
+    float speed = params.default_servo_speed;
+    servo_interface->setJointAngleAndSpeed(leg, 0, clamped.coxa, speed);
+    servo_interface->setJointAngleAndSpeed(leg, 1, clamped.femur, speed);
+    servo_interface->setJointAngleAndSpeed(leg, 2, clamped.tibia, speed);
     return true;
 }
 
