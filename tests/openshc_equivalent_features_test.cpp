@@ -1,8 +1,8 @@
-#include "../include/admittance_controller.h"
-#include "../include/imu_auto_pose.h"
-#include "../include/manual_pose_controller.h"
-#include "../include/walk_controller.h"
-#include "../include/walkspace_analyzer.h"
+#include "../src/admittance_controller.h"
+#include "../src/imu_auto_pose.h"
+#include "../src/manual_pose_controller.h"
+#include "../src/walk_controller.h"
+#include "../src/walkspace_analyzer.h"
 #include "test_stubs.h"
 #include <cassert>
 #include <iostream>

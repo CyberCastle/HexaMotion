@@ -1,6 +1,6 @@
 #include <cassert>
 #include <iostream>
-#include "../include/math_utils.h"
+#include "../src/math_utils.h"
 
 int main() {
     using namespace math_utils;

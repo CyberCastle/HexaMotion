@@ -94,7 +94,7 @@ The `Parameters` structure defines the physical dimensions and control limits of
 -   Joint angle limits for coxa, femur and tibia.
 -   IMU and FSR calibration settings.
 -   Gait tuning factors and control frequency.
-    See `include/locomotion_system.h` for a detailed list.
+    See `src/locomotion_system.h` for a detailed list.
 
 ## Running tests
 

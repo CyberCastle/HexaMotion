@@ -1,9 +1,9 @@
-#include "../include/HexaModel.h"
-#include "../include/imu_auto_pose.h"
+#include "../src/HexaModel.h"
+#include "../src/imu_auto_pose.h"
 #include "../tests/test_stubs.h"
 
-#include "../include/HexaModel.h"
-#include "../include/imu_auto_pose.h"
+#include "../src/HexaModel.h"
+#include "../src/imu_auto_pose.h"
 #include "../tests/test_stubs.h"
 #include <iomanip>
 #include <iostream>

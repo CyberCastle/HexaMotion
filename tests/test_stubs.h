@@ -1,7 +1,7 @@
 #ifndef TEST_STUBS_H
 #define TEST_STUBS_H
 
-#include "../include/HexaModel.h"
+#include "../src/HexaModel.h"
 #include <cmath>
 #include <iostream>
 #include <random>

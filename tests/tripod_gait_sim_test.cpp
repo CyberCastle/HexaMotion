@@ -1,5 +1,5 @@
-#include "../include/locomotion_system.h"
-#include "../include/state_controller.h"
+#include "../src/locomotion_system.h"
+#include "../src/state_controller.h"
 #include "test_stubs.h"
 #include <cassert>
 #include <chrono>

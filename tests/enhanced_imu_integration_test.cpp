@@ -1,5 +1,5 @@
-#include "../include/locomotion_system.h"
-#include "../include/terrain_adaptation.h"
+#include "../src/locomotion_system.h"
+#include "../src/terrain_adaptation.h"
 #include "test_stubs.h"
 #include <iostream>
 

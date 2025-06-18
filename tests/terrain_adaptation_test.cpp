@@ -1,5 +1,5 @@
-#include "../include/terrain_adaptation.h"
-#include "../include/walk_controller.h"
+#include "../src/terrain_adaptation.h"
+#include "../src/walk_controller.h"
 #include "test_stubs.h"
 #include <cassert>
 #include <cmath>

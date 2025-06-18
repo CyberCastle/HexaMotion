@@ -1,4 +1,4 @@
-#include "../include/admittance_controller.h"
+#include "../src/admittance_controller.h"
 #include "test_stubs.h"
 #include <cassert>
 #include <iostream>
