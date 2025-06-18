@@ -1,6 +1,6 @@
 #include <iostream>
-#include "../include/math_utils.h"
-#include "../include/HexaModel.h"
+#include "../src/math_utils.h"
+#include "../src/HexaModel.h"
 
 int main() {
     std::cout << "=== Test isPointReachable Function ===" << std::endl;

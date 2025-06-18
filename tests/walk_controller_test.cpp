@@ -1,4 +1,4 @@
-#include "../include/walk_controller.h"
+#include "../src/walk_controller.h"
 #include "test_stubs.h"
 #include <cassert>
 #include <iostream>

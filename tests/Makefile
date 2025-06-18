@@ -5,7 +5,7 @@ EIGEN_PATH := $(shell brew --prefix eigen 2>/dev/null)/include/eigen3
 else
 EIGEN_PATH := /usr/include/eigen3
 endif
-CXXFLAGS=-I../include -I. -I$(EIGEN_PATH) -std=c++17
+CXXFLAGS=-I../src -I. -I$(EIGEN_PATH) -std=c++17
 
 SOURCES = ../src/math_utils.cpp ../src/robot_model.cpp ../src/pose_controller.cpp ../src/walk_controller.cpp ../src/terrain_adaptation.cpp ../src/admittance_controller.cpp ../src/velocity_limits.cpp ../src/manual_pose_controller.cpp ../src/state_controller.cpp ../src/locomotion_system.cpp
 

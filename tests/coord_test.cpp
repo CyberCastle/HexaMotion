@@ -1,5 +1,5 @@
 // Test to understand the coordinate system and fix IK
-#include "../include/locomotion_system.h"
+#include "../src/locomotion_system.h"
 #include "test_stubs.h"
 #include <cmath>
 #include <iostream>

@@ -1,4 +1,4 @@
-#include "../include/pose_controller.h"
+#include "../src/pose_controller.h"
 #include "test_stubs.h"
 #include <cassert>
 #include <iostream>

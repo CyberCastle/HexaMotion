@@ -1,9 +1,9 @@
-#include "../include/admittance_controller.h"
-#include "../include/imu_auto_pose.h"
-#include "../include/locomotion_system.h"
-#include "../include/manual_pose_controller.h"
-#include "../include/precision_config.h"
-#include "../include/state_controller.h"
+#include "../src/admittance_controller.h"
+#include "../src/imu_auto_pose.h"
+#include "../src/locomotion_system.h"
+#include "../src/manual_pose_controller.h"
+#include "../src/precision_config.h"
+#include "../src/state_controller.h"
 #include "test_stubs.h"
 #include <cassert>
 #include <chrono>
