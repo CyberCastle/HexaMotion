@@ -9,6 +9,11 @@
 #include <algorithm>
 #include <cmath>
 
+namespace {
+// File-scope empty state to avoid static local initialization
+static const AdmittanceController::LegAdmittanceState EMPTY_LEG_STATE;
+} // namespace
+
 AdmittanceController::AdmittanceController(RobotModel &model, IIMUInterface *imu, IFSRInterface *fsr,
                                            ComputeConfig config)
     : model_(model), imu_(imu), fsr_(fsr), config_(config),
@@ -104,11 +109,10 @@ void AdmittanceController::updateStiffness(const LegState leg_states[NUM_LEGS],
 }
 
 const AdmittanceController::LegAdmittanceState &AdmittanceController::getLegState(int leg_index) const {
-    static LegAdmittanceState empty_state;
     if (leg_index >= 0 && leg_index < NUM_LEGS) {
         return leg_states_[leg_index];
     }
-    return empty_state;
+    return EMPTY_LEG_STATE;
 }
 
 void AdmittanceController::resetLegDynamics(int leg_index) {
