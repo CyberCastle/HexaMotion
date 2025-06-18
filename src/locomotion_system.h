@@ -106,6 +106,12 @@ class LocomotionSystem {
     PoseController *pose_ctrl;
     WalkController *walk_ctrl;
     AdmittanceController *admittance_ctrl;
+    // FSR contact history for updateLegStates filtering
+    float fsr_contact_history[NUM_LEGS][3];
+    // Circular buffer index for FSR history
+    int fsr_history_index;
+    // Last log time for sensor update profiling
+    unsigned long last_sensor_log_time;
 
     Point3D transformWorldToBody(const Point3D &p_world) const;
     bool setLegJointAngles(int leg_index, const JointAngles &q);

@@ -8,6 +8,12 @@
 #include <algorithm>
 #include <cmath>
 
+namespace {
+// File-scope empty defaults to avoid static local initialization locks
+static const TerrainAdaptation::ExternalTarget EMPTY_EXTERNAL_TARGET;
+static const TerrainAdaptation::StepPlane EMPTY_STEP_PLANE;
+} // namespace
+
 TerrainAdaptation::TerrainAdaptation(RobotModel &model)
     : model_(model), rough_terrain_mode_(false), force_normal_touchdown_(false),
       gravity_aligned_tips_(false), touchdown_threshold_(10.0f), liftoff_threshold_(5.0f),
@@ -72,19 +78,17 @@ void TerrainAdaptation::setExternalDefault(int leg_index, const ExternalTarget &
 }
 
 const TerrainAdaptation::ExternalTarget &TerrainAdaptation::getExternalTarget(int leg_index) const {
-    static const ExternalTarget empty_target;
     if (leg_index >= 0 && leg_index < NUM_LEGS) {
         return external_targets_[leg_index];
     }
-    return empty_target;
+    return EMPTY_EXTERNAL_TARGET;
 }
 
 const TerrainAdaptation::StepPlane &TerrainAdaptation::getStepPlane(int leg_index) const {
-    static const StepPlane empty_plane;
     if (leg_index >= 0 && leg_index < NUM_LEGS) {
         return step_planes_[leg_index];
     }
-    return empty_plane;
+    return EMPTY_STEP_PLANE;
 }
 
 bool TerrainAdaptation::hasTouchdownDetection(int leg_index) const {

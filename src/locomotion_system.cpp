@@ -37,6 +37,13 @@ LocomotionSystem::LocomotionSystem(const Parameters &params)
         //              legs 2,4,6 (indices 1,3,5) = group B (phase 0.5)
         leg_phase_offsets[i] = (i % 2) * 0.5f;
     }
+    // Initialize FSR contact history buffer and index
+    fsr_history_index = -1;
+    for (int i = 0; i < NUM_LEGS; ++i)
+        for (int j = 0; j < 3; ++j)
+            fsr_contact_history[i][j] = 0.0f;
+    // Initialize sensor log timestamp to avoid static local in updateSensorsParallel
+    last_sensor_log_time = 0;
 
     initializeDefaultPose();
 }
@@ -433,8 +440,8 @@ void LocomotionSystem::calculateAdaptivePhaseOffsets() {
             3.0f / 6.0f, // BR: 0.500
             4.0f / 6.0f, // CR: 0.667
             1.0f / 6.0f, // CL: 0.167
-            0.0f / 6.0f, // BL: 0.000
-            5.0f / 6.0f  // AL: 0.833
+            0.0f / 6.0f, // BL: mult=0 -> 0.000
+            5.0f / 6.0f  // AL: mult=5 -> 0.833
         };
 
         float wave_factor = (0.3f - stability_index) / 0.3f; // 0-1 as stability decreases
@@ -995,20 +1002,18 @@ void LocomotionSystem::updateLegStates() {
     if (!fsr_interface)
         return;
 
-    static float contact_history[NUM_LEGS][3] = {{0}}; // 3-sample history for filtering
-    static int history_index = 0;
+    // Update circular buffer index for filtered contact history
+    fsr_history_index = (fsr_history_index + 1) % 3;
 
-    // Update circular buffer index
-    history_index = (history_index + 1) % 3;
-
+    // Iterate over each leg and filter FSR contact
     for (int i = 0; i < NUM_LEGS; ++i) {
         FSRData fsr = fsr_interface->readFSR(i);
 
-        // Store contact value in history (1.0 for contact, 0.0 for no contact)
-        contact_history[i][history_index] = fsr.in_contact ? 1.0f : 0.0f;
+        // Store contact value in instance history buffer (1.0 for contact, 0.0 for no contact)
+        fsr_contact_history[i][fsr_history_index] = fsr.in_contact ? 1.0f : 0.0f;
 
         // Calculate filtered contact using 3-sample average
-        float contact_average = (contact_history[i][0] + contact_history[i][1] + contact_history[i][2]) / 3.0f;
+        float contact_average = (fsr_contact_history[i][0] + fsr_contact_history[i][1] + fsr_contact_history[i][2]) / 3.0f;
 
         // Hysteresis thresholds to prevent chattering
         const float CONTACT_THRESHOLD = 0.7f; // Need 70% confidence for contact
@@ -1477,10 +1482,9 @@ bool LocomotionSystem::updateSensorsParallel() {
 #endif
 
 #if defined(ENABLE_LOG) && defined(ARDUINO)
-    // Log timing information for optimization
-    static unsigned long last_log_time = 0;
-    if (millis() - last_log_time > 5000) { // Log every 5 seconds
-        last_log_time = millis();
+    // Log every 5 seconds without static local variable
+    if (millis() - last_sensor_log_time > 5000) {
+        last_sensor_log_time = millis();
         // Log update timing for performance analysis
         Serial.print("Parallel sensor update time: ");
         Serial.print(update_time);

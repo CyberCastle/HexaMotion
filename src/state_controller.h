@@ -525,6 +525,15 @@ class StateController {
     // Error handling
     bool has_error_;
     String last_error_message_;
+    // Sequence execution state to avoid static locals
+    int startup_step_;
+    bool startup_transition_initialized_;
+    int startup_transition_step_count_;
+    int shutdown_step_;
+    bool shutdown_transition_initialized_;
+    int shutdown_transition_step_count_;
+    int pack_step_;
+    int unpack_step_;
 
     // Initialization flag
     bool is_initialized_;

@@ -134,7 +134,7 @@ String toArduinoString(const std::string &str) {
 // ==============================
 
 StateController::StateController(LocomotionSystem &locomotion, const StateMachineConfig &config)
-    : locomotion_system_(locomotion), config_(config), current_system_state_(SystemState::SYSTEM_SUSPENDED), current_robot_state_(RobotState::ROBOT_UNKNOWN), current_walk_state_(WalkState::WALK_STOPPED), current_posing_mode_(PosingMode::POSING_NONE), current_cruise_control_mode_(CruiseControlMode::CRUISE_CONTROL_OFF), current_pose_reset_mode_(PoseResetMode::POSE_RESET_NONE), desired_system_state_(SystemState::SYSTEM_SUSPENDED), desired_robot_state_(RobotState::ROBOT_UNKNOWN), manual_leg_count_(0), is_transitioning_(false), desired_linear_velocity_(Eigen::Vector2f::Zero()), desired_angular_velocity_(0.0f), desired_body_position_(Eigen::Vector3f::Zero()), desired_body_orientation_(Eigen::Vector3f::Zero()), cruise_velocity_(Eigen::Vector3f::Zero()), cruise_start_time_(0), cruise_end_time_(0), last_update_time_(0), dt_(0.02f), has_error_(false), is_initialized_(false) {
+    : locomotion_system_(locomotion), config_(config), current_system_state_(SystemState::SYSTEM_SUSPENDED), current_robot_state_(RobotState::ROBOT_UNKNOWN), current_walk_state_(WalkState::WALK_STOPPED), current_posing_mode_(PosingMode::POSING_NONE), current_cruise_control_mode_(CruiseControlMode::CRUISE_CONTROL_OFF), current_pose_reset_mode_(PoseResetMode::POSE_RESET_NONE), desired_system_state_(SystemState::SYSTEM_SUSPENDED), desired_robot_state_(RobotState::ROBOT_UNKNOWN), manual_leg_count_(0), is_transitioning_(false), desired_linear_velocity_(Eigen::Vector2f::Zero()), desired_angular_velocity_(0.0f), desired_body_position_(Eigen::Vector3f::Zero()), desired_body_orientation_(Eigen::Vector3f::Zero()), cruise_velocity_(Eigen::Vector3f::Zero()), cruise_start_time_(0), cruise_end_time_(0), last_update_time_(0), dt_(0.02f), has_error_(false), is_initialized_(false), startup_step_(0), startup_transition_initialized_(false), startup_transition_step_count_(4), shutdown_step_(0), shutdown_transition_initialized_(false), shutdown_transition_step_count_(3), pack_step_(0), unpack_step_(0) {
 
     // Initialize leg states
     for (int i = 0; i < NUM_LEGS; i++) {
@@ -1055,35 +1055,31 @@ void StateController::applyPoseReset() {
  * @return int Progress percentage (0-100), 100 indicates completion
  */
 int StateController::executeStartupSequence() {
-    // Enhanced startup sequence following OpenSHC patterns
-    static int startup_step = 0;
-    static bool transition_initialized = false;
-    static int transition_step_count = 4; // More steps for safer transition
-
-    if (!transition_initialized) {
-        // Initialize comprehensive startup sequence
-        transition_progress_.total_steps = transition_step_count;
-        transition_initialized = true;
-        startup_step = 0;
+    // Enhanced startup sequence following OpenSHC patterns using instance members
+    if (!startup_transition_initialized_) {
+        transition_progress_.total_steps = startup_transition_step_count_;
+        startup_transition_initialized_ = true;
+        startup_step_ = 0;
     }
 
-    switch (startup_step) {
+    // Execute sequence based on startup_step_
+    switch (startup_step_) {
     case 0:
         // Step 1: Initialize ready stance
-        startup_step = 1;
+        startup_step_ = 1;
         transition_progress_.current_step = 1;
         return 25;
 
     case 1:
         // Step 2: Move to intermediate position (safer transition)
         // Use locomotion system to transition to higher stance
-        startup_step = 2;
+        startup_step_ = 2;
         transition_progress_.current_step = 2;
         return 50;
 
     case 2:
         // Step 3: Move to walking height
-        startup_step = 3;
+        startup_step_ = 3;
         transition_progress_.current_step = 3;
         return 75;
 
@@ -1091,9 +1087,9 @@ int StateController::executeStartupSequence() {
         // Step 4: Finalize walking stance and enable locomotion
         if (locomotion_system_.setStandingPose()) {
             // Update default configuration for walking
-            startup_step = 0; // Reset for next time
-            transition_initialized = false;
-            transition_progress_.current_step = transition_step_count;
+            startup_step_ = 0; // Reset for next time
+            startup_transition_initialized_ = false;
+            transition_progress_.current_step = startup_transition_step_count_;
             transition_progress_.is_complete = true;
             return 100;
         }
@@ -1114,52 +1110,41 @@ int StateController::executeStartupSequence() {
  * @return int Progress percentage (0-100), 100 indicates completion
  */
 int StateController::executeShutdownSequence() {
-    // Enhanced shutdown sequence following OpenSHC patterns
-    static int shutdown_step = 0;
-    static bool transition_initialized = false;
-    static int transition_step_count = 3;
-
-    if (!transition_initialized) {
+    // Enhanced shutdown sequence following OpenSHC patterns using instance members
+    if (!shutdown_transition_initialized_) {
         // Ensure walking has stopped before shutdown
         if (current_walk_state_ != WALK_STOPPED) {
-            // Force stop walking first
             desired_linear_velocity_.setZero();
             desired_angular_velocity_ = 0.0f;
             return 10; // Stay in shutdown but indicate progress
         }
-
-        transition_progress_.total_steps = transition_step_count;
-        transition_initialized = true;
-        shutdown_step = 0;
+        transition_progress_.total_steps = shutdown_transition_step_count_;
+        shutdown_transition_initialized_ = true;
+        shutdown_step_ = 0;
     }
 
-    switch (shutdown_step) {
+    switch (shutdown_step_) {
     case 0:
         // Step 1: Return any manually controlled legs to automatic control
         if (manual_leg_count_ > 0) {
-            // Reset manual leg states - simplified implementation
             manual_leg_count_ = 0;
-            shutdown_step = 1;
-            transition_progress_.current_step = 1;
-            return 33;
-        } else {
-            shutdown_step = 1;
-            transition_progress_.current_step = 1;
-            return 33;
         }
+        shutdown_step_ = 1;
+        transition_progress_.current_step = 1;
+        return 33;
 
     case 1:
         // Step 2: Transition to ready height (higher than walking height)
-        shutdown_step = 2;
+        shutdown_step_ = 2;
         transition_progress_.current_step = 2;
         return 66;
 
     case 2:
         // Step 3: Finalize ready position
         if (locomotion_system_.setStandingPose()) {
-            shutdown_step = 0; // Reset for next time
-            transition_initialized = false;
-            transition_progress_.current_step = transition_step_count;
+            shutdown_step_ = 0; // Reset for next time
+            shutdown_transition_initialized_ = false;
+            transition_progress_.current_step = shutdown_transition_step_count_;
             transition_progress_.is_complete = true;
             return 100;
         }
@@ -1171,18 +1156,16 @@ int StateController::executeShutdownSequence() {
 }
 
 int StateController::executePackSequence() {
-    // Simplified pack sequence
-    static int pack_step = 0;
-
-    if (pack_step == 0) {
+    // Simplified pack sequence using instance member
+    if (pack_step_ == 0) {
         transition_progress_.total_steps = 2;
-        pack_step = 1;
+        pack_step_ = 1;
         transition_progress_.current_step = 1;
         return 50;
-    } else if (pack_step == 1) {
+    } else if (pack_step_ == 1) {
         // Move to packed position (crouch pose as approximation)
         if (locomotion_system_.setCrouchPose()) {
-            pack_step = 0; // Reset for next time
+            pack_step_ = 0; // Reset for next time
             transition_progress_.current_step = 2;
             transition_progress_.is_complete = true;
             return 100;
@@ -1192,18 +1175,16 @@ int StateController::executePackSequence() {
 }
 
 int StateController::executeUnpackSequence() {
-    // Simplified unpack sequence
-    static int unpack_step = 0;
-
-    if (unpack_step == 0) {
+    // Simplified unpack sequence using instance member
+    if (unpack_step_ == 0) {
         transition_progress_.total_steps = 2;
-        unpack_step = 1;
+        unpack_step_ = 1;
         transition_progress_.current_step = 1;
         return 50;
-    } else if (unpack_step == 1) {
+    } else if (unpack_step_ == 1) {
         // Move to ready position
         if (locomotion_system_.setStandingPose()) {
-            unpack_step = 0; // Reset for next time
+            unpack_step_ = 0; // Reset for next time
             transition_progress_.current_step = 2;
             transition_progress_.is_complete = true;
             return 100;
