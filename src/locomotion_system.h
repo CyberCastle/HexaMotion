@@ -271,6 +271,18 @@ class LocomotionSystem {
     /** Configure step height and length. */
     bool setStepParameters(float height, float length);
 
+    // Smooth trajectory configuration (OpenSHC-style movement)
+    /** Configure smooth trajectory interpolation from current servo positions. */
+    bool configureSmoothMovement(bool enable = true, float interpolation_speed = 0.1f, uint8_t max_steps = 20);
+    /** Set body pose using smooth trajectory interpolation (default behavior). */
+    bool setBodyPoseSmooth(const Eigen::Vector3f &position, const Eigen::Vector3f &orientation);
+    /** Set body pose immediately without smooth interpolation (legacy behavior). */
+    bool setBodyPoseImmediate(const Eigen::Vector3f &position, const Eigen::Vector3f &orientation);
+    /** Check if smooth trajectory interpolation is currently active. */
+    bool isSmoothMovementInProgress() const;
+    /** Reset/stop current smooth trajectory interpolation. */
+    void resetSmoothMovement();
+
     // Diagnostics
     /** Execute a basic hardware self-test. */
     bool performSelfTest();

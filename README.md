@@ -9,12 +9,39 @@ The robot body forms a hexagon, so each coxa joint is mounted at a 60° interval
 
 ## Features
 
+-   **Smooth Trajectory Interpolation**: OpenSHC-style movement using current servo positions as starting points for natural, smooth robot motion.
 -   Inverse kinematics using DH parameters and Jacobians.
 -   Pose and orientation control via IMU feedback.
 -   Multiple gait planner with tripod, wave, ripple and metachronal options.
 -   FSR input for contact detection.
 -   Smart servo interface for precise joint control.
 -   Error reporting and self tests.
+
+## 🚀 New: Smooth Movement Feature
+
+HexaMotion now includes **smooth trajectory interpolation** that uses current servo positions as starting points for pose changes, similar to OpenSHC's approach. This provides:
+
+-   **Natural movement**: Smooth transitions instead of sudden position jumps
+-   **Current position awareness**: Trajectories start from actual servo positions
+-   **Configurable smoothness**: Adjustable interpolation speed and precision
+-   **Backward compatibility**: Existing code works with improved behavior
+
+### Quick Start with Smooth Movement
+
+```cpp
+// Configure smooth trajectory parameters
+params.smooth_trajectory.use_current_servo_positions = true;  // Enable feature
+params.smooth_trajectory.interpolation_speed = 0.15f;        // Smooth speed
+params.smooth_trajectory.max_interpolation_steps = 20;       // Precision
+
+// Standard pose changes now use smooth trajectories automatically
+locomotion_system.setBodyPose(new_position, new_orientation);
+
+// Or configure at runtime
+locomotion_system.configureSmoothMovement(true, 0.2f, 25);
+```
+
+See [Smooth Movement Guide](docs/SMOOTH_MOVEMENT_GUIDE.md) for complete documentation.
 
 ## Prerequisites
 

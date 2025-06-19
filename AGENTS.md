@@ -6,6 +6,15 @@ This file defines the guidelines for contributing to HexaMotion.
 
 This library provides locomotion control for a hexapod robot based on the Arduino Giga R1. The robot body forms a hexagon with legs spaced 60° apart, each leg having three joints for 3DOF. It includes inverse kinematics using DH parameters and Jacobians, orientation and pose control, gait planning and error handling. The interfaces `IIMUInterface`, `IFSRInterface` and `IServoInterface` must be implemented to connect the IMU, FSR sensors and smart servos.
 
+**New Feature**: HexaMotion now includes **smooth trajectory interpolation** that uses current servo positions as starting points for pose calculations, equivalent to OpenSHC's smooth movement approach. This is the default behavior and provides natural, smooth robot movements that optimize from the current state rather than theoretical positions.
+
+## Key Features
+
+-   **Smooth Movement System**: Uses current servo positions as trajectory starting points (OpenSHC-style)
+-   **Configurable Interpolation**: Adjustable speed and precision for different use cases
+-   **Backward Compatibility**: Original immediate movement behavior available when needed
+-   **Automatic Optimization**: Movements are inherently smooth and natural by default
+
 ## Code Style
 
 -   Use C++17.

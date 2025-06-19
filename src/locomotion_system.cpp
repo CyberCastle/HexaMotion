@@ -777,6 +777,65 @@ bool LocomotionSystem::setCrouchPose() {
     return pose_ctrl->setCrouchPose(leg_positions, joint_angles, params.robot_height);
 }
 
+// Smooth trajectory configuration methods (OpenSHC-style movement)
+bool LocomotionSystem::configureSmoothMovement(bool enable, float interpolation_speed, uint8_t max_steps) {
+    if (!pose_ctrl)
+        return false;
+
+    // Configure the pose controller's smooth trajectory settings
+    pose_ctrl->configureSmoothTrajectory(enable, interpolation_speed, max_steps);
+    return true;
+}
+
+bool LocomotionSystem::setBodyPoseSmooth(const Eigen::Vector3f &position, const Eigen::Vector3f &orientation) {
+    if (!system_enabled || !pose_ctrl)
+        return false;
+
+    // Use the smooth trajectory method explicitly
+    if (!pose_ctrl->setBodyPoseSmooth(position, orientation, leg_positions, joint_angles)) {
+        last_error = KINEMATICS_ERROR;
+        return false;
+    }
+
+    body_position = position;
+    body_orientation = orientation;
+
+    // Reproject standing feet to maintain contact during pose changes
+    reprojectStandingFeet();
+
+    return true;
+}
+
+bool LocomotionSystem::setBodyPoseImmediate(const Eigen::Vector3f &position, const Eigen::Vector3f &orientation) {
+    if (!system_enabled || !pose_ctrl)
+        return false;
+
+    // Use the immediate (non-smooth) method for compatibility
+    if (!pose_ctrl->setBodyPoseImmediate(position, orientation, leg_positions, joint_angles)) {
+        last_error = KINEMATICS_ERROR;
+        return false;
+    }
+
+    body_position = position;
+    body_orientation = orientation;
+
+    // Reproject standing feet to maintain contact during pose changes
+    reprojectStandingFeet();
+
+    return true;
+}
+
+bool LocomotionSystem::isSmoothMovementInProgress() const {
+    if (!pose_ctrl)
+        return false;
+    return pose_ctrl->isTrajectoryInProgress();
+}
+
+void LocomotionSystem::resetSmoothMovement() {
+    if (pose_ctrl)
+        pose_ctrl->resetTrajectory();
+}
+
 // Main system update
 bool LocomotionSystem::update() {
     if (!system_enabled)
