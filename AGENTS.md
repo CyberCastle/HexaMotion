@@ -11,7 +11,7 @@ This library provides locomotion control for a hexapod robot based on the Arduin
 -   Use C++17.
 -   Four-space indentation with no tabs.
 -   Place the opening brace on the same line as the declaration.
--   Document public functions using Doxygen-style comments (`/** ... */`).
+-   Document public functions using Doxygen-style comments (`/** ... */`) and in English.
 
 ## Development
 
