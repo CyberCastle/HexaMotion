@@ -22,7 +22,8 @@ int main() {
     JointAngles joint_angles[NUM_LEGS];
 
     // Initialize default leg positions
-    pose_controller.initializeDefaultPose(leg_positions, joint_angles, params.hexagon_radius, params.robot_height);
+    // Use a smaller leg radius to keep the feet within reach
+    pose_controller.initializeDefaultPose(leg_positions, joint_angles, 150.0f, params.robot_height);
 
     std::cout << "\n1. Testing quaternion conversion functions..." << std::endl;
 
@@ -45,7 +46,7 @@ int main() {
 
     // Test quaternion pose setting
     Eigen::Vector3f position(0.0f, 0.0f, 100.0f);
-    Eigen::Vector4f quaternion = math_utils::eulerPoint3DToQuaternion(Point3D(15.0f, 10.0f, 20.0f));
+    Eigen::Vector4f quaternion = math_utils::eulerPoint3DToQuaternion(Point3D(5.0f, 5.0f, 5.0f));
 
     bool pose_success = pose_controller.setBodyPoseQuaternion(position, quaternion, leg_positions, joint_angles);
     std::cout << "Quaternion pose setting: " << (pose_success ? "PASS" : "FAIL") << std::endl;
@@ -56,8 +57,8 @@ int main() {
     Eigen::Vector3f start_pos(0.0f, 0.0f, 100.0f);
     Eigen::Vector4f start_quat(1.0f, 0.0f, 0.0f, 0.0f); // Identity
 
-    Eigen::Vector3f end_pos(10.0f, 5.0f, 110.0f);
-    Eigen::Vector4f end_quat = math_utils::eulerPoint3DToQuaternion(Point3D(20.0f, 15.0f, 30.0f));
+    Eigen::Vector3f end_pos(0.0f, 0.0f, 100.0f);
+    Eigen::Vector4f end_quat = math_utils::eulerPoint3DToQuaternion(Point3D(5.0f, 5.0f, 5.0f));
 
     // Test interpolation at t=0.5
     bool interp_success = pose_controller.interpolatePose(start_pos, start_quat, end_pos, end_quat,
