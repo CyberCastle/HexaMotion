@@ -26,31 +26,31 @@ walk_controller_test: walk_controller_test.cpp ../src/walk_controller.cpp ../src
 admittance_controller_test: admittance_controller_test.cpp ../src/admittance_controller.cpp ../src/robot_model.cpp ../src/math_utils.cpp
 	$(CXX) $(CXXFLAGS) $^ -o $@
 
-locomotion_system_test: locomotion_system_test.cpp ../src/locomotion_system.cpp ../src/robot_model.cpp ../src/pose_controller.cpp ../src/walk_controller.cpp ../src/terrain_adaptation.cpp ../src/admittance_controller.cpp ../src/velocity_limits.cpp ../src/math_utils.cpp
+locomotion_system_test: locomotion_system_test.cpp ../src/locomotion_system.cpp ../src/robot_model.cpp ../src/pose_controller.cpp ../src/walk_controller.cpp ../src/terrain_adaptation.cpp ../src/admittance_controller.cpp ../src/velocity_limits.cpp ../src/cartesian_velocity_controller.cpp ../src/math_utils.cpp
 	$(CXX) $(CXXFLAGS) $^ -o $@
 
-state_controller_test: state_controller_test.cpp ../src/state_controller.cpp ../src/locomotion_system.cpp ../src/robot_model.cpp ../src/pose_controller.cpp ../src/walk_controller.cpp ../src/terrain_adaptation.cpp ../src/admittance_controller.cpp ../src/velocity_limits.cpp ../src/math_utils.cpp
+state_controller_test: state_controller_test.cpp ../src/state_controller.cpp ../src/locomotion_system.cpp ../src/robot_model.cpp ../src/pose_controller.cpp ../src/walk_controller.cpp ../src/terrain_adaptation.cpp ../src/admittance_controller.cpp ../src/velocity_limits.cpp ../src/cartesian_velocity_controller.cpp ../src/math_utils.cpp
 	$(CXX) $(CXXFLAGS) $^ -o $@
 
-tripod_gait_sim_test: tripod_gait_sim_test.cpp ../src/state_controller.cpp ../src/locomotion_system.cpp ../src/robot_model.cpp ../src/pose_controller.cpp ../src/walk_controller.cpp ../src/terrain_adaptation.cpp ../src/admittance_controller.cpp ../src/velocity_limits.cpp ../src/math_utils.cpp
+tripod_gait_sim_test: tripod_gait_sim_test.cpp ../src/state_controller.cpp ../src/locomotion_system.cpp ../src/robot_model.cpp ../src/pose_controller.cpp ../src/walk_controller.cpp ../src/terrain_adaptation.cpp ../src/admittance_controller.cpp ../src/velocity_limits.cpp ../src/cartesian_velocity_controller.cpp ../src/math_utils.cpp
 	$(CXX) $(CXXFLAGS) $^ -o $@
 
-ik_debug_test: ik_debug_test.cpp ../src/locomotion_system.cpp ../src/robot_model.cpp ../src/pose_controller.cpp ../src/walk_controller.cpp ../src/terrain_adaptation.cpp ../src/admittance_controller.cpp ../src/velocity_limits.cpp ../src/math_utils.cpp
+ik_debug_test: ik_debug_test.cpp ../src/locomotion_system.cpp ../src/robot_model.cpp ../src/pose_controller.cpp ../src/walk_controller.cpp ../src/terrain_adaptation.cpp ../src/admittance_controller.cpp ../src/velocity_limits.cpp ../src/cartesian_velocity_controller.cpp ../src/math_utils.cpp
 	$(CXX) $(CXXFLAGS) $^ -o $@
 
 height_range_test: height_range_test.cpp ../src/robot_model.cpp ../src/math_utils.cpp
 	$(CXX) $(CXXFLAGS) $^ -o $@
 
-geometry_test: geometry_test.cpp ../src/locomotion_system.cpp ../src/robot_model.cpp ../src/pose_controller.cpp ../src/walk_controller.cpp ../src/terrain_adaptation.cpp ../src/admittance_controller.cpp ../src/velocity_limits.cpp ../src/math_utils.cpp
+geometry_test: geometry_test.cpp ../src/locomotion_system.cpp ../src/robot_model.cpp ../src/pose_controller.cpp ../src/walk_controller.cpp ../src/terrain_adaptation.cpp ../src/admittance_controller.cpp ../src/velocity_limits.cpp ../src/cartesian_velocity_controller.cpp ../src/math_utils.cpp
 	$(CXX) $(CXXFLAGS) $^ -o $@
 
-ik_analytical_fix: ik_analytical_fix.cpp ../src/locomotion_system.cpp ../src/robot_model.cpp ../src/pose_controller.cpp ../src/walk_controller.cpp ../src/terrain_adaptation.cpp ../src/admittance_controller.cpp ../src/velocity_limits.cpp ../src/math_utils.cpp
+ik_analytical_fix: ik_analytical_fix.cpp ../src/locomotion_system.cpp ../src/robot_model.cpp ../src/pose_controller.cpp ../src/walk_controller.cpp ../src/terrain_adaptation.cpp ../src/admittance_controller.cpp ../src/velocity_limits.cpp ../src/cartesian_velocity_controller.cpp ../src/math_utils.cpp
 	$(CXX) $(CXXFLAGS) $^ -o $@
 
-ik_coordinate_test: ik_coordinate_test.cpp ../src/locomotion_system.cpp ../src/robot_model.cpp ../src/pose_controller.cpp ../src/walk_controller.cpp ../src/terrain_adaptation.cpp ../src/admittance_controller.cpp ../src/velocity_limits.cpp ../src/math_utils.cpp
+ik_coordinate_test: ik_coordinate_test.cpp ../src/locomotion_system.cpp ../src/robot_model.cpp ../src/pose_controller.cpp ../src/walk_controller.cpp ../src/terrain_adaptation.cpp ../src/admittance_controller.cpp ../src/velocity_limits.cpp ../src/cartesian_velocity_controller.cpp ../src/math_utils.cpp
 	$(CXX) $(CXXFLAGS) $^ -o $@
 
-coord_test: coord_test.cpp ../src/locomotion_system.cpp ../src/robot_model.cpp ../src/pose_controller.cpp ../src/walk_controller.cpp ../src/terrain_adaptation.cpp ../src/admittance_controller.cpp ../src/velocity_limits.cpp ../src/math_utils.cpp
+coord_test: coord_test.cpp ../src/locomotion_system.cpp ../src/robot_model.cpp ../src/pose_controller.cpp ../src/walk_controller.cpp ../src/terrain_adaptation.cpp ../src/admittance_controller.cpp ../src/velocity_limits.cpp ../src/cartesian_velocity_controller.cpp ../src/math_utils.cpp
 	$(CXX) $(CXXFLAGS) $^ -o $@
 
 joint_test: joint_test.cpp ../src/robot_model.cpp ../src/math_utils.cpp
@@ -92,19 +92,19 @@ terrain_adaptation_test: terrain_adaptation_test.cpp ../src/terrain_adaptation.c
 velocity_limits_test: velocity_limits_test.cpp ../src/velocity_limits.cpp ../src/walk_controller.cpp ../src/terrain_adaptation.cpp ../src/robot_model.cpp ../src/math_utils.cpp
 	$(CXX) $(CXXFLAGS) $^ -o $@
 
-state_controller_runtime_test: state_controller_runtime_test.cpp ../src/state_controller.cpp ../src/locomotion_system.cpp ../src/robot_model.cpp ../src/pose_controller.cpp ../src/walk_controller.cpp ../src/terrain_adaptation.cpp ../src/admittance_controller.cpp ../src/velocity_limits.cpp ../src/math_utils.cpp
+state_controller_runtime_test: state_controller_runtime_test.cpp ../src/state_controller.cpp ../src/locomotion_system.cpp ../src/robot_model.cpp ../src/pose_controller.cpp ../src/walk_controller.cpp ../src/terrain_adaptation.cpp ../src/admittance_controller.cpp ../src/velocity_limits.cpp ../src/cartesian_velocity_controller.cpp ../src/math_utils.cpp
 	$(CXX) $(CXXFLAGS) $^ -o $@
 
 openshc_equivalent_features_test: openshc_equivalent_features_test.cpp ../src/walkspace_analyzer.cpp ../src/manual_pose_controller.cpp ../src/admittance_controller.cpp ../src/imu_auto_pose.cpp ../src/walk_controller.cpp ../src/terrain_adaptation.cpp ../src/robot_model.cpp ../src/velocity_limits.cpp ../src/math_utils.cpp
 	$(CXX) $(CXXFLAGS) $^ -o $@
 
-full_feature_sim_test: full_feature_sim_test.cpp ../src/state_controller.cpp ../src/locomotion_system.cpp ../src/robot_model.cpp ../src/pose_controller.cpp ../src/walk_controller.cpp ../src/terrain_adaptation.cpp ../src/admittance_controller.cpp ../src/velocity_limits.cpp ../src/manual_pose_controller.cpp ../src/imu_auto_pose.cpp ../src/walkspace_analyzer.cpp ../src/math_utils.cpp
+full_feature_sim_test: full_feature_sim_test.cpp ../src/state_controller.cpp ../src/locomotion_system.cpp ../src/robot_model.cpp ../src/pose_controller.cpp ../src/walk_controller.cpp ../src/terrain_adaptation.cpp ../src/admittance_controller.cpp ../src/velocity_limits.cpp ../src/manual_pose_controller.cpp ../src/imu_auto_pose.cpp ../src/walkspace_analyzer.cpp ../src/cartesian_velocity_controller.cpp ../src/math_utils.cpp
 	$(CXX) $(CXXFLAGS) $^ -o $@
 
-test_metachronal_adaptive_gaits: test_metachronal_adaptive_gaits.cpp ../src/locomotion_system.cpp ../src/robot_model.cpp ../src/pose_controller.cpp ../src/walk_controller.cpp ../src/terrain_adaptation.cpp ../src/admittance_controller.cpp ../src/velocity_limits.cpp ../src/math_utils.cpp
+test_metachronal_adaptive_gaits: test_metachronal_adaptive_gaits.cpp ../src/locomotion_system.cpp ../src/robot_model.cpp ../src/pose_controller.cpp ../src/walk_controller.cpp ../src/terrain_adaptation.cpp ../src/admittance_controller.cpp ../src/velocity_limits.cpp ../src/cartesian_velocity_controller.cpp ../src/math_utils.cpp
 	$(CXX) $(CXXFLAGS) $^ -o $@
 
-final_validation_test: final_validation_test.cpp ../src/locomotion_system.cpp ../src/robot_model.cpp ../src/pose_controller.cpp ../src/walk_controller.cpp ../src/terrain_adaptation.cpp ../src/admittance_controller.cpp ../src/velocity_limits.cpp ../src/math_utils.cpp
+final_validation_test: final_validation_test.cpp ../src/locomotion_system.cpp ../src/robot_model.cpp ../src/pose_controller.cpp ../src/walk_controller.cpp ../src/terrain_adaptation.cpp ../src/admittance_controller.cpp ../src/velocity_limits.cpp ../src/cartesian_velocity_controller.cpp ../src/math_utils.cpp
 	$(CXX) $(CXXFLAGS) $^ -o $@
 
 quaternion_pose_system_test: quaternion_pose_system_test.cpp ../src/pose_controller.cpp ../src/manual_pose_controller.cpp ../src/robot_model.cpp ../src/math_utils.cpp
@@ -122,7 +122,7 @@ cruise_control_comprehensive_test: cruise_control_comprehensive_test.cpp $(SOURC
 absolute_positioning_compile_test: absolute_positioning_compile_test.cpp ../src/imu_auto_pose.cpp ../src/robot_model.cpp ../src/manual_pose_controller.cpp ../src/pose_controller.cpp ../src/math_utils.cpp
 	$(CXX) $(CXXFLAGS) $^ -o $@
 
-enhanced_imu_integration_test: enhanced_imu_integration_test.cpp ../src/terrain_adaptation.cpp ../src/locomotion_system.cpp ../src/robot_model.cpp ../src/pose_controller.cpp ../src/walk_controller.cpp ../src/admittance_controller.cpp ../src/velocity_limits.cpp ../src/math_utils.cpp
+enhanced_imu_integration_test: enhanced_imu_integration_test.cpp ../src/terrain_adaptation.cpp ../src/locomotion_system.cpp ../src/robot_model.cpp ../src/pose_controller.cpp ../src/walk_controller.cpp ../src/admittance_controller.cpp ../src/velocity_limits.cpp ../src/cartesian_velocity_controller.cpp ../src/math_utils.cpp
 	$(CXX) $(CXXFLAGS) $^ -o $@
 
 admittance_derivatives_test: admittance_derivatives_test.cpp ../src/admittance_controller.cpp ../src/robot_model.cpp ../src/math_utils.cpp
