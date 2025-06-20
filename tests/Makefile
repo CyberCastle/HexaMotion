@@ -9,7 +9,7 @@ CXXFLAGS=-I../src -I. -I$(EIGEN_PATH) -std=c++17
 
 SOURCES = ../src/math_utils.cpp ../src/robot_model.cpp ../src/pose_controller.cpp ../src/walk_controller.cpp ../src/terrain_adaptation.cpp ../src/admittance_controller.cpp ../src/velocity_limits.cpp ../src/manual_pose_controller.cpp ../src/state_controller.cpp ../src/locomotion_system.cpp
 
-all: math_utils_test model_test pose_controller_test walk_controller_test admittance_controller_test locomotion_system_test state_controller_test cruise_control_comprehensive_test tripod_gait_sim_test ik_debug_test height_range_test geometry_test ik_analytical_fix ik_coordinate_test coord_test joint_test ik_debug_detailed dls_validation_test ik_debug_analysis workspace_analysis actual_workspace_test comprehensive_ik_test angle_range_test edge_case_analysis angle_normalization_test terrain_adaptation_test velocity_limits_test state_controller_runtime_test openshc_equivalent_features_test full_feature_sim_test test_metachronal_adaptive_gaits final_validation_test quaternion_pose_system_test pose_control_comprehensive_test pose_control_equivalence_test absolute_positioning_compile_test admittance_derivatives_test
+all: math_utils_test model_test pose_controller_test walk_controller_test admittance_controller_test locomotion_system_test state_controller_test cruise_control_comprehensive_test tripod_gait_sim_test ik_debug_test height_range_test geometry_test ik_analytical_fix ik_coordinate_test coord_test joint_test ik_debug_detailed dls_validation_test ik_debug_analysis workspace_analysis actual_workspace_test comprehensive_ik_test angle_range_test edge_case_analysis angle_normalization_test terrain_adaptation_test velocity_limits_test state_controller_runtime_test openshc_equivalent_features_test full_feature_sim_test test_metachronal_adaptive_gaits final_validation_test quaternion_pose_system_test quaternion_functions_test pose_control_comprehensive_test pose_control_equivalence_test absolute_positioning_compile_test admittance_derivatives_test
 
 math_utils_test: math_utils_test.cpp ../src/math_utils.cpp
 	$(CXX) $(CXXFLAGS) $^ -o $@
@@ -110,6 +110,9 @@ final_validation_test: final_validation_test.cpp ../src/locomotion_system.cpp ..
 quaternion_pose_system_test: quaternion_pose_system_test.cpp ../src/pose_controller.cpp ../src/manual_pose_controller.cpp ../src/robot_model.cpp ../src/math_utils.cpp
 	$(CXX) $(CXXFLAGS) $^ -o $@
 
+quaternion_functions_test: quaternion_functions_test.cpp ../src/math_utils.cpp
+	$(CXX) $(CXXFLAGS) $^ -o $@
+
 pose_control_equivalence_test: pose_control_equivalence_test.cpp
 	$(CXX) $(CXXFLAGS) $< -o $@
 
@@ -129,4 +132,4 @@ admittance_derivatives_test: admittance_derivatives_test.cpp ../src/admittance_c
 	$(CXX) $(CXXFLAGS) $^ -o $@
 
 clean:
-	rm -f math_utils_test model_test pose_controller_test walk_controller_test admittance_controller_test locomotion_system_test state_controller_test tripod_gait_sim_test ik_debug_test height_range_test geometry_test ik_analytical_fix ik_coordinate_test coord_test joint_test ik_debug_detailed dls_validation_test ik_debug_analysis workspace_analysis actual_workspace_test comprehensive_ik_test test3_analysis angle_range_test edge_case_analysis angle_normalization_test terrain_adaptation_test velocity_limits_test state_controller_runtime_test openshc_equivalent_features_test full_feature_sim_test test_metachronal_adaptive_gaits final_validation_test quaternion_pose_system_test pose_control_comprehensive_test pose_control_equivalence_test cruise_control_comprehensive_test absolute_positioning_compile_test enhanced_imu_integration_test admittance_derivatives_test
+	rm -f math_utils_test model_test pose_controller_test walk_controller_test admittance_controller_test locomotion_system_test state_controller_test tripod_gait_sim_test ik_debug_test height_range_test geometry_test ik_analytical_fix ik_coordinate_test coord_test joint_test ik_debug_detailed dls_validation_test ik_debug_analysis workspace_analysis actual_workspace_test comprehensive_ik_test test3_analysis angle_range_test edge_case_analysis angle_normalization_test terrain_adaptation_test velocity_limits_test state_controller_runtime_test openshc_equivalent_features_test full_feature_sim_test test_metachronal_adaptive_gaits final_validation_test quaternion_pose_system_test quaternion_functions_test pose_control_comprehensive_test pose_control_equivalence_test cruise_control_comprehensive_test absolute_positioning_compile_test enhanced_imu_integration_test admittance_derivatives_test

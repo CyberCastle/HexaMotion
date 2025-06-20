@@ -22,6 +22,8 @@ int main() {
     RobotModel model(p);
     DummyServo servos;
     PoseController pc(model, &servos);
+    // Disable smooth trajectory for deterministic tests
+    pc.configureSmoothTrajectory(false);
     Point3D legs[NUM_LEGS];
     JointAngles joints[NUM_LEGS];
     pc.initializeDefaultPose(legs, joints, p.hexagon_radius, p.robot_height);

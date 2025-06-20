@@ -292,6 +292,9 @@ inline Parameters createDefaultParameters() {
     params.control_frequency = 50.0f;
     params.fsr_threshold = 0.1f;
     params.fsr_max_pressure = 10.0f;
+    // Disable smooth trajectory features for unit tests
+    params.smooth_trajectory.use_current_servo_positions = false;
+    params.smooth_trajectory.enable_pose_interpolation = false;
     return params;
 }
 
