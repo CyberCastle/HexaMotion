@@ -27,7 +27,8 @@ LocomotionSystem::LocomotionSystem(const Parameters &params)
       body_position(0.0f, 0.0f, params.robot_height), body_orientation(0.0f, 0.0f, 0.0f),
       current_gait(TRIPOD_GAIT), gait_phase(0.0f), step_height(30.0f), step_length(50.0f),
       stance_duration(0.5f), swing_duration(0.5f), cycle_frequency(2.0f),
-      system_enabled(false), last_update_time(0), dt(0.02f), last_error(NO_ERROR),
+      system_enabled(false), last_update_time(0), dt(0.02f),
+      velocity_controller(nullptr), last_error(NO_ERROR),
       model(params), pose_ctrl(nullptr), walk_ctrl(nullptr), admittance_ctrl(nullptr) {
 
     // Initialize leg states and phase offsets for tripod gait
@@ -54,6 +55,7 @@ LocomotionSystem::~LocomotionSystem() {
     delete pose_ctrl;
     delete walk_ctrl;
     delete admittance_ctrl;
+    delete velocity_controller;
 }
 
 // System initialization
@@ -86,6 +88,7 @@ bool LocomotionSystem::initialize(IIMUInterface *imu, IFSRInterface *fsr, IServo
     pose_ctrl = new PoseController(model, servo_interface);
     walk_ctrl = new WalkController(model);
     admittance_ctrl = new AdmittanceController(model, imu_interface, fsr_interface);
+    velocity_controller = new CartesianVelocityController(model);
 
     // Validate parameters
     if (!validateParameters()) {
@@ -198,10 +201,15 @@ bool LocomotionSystem::setLegJointAngles(int leg, const JointAngles &q) {
         return false;
 
     joint_angles[leg] = clamped; // internal state
-    float speed = params.default_servo_speed;
-    servo_interface->setJointAngleAndSpeed(leg, 0, clamped.coxa, speed);
-    servo_interface->setJointAngleAndSpeed(leg, 1, clamped.femur, speed);
-    servo_interface->setJointAngleAndSpeed(leg, 2, clamped.tibia, speed);
+
+    // Use velocity controller to get appropriate servo speeds
+    float coxa_speed = velocity_controller ? velocity_controller->getServoSpeed(leg, 0) : params.default_servo_speed;
+    float femur_speed = velocity_controller ? velocity_controller->getServoSpeed(leg, 1) : params.default_servo_speed;
+    float tibia_speed = velocity_controller ? velocity_controller->getServoSpeed(leg, 2) : params.default_servo_speed;
+
+    servo_interface->setJointAngleAndSpeed(leg, 0, clamped.coxa, coxa_speed);
+    servo_interface->setJointAngleAndSpeed(leg, 1, clamped.femur, femur_speed);
+    servo_interface->setJointAngleAndSpeed(leg, 2, clamped.tibia, tibia_speed);
     return true;
 }
 
@@ -463,6 +471,12 @@ void LocomotionSystem::calculateAdaptivePhaseOffsets() {
 bool LocomotionSystem::planGaitSequence(float vx, float vy, float omega) {
     if (!walk_ctrl)
         return false;
+
+    // Update velocity controller with current velocity commands
+    if (velocity_controller) {
+        velocity_controller->updateServoSpeeds(vx, vy, omega, current_gait);
+    }
+
     return walk_ctrl->planGaitSequence(vx, vy, omega);
 }
 
@@ -787,6 +801,7 @@ bool LocomotionSystem::configureSmoothMovement(bool enable, float interpolation_
     return true;
 }
 
+// Smooth movement methods for OpenSHC-style pose control
 bool LocomotionSystem::setBodyPoseSmooth(const Eigen::Vector3f &position, const Eigen::Vector3f &orientation) {
     if (!system_enabled || !pose_ctrl)
         return false;
@@ -1570,4 +1585,36 @@ bool LocomotionSystem::updateSensorsParallel() {
     }
 
     return true;
+}
+
+// Cartesian velocity control methods
+bool LocomotionSystem::setVelocityControlEnabled(bool enable) {
+    if (velocity_controller) {
+        velocity_controller->setVelocityControlEnabled(enable);
+        return true;
+    }
+    return false;
+}
+
+bool LocomotionSystem::setVelocityScaling(const CartesianVelocityController::VelocityScaling &scaling) {
+    if (velocity_controller) {
+        velocity_controller->setVelocityScaling(scaling);
+        return true;
+    }
+    return false;
+}
+
+bool LocomotionSystem::setGaitSpeedModifiers(const CartesianVelocityController::GaitSpeedModifiers &modifiers) {
+    if (velocity_controller) {
+        velocity_controller->setGaitSpeedModifiers(modifiers);
+        return true;
+    }
+    return false;
+}
+
+float LocomotionSystem::getCurrentServoSpeed(int leg_index, int joint_index) const {
+    if (velocity_controller) {
+        return velocity_controller->getServoSpeed(leg_index, joint_index);
+    }
+    return params.default_servo_speed;
 }

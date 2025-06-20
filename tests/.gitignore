@@ -1,0 +1,7 @@
+# Ignore compiled test executables and temporary files
+*
+!*.cpp
+!*.h
+!*.sh
+!.gitignore
+!Makefile

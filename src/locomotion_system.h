@@ -45,6 +45,7 @@
 
 #include "HexaModel.h"
 #include "admittance_controller.h"
+#include "cartesian_velocity_controller.h"
 #include "pose_controller.h"
 #include "walk_controller.h"
 #include <Arduino.h>
@@ -98,6 +99,9 @@ class LocomotionSystem {
     bool system_enabled;
     unsigned long last_update_time;
     float dt; // Delta time since last update (seconds)
+
+    // Velocity control
+    CartesianVelocityController *velocity_controller;
 
     // Error variables
     ErrorCode last_error;
@@ -274,14 +278,34 @@ class LocomotionSystem {
     // Smooth trajectory configuration (OpenSHC-style movement)
     /** Configure smooth trajectory interpolation from current servo positions. */
     bool configureSmoothMovement(bool enable = true, float interpolation_speed = 0.1f, uint8_t max_steps = 20);
-    /** Set body pose using smooth trajectory interpolation (default behavior). */
+
+    /** Set body pose using smooth trajectory interpolation. */
     bool setBodyPoseSmooth(const Eigen::Vector3f &position, const Eigen::Vector3f &orientation);
-    /** Set body pose immediately without smooth interpolation (legacy behavior). */
+
+    /** Set body pose immediately without trajectory interpolation. */
     bool setBodyPoseImmediate(const Eigen::Vector3f &position, const Eigen::Vector3f &orientation);
-    /** Check if smooth trajectory interpolation is currently active. */
+
+    /** Check if a smooth movement trajectory is currently in progress. */
     bool isSmoothMovementInProgress() const;
-    /** Reset/stop current smooth trajectory interpolation. */
+
+    /** Reset any active smooth movement trajectory. */
     void resetSmoothMovement();
+
+    // Cartesian velocity control
+    /** Get the velocity controller instance for configuration. */
+    CartesianVelocityController *getVelocityController() { return velocity_controller; }
+
+    /** Enable or disable velocity-based servo speed control. */
+    bool setVelocityControlEnabled(bool enable);
+
+    /** Configure velocity scaling parameters. */
+    bool setVelocityScaling(const CartesianVelocityController::VelocityScaling &scaling);
+
+    /** Configure gait-specific speed modifiers. */
+    bool setGaitSpeedModifiers(const CartesianVelocityController::GaitSpeedModifiers &modifiers);
+
+    /** Get current servo speed for a specific joint (affected by velocity control). */
+    float getCurrentServoSpeed(int leg_index, int joint_index) const;
 
     // Diagnostics
     /** Execute a basic hardware self-test. */
