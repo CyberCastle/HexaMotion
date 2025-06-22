@@ -47,6 +47,16 @@ Each test executable can be run individually.
 
 ### Test Parameters
 
+robot height: 90 mm
+robot weight: 6.5 Kg
+body hexagon radius: 400 mm.
+coxa length: 50 mm
+coxa weight: 54 g
+femur length: 101 mm
+femur weight: 150 g
+tibia length: 208 mm
+tibia weight: 200 g
+
 Use the following `Parameters` configuration in the test files:
 
 ```cpp
