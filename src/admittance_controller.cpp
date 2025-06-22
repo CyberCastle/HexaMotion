@@ -1,4 +1,5 @@
 #include "admittance_controller.h"
+#include "hexamotion_constants.h"
 
 /**
  * @file admittance_controller.cpp
@@ -17,7 +18,7 @@ static const AdmittanceController::LegAdmittanceState EMPTY_LEG_STATE;
 AdmittanceController::AdmittanceController(RobotModel &model, IIMUInterface *imu, IFSRInterface *fsr,
                                            ComputeConfig config)
     : model_(model), imu_(imu), fsr_(fsr), config_(config),
-      dynamic_stiffness_enabled_(false), swing_stiffness_scaler_(0.5f),
+      dynamic_stiffness_enabled_(false), swing_stiffness_scaler_(WORKSPACE_SCALING_FACTOR),
       load_stiffness_scaler_(1.5f), step_clearance_(40.0f),
       current_time_(0.0) {
     delta_time_ = config_.getDeltaTime();
@@ -152,11 +153,11 @@ void AdmittanceController::selectIntegrationMethod() {
 
 void AdmittanceController::initializeDefaultParameters() {
     for (int i = 0; i < NUM_LEGS; i++) {
-        leg_states_[i].params.virtual_mass = 0.5f;        // 500g virtual mass
-        leg_states_[i].params.virtual_damping = 2.0f;     // Critical damping
-        leg_states_[i].params.virtual_stiffness = 100.0f; // Medium stiffness
+        leg_states_[i].params.virtual_mass = WORKSPACE_SCALING_FACTOR;       // 500g virtual mass
+        leg_states_[i].params.virtual_damping = ANGULAR_ACCELERATION_FACTOR; // Critical damping
+        leg_states_[i].params.virtual_stiffness = 100.0f;                    // Medium stiffness
         leg_states_[i].active = true;
-        leg_states_[i].stiffness_scale = 1.0f;
+        leg_states_[i].stiffness_scale = DEFAULT_ANGULAR_SCALING;
 
         // Initialize state vectors for derivative-based integration
         leg_dynamics_state_[i] = math_utils::StateVector<Point3D>(Point3D(0, 0, 0), Point3D(0, 0, 0));
@@ -173,7 +174,7 @@ Point3D AdmittanceController::calculateAcceleration(const AdmittanceParams &para
     Point3D damping_force = params.velocity * (-params.virtual_damping);
     Point3D total_force = params.applied_force + spring_force + damping_force;
 
-    return total_force * (1.0f / params.virtual_mass);
+    return total_force * (DEFAULT_ANGULAR_SCALING / params.virtual_mass);
 }
 
 float AdmittanceController::calculateStiffnessScale(int leg_index, LegState leg_state,
@@ -216,7 +217,7 @@ bool AdmittanceController::maintainOrientation(const Point3D &target, Point3D &c
         return false;
 
     Point3D err = orientationError(target);
-    current = current + err * (dt * 0.5f);
+    current = current + err * (dt * WORKSPACE_SCALING_FACTOR);
     return true;
 }
 
@@ -341,7 +342,7 @@ math_utils::StateVector<Point3D> AdmittanceController::admittanceDerivatives(
     Point3D damping_force = velocity * (-admittance_params->damping);
     Point3D net_force = admittance_params->external_force + spring_force + damping_force;
 
-    Point3D acceleration = net_force * (1.0f / admittance_params->mass);
+    Point3D acceleration = net_force * (DEFAULT_ANGULAR_SCALING / admittance_params->mass);
 
     // Return derivatives: [dx/dt, dv/dt] = [velocity, acceleration]
     return math_utils::StateVector<Point3D>(velocity, acceleration);

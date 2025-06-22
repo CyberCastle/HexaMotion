@@ -1,4 +1,5 @@
 #include "pose_controller.h"
+#include "hexamotion_constants.h"
 
 /**
  * @file pose_controller.cpp
@@ -83,7 +84,7 @@ bool PoseController::setLegPosition(int leg_index, const Point3D &position,
 void PoseController::initializeDefaultPose(Point3D leg_pos[NUM_LEGS], JointAngles joint_q[NUM_LEGS],
                                            float hex_radius, float robot_height) {
     for (int i = 0; i < NUM_LEGS; i++) {
-        float angle = i * 60.0f;
+        float angle = i * LEG_ANGLE_SPACING;
         leg_pos[i].x = hex_radius * cos(math_utils::degreesToRadians(angle)) + 50.0f;
         leg_pos[i].y = hex_radius * sin(math_utils::degreesToRadians(angle));
         leg_pos[i].z = -robot_height;
@@ -122,7 +123,7 @@ bool PoseController::interpolatePose(const Eigen::Vector3f &start_pos, const Eig
                                      const Eigen::Vector3f &end_pos, const Eigen::Vector4f &end_quat,
                                      float t, Point3D leg_positions[NUM_LEGS], JointAngles joint_angles[NUM_LEGS]) {
     // Clamp interpolation parameter
-    t = std::max(0.0f, std::min(1.0f, t));
+    t = std::max(0.0f, std::min(DEFAULT_ANGULAR_SCALING, t));
 
     // Linear interpolation for position
     Eigen::Vector3f interp_pos = start_pos + t * (end_pos - start_pos);
@@ -259,7 +260,7 @@ bool PoseController::updateTrajectoryStep(Point3D leg_positions[NUM_LEGS], Joint
     // Calculate interpolation progress
     trajectory_step_count++;
     trajectory_progress = static_cast<float>(trajectory_step_count) / static_cast<float>(config.max_interpolation_steps);
-    trajectory_progress = std::min(1.0f, trajectory_progress * config.interpolation_speed * 10.0f); // Scale for responsiveness
+    trajectory_progress = std::min(DEFAULT_ANGULAR_SCALING, trajectory_progress * config.interpolation_speed * 10.0f); // Scale for responsiveness
 
     // Interpolate each leg position and angles
     for (int i = 0; i < NUM_LEGS; i++) {
@@ -318,7 +319,7 @@ bool PoseController::isTrajectoryComplete() const {
     const auto &config = model.getParams().smooth_trajectory;
 
     // Check if we've reached maximum steps or full progress
-    if (trajectory_step_count >= config.max_interpolation_steps || trajectory_progress >= 1.0f) {
+    if (trajectory_step_count >= config.max_interpolation_steps || trajectory_progress >= DEFAULT_ANGULAR_SCALING) {
         return true;
     }
 
@@ -326,9 +327,9 @@ bool PoseController::isTrajectoryComplete() const {
     if (servos) {
         for (int i = 0; i < NUM_LEGS; i++) {
             // Check position tolerance (approximate)
-            float pos_diff_x = std::abs(trajectory_target_positions[i].x - trajectory_start_positions[i].x) * (1.0f - trajectory_progress);
-            float pos_diff_y = std::abs(trajectory_target_positions[i].y - trajectory_start_positions[i].y) * (1.0f - trajectory_progress);
-            float pos_diff_z = std::abs(trajectory_target_positions[i].z - trajectory_start_positions[i].z) * (1.0f - trajectory_progress);
+            float pos_diff_x = std::abs(trajectory_target_positions[i].x - trajectory_start_positions[i].x) * (DEFAULT_ANGULAR_SCALING - trajectory_progress);
+            float pos_diff_y = std::abs(trajectory_target_positions[i].y - trajectory_start_positions[i].y) * (DEFAULT_ANGULAR_SCALING - trajectory_progress);
+            float pos_diff_z = std::abs(trajectory_target_positions[i].z - trajectory_start_positions[i].z) * (DEFAULT_ANGULAR_SCALING - trajectory_progress);
 
             float total_diff = sqrt(pos_diff_x * pos_diff_x + pos_diff_y * pos_diff_y + pos_diff_z * pos_diff_z);
             if (total_diff > config.position_tolerance_mm) {
@@ -373,6 +374,6 @@ void PoseController::configureSmoothTrajectory(bool use_current_positions, float
     // Configure smooth trajectory parameters (OpenSHC-equivalent global parameter modification)
     auto &config = const_cast<Parameters &>(model.getParams()).smooth_trajectory;
     config.use_current_servo_positions = use_current_positions;
-    config.interpolation_speed = std::max(0.01f, std::min(1.0f, interpolation_speed));
+    config.interpolation_speed = std::max(0.01f, std::min(DEFAULT_ANGULAR_SCALING, interpolation_speed));
     config.max_interpolation_steps = std::max(static_cast<uint8_t>(1), std::min(static_cast<uint8_t>(100), max_steps));
 }

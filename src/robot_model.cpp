@@ -1,4 +1,5 @@
 #include "HexaModel.h"
+#include "hexamotion_constants.h"
 
 /**
  * @file robot_model.cpp
@@ -53,12 +54,8 @@ void RobotModel::initializeDH() {
 // Based on CSIRO syropod_highlevel_controller implementation
 JointAngles RobotModel::inverseKinematics(int leg, const Point3D &p_target) {
 
-    const float DLS_COEFFICIENT = 0.02f; // Damping factor for numerical stability
-    const float IK_TOLERANCE = 0.005f;   // 5mm tolerance for convergence
-    const int MAX_ITERATIONS = 75;       // Increased iterations for better convergence
-
     // Transform target to leg coordinate system
-    const float base_angle_deg = leg * 60.0f;
+    const float base_angle_deg = leg * LEG_ANGLE_SPACING;
     float base_x = params.hexagon_radius * cos(math_utils::degreesToRadians(base_angle_deg));
     float base_y = params.hexagon_radius * sin(math_utils::degreesToRadians(base_angle_deg));
 
@@ -72,18 +69,18 @@ JointAngles RobotModel::inverseKinematics(int leg, const Point3D &p_target) {
     float min_reach = std::abs(params.femur_length - params.tibia_length);
 
     // Check workspace bounds using centralized function (allow margin for numerical precision)
-    if (!math_utils::isPointReachable(local_target, min_reach * 0.9f, max_reach * 1.02f)) {
-        float coxa_angle = atan2(local_target.y, local_target.x) * 180.0f / M_PI;
+    if (!math_utils::isPointReachable(local_target, min_reach * IK_MIN_REACH_MARGIN, max_reach * IK_MAX_REACH_MARGIN)) {
+        float coxa_angle = atan2(local_target.y, local_target.x) * RADIANS_TO_DEGREES_FACTOR;
         coxa_angle = constrainAngle(coxa_angle, params.coxa_angle_limits[0], params.coxa_angle_limits[1]);
 
         // Determine if target is too far or too close
         float target_distance = math_utils::magnitude(local_target);
-        if (target_distance > max_reach * 1.02f) {
+        if (target_distance > max_reach * IK_MAX_REACH_MARGIN) {
             // Target too far - return extended pose within joint limits
-            return JointAngles(coxa_angle, -45.0f, 60.0f); // Constrained extended pose
+            return JointAngles(coxa_angle, IK_PRIMARY_FEMUR_ANGLE, IK_PRIMARY_TIBIA_ANGLE); // Constrained extended pose
         } else {
             // Target too close - return retracted pose within joint limits
-            return JointAngles(coxa_angle, 30.0f, -60.0f); // Constrained retracted pose
+            return JointAngles(coxa_angle, IK_HIGH_FEMUR_ANGLE, IK_HIGH_TIBIA_ANGLE); // Constrained retracted pose
         }
     }
 
@@ -116,19 +113,19 @@ JointAngles RobotModel::inverseKinematics(int leg, const Point3D &p_target) {
 
     // Define starting configurations based on user preference
     std::vector<JointAngles> starting_configs;
-    float coxa_start = atan2(local_target.y, local_target.x) * 180.0f / M_PI;
+    float coxa_start = atan2(local_target.y, local_target.x) * RADIANS_TO_DEGREES_FACTOR;
     coxa_start = constrainAngle(coxa_start, params.coxa_angle_limits[0], params.coxa_angle_limits[1]);
 
     if (params.ik.use_multiple_starts) {
         // Enhanced approach: Multiple starting configurations for better convergence
-        starting_configs.push_back(JointAngles(coxa_start, -45.0f, 60.0f)); // Primary guess
-        starting_configs.push_back(JointAngles(coxa_start, 30.0f, -60.0f)); // High pose
-        starting_configs.push_back(JointAngles(coxa_start, -30.0f, 45.0f)); // Mid pose
-        starting_configs.push_back(JointAngles(coxa_start, 0.0f, 0.0f));    // Straight pose
-        starting_configs.push_back(JointAngles(coxa_start, -60.0f, 80.0f)); // Extended pose
+        starting_configs.push_back(JointAngles(coxa_start, IK_PRIMARY_FEMUR_ANGLE, IK_PRIMARY_TIBIA_ANGLE));   // Primary guess
+        starting_configs.push_back(JointAngles(coxa_start, IK_HIGH_FEMUR_ANGLE, IK_HIGH_TIBIA_ANGLE));         // High pose
+        starting_configs.push_back(JointAngles(coxa_start, -30.0f, 45.0f));                                    // Mid pose
+        starting_configs.push_back(JointAngles(coxa_start, 0.0f, 0.0f));                                       // Straight pose
+        starting_configs.push_back(JointAngles(coxa_start, IK_EXTENDED_FEMUR_ANGLE, IK_EXTENDED_TIBIA_ANGLE)); // Extended pose
     } else {
         // Original CSIRO approach: Single starting configuration
-        starting_configs.push_back(JointAngles(coxa_start, -45.0f, 60.0f));
+        starting_configs.push_back(JointAngles(coxa_start, IK_PRIMARY_FEMUR_ANGLE, IK_PRIMARY_TIBIA_ANGLE));
     }
 
     // Try each starting configuration
@@ -141,10 +138,10 @@ JointAngles RobotModel::inverseKinematics(int leg, const Point3D &p_target) {
         current_angles.tibia = constrainAngle(current_angles.tibia, params.tibia_angle_limits[0], params.tibia_angle_limits[1]);
 
         float previous_error = std::numeric_limits<float>::max();
-        float stagnation_threshold = 0.001f; // If error doesn't improve by this much, consider stagnant
+        float stagnation_threshold = IK_STAGNATION_THRESHOLD; // If error doesn't improve by this much, consider stagnant
         int stagnation_count = 0;
 
-        for (int iter = 0; iter < MAX_ITERATIONS; ++iter) {
+        for (int iter = 0; iter < IK_MAX_ITERATIONS; ++iter) {
             // Calculate current end-effector position using forward kinematics
             Point3D current_pos = forwardKinematics(leg, current_angles);
 
@@ -166,7 +163,7 @@ JointAngles RobotModel::inverseKinematics(int leg, const Point3D &p_target) {
             // Check for stagnation (not making progress)
             if (previous_error - error_norm < stagnation_threshold) {
                 stagnation_count++;
-                if (stagnation_count > 5) {
+                if (stagnation_count > IK_STAGNATION_COUNT_MAX) {
                     // Algorithm is stagnating, break from inner loop to try next start
                     break;
                 }
@@ -180,21 +177,21 @@ JointAngles RobotModel::inverseKinematics(int leg, const Point3D &p_target) {
 
             // Check for singular configuration (determinant near zero)
             float det = jacobian.determinant();
-            if (std::abs(det) < 1e-6) {
+            if (std::abs(det) < IK_SINGULAR_THRESHOLD) {
                 // Near singular configuration, increase damping
-                const float high_damping = 0.1f;
+                const float high_damping = IK_HIGH_DAMPING;
                 Eigen::Matrix3f JJT = jacobian * jacobian.transpose();
                 Eigen::Matrix3f identity = Eigen::Matrix3f::Identity();
                 Eigen::Matrix3f damped_inv = (JJT + high_damping * high_damping * identity).inverse();
                 Eigen::Matrix3f jacobian_inverse = jacobian.transpose() * damped_inv;
 
                 // Calculate joint angle changes with smaller step
-                Eigen::Vector3f angle_delta = jacobian_inverse * position_delta * 0.5f;
+                Eigen::Vector3f angle_delta = jacobian_inverse * position_delta * IK_STEP_SIZE_REDUCTION;
 
                 // Convert to degrees and update joint angles
-                current_angles.coxa += angle_delta(0) * 180.0f / M_PI;
-                current_angles.femur += angle_delta(1) * 180.0f / M_PI;
-                current_angles.tibia += angle_delta(2) * 180.0f / M_PI;
+                current_angles.coxa += angle_delta(0) * RADIANS_TO_DEGREES_FACTOR;
+                current_angles.femur += angle_delta(1) * RADIANS_TO_DEGREES_FACTOR;
+                current_angles.tibia += angle_delta(2) * RADIANS_TO_DEGREES_FACTOR;
 
                 // Normalize angles to handle wraparound
                 current_angles.coxa = normalizeAngle(current_angles.coxa);
@@ -205,16 +202,16 @@ JointAngles RobotModel::inverseKinematics(int leg, const Point3D &p_target) {
                 // J_inv = J^T * (J * J^T + λ^2 * I)^(-1)
                 Eigen::Matrix3f JJT = jacobian * jacobian.transpose();
                 Eigen::Matrix3f identity = Eigen::Matrix3f::Identity();
-                Eigen::Matrix3f damped_inv = (JJT + DLS_COEFFICIENT * DLS_COEFFICIENT * identity).inverse();
+                Eigen::Matrix3f damped_inv = (JJT + IK_DLS_COEFFICIENT * IK_DLS_COEFFICIENT * identity).inverse();
                 Eigen::Matrix3f jacobian_inverse = jacobian.transpose() * damped_inv;
 
                 // Calculate joint angle changes
                 Eigen::Vector3f angle_delta = jacobian_inverse * position_delta;
 
                 // Convert to degrees and update joint angles
-                current_angles.coxa += angle_delta(0) * 180.0f / M_PI;
-                current_angles.femur += angle_delta(1) * 180.0f / M_PI;
-                current_angles.tibia += angle_delta(2) * 180.0f / M_PI;
+                current_angles.coxa += angle_delta(0) * RADIANS_TO_DEGREES_FACTOR;
+                current_angles.femur += angle_delta(1) * RADIANS_TO_DEGREES_FACTOR;
+                current_angles.tibia += angle_delta(2) * RADIANS_TO_DEGREES_FACTOR;
 
                 // Normalize angles to handle wraparound
                 current_angles.coxa = normalizeAngle(current_angles.coxa);
@@ -270,7 +267,7 @@ Point3D RobotModel::forwardKinematics(int leg_index, const JointAngles &angles) 
 }
 
 Eigen::Matrix4f RobotModel::legTransform(int leg_index, const JointAngles &q) const {
-    const float base_angle_deg = leg_index * 60.0f;
+    const float base_angle_deg = leg_index * LEG_ANGLE_SPACING;
     Eigen::Matrix4f T = Eigen::Matrix4f::Identity();
     T(0, 3) = params.hexagon_radius * cos(math_utils::degreesToRadians(base_angle_deg));
     T(1, 3) = params.hexagon_radius * sin(math_utils::degreesToRadians(base_angle_deg));
@@ -296,7 +293,7 @@ Eigen::Matrix3f RobotModel::calculateJacobian(int leg, const JointAngles &q, con
     // Based on syropod_highlevel_controller implementation
 
     // Get base transform for this leg
-    const float base_angle_deg = leg * 60.0f;
+    const float base_angle_deg = leg * LEG_ANGLE_SPACING;
     Eigen::Matrix4f T_base = Eigen::Matrix4f::Identity();
     T_base(0, 3) = params.hexagon_radius * cos(math_utils::degreesToRadians(base_angle_deg));
     T_base(1, 3) = params.hexagon_radius * sin(math_utils::degreesToRadians(base_angle_deg));
@@ -375,7 +372,7 @@ float RobotModel::normalizeAngle(float angle_deg) const {
     angle_rad = atan2(sin(angle_rad), cos(angle_rad));
 
     // Convert back to degrees
-    return angle_rad * 180.0f / M_PI;
+    return angle_rad * RADIANS_TO_DEGREES_FACTOR;
 }
 
 bool RobotModel::validate() const {
@@ -389,7 +386,7 @@ std::pair<float, float> RobotModel::calculateHeightRange() const {
 
     // Workspace analysis: discretize the joint configuration space
     // Based on "Introduction to Robotics" - Craig and "Robotics: Modelling, Planning and Control" - Siciliano
-    const int resolution = 10; // discretization resolution
+    const int resolution = WORKSPACE_RESOLUTION; // discretization resolution
 
     const float coxa_step = (params.coxa_angle_limits[1] - params.coxa_angle_limits[0]) / resolution;
     const float femur_step = (params.femur_angle_limits[1] - params.femur_angle_limits[0]) / resolution;

@@ -14,6 +14,7 @@
  */
 
 #include "locomotion_system.h"
+#include "hexamotion_constants.h"
 #include "math_utils.h"
 #include <algorithm>
 #include <vector>
@@ -26,7 +27,7 @@ LocomotionSystem::LocomotionSystem(const Parameters &params)
     : params(params), imu_interface(nullptr), fsr_interface(nullptr), servo_interface(nullptr),
       body_position(0.0f, 0.0f, params.robot_height), body_orientation(0.0f, 0.0f, 0.0f),
       current_gait(TRIPOD_GAIT), gait_phase(0.0f), step_height(30.0f), step_length(50.0f),
-      stance_duration(0.5f), swing_duration(0.5f), cycle_frequency(2.0f),
+      stance_duration(WORKSPACE_SCALING_FACTOR), swing_duration(WORKSPACE_SCALING_FACTOR), cycle_frequency(ANGULAR_ACCELERATION_FACTOR),
       system_enabled(false), last_update_time(0), dt(0.02f),
       velocity_controller(nullptr), last_error(NO_ERROR),
       model(params), pose_ctrl(nullptr), walk_ctrl(nullptr), admittance_ctrl(nullptr) {
@@ -1354,8 +1355,8 @@ void LocomotionSystem::compensateForSlope() {
             float qz = imu_data.absolute_data.quaternion_z;
 
             // Calculate terrain-aligned compensation using quaternion
-            float quat_roll = atan2(2.0f * (qw * qx + qy * qz), 1.0f - 2.0f * (qx * qx + qy * qy)) * 180.0f / M_PI;
-            float quat_pitch = asin(2.0f * (qw * qy - qz * qx)) * 180.0f / M_PI;
+            float quat_roll = atan2(2.0f * (qw * qx + qy * qz), 1.0f - 2.0f * (qx * qx + qy * qy)) * RADIANS_TO_DEGREES_FACTOR;
+            float quat_pitch = asin(2.0f * (qw * qy - qz * qx)) * RADIANS_TO_DEGREES_FACTOR;
 
             // Blend quaternion and Euler compensations for robustness
             roll_compensation = 0.7f * roll_compensation + 0.3f * (-quat_roll * 0.6f);

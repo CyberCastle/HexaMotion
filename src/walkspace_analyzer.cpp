@@ -1,4 +1,5 @@
 #include "walkspace_analyzer.h"
+#include "hexamotion_constants.h"
 #include "math_utils.h"
 #include <algorithm>
 #include <cmath>
@@ -150,8 +151,8 @@ void WalkspaceAnalyzer::calculateLegWorkspaceBounds(int leg_index) {
     bounds.max_radius = total_reach;
     bounds.min_height = -total_reach;
     bounds.max_height = total_reach;
-    bounds.min_angle = -180.0f;
-    bounds.max_angle = 180.0f;
+    bounds.min_angle = -HALF_ROTATION_DEGREES;
+    bounds.max_angle = HALF_ROTATION_DEGREES;
 }
 
 void WalkspaceAnalyzer::generateWalkspaceForLeg(int leg_index) {
@@ -233,12 +234,12 @@ void WalkspaceAnalyzer::generateWalkspaceForLeg(int leg_index) {
         calculateLegWorkspaceBounds(leg_index); // Use existing method instead of calculateSimpleWorkspace
 
         // Sample at lower resolution for PRECISION_FAST
-        const float radius_step = 20.0f;  // mm
-        const float bearing_step = 30.0f; // degrees
+        const float radius_step = RADIUS_STEP_DEFAULT;   // mm
+        const float bearing_step = BEARING_STEP_DEGREES; // degrees
 
         for (float radius = 0; radius < bounds.max_radius; radius += radius_step) {
-            for (float bearing = 0; bearing < 360.0f; bearing += bearing_step) {
-                float bearing_rad = bearing * M_PI / 180.0f;
+            for (float bearing = 0; bearing < FULL_ROTATION_DEGREES; bearing += bearing_step) {
+                float bearing_rad = bearing * DEGREES_TO_RADIANS_FACTOR;
 
                 Point3D test_point;
                 test_point.x = radius * cos(bearing_rad);
@@ -535,7 +536,7 @@ bool WalkspaceAnalyzer::isPositionReachableWithWorkplane(int leg_index, const Po
 
     // Calculate bearing to position
     float bearing_rad = atan2(position.y, position.x);
-    float bearing_deg = bearing_rad * 180.0f / M_PI;
+    float bearing_deg = bearing_rad * RADIANS_TO_DEGREES_FACTOR;
 
     // Normalize bearing to 0-360 range
     while (bearing_deg < 0)
@@ -557,7 +558,7 @@ bool WalkspaceAnalyzer::isPositionReachableWithWorkplane(int leg_index, const Po
     }
 
     // Interpolate maximum radius at this bearing
-    float t = (bearing_deg - lower_bearing) / 45.0f;
+    float t = (bearing_deg - lower_bearing) / TIBIA_ANGLE_MAX;
     float max_radius = lower_it->second * (1.0f - t) + upper_it->second * t;
 
     // Check if position is within reachable radius

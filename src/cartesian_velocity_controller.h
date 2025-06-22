@@ -2,37 +2,9 @@
 #define CARTESIAN_VELOCITY_CONTROLLER_H
 
 #include "HexaModel.h"
+#include "hexamotion_constants.h"
 #include "velocity_limits.h"
 #include <array>
-
-// Velocity control constants
-#define SERVO_SPEED_MIN 0.1f                  // Minimum servo speed multiplier
-#define SERVO_SPEED_MAX 3.0f                  // Maximum servo speed multiplier
-#define SERVO_SPEED_DEFAULT 1.0f              // Default servo speed multiplier
-#define VELOCITY_SCALE_MIN 0.1f               // Minimum velocity scaling factor
-#define VELOCITY_SCALE_MAX 5.0f               // Maximum velocity scaling factor
-#define SPEED_RATIO_MIN 0.05f                 // Minimum speed ratio (5%)
-#define SPEED_RATIO_MAX_VALIDATION 0.95f      // Maximum for minimum_speed_ratio validation
-#define SPEED_RATIO_MIN_VALIDATION 1.05f      // Minimum for maximum_speed_ratio validation
-#define SPEED_RATIO_MAX 3.0f                  // Maximum speed ratio (300%)
-#define GAIT_MODIFIER_MIN 0.1f                // Minimum gait speed modifier
-#define GAIT_MODIFIER_MAX 2.0f                // Maximum gait speed modifier
-#define LEG_COMPENSATION_MIN 0.5f             // Minimum leg speed compensation
-#define LEG_COMPENSATION_MAX 2.0f             // Maximum leg speed compensation
-#define DEFAULT_LINEAR_VELOCITY_SCALE 2.0f    // Default linear velocity scaling factor
-#define DEFAULT_ANGULAR_VELOCITY_SCALE 1.5f   // Default angular velocity scaling factor
-#define DEFAULT_MIN_SPEED_RATIO 0.2f          // Default minimum speed ratio (20%)
-#define DEFAULT_MAX_SPEED_RATIO 1.8f          // Default maximum speed ratio (180%)
-#define DEFAULT_TRIPOD_SPEED_FACTOR 1.2f      // Default tripod gait speed factor
-#define DEFAULT_WAVE_SPEED_FACTOR 0.8f        // Default wave gait speed factor
-#define DEFAULT_RIPPLE_SPEED_FACTOR 0.9f      // Default ripple gait speed factor
-#define DEFAULT_METACHRONAL_SPEED_FACTOR 1.0f // Default metachronal gait speed factor
-#define DEFAULT_ADAPTIVE_SPEED_FACTOR 1.1f    // Default adaptive gait speed factor
-#define COXA_SPEED_FACTOR 0.9f                // Coxa joint speed adjustment (10% slower)
-#define FEMUR_SPEED_FACTOR 1.0f               // Femur joint speed adjustment (normal)
-#define TIBIA_SPEED_FACTOR 1.1f               // Tibia joint speed adjustment (10% faster)
-#define FEMUR_VELOCITY_MULTIPLIER 1.1f        // Femur velocity scaling multiplier
-#define TIBIA_VELOCITY_MULTIPLIER 1.2f        // Tibia velocity scaling multiplier
 
 /**
  * @brief Cartesian velocity controller equivalent to OpenSHC's velocity control system.

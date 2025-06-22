@@ -1,4 +1,5 @@
 #include "HexaModel.h"
+#include "hexamotion_constants.h"
 #include "velocity_limits.h"
 #include "walk_controller.h"
 #include <cmath>
@@ -28,7 +29,7 @@ void demonstrateBearingBasedLimits(VelocityLimits &velocity_limits) {
     std::cout << "=== Bearing-Based Velocity Limits ===\n";
 
     // Test limits at different bearings
-    std::vector<float> test_bearings = {0.0f, 45.0f, 90.0f, 135.0f, 180.0f, 225.0f, 270.0f, 315.0f};
+    std::vector<float> test_bearings = {0.0f, TIBIA_ANGLE_MAX, DEFAULT_MAX_ANGULAR_VELOCITY, 135.0f, HALF_ROTATION_DEGREES, 225.0f, 270.0f, 315.0f};
 
     for (float bearing : test_bearings) {
         auto limits = velocity_limits.getLimit(bearing);
@@ -47,22 +48,22 @@ void demonstrateGaitParameterEffects(VelocityLimits &velocity_limits) {
     std::vector<VelocityLimits::GaitConfig> gait_configs(3);
 
     // Slow, stable gait
-    gait_configs[0].frequency = 0.5f;
+    gait_configs[0].frequency = WORKSPACE_SCALING_FACTOR;
     gait_configs[0].stance_ratio = 0.8f;
     gait_configs[0].swing_ratio = 0.2f;
-    gait_configs[0].time_to_max_stride = 3.0f;
+    gait_configs[0].time_to_max_stride = SERVO_SPEED_MAX;
 
     // Normal gait
-    gait_configs[1].frequency = 1.0f;
+    gait_configs[1].frequency = DEFAULT_ANGULAR_SCALING;
     gait_configs[1].stance_ratio = 0.6f;
     gait_configs[1].swing_ratio = 0.4f;
-    gait_configs[1].time_to_max_stride = 2.0f;
+    gait_configs[1].time_to_max_stride = ANGULAR_ACCELERATION_FACTOR;
 
     // Fast, dynamic gait
-    gait_configs[2].frequency = 2.0f;
+    gait_configs[2].frequency = ANGULAR_ACCELERATION_FACTOR;
     gait_configs[2].stance_ratio = 0.4f;
     gait_configs[2].swing_ratio = 0.6f;
-    gait_configs[2].time_to_max_stride = 1.0f;
+    gait_configs[2].time_to_max_stride = DEFAULT_ANGULAR_SCALING;
 
     std::vector<std::string> gait_names = {"Slow Gait", "Normal Gait", "Fast Gait"};
 
@@ -81,9 +82,9 @@ void demonstrateGaitParameterEffects(VelocityLimits &velocity_limits) {
 void demonstrateVelocityScaling(VelocityLimits &velocity_limits) {
     std::cout << "=== Velocity Scaling with Angular Demand ===\n";
 
-    VelocityLimits::LimitValues base_limits(1.0f, 1.0f, 2.0f, 1.0f);
+    VelocityLimits::LimitValues base_limits(DEFAULT_ANGULAR_SCALING, DEFAULT_ANGULAR_SCALING, ANGULAR_ACCELERATION_FACTOR, DEFAULT_ANGULAR_SCALING);
 
-    std::vector<float> angular_percentages = {0.0f, 0.25f, 0.5f, 0.75f, 1.0f};
+    std::vector<float> angular_percentages = {0.0f, 0.25f, WORKSPACE_SCALING_FACTOR, 0.75f, DEFAULT_ANGULAR_SCALING};
 
     for (float percentage : angular_percentages) {
         auto scaled = velocity_limits.scaleVelocityLimits(base_limits, percentage);
@@ -98,9 +99,9 @@ void demonstrateVelocityScaling(VelocityLimits &velocity_limits) {
 void demonstrateAccelerationLimiting(VelocityLimits &velocity_limits) {
     std::cout << "=== Acceleration Limiting Demonstration ===\n";
 
-    VelocityLimits::LimitValues target(1.0f, 0.5f, 1.5f, 0.8f);
+    VelocityLimits::LimitValues target(DEFAULT_ANGULAR_SCALING, WORKSPACE_SCALING_FACTOR, 1.5f, 0.8f);
     VelocityLimits::LimitValues current(0.0f, 0.0f, 0.0f, 0.8f);
-    float dt = 0.1f;
+    float dt = MIN_SERVO_VELOCITY;
 
     std::cout << "Target velocities: Vx=" << target.linear_x
               << " Vy=" << target.linear_y << " ω=" << target.angular_z << "\n";
@@ -135,11 +136,11 @@ void demonstrateWalkControllerIntegration(WalkController &walk_controller) {
 
     // Test velocity limiting through WalkController
     std::vector<std::tuple<float, float, float>> test_velocities = {
-        {0.5f, 0.0f, 0.0f},   // Forward
-        {0.0f, 0.5f, 0.0f},   // Sideways
-        {0.0f, 0.0f, 1.0f},   // Rotation
-        {1.0f, 1.0f, 2.0f},   // Combined (likely exceeds limits)
-        {-0.5f, -0.3f, -1.5f} // Negative velocities
+        {WORKSPACE_SCALING_FACTOR, 0.0f, 0.0f}, // Forward
+        {0.0f, WORKSPACE_SCALING_FACTOR, 0.0f}, // Sideways
+        {0.0f, 0.0f, DEFAULT_ANGULAR_SCALING},  // Rotation
+        {1.0f, 1.0f, 2.0f},                     // Combined (likely exceeds limits)
+        {-0.5f, -0.3f, -1.5f}                   // Negative velocities
     };
 
     for (const auto &[vx, vy, omega] : test_velocities) {

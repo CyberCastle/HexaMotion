@@ -1,6 +1,7 @@
 #ifndef MODEL_H
 #define MODEL_H
 
+#include "hexamotion_constants.h"
 #include "math_utils.h"
 #include <Arduino.h>
 #include <ArduinoEigen.h>
@@ -39,19 +40,19 @@ struct Parameters {
     float max_angular_velocity;
     float stability_margin;
     float control_frequency;
-    float default_servo_speed = 1.0f; ///< Default servo movement speed (0.1-3.0, where 1.0 is normal speed)
+    float default_servo_speed = SERVO_SPEED_DEFAULT; ///< Default servo movement speed (0.1-3.0, where 1.0 is normal speed)
 
     /**
      * @brief Smooth trajectory configuration for pose updates.
      * Equivalent to OpenSHC's trajectory interpolation system.
      */
     struct SmoothTrajectoryConfig {
-        bool use_current_servo_positions = true; ///< Use current servo positions as starting point for trajectories (OpenSHC-style)
-        bool enable_pose_interpolation = true;   ///< Enable smooth pose interpolation between positions
-        float interpolation_speed = 0.1f;        ///< Interpolation speed factor (0.01-1.0, where 0.1 is smooth)
-        float position_tolerance_mm = 1.0f;      ///< Position tolerance for determining if servo has reached target
-        uint8_t max_interpolation_steps = 20;    ///< Maximum steps for pose interpolation
-        bool use_quaternion_slerp = true;        ///< Use spherical interpolation for orientations
+        bool use_current_servo_positions = true;          ///< Use current servo positions as starting point for trajectories (OpenSHC-style)
+        bool enable_pose_interpolation = true;            ///< Enable smooth pose interpolation between positions
+        float interpolation_speed = MIN_SERVO_VELOCITY;   ///< Interpolation speed factor (0.01-1.0, where 0.1 is smooth)
+        float position_tolerance_mm = POSITION_TOLERANCE; ///< Position tolerance for determining if servo has reached target
+        uint8_t max_interpolation_steps = 20;             ///< Maximum steps for pose interpolation
+        bool use_quaternion_slerp = true;                 ///< Use spherical interpolation for orientations
     } smooth_trajectory;
 
     /**

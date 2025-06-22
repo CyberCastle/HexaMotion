@@ -1,4 +1,5 @@
 #include "velocity_limits.h"
+#include "hexamotion_constants.h"
 
 /**
  * @file velocity_limits.cpp
@@ -6,10 +7,13 @@
  */
 #include "math_utils.h"
 #include <algorithm>
-#include <cmath>
+#in bearing_degrees = std::fmod(bearing_degrees, FULL_ROTATION_DEGREES);
+if (bearing_degrees < 0.0f)
+    bearing_degrees += FULL_ROTATION_DEGREES;
+de<cmath>
 
 VelocityLimits::VelocityLimits(const RobotModel &model)
-    : model_(model), angular_velocity_scaling_(1.0f) {
+    : model_(model), angular_velocity_scaling_(DEFAULT_ANGULAR_SCALING) {
     // Initialize with default gait configuration
     current_gait_config_ = GaitConfig();
     generateLimits(current_gait_config_);
@@ -54,11 +58,11 @@ void VelocityLimits::calculateWorkspace(const GaitConfig &gait_config) {
     // Calculate walkspace radius based on hexagon geometry
     // This is the effective radius where feet can safely step
     workspace_config_.walkspace_radius = std::max(workspace_config_.walkspace_radius,
-                                                  params.hexagon_radius + safe_reach * 0.7f);
+                                                  params.hexagon_radius + safe_reach * WALKSPACE_SCALING_FACTOR);
 
     // Stance radius for angular velocity calculations
     // This represents the effective turning radius of the robot
-    workspace_config_.stance_radius = params.hexagon_radius + safe_reach * 0.5f;
+    workspace_config_.stance_radius = params.hexagon_radius + safe_reach * WORKSPACE_SCALING_FACTOR;
 
     // Ensure minimum reasonable values
     workspace_config_.walkspace_radius = std::max(workspace_config_.walkspace_radius, 0.05f);
@@ -76,8 +80,8 @@ VelocityLimits::LimitValues VelocityLimits::scaleVelocityLimits(
 
     // Scale linear velocities based on angular velocity demand
     // High angular velocities reduce available linear velocity
-    float linear_scale = 1.0f - (std::abs(angular_scale) * 0.3f);
-    linear_scale = std::max(0.1f, linear_scale); // Minimum 10% linear velocity
+    float linear_scale = DEFAULT_ANGULAR_SCALING - (std::abs(angular_scale) * ANGULAR_LINEAR_COUPLING);
+    linear_scale = std::max(MIN_SERVO_VELOCITY, linear_scale); // Minimum 10% linear velocity
 
     scaled_limits.linear_x *= linear_scale;
     scaled_limits.linear_y *= linear_scale;
@@ -138,7 +142,7 @@ VelocityLimits::LimitValues VelocityLimits::applyAccelerationLimits(
     }
 
     // Limit angular velocity change (with different scaling for rotational acceleration)
-    float max_delta_omega = target_velocities.acceleration * dt * 2.0f; // Angular acceleration is typically higher
+    float max_delta_omega = target_velocities.acceleration * dt * ANGULAR_ACCELERATION_FACTOR; // Angular acceleration is typically higher
     float delta_omega = target_velocities.angular_z - current_velocities.angular_z;
     if (std::abs(delta_omega) > max_delta_omega) {
         limited_velocities.angular_z = current_velocities.angular_z +
@@ -159,7 +163,7 @@ void VelocityLimits::calculateOvershoot(const GaitConfig &gait_config) {
 
     // Overshoot distance during acceleration phase
     float accel_time = gait_config.time_to_max_stride;
-    workspace_config_.overshoot_x = 0.5f * max_acceleration * accel_time * accel_time;
+    workspace_config_.overshoot_x = WORKSPACE_SCALING_FACTOR * max_acceleration * accel_time * accel_time;
     workspace_config_.overshoot_y = workspace_config_.overshoot_x; // Symmetric for now
 
     // Add safety margin
@@ -367,7 +371,7 @@ float VelocityLimits::calculateEffectiveRadius(int leg_index, float bearing_degr
 
 Point3D VelocityLimits::getLegBasePosition(int leg_index) const {
     const Parameters &params = model_.getParams();
-    float base_angle = leg_index * 60.0f; // Hexagon geometry
+    float base_angle = leg_index * LEG_ANGLE_SPACING; // Hexagon geometry
 
     Point3D base_pos;
     base_pos.x = params.hexagon_radius * std::cos(math_utils::degreesToRadians(base_angle));

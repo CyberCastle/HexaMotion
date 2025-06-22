@@ -1,4 +1,5 @@
 #include "walk_controller.h"
+#include "hexamotion_constants.h"
 
 WalkController::WalkController(RobotModel &m)
     : model(m), current_gait(TRIPOD_GAIT), gait_phase(0.0f),
@@ -8,7 +9,7 @@ WalkController::WalkController(RobotModel &m)
 
     // Initialize velocity limits with default gait parameters
     VelocityLimits::GaitConfig default_gait;
-    default_gait.frequency = 1.0f;
+    default_gait.frequency = DEFAULT_ANGULAR_SCALING;
     default_gait.stance_ratio = 0.6f;
     default_gait.swing_ratio = 0.4f;
     default_gait.time_to_max_stride = 2.0f;
@@ -57,7 +58,7 @@ Point3D WalkController::footTrajectory(int leg_index, float phase, float step_he
     if (leg_phase >= 1.0f)
         leg_phase -= 1.0f;
     Point3D trajectory;
-    float base_angle = leg_index * 60.0f;
+    float base_angle = leg_index * LEG_ANGLE_SPACING;
     const Parameters &p = model.getParams();
 
     // Calculate leg base position (hexagon corner)
@@ -80,7 +81,7 @@ Point3D WalkController::footTrajectory(int leg_index, float phase, float step_he
     if (leg_phase < stance_duration) {
         leg_states[leg_index] = STANCE_PHASE;
         float support_progress = leg_phase / stance_duration;
-        trajectory.x = default_foot_x + step_length * (0.5f - support_progress);
+        trajectory.x = default_foot_x + step_length * (WORKSPACE_SCALING_FACTOR - support_progress);
         trajectory.y = default_foot_y;
         trajectory.z = -robot_height;
     } else {
@@ -88,13 +89,13 @@ Point3D WalkController::footTrajectory(int leg_index, float phase, float step_he
         float swing_progress = (leg_phase - stance_duration) / swing_duration;
 
         Eigen::Vector3f ctrl[5];
-        float start_x = default_foot_x - step_length * 0.5f;
-        float end_x = default_foot_x + step_length * 0.5f;
+        float start_x = default_foot_x - step_length * WORKSPACE_SCALING_FACTOR;
+        float end_x = default_foot_x + step_length * WORKSPACE_SCALING_FACTOR;
         float z_base = -robot_height;
         ctrl[0] = Eigen::Vector3f(start_x, default_foot_y, z_base);
-        ctrl[1] = Eigen::Vector3f(start_x, default_foot_y, z_base + step_height * 0.5f);
-        ctrl[2] = Eigen::Vector3f((start_x + end_x) / 2.0f, default_foot_y, z_base + step_height);
-        ctrl[3] = Eigen::Vector3f(end_x, default_foot_y, z_base + step_height * 0.5f);
+        ctrl[1] = Eigen::Vector3f(start_x, default_foot_y, z_base + step_height * WORKSPACE_SCALING_FACTOR);
+        ctrl[2] = Eigen::Vector3f((start_x + end_x) / ANGULAR_ACCELERATION_FACTOR, default_foot_y, z_base + step_height);
+        ctrl[3] = Eigen::Vector3f(end_x, default_foot_y, z_base + step_height * WORKSPACE_SCALING_FACTOR);
         ctrl[4] = Eigen::Vector3f(end_x, default_foot_y, z_base);
         Eigen::Vector3f pos = math_utils::quarticBezier(ctrl, swing_progress);
         trajectory.x = pos[0];
@@ -188,7 +189,7 @@ void WalkController::updateVelocityLimits(float frequency, float stance_ratio, f
     VelocityLimits::GaitConfig gait_config;
     gait_config.frequency = frequency;
     gait_config.stance_ratio = stance_ratio;
-    gait_config.swing_ratio = 1.0f - stance_ratio;
+    gait_config.swing_ratio = DEFAULT_ANGULAR_SCALING - stance_ratio;
     gait_config.time_to_max_stride = time_to_max_stride;
 
     velocity_limits_.updateGaitParameters(gait_config);

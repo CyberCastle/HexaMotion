@@ -1,4 +1,5 @@
 #include "manual_pose_controller.h"
+#include "hexamotion_constants.h"
 
 /**
  * @file manual_pose_controller.cpp
@@ -11,7 +12,7 @@
 ManualPoseController::ManualPoseController(RobotModel &model)
     : model_(model), current_mode_(POSE_TRANSLATION),
       pose_limits_{Point3D(200.0f, 200.0f, 100.0f), Point3D(0.5f, 0.5f, 0.5f), 50.0f, 200.0f, 300.0f},
-      interpolation_speed_(0.1f), smooth_transitions_(true) {
+      interpolation_speed_(MIN_SERVO_VELOCITY), smooth_transitions_(true) {
 }
 
 void ManualPoseController::initialize() {
@@ -93,7 +94,7 @@ void ManualPoseController::updatePoseInterpolation(float dt) {
         return;
     }
 
-    float alpha = std::min(1.0f, interpolation_speed_ * dt * 60.0f); // Normalize to 60 FPS
+    float alpha = std::min(DEFAULT_ANGULAR_SCALING, interpolation_speed_ * dt * LEG_ANGLE_SPACING); // Normalize to 60 FPS
 
     // Interpolate body position
     current_pose_.body_position = interpolatePoint3D(current_pose_.body_position,
@@ -128,7 +129,7 @@ void ManualPoseController::resetPose() {
 
 void ManualPoseController::setSmoothTransitions(bool enable, float speed) {
     smooth_transitions_ = enable;
-    interpolation_speed_ = std::max(0.01f, std::min(1.0f, speed));
+    interpolation_speed_ = std::max(0.01f, std::min(DEFAULT_ANGULAR_SCALING, speed));
 }
 
 void ManualPoseController::savePosePreset(const std::string &name) {
@@ -215,7 +216,7 @@ void ManualPoseController::initializePoseLimits() {
 void ManualPoseController::initializeDefaultPresets() {
     // Create default pose presets
     PoseState neutral_pose;
-    neutral_pose.body_height = 90.0f;
+    neutral_pose.body_height = DEFAULT_MAX_ANGULAR_VELOCITY;
     pose_presets_["neutral"] = neutral_pose;
 
     PoseState high_pose;
@@ -223,12 +224,12 @@ void ManualPoseController::initializeDefaultPresets() {
     pose_presets_["high"] = high_pose;
 
     PoseState low_pose;
-    low_pose.body_height = 60.0f;
+    low_pose.body_height = LEG_ANGLE_SPACING;
     pose_presets_["low"] = low_pose;
 
     PoseState forward_lean;
     forward_lean.body_rotation.y = 0.174f; // 10 degrees
-    forward_lean.body_height = 90.0f;
+    forward_lean.body_height = DEFAULT_MAX_ANGULAR_VELOCITY;
     pose_presets_["forward_lean"] = forward_lean;
 }
 
@@ -322,8 +323,8 @@ Point3D ManualPoseController::calculateDefaultLegPosition(int leg_index, float h
     const Parameters &params = model_.getParams();
 
     // Calculate default stance position for this leg
-    float angle = leg_index * M_PI / 3.0f;       // 60 degrees between legs
-    float radius = params.hexagon_radius * 0.8f; // Default stance radius
+    float angle = leg_index * M_PI / SERVO_SPEED_MAX; // 60 degrees between legs
+    float radius = params.hexagon_radius * 0.8f;      // Default stance radius
 
     return Point3D(
         radius * cos(angle),
@@ -351,14 +352,14 @@ void ManualPoseController::setPoseQuaternion(const Point3D &position, const Eige
 }
 
 void ManualPoseController::interpolateToQuaternionPose(const Point3D &target_pos, const Eigen::Vector4f &target_quat, float speed) {
-    if (!smooth_transitions_ || speed >= 1.0f) {
-        setPoseQuaternion(target_pos, target_quat, 1.0f);
+    if (!smooth_transitions_ || speed >= DEFAULT_ANGULAR_SCALING) {
+        setPoseQuaternion(target_pos, target_quat, DEFAULT_ANGULAR_SCALING);
         current_pose_ = target_pose_;
         return;
     }
 
     // Clamp speed
-    speed = std::max(0.0f, std::min(1.0f, speed));
+    speed = std::max(0.0f, std::min(DEFAULT_ANGULAR_SCALING, speed));
 
     // Linear interpolation for position
     current_pose_.body_position.x += speed * (target_pos.x - current_pose_.body_position.x);

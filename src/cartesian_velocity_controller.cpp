@@ -1,4 +1,5 @@
 #include "cartesian_velocity_controller.h"
+#include "hexamotion_constants.h"
 #include "math_utils.h"
 #include <algorithm>
 #include <cmath>
@@ -175,7 +176,7 @@ void CartesianVelocityController::resetToDefaults() {
 }
 
 float CartesianVelocityController::calculateLinearVelocityScale(float velocity_magnitude) const {
-    if (velocity_magnitude < 0.001f) { // Very small velocity, minimal scaling
+    if (velocity_magnitude < VELOCITY_THRESHOLD) { // Very small velocity, minimal scaling
         return velocity_scaling_.minimum_speed_ratio;
     }
 
@@ -183,7 +184,7 @@ float CartesianVelocityController::calculateLinearVelocityScale(float velocity_m
     const Parameters &params = model_.getParams();
     float max_velocity_ms = params.max_velocity / 1000.0f; // Convert mm/s to m/s
 
-    if (max_velocity_ms < 0.001f) {
+    if (max_velocity_ms < VELOCITY_THRESHOLD) {
         return SERVO_SPEED_DEFAULT; // Default scaling if max velocity not properly set
     }
 
@@ -200,7 +201,7 @@ float CartesianVelocityController::calculateLinearVelocityScale(float velocity_m
 }
 
 float CartesianVelocityController::calculateAngularVelocityScale(float angular_velocity) const {
-    if (angular_velocity < 0.001f) { // Very small angular velocity
+    if (angular_velocity < VELOCITY_THRESHOLD) { // Very small angular velocity
         return SERVO_SPEED_DEFAULT;
     }
 
@@ -208,7 +209,7 @@ float CartesianVelocityController::calculateAngularVelocityScale(float angular_v
     const Parameters &params = model_.getParams();
     float max_angular_velocity_rads = math_utils::degreesToRadians(params.max_angular_velocity);
 
-    if (max_angular_velocity_rads < 0.001f) {
+    if (max_angular_velocity_rads < VELOCITY_THRESHOLD) {
         return SERVO_SPEED_DEFAULT; // Default scaling if max angular velocity not properly set
     }
 
@@ -248,7 +249,7 @@ float CartesianVelocityController::calculateLegSpeedCompensation(int leg_index, 
 
     // Get leg position in robot frame
     const Parameters &params = model_.getParams();
-    float leg_angle_deg = leg_index * 60.0f; // Hexapod legs spaced 60° apart
+    float leg_angle_deg = leg_index * LEG_ANGLE_SPACING; // Hexapod legs spaced 60° apart
     float leg_angle_rad = math_utils::degreesToRadians(leg_angle_deg);
 
     // Leg position relative to robot center

@@ -1,22 +1,23 @@
 #include "math_utils.h"
 #include "HexaModel.h"
+#include "hexamotion_constants.h"
 #include <math.h>
 
 // Utility function implementations
 namespace math_utils {
 float degreesToRadians(float degrees) {
-    return degrees * M_PI / 180.0f;
+    return degrees * DEGREES_TO_RADIANS_FACTOR;
 }
 
 float radiansToDegrees(float radians) {
-    return radians * 180.0f / M_PI;
+    return radians * RADIANS_TO_DEGREES_FACTOR;
 }
 
 float normalizeAngle(float angle) {
-    while (angle > 180.0f)
-        angle -= 360.0f;
-    while (angle < -180.0f)
-        angle += 360.0f;
+    while (angle > HALF_ROTATION_DEGREES)
+        angle -= FULL_ROTATION_DEGREES;
+    while (angle < -HALF_ROTATION_DEGREES)
+        angle += FULL_ROTATION_DEGREES;
     return angle;
 }
 
@@ -199,7 +200,7 @@ float pointToLineDistance(const Point3D &point, const Point3D &line_start, const
     float t = dot_product / line_length_sq;
 
     // Clamp t to [0, 1] to ensure we're on the line segment
-    t = std::max(0.0f, std::min(1.0f, t));
+    t = std::max(0.0f, std::min(DEFAULT_ANGULAR_SCALING, t));
 
     // Calculate the closest point on the line segment
     Point3D closest_point = Point3D(

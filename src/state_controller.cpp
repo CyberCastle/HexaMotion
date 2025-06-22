@@ -1,4 +1,5 @@
 #include "state_controller.h"
+#include "hexamotion_constants.h"
 
 /**
  * @file state_controller.cpp
@@ -450,7 +451,7 @@ bool StateController::setDesiredBodyPosition(const Eigen::Vector3f &position) {
 
 bool StateController::setDesiredBodyOrientation(const Eigen::Vector3f &orientation) {
     // Validate orientation limits (basic safety check)
-    const float MAX_ANGLE = 45.0f; // degrees
+    const float MAX_ANGLE = TIBIA_ANGLE_MAX; // degrees
     if (abs(orientation.x()) > MAX_ANGLE ||
         abs(orientation.y()) > MAX_ANGLE ||
         abs(orientation.z()) > MAX_ANGLE) {
@@ -1216,7 +1217,7 @@ bool StateController::isRobotPacked() const {
 
         // If orientation is available but position isn't, use orientation-based heuristic
         // Large roll/pitch might indicate packed/fallen state
-        return (abs(current_orientation.x()) > 45.0f || abs(current_orientation.y()) > 45.0f);
+        return (abs(current_orientation.x()) > TIBIA_ANGLE_MAX || abs(current_orientation.y()) > TIBIA_ANGLE_MAX);
     }
 
     return current_position.z() < 50.0f; // Very low height indicates packed state
