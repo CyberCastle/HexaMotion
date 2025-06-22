@@ -48,12 +48,12 @@ bool CartesianVelocityController::updateServoSpeeds(float linear_velocity_x, flo
         leg_servo_speeds_[leg].coxa.gait_adjustment = gait_adjustment;
 
         leg_servo_speeds_[leg].femur.base_speed = base_speed;
-        leg_servo_speeds_[leg].femur.velocity_scaling = combined_scale * 1.1f; // Femur moves more
+        leg_servo_speeds_[leg].femur.velocity_scaling = combined_scale * FEMUR_VELOCITY_MULTIPLIER; // Femur moves more
         leg_servo_speeds_[leg].femur.angular_compensation = angular_scale;
         leg_servo_speeds_[leg].femur.gait_adjustment = gait_adjustment;
 
         leg_servo_speeds_[leg].tibia.base_speed = base_speed;
-        leg_servo_speeds_[leg].tibia.velocity_scaling = combined_scale * 1.2f; // Tibia moves most
+        leg_servo_speeds_[leg].tibia.velocity_scaling = combined_scale * TIBIA_VELOCITY_MULTIPLIER; // Tibia moves most
         leg_servo_speeds_[leg].tibia.angular_compensation = angular_scale;
         leg_servo_speeds_[leg].tibia.gait_adjustment = gait_adjustment;
 
@@ -119,21 +119,21 @@ void CartesianVelocityController::setVelocityScaling(const VelocityScaling &scal
     velocity_scaling_ = scaling;
 
     // Validate and clamp scaling parameters
-    velocity_scaling_.linear_velocity_scale = std::max(0.1f, std::min(5.0f, velocity_scaling_.linear_velocity_scale));
-    velocity_scaling_.angular_velocity_scale = std::max(0.1f, std::min(5.0f, velocity_scaling_.angular_velocity_scale));
-    velocity_scaling_.minimum_speed_ratio = std::max(0.05f, std::min(0.95f, velocity_scaling_.minimum_speed_ratio));
-    velocity_scaling_.maximum_speed_ratio = std::max(1.05f, std::min(3.0f, velocity_scaling_.maximum_speed_ratio));
+    velocity_scaling_.linear_velocity_scale = std::max(VELOCITY_SCALE_MIN, std::min(VELOCITY_SCALE_MAX, velocity_scaling_.linear_velocity_scale));
+    velocity_scaling_.angular_velocity_scale = std::max(VELOCITY_SCALE_MIN, std::min(VELOCITY_SCALE_MAX, velocity_scaling_.angular_velocity_scale));
+    velocity_scaling_.minimum_speed_ratio = std::max(SPEED_RATIO_MIN, std::min(SPEED_RATIO_MAX_VALIDATION, velocity_scaling_.minimum_speed_ratio));
+    velocity_scaling_.maximum_speed_ratio = std::max(SPEED_RATIO_MIN_VALIDATION, std::min(SPEED_RATIO_MAX, velocity_scaling_.maximum_speed_ratio));
 }
 
 void CartesianVelocityController::setGaitSpeedModifiers(const GaitSpeedModifiers &modifiers) {
     gait_modifiers_ = modifiers;
 
     // Validate and clamp gait modifiers
-    gait_modifiers_.tripod_speed_factor = std::max(0.1f, std::min(2.0f, gait_modifiers_.tripod_speed_factor));
-    gait_modifiers_.wave_speed_factor = std::max(0.1f, std::min(2.0f, gait_modifiers_.wave_speed_factor));
-    gait_modifiers_.ripple_speed_factor = std::max(0.1f, std::min(2.0f, gait_modifiers_.ripple_speed_factor));
-    gait_modifiers_.metachronal_speed_factor = std::max(0.1f, std::min(2.0f, gait_modifiers_.metachronal_speed_factor));
-    gait_modifiers_.adaptive_speed_factor = std::max(0.1f, std::min(2.0f, gait_modifiers_.adaptive_speed_factor));
+    gait_modifiers_.tripod_speed_factor = std::max(GAIT_MODIFIER_MIN, std::min(GAIT_MODIFIER_MAX, gait_modifiers_.tripod_speed_factor));
+    gait_modifiers_.wave_speed_factor = std::max(GAIT_MODIFIER_MIN, std::min(GAIT_MODIFIER_MAX, gait_modifiers_.wave_speed_factor));
+    gait_modifiers_.ripple_speed_factor = std::max(GAIT_MODIFIER_MIN, std::min(GAIT_MODIFIER_MAX, gait_modifiers_.ripple_speed_factor));
+    gait_modifiers_.metachronal_speed_factor = std::max(GAIT_MODIFIER_MIN, std::min(GAIT_MODIFIER_MAX, gait_modifiers_.metachronal_speed_factor));
+    gait_modifiers_.adaptive_speed_factor = std::max(GAIT_MODIFIER_MIN, std::min(GAIT_MODIFIER_MAX, gait_modifiers_.adaptive_speed_factor));
 }
 
 void CartesianVelocityController::setVelocityControlEnabled(bool enable) {
@@ -163,9 +163,9 @@ void CartesianVelocityController::resetToDefaults() {
 
     // Reset all leg servo speeds to defaults
     for (int leg = 0; leg < NUM_LEGS; ++leg) {
-        leg_servo_speeds_[leg].coxa = ServoSpeedConfig{default_speed, 1.0f, 1.0f, 1.0f};
-        leg_servo_speeds_[leg].femur = ServoSpeedConfig{default_speed, 1.0f, 1.0f, 1.0f};
-        leg_servo_speeds_[leg].tibia = ServoSpeedConfig{default_speed, 1.0f, 1.0f, 1.0f};
+        leg_servo_speeds_[leg].coxa = ServoSpeedConfig{default_speed, SERVO_SPEED_DEFAULT, SERVO_SPEED_DEFAULT, SERVO_SPEED_DEFAULT};
+        leg_servo_speeds_[leg].femur = ServoSpeedConfig{default_speed, SERVO_SPEED_DEFAULT, SERVO_SPEED_DEFAULT, SERVO_SPEED_DEFAULT};
+        leg_servo_speeds_[leg].tibia = ServoSpeedConfig{default_speed, SERVO_SPEED_DEFAULT, SERVO_SPEED_DEFAULT, SERVO_SPEED_DEFAULT};
     }
 
     // Reset velocity state
@@ -184,12 +184,12 @@ float CartesianVelocityController::calculateLinearVelocityScale(float velocity_m
     float max_velocity_ms = params.max_velocity / 1000.0f; // Convert mm/s to m/s
 
     if (max_velocity_ms < 0.001f) {
-        return 1.0f; // Default scaling if max velocity not properly set
+        return SERVO_SPEED_DEFAULT; // Default scaling if max velocity not properly set
     }
 
     // Calculate linear scaling: higher velocity = higher servo speed
     float velocity_ratio = velocity_magnitude / max_velocity_ms;
-    velocity_ratio = std::min(1.0f, velocity_ratio); // Clamp to max
+    velocity_ratio = std::min(SERVO_SPEED_DEFAULT, velocity_ratio); // Clamp to max
 
     // Apply scaling with configured parameters
     float scale = velocity_scaling_.minimum_speed_ratio +
@@ -201,7 +201,7 @@ float CartesianVelocityController::calculateLinearVelocityScale(float velocity_m
 
 float CartesianVelocityController::calculateAngularVelocityScale(float angular_velocity) const {
     if (angular_velocity < 0.001f) { // Very small angular velocity
-        return 1.0f;
+        return SERVO_SPEED_DEFAULT;
     }
 
     // Map angular velocity to speed scaling using the robot's maximum angular velocity as reference
@@ -209,15 +209,15 @@ float CartesianVelocityController::calculateAngularVelocityScale(float angular_v
     float max_angular_velocity_rads = math_utils::degreesToRadians(params.max_angular_velocity);
 
     if (max_angular_velocity_rads < 0.001f) {
-        return 1.0f; // Default scaling if max angular velocity not properly set
+        return SERVO_SPEED_DEFAULT; // Default scaling if max angular velocity not properly set
     }
 
     // Calculate angular scaling: higher angular velocity = higher servo speed for outer legs
     float angular_ratio = angular_velocity / max_angular_velocity_rads;
-    angular_ratio = std::min(1.0f, angular_ratio); // Clamp to max
+    angular_ratio = std::min(SERVO_SPEED_DEFAULT, angular_ratio); // Clamp to max
 
     // Angular motion typically requires faster servo speeds
-    float scale = 1.0f + angular_ratio * velocity_scaling_.angular_velocity_scale;
+    float scale = SERVO_SPEED_DEFAULT + angular_ratio * velocity_scaling_.angular_velocity_scale;
 
     return std::max(velocity_scaling_.minimum_speed_ratio,
                     std::min(velocity_scaling_.maximum_speed_ratio, scale));
@@ -236,14 +236,14 @@ float CartesianVelocityController::calculateGaitSpeedAdjustment(GaitType gait) c
     case ADAPTIVE_GAIT:
         return gait_modifiers_.adaptive_speed_factor;
     default:
-        return 1.0f;
+        return SERVO_SPEED_DEFAULT;
     }
 }
 
 float CartesianVelocityController::calculateLegSpeedCompensation(int leg_index, float linear_vx,
                                                                  float linear_vy, float angular_vel) const {
     if (leg_index < 0 || leg_index >= NUM_LEGS) {
-        return 1.0f;
+        return SERVO_SPEED_DEFAULT;
     }
 
     // Get leg position in robot frame
@@ -270,12 +270,12 @@ float CartesianVelocityController::calculateLegSpeedCompensation(int leg_index, 
     // Scale servo speed based on leg velocity demand
     // Higher demand = higher servo speed
     float max_expected_velocity = 0.5f; // m/s - typical maximum leg velocity
-    float velocity_ratio = std::min(1.0f, total_leg_velocity / max_expected_velocity);
+    float velocity_ratio = std::min(SERVO_SPEED_DEFAULT, total_leg_velocity / max_expected_velocity);
 
     // Apply compensation: faster legs need higher servo speeds
-    float compensation = 1.0f + velocity_ratio * 0.5f; // Up to 50% speed increase
+    float compensation = SERVO_SPEED_DEFAULT + velocity_ratio * 0.5f; // Up to 50% speed increase
 
-    return std::max(0.5f, std::min(2.0f, compensation)); // Clamp to reasonable range
+    return std::max(LEG_COMPENSATION_MIN, std::min(LEG_COMPENSATION_MAX, compensation)); // Clamp to reasonable range
 }
 
 float CartesianVelocityController::applyWorkspaceConstraints(int leg_index, int joint_index, float base_speed) const {
@@ -288,15 +288,15 @@ float CartesianVelocityController::applyWorkspaceConstraints(int leg_index, int 
     switch (joint_index) {
     case 0: // Coxa joint
         // Coxa typically has lower speed requirements
-        constrained_speed *= 0.9f;
+        constrained_speed *= COXA_SPEED_FACTOR;
         break;
     case 1: // Femur joint
         // Femur carries most of the leg motion load
-        constrained_speed *= 1.0f;
+        constrained_speed *= FEMUR_SPEED_FACTOR;
         break;
     case 2: // Tibia joint
         // Tibia provides fine positioning and may need higher speeds
-        constrained_speed *= 1.1f;
+        constrained_speed *= TIBIA_SPEED_FACTOR;
         break;
     }
 
@@ -306,5 +306,5 @@ float CartesianVelocityController::applyWorkspaceConstraints(int leg_index, int 
                                           constrained_speed));
 
     // Final servo speed limits (typical servo constraints)
-    return std::max(0.1f, std::min(3.0f, constrained_speed));
+    return std::max(SERVO_SPEED_MIN, std::min(SERVO_SPEED_MAX, constrained_speed));
 }

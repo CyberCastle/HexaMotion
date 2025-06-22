@@ -5,6 +5,35 @@
 #include "velocity_limits.h"
 #include <array>
 
+// Velocity control constants
+#define SERVO_SPEED_MIN 0.1f                  // Minimum servo speed multiplier
+#define SERVO_SPEED_MAX 3.0f                  // Maximum servo speed multiplier
+#define SERVO_SPEED_DEFAULT 1.0f              // Default servo speed multiplier
+#define VELOCITY_SCALE_MIN 0.1f               // Minimum velocity scaling factor
+#define VELOCITY_SCALE_MAX 5.0f               // Maximum velocity scaling factor
+#define SPEED_RATIO_MIN 0.05f                 // Minimum speed ratio (5%)
+#define SPEED_RATIO_MAX_VALIDATION 0.95f      // Maximum for minimum_speed_ratio validation
+#define SPEED_RATIO_MIN_VALIDATION 1.05f      // Minimum for maximum_speed_ratio validation
+#define SPEED_RATIO_MAX 3.0f                  // Maximum speed ratio (300%)
+#define GAIT_MODIFIER_MIN 0.1f                // Minimum gait speed modifier
+#define GAIT_MODIFIER_MAX 2.0f                // Maximum gait speed modifier
+#define LEG_COMPENSATION_MIN 0.5f             // Minimum leg speed compensation
+#define LEG_COMPENSATION_MAX 2.0f             // Maximum leg speed compensation
+#define DEFAULT_LINEAR_VELOCITY_SCALE 2.0f    // Default linear velocity scaling factor
+#define DEFAULT_ANGULAR_VELOCITY_SCALE 1.5f   // Default angular velocity scaling factor
+#define DEFAULT_MIN_SPEED_RATIO 0.2f          // Default minimum speed ratio (20%)
+#define DEFAULT_MAX_SPEED_RATIO 1.8f          // Default maximum speed ratio (180%)
+#define DEFAULT_TRIPOD_SPEED_FACTOR 1.2f      // Default tripod gait speed factor
+#define DEFAULT_WAVE_SPEED_FACTOR 0.8f        // Default wave gait speed factor
+#define DEFAULT_RIPPLE_SPEED_FACTOR 0.9f      // Default ripple gait speed factor
+#define DEFAULT_METACHRONAL_SPEED_FACTOR 1.0f // Default metachronal gait speed factor
+#define DEFAULT_ADAPTIVE_SPEED_FACTOR 1.1f    // Default adaptive gait speed factor
+#define COXA_SPEED_FACTOR 0.9f                // Coxa joint speed adjustment (10% slower)
+#define FEMUR_SPEED_FACTOR 1.0f               // Femur joint speed adjustment (normal)
+#define TIBIA_SPEED_FACTOR 1.1f               // Tibia joint speed adjustment (10% faster)
+#define FEMUR_VELOCITY_MULTIPLIER 1.1f        // Femur velocity scaling multiplier
+#define TIBIA_VELOCITY_MULTIPLIER 1.2f        // Tibia velocity scaling multiplier
+
 /**
  * @brief Cartesian velocity controller equivalent to OpenSHC's velocity control system.
  *
@@ -23,10 +52,10 @@ class CartesianVelocityController {
      * @brief Servo speed configuration for all joints.
      */
     struct ServoSpeedConfig {
-        float base_speed = 1.0f;           // Base servo speed multiplier (0.1-3.0)
-        float velocity_scaling = 1.0f;     // Velocity-dependent scaling factor
-        float angular_compensation = 1.0f; // Angular velocity compensation
-        float gait_adjustment = 1.0f;      // Gait-specific adjustment
+        float base_speed = SERVO_SPEED_DEFAULT;           // Base servo speed multiplier (0.1-3.0)
+        float velocity_scaling = SERVO_SPEED_DEFAULT;     // Velocity-dependent scaling factor
+        float angular_compensation = SERVO_SPEED_DEFAULT; // Angular velocity compensation
+        float gait_adjustment = SERVO_SPEED_DEFAULT;      // Gait-specific adjustment
 
         /**
          * @brief Calculate final servo speed from all factors.
@@ -34,7 +63,7 @@ class CartesianVelocityController {
          */
         float getEffectiveSpeed() const {
             float speed = base_speed * velocity_scaling * angular_compensation * gait_adjustment;
-            return std::max(0.1f, std::min(3.0f, speed)); // Clamp to servo limits
+            return std::max(SERVO_SPEED_MIN, std::min(SERVO_SPEED_MAX, speed)); // Clamp to servo limits
         }
     };
 
@@ -51,22 +80,22 @@ class CartesianVelocityController {
      * @brief Velocity scaling parameters.
      */
     struct VelocityScaling {
-        float linear_velocity_scale = 2.0f;  // Linear velocity to speed scaling factor
-        float angular_velocity_scale = 1.5f; // Angular velocity to speed scaling factor
-        float minimum_speed_ratio = 0.2f;    // Minimum speed as ratio of max (20%)
-        float maximum_speed_ratio = 1.8f;    // Maximum speed as ratio of max (180%)
-        bool enable_adaptive_scaling = true; // Enable adaptive scaling based on leg workspace
+        float linear_velocity_scale = DEFAULT_LINEAR_VELOCITY_SCALE;   // Linear velocity to speed scaling factor
+        float angular_velocity_scale = DEFAULT_ANGULAR_VELOCITY_SCALE; // Angular velocity to speed scaling factor
+        float minimum_speed_ratio = DEFAULT_MIN_SPEED_RATIO;           // Minimum speed as ratio of max (20%)
+        float maximum_speed_ratio = DEFAULT_MAX_SPEED_RATIO;           // Maximum speed as ratio of max (180%)
+        bool enable_adaptive_scaling = true;                           // Enable adaptive scaling based on leg workspace
     };
 
     /**
      * @brief Gait-specific speed modifiers.
      */
     struct GaitSpeedModifiers {
-        float tripod_speed_factor = 1.2f;      // Tripod gait speed multiplier
-        float wave_speed_factor = 0.8f;        // Wave gait speed multiplier
-        float ripple_speed_factor = 0.9f;      // Ripple gait speed multiplier
-        float metachronal_speed_factor = 1.0f; // Metachronal gait speed multiplier
-        float adaptive_speed_factor = 1.1f;    // Adaptive gait speed multiplier
+        float tripod_speed_factor = DEFAULT_TRIPOD_SPEED_FACTOR;           // Tripod gait speed multiplier
+        float wave_speed_factor = DEFAULT_WAVE_SPEED_FACTOR;               // Wave gait speed multiplier
+        float ripple_speed_factor = DEFAULT_RIPPLE_SPEED_FACTOR;           // Ripple gait speed multiplier
+        float metachronal_speed_factor = DEFAULT_METACHRONAL_SPEED_FACTOR; // Metachronal gait speed multiplier
+        float adaptive_speed_factor = DEFAULT_ADAPTIVE_SPEED_FACTOR;       // Adaptive gait speed multiplier
     };
 
     /**
