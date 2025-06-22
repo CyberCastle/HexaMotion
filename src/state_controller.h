@@ -540,6 +540,9 @@ class StateController {
 
     // Pose control
     std::unique_ptr<PoseController> pose_controller_;
+    // Precomputed joint angle targets for packed and ready states
+    JointAngles packed_target_angles_[NUM_LEGS];
+    JointAngles ready_target_angles_[NUM_LEGS];
 
     // ==============================
     // PRIVATE METHODS

@@ -1169,6 +1169,10 @@ int StateController::executePackSequence() {
             pack_step_ = 0; // Reset for next time
             transition_progress_.current_step = 2;
             transition_progress_.is_complete = true;
+            // Capture packed target joint angles
+            for (int i = 0; i < NUM_LEGS; ++i) {
+                packed_target_angles_[i] = locomotion_system_.getCurrentAngles(i);
+            }
             return 100;
         }
     }
@@ -1188,6 +1192,10 @@ int StateController::executeUnpackSequence() {
             unpack_step_ = 0; // Reset for next time
             transition_progress_.current_step = 2;
             transition_progress_.is_complete = true;
+            // Capture ready target joint angles
+            for (int i = 0; i < NUM_LEGS; ++i) {
+                ready_target_angles_[i] = locomotion_system_.getCurrentAngles(i);
+            }
             return 100;
         }
     }
@@ -1220,7 +1228,20 @@ bool StateController::isRobotPacked() const {
         return (abs(current_orientation.x()) > TIBIA_ANGLE_MAX || abs(current_orientation.y()) > TIBIA_ANGLE_MAX);
     }
 
-    return current_position.z() < 50.0f; // Very low height indicates packed state
+    bool body_low = current_position.z() < 50.0f;
+    // Joint-based packed check
+    bool joints_ok = true;
+    for (int i = 0; i < NUM_LEGS; ++i) {
+        JointAngles cur = locomotion_system_.getCurrentAngles(i);
+        JointAngles tgt = packed_target_angles_[i];
+        if (abs(cur.coxa - tgt.coxa) > JOINT_TOLERANCE ||
+            abs(cur.femur - tgt.femur) > JOINT_TOLERANCE ||
+            abs(cur.tibia - tgt.tibia) > JOINT_TOLERANCE) {
+            joints_ok = false;
+            break;
+        }
+    }
+    return body_low && joints_ok;
 }
 
 bool StateController::isRobotReady() const {
@@ -1236,8 +1257,20 @@ bool StateController::isRobotReady() const {
     // Check if at reasonable height and level orientation
     bool height_ok = (current_position.z() > 80.0f && current_position.z() < 200.0f);
     bool orientation_ok = (abs(current_orientation.x()) < 10.0f && abs(current_orientation.y()) < 10.0f);
-
-    return height_ok && orientation_ok;
+    bool body_ready = height_ok && orientation_ok;
+    // Joint-based ready check
+    bool joints_ok = true;
+    for (int i = 0; i < NUM_LEGS; ++i) {
+        JointAngles cur = locomotion_system_.getCurrentAngles(i);
+        JointAngles tgt = ready_target_angles_[i];
+        if (abs(cur.coxa - tgt.coxa) > JOINT_TOLERANCE ||
+            abs(cur.femur - tgt.femur) > JOINT_TOLERANCE ||
+            abs(cur.tibia - tgt.tibia) > JOINT_TOLERANCE) {
+            joints_ok = false;
+            break;
+        }
+    }
+    return body_ready && joints_ok;
 }
 
 bool StateController::isValidStateTransition(RobotState current_state, RobotState desired_state) const {
