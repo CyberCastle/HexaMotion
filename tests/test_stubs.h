@@ -179,6 +179,11 @@ struct DummyFSR : IFSRInterface {
 
 struct DummyServo : IServoInterface {
     bool initialize() override { return true; }
+    bool hasBlockingStatusFlags(int, int, uint8_t *active_flags = nullptr) override {
+        if (active_flags)
+            *active_flags = 0;
+        return false;
+    }
     bool setJointAngleAndSpeed(int, int, float, float) override { return true; }
     float getJointAngle(int, int) override { return 0.0f; }
     bool isJointMoving(int, int) override { return false; }
@@ -215,6 +220,14 @@ struct ProgressiveServo : IServoInterface {
     bool initialize() override {
         initialized = true;
         return true;
+    }
+
+    bool hasBlockingStatusFlags(int leg, int joint, uint8_t *active_flags = nullptr) override {
+        // Mock implementation - no servos are blocked
+        if (active_flags) {
+            *active_flags = 0; // No flags active
+        }
+        return false; // No blocking flags
     }
 
     bool setJointAngleAndSpeed(int leg, int joint, float angle, float speed) override {

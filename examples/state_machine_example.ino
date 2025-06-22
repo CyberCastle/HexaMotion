@@ -127,6 +127,15 @@ class MyFSR : public IFSRInterface {
 class MyServo : public IServoInterface {
   public:
     bool initialize() override { return true; }
+
+    bool hasBlockingStatusFlags(int leg_index, int joint_index, uint8_t *active_flags = nullptr) override {
+        // Mock implementation - no servos are blocked
+        if (active_flags) {
+            *active_flags = 0; // No flags active
+        }
+        return false; // No blocking flags
+    }
+
     bool setJointAngleAndSpeed(int leg_index, int joint_index, float angle, float speed) override {
         // Send actual servo commands here with both angle and speed
         (void)leg_index;

@@ -64,7 +64,8 @@ class LocomotionSystem {
         KINEMATICS_ERROR = 4,
         STABILITY_ERROR = 5,
         PARAMETER_ERROR = 6,
-        SENSOR_ERROR = 7 // General sensor communication error
+        SENSOR_ERROR = 7,       // General sensor communication error
+        SERVO_BLOCKED_ERROR = 8 // Servo blocked by status flags
     };
 
   private:

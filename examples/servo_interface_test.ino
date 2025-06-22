@@ -31,6 +31,14 @@ class TestServo : public IServoInterface {
         return true;
     }
 
+    bool hasBlockingStatusFlags(int leg_index, int joint_index, uint8_t *active_flags = nullptr) override {
+        // Mock implementation - no servos are blocked
+        if (active_flags) {
+            *active_flags = 0; // No flags active
+        }
+        return false; // No blocking flags
+    }
+
     // NEW: Combined angle and speed control
     bool setJointAngleAndSpeed(int leg_index, int joint_index, float angle, float speed) override {
         if (leg_index < 0 || leg_index >= NUM_LEGS)

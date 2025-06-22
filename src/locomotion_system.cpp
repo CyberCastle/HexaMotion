@@ -182,6 +182,22 @@ bool LocomotionSystem::setLegJointAngles(int leg, const JointAngles &q) {
     if (!servo_interface)
         return false;
 
+    // CHECK SERVO STATUS FLAGS BEFORE ATTEMPTING MOVEMENT
+    // Verify that all servos in this leg are ready for movement
+    for (int joint = 0; joint < DOF_PER_LEG; ++joint) {
+        if (servo_interface->hasBlockingStatusFlags(leg, joint)) {
+            // Servo is blocked, cannot move this leg
+            last_error = SERVO_BLOCKED_ERROR;
+#if defined(ENABLE_LOG) && defined(ARDUINO)
+            Serial.print("Servo blocked - leg ");
+            Serial.print(leg);
+            Serial.print(" joint ");
+            Serial.println(joint);
+#endif
+            return false;
+        }
+    }
+
     bool within_limits = q.coxa >= params.coxa_angle_limits[0] &&
                          q.coxa <= params.coxa_angle_limits[1] &&
                          q.femur >= params.femur_angle_limits[0] &&
@@ -941,6 +957,8 @@ String LocomotionSystem::getErrorMessage(ErrorCode error) {
         return "Parameter error";
     case SENSOR_ERROR:
         return "Sensor communication error";
+    case SERVO_BLOCKED_ERROR:
+        return "Servo blocked by status flags";
     default:
         return "Unknown error";
     }
@@ -981,6 +999,11 @@ bool LocomotionSystem::handleError(ErrorCode error) {
     case KINEMATICS_ERROR:
         // Return to a safe pose
         return setStandingPose();
+
+    case SERVO_BLOCKED_ERROR:
+        // Cannot recover from blocked servos automatically - requires manual intervention
+        // The error provides diagnostic information about which servos are blocked
+        return false;
 
     default:
         return false;

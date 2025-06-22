@@ -187,6 +187,13 @@ class ParallelDemoFSR : public IFSRInterface {
 class ParallelDemoServo : public IServoInterface {
   public:
     bool initialize() override { return true; }
+
+    bool hasBlockingStatusFlags(int leg_index, int joint_index, uint8_t *active_flags = nullptr) override {
+        if (active_flags)
+            *active_flags = 0;
+        return false;
+    }
+
     bool setJointAngleAndSpeed(int leg_index, int joint_index, float angle, float speed) override {
         (void)leg_index;
         (void)joint_index;

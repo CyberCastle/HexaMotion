@@ -285,6 +285,14 @@ class IServoInterface {
     virtual bool initialize() = 0;
 
     /**
+     * Check if any status flags are active that would prevent servo movement.
+     * @param leg_index Index of the leg (0-5)
+     * @param joint_index Index of the joint within leg (0-2: coxa, femur, tibia)
+     * @return true if any blocking flags are active, false if servo is ready for movement
+     */
+    virtual bool hasBlockingStatusFlags(int leg_index, int joint_index) = 0;
+
+    /**
      * Set a joint's angular position and velocity simultaneously.
      * This is the primary method for servo control - both parameters must be set together.
      * @param leg_index Index of the leg (0-5)

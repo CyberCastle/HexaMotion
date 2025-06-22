@@ -39,6 +39,10 @@ bool PoseController::setBodyPose(const Eigen::Vector3f &position, const Eigen::V
         if (servos) {
             float speed = model.getParams().default_servo_speed;
             for (int j = 0; j < DOF_PER_LEG; ++j) {
+                // Check servo status flags before movement
+                if (servos->hasBlockingStatusFlags(i, j)) {
+                    return false; // Servo blocked by status flags
+                }
                 float angle = (j == 0 ? angles.coxa : (j == 1 ? angles.femur : angles.tibia));
                 servos->setJointAngleAndSpeed(i, j, angle, speed);
             }
@@ -64,6 +68,10 @@ bool PoseController::setLegPosition(int leg_index, const Point3D &position,
     if (servos) {
         float speed = model.getParams().default_servo_speed;
         for (int j = 0; j < DOF_PER_LEG; ++j) {
+            // Check servo status flags before movement
+            if (servos->hasBlockingStatusFlags(leg_index, j)) {
+                return false; // Servo blocked by status flags
+            }
             float angle = (j == 0 ? angles.coxa : (j == 1 ? angles.femur : angles.tibia));
             servos->setJointAngleAndSpeed(leg_index, j, angle, speed);
         }
@@ -286,6 +294,10 @@ bool PoseController::updateTrajectoryStep(Point3D leg_positions[NUM_LEGS], Joint
         if (servos) {
             float speed = model.getParams().default_servo_speed * config.interpolation_speed;
             for (int j = 0; j < DOF_PER_LEG; ++j) {
+                // Check servo status flags before movement
+                if (servos->hasBlockingStatusFlags(i, j)) {
+                    return false; // Servo blocked by status flags
+                }
                 float angle = (j == 0 ? joint_angles[i].coxa : (j == 1 ? joint_angles[i].femur : joint_angles[i].tibia));
                 servos->setJointAngleAndSpeed(i, j, angle, speed);
             }
@@ -345,6 +357,10 @@ bool PoseController::setBodyPoseImmediate(const Eigen::Vector3f &position, const
         if (servos) {
             float speed = model.getParams().default_servo_speed;
             for (int j = 0; j < DOF_PER_LEG; ++j) {
+                // Check servo status flags before movement
+                if (servos->hasBlockingStatusFlags(i, j)) {
+                    return false; // Servo blocked by status flags
+                }
                 float angle = (j == 0 ? angles.coxa : (j == 1 ? angles.femur : angles.tibia));
                 servos->setJointAngleAndSpeed(i, j, angle, speed);
             }
