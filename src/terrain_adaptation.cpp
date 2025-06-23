@@ -23,8 +23,8 @@ TerrainAdaptation::TerrainAdaptation(RobotModel &model)
     // Initialize FSR thresholds from model parameters or use defaults
     const Parameters &params = model_.getParams();
 
-    // Use fsr_threshold if configured (> 0), otherwise use default
-    touchdown_threshold_ = (params.fsr_threshold > 0.0f) ? params.fsr_threshold : DEFAULT_FSR_TOUCHDOWN_THRESHOLD;
+    // Use fsr_touchdown_threshold if configured (> 0), otherwise use default
+    touchdown_threshold_ = (params.fsr_touchdown_threshold > 0.0f) ? params.fsr_touchdown_threshold : DEFAULT_FSR_TOUCHDOWN_THRESHOLD;
 
     // Use fsr_liftoff_threshold if configured (> 0), otherwise use default
     liftoff_threshold_ = (params.fsr_liftoff_threshold > 0.0f) ? params.fsr_liftoff_threshold : DEFAULT_FSR_LIFTOFF_THRESHOLD;
@@ -490,9 +490,9 @@ void TerrainAdaptation::updateAdvancedTerrainAnalysis(const IMUData &imu_data) {
 void TerrainAdaptation::updateThresholdsFromModel() {
     const Parameters &params = model_.getParams();
 
-    // Update touchdown threshold from fsr_threshold if configured
-    if (params.fsr_threshold > 0.0f) {
-        touchdown_threshold_ = params.fsr_threshold;
+    // Update touchdown threshold from fsr_touchdown_threshold if configured
+    if (params.fsr_touchdown_threshold > 0.0f) {
+        touchdown_threshold_ = params.fsr_touchdown_threshold;
     }
 
     // Update liftoff threshold from fsr_liftoff_threshold if configured

@@ -30,7 +30,7 @@
  *
  * SENSOR SETTINGS:
  * - IMU_CALIBRATION_OFFSET: IMU calibration offset [roll, pitch, yaw] (degrees)
- * - FSR_THRESHOLD: FSR touchdown detection threshold (ADC units)
+ * - FSR_TOUCHDOWN_THRESHOLD: FSR touchdown detection threshold (ADC units)
  * - FSR_LIFTOFF_THRESHOLD: FSR liftoff detection threshold (ADC units)
  * - FSR_MAX_PRESSURE: Maximum detectable FSR pressure (N or kg)
  *

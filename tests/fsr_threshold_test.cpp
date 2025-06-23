@@ -16,8 +16,8 @@ int main() {
     std::cout << "\n=== Testing Default Thresholds ===" << std::endl;
     {
         Parameters params = createDefaultParameters();
-        params.fsr_threshold = 0.0f;         // Not configured
-        params.fsr_liftoff_threshold = 0.0f; // Not configured
+        params.fsr_touchdown_threshold = 0.0f; // Not configured
+        params.fsr_liftoff_threshold = 0.0f;   // Not configured
 
         RobotModel model(params);
         TerrainAdaptation terrain_adaptation(model);
@@ -36,8 +36,8 @@ int main() {
     std::cout << "\n=== Testing Custom Model Thresholds ===" << std::endl;
     {
         Parameters params = createDefaultParameters();
-        params.fsr_threshold = 25.0f;         // Custom touchdown threshold
-        params.fsr_liftoff_threshold = 12.0f; // Custom liftoff threshold
+        params.fsr_touchdown_threshold = 25.0f; // Custom touchdown threshold
+        params.fsr_liftoff_threshold = 12.0f;   // Custom liftoff threshold
 
         RobotModel model(params);
         TerrainAdaptation terrain_adaptation(model);
@@ -76,8 +76,8 @@ int main() {
     std::cout << "\n=== Testing Partial Configuration ===" << std::endl;
     {
         Parameters params = createDefaultParameters();
-        params.fsr_threshold = 20.0f;        // Only touchdown configured
-        params.fsr_liftoff_threshold = 0.0f; // Liftoff not configured
+        params.fsr_touchdown_threshold = 20.0f; // Only touchdown configured
+        params.fsr_liftoff_threshold = 0.0f;    // Liftoff not configured
 
         RobotModel model(params);
         TerrainAdaptation terrain_adaptation(model);
@@ -96,7 +96,7 @@ int main() {
     std::cout << "\n=== Testing Manual Threshold Updates ===" << std::endl;
     {
         Parameters params = createDefaultParameters();
-        params.fsr_threshold = 40.0f;
+        params.fsr_touchdown_threshold = 40.0f;
         params.fsr_liftoff_threshold = 20.0f;
 
         RobotModel model(params);

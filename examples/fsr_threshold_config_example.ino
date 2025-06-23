@@ -79,13 +79,13 @@ void setup() {
     Serial.println("\n=== Method 1: Configuration via Parameters ===");
 
     // Configure touchdown threshold (when foot makes contact)
-    robot_params.fsr_threshold = 30.0f; // 30 ADC units for touchdown
+    robot_params.fsr_touchdown_threshold = 30.0f; // 30 ADC units for touchdown
 
     // Configure liftoff threshold (when foot loses contact)
     robot_params.fsr_liftoff_threshold = 15.0f; // 15 ADC units for liftoff
 
     Serial.print("Configured touchdown threshold: ");
-    Serial.println(robot_params.fsr_threshold);
+    Serial.println(robot_params.fsr_touchdown_threshold);
     Serial.print("Configured liftoff threshold: ");
     Serial.println(robot_params.fsr_liftoff_threshold);
 
@@ -294,9 +294,9 @@ Parameters createBasicParameters() {
     params.control_frequency = 50.0f;    // Hz
 
     // FSR parameters (will be configured in example)
-    params.fsr_threshold = 0.0f;         // Will be set dynamically
-    params.fsr_liftoff_threshold = 0.0f; // Will be set dynamically
-    params.fsr_max_pressure = 100.0f;    // Maximum FSR reading (N)
+    params.fsr_touchdown_threshold = 0.0f; // Will be set dynamically
+    params.fsr_liftoff_threshold = 0.0f;   // Will be set dynamically
+    params.fsr_max_pressure = 100.0f;      // Maximum FSR reading (N)
 
     return params;
 }

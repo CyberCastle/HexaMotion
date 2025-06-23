@@ -34,7 +34,7 @@ void setup() {
     // Touchdown threshold - pressure level that indicates foot contact with ground
     // Higher values make the system less sensitive to light contact
     // Lower values make the system more sensitive but may trigger false positives
-    robot_params.fsr_threshold = 30.0f; // ADC units (touchdown)
+    robot_params.fsr_touchdown_threshold = 30.0f; // ADC units (touchdown)
 
     // Liftoff threshold - pressure level below which foot is considered lifted
     // Should be lower than touchdown threshold to provide hysteresis

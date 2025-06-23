@@ -298,7 +298,7 @@ inline Parameters createDefaultParameters() {
     params.max_angular_velocity = 45.0f;
     params.stability_margin = 0.02f;
     params.control_frequency = 50.0f;
-    params.fsr_threshold = 0.1f;
+    params.fsr_touchdown_threshold = 0.1f;
     params.fsr_liftoff_threshold = 0.05f;
     params.fsr_max_pressure = 10.0f;
     // Disable smooth trajectory features for unit tests

@@ -33,7 +33,7 @@ struct Parameters {
     float dh_parameters[NUM_LEGS][DOF_PER_LEG][4];
 
     Eigen::Vector3f imu_calibration_offset;
-    float fsr_threshold;
+    float fsr_touchdown_threshold;
     float fsr_liftoff_threshold;
     float fsr_max_pressure;
 
