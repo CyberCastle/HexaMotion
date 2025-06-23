@@ -34,6 +34,7 @@ struct Parameters {
 
     Eigen::Vector3f imu_calibration_offset;
     float fsr_threshold;
+    float fsr_liftoff_threshold;
     float fsr_max_pressure;
 
     float max_velocity;

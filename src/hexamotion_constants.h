@@ -151,9 +151,9 @@
 // TERRAIN ADAPTATION CONSTANTS
 // ========================================================================
 
-// Force thresholds for terrain contact
-#define TOUCHDOWN_THRESHOLD 10.0f // Force threshold for touchdown detection (N)
-#define LIFTOFF_THRESHOLD 5.0f    // Force threshold for liftoff detection (N)
+// Default FSR threshold values for terrain contact detection
+#define DEFAULT_FSR_TOUCHDOWN_THRESHOLD 10.0f // Default FSR touchdown threshold (N or ADC units)
+#define DEFAULT_FSR_LIFTOFF_THRESHOLD 5.0f    // Default FSR liftoff threshold (N or ADC units)
 
 // Terrain analysis parameters
 #define STEP_DEPTH_DEFAULT 20.0f   // Default step depth for terrain analysis (mm)

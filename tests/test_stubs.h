@@ -179,9 +179,7 @@ struct DummyFSR : IFSRInterface {
 
 struct DummyServo : IServoInterface {
     bool initialize() override { return true; }
-    bool hasBlockingStatusFlags(int, int, uint8_t *active_flags = nullptr) override {
-        if (active_flags)
-            *active_flags = 0;
+    bool hasBlockingStatusFlags(int, int) override {
         return false;
     }
     bool setJointAngleAndSpeed(int, int, float, float) override { return true; }
@@ -222,11 +220,8 @@ struct ProgressiveServo : IServoInterface {
         return true;
     }
 
-    bool hasBlockingStatusFlags(int leg, int joint, uint8_t *active_flags = nullptr) override {
+    bool hasBlockingStatusFlags(int leg, int joint) override {
         // Mock implementation - no servos are blocked
-        if (active_flags) {
-            *active_flags = 0; // No flags active
-        }
         return false; // No blocking flags
     }
 
@@ -304,6 +299,7 @@ inline Parameters createDefaultParameters() {
     params.stability_margin = 0.02f;
     params.control_frequency = 50.0f;
     params.fsr_threshold = 0.1f;
+    params.fsr_liftoff_threshold = 0.05f;
     params.fsr_max_pressure = 10.0f;
     // Disable smooth trajectory features for unit tests
     params.smooth_trajectory.use_current_servo_positions = false;

@@ -131,7 +131,7 @@ void testTouchdownDetection() {
     std::cout << "✓ Touchdown detection working" << std::endl;
 
     // Test liftoff event
-    fsr.setFSRData(0, 2.0f, false); // Below liftoff threshold
+    fsr.setFSRData(0, 1.0f, false); // Well below liftoff threshold (default is 5.0f)
     terrain_adaptation.update(&fsr, &imu);
 
     const TerrainAdaptation::StepPlane &step_plane_after = terrain_adaptation.getStepPlane(0);

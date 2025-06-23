@@ -17,8 +17,17 @@ static const TerrainAdaptation::StepPlane EMPTY_STEP_PLANE;
 
 TerrainAdaptation::TerrainAdaptation(RobotModel &model)
     : model_(model), rough_terrain_mode_(false), force_normal_touchdown_(false),
-      gravity_aligned_tips_(false), touchdown_threshold_(TOUCHDOWN_THRESHOLD), liftoff_threshold_(LIFTOFF_THRESHOLD),
-      step_depth_(STEP_DEPTH_DEFAULT), gravity_estimate_(0, 0, -GRAVITY_ACCELERATION) {
+      gravity_aligned_tips_(false), step_depth_(STEP_DEPTH_DEFAULT),
+      gravity_estimate_(0, 0, -GRAVITY_ACCELERATION) {
+
+    // Initialize FSR thresholds from model parameters or use defaults
+    const Parameters &params = model_.getParams();
+
+    // Use fsr_threshold if configured (> 0), otherwise use default
+    touchdown_threshold_ = (params.fsr_threshold > 0.0f) ? params.fsr_threshold : DEFAULT_FSR_TOUCHDOWN_THRESHOLD;
+
+    // Use fsr_liftoff_threshold if configured (> 0), otherwise use default
+    liftoff_threshold_ = (params.fsr_liftoff_threshold > 0.0f) ? params.fsr_liftoff_threshold : DEFAULT_FSR_LIFTOFF_THRESHOLD;
 
     // Initialize per-leg data
     for (int i = 0; i < NUM_LEGS; i++) {
@@ -475,5 +484,19 @@ void TerrainAdaptation::updateAdvancedTerrainAnalysis(const IMUData &imu_data) {
         for (int i = 0; i < NUM_LEGS; i++) {
             step_planes_[i].confidence *= 0.9f;
         }
+    }
+}
+
+void TerrainAdaptation::updateThresholdsFromModel() {
+    const Parameters &params = model_.getParams();
+
+    // Update touchdown threshold from fsr_threshold if configured
+    if (params.fsr_threshold > 0.0f) {
+        touchdown_threshold_ = params.fsr_threshold;
+    }
+
+    // Update liftoff threshold from fsr_liftoff_threshold if configured
+    if (params.fsr_liftoff_threshold > 0.0f) {
+        liftoff_threshold_ = params.fsr_liftoff_threshold;
     }
 }

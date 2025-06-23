@@ -115,6 +115,36 @@ class TerrainAdaptation {
     void setGravityAlignedTips(bool enabled) { gravity_aligned_tips_ = enabled; }
 
     /**
+     * @brief Set FSR touchdown threshold
+     * @param threshold FSR threshold for touchdown detection (N or ADC units)
+     */
+    void setTouchdownThreshold(float threshold) { touchdown_threshold_ = threshold; }
+
+    /**
+     * @brief Set FSR liftoff threshold
+     * @param threshold FSR threshold for liftoff detection (N or ADC units)
+     */
+    void setLiftoffThreshold(float threshold) { liftoff_threshold_ = threshold; }
+
+    /**
+     * @brief Get current touchdown threshold
+     * @return Touchdown threshold value
+     */
+    float getTouchdownThreshold() const { return touchdown_threshold_; }
+
+    /**
+     * @brief Get current liftoff threshold
+     * @return Liftoff threshold value
+     */
+    float getLiftoffThreshold() const { return liftoff_threshold_; }
+
+    /**
+     * @brief Update FSR thresholds from model parameters
+     * Call this method when model parameters change to sync threshold values
+     */
+    void updateThresholdsFromModel();
+
+    /**
      * @brief Set external target for specific leg
      * @param leg_index Leg index (0-5)
      * @param target External target specification

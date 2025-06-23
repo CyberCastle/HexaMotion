@@ -465,8 +465,9 @@ void initializeRobotParameters() {
     robot_params.tibia_angle_limits[1] = 90.0f;
 
     // Sensor parameters
-    robot_params.fsr_threshold = 50.0f;      // ADC units
-    robot_params.fsr_max_pressure = 100.0f;  // Newtons
+    robot_params.fsr_threshold = 50.0f;           // Touchdown threshold (ADC units)
+    robot_params.fsr_liftoff_threshold = 25.0f;   // Liftoff threshold (ADC units)
+    robot_params.fsr_max_pressure = 100.0f;       // Newtons
 
     // Control parameters
     robot_params.max_velocity = 100.0f;         // mm/s
