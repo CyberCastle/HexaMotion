@@ -27,7 +27,7 @@ Parameters createTestParameters() {
     params.coxa_length = 50.0f;
     params.femur_length = 101.0f;
     params.tibia_length = 208.0f;
-    params.robot_height = 90.0f;
+    params.robot_height = 100.0f;
     params.height_offset = 0.0f;
     params.control_frequency = 100;
 
