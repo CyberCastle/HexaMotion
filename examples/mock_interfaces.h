@@ -140,12 +140,9 @@ class ExampleServo : public IServoInterface {
 
     bool initialize() override { return true; }
 
-    bool hasBlockingStatusFlags(int /*leg_index*/, int /*joint_index*/, uint8_t *active_flags = nullptr) override {
-        // Mock implementation - no servos are blocked
-        if (active_flags) {
-            *active_flags = 0; // No flags active
-        }
-        return false; // No blocking flags
+    bool hasBlockingStatusFlags(int /*leg_index*/, int /*joint_index*/) override {
+        // Mock implementation - no servos are blocked and no flag reporting
+        return false;
     }
 
     bool setJointAngleAndSpeed(int leg_index, int joint_index, float angle, float speed) override {

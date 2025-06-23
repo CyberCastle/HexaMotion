@@ -13,7 +13,7 @@ class VelocityLimitsTest {
     std::unique_ptr<VelocityLimits> velocity_limits;
     std::unique_ptr<WalkController> walk_controller;
 
-    const float FLOAT_TOLERANCE = 1e-5f;
+    const float FLOAT_TOLERANCE_TEST = 1e-5f;
     int tests_passed = 0;
     int tests_failed = 0;
 
@@ -115,10 +115,10 @@ class VelocityLimitsTest {
 
     void testBearingNormalization() {
         std::cout << "Testing bearing normalization..." << std::endl;
-        assert_near(VelocityLimits::normalizeBearing(0.0f), 0.0f, FLOAT_TOLERANCE, "0° normalization");
-        assert_near(VelocityLimits::normalizeBearing(360.0f), 0.0f, FLOAT_TOLERANCE, "360° normalization");
-        assert_near(VelocityLimits::normalizeBearing(-90.0f), 270.0f, FLOAT_TOLERANCE, "-90° normalization");
-        assert_near(VelocityLimits::normalizeBearing(450.0f), 90.0f, FLOAT_TOLERANCE, "450° normalization");
+        assert_near(VelocityLimits::normalizeBearing(0.0f), 0.0f, FLOAT_TOLERANCE_TEST, "0° normalization");
+        assert_near(VelocityLimits::normalizeBearing(360.0f), 0.0f, FLOAT_TOLERANCE_TEST, "360° normalization");
+        assert_near(VelocityLimits::normalizeBearing(-90.0f), 270.0f, FLOAT_TOLERANCE_TEST, "-90° normalization");
+        assert_near(VelocityLimits::normalizeBearing(450.0f), 90.0f, FLOAT_TOLERANCE_TEST, "450° normalization");
     }
 
     void testBearingCalculation() {
