@@ -1,16 +1,13 @@
-#include "velocity_limits.h"
-#include "hexamotion_constants.h"
-
 /**
  * @file velocity_limits.cpp
  * @brief Helper functions for validating commanded velocities.
  */
+
+#include "velocity_limits.h"
+#include "hexamotion_constants.h"
 #include "math_utils.h"
 #include <algorithm>
-#in bearing_degrees = std::fmod(bearing_degrees, FULL_ROTATION_DEGREES);
-if (bearing_degrees < 0.0f)
-    bearing_degrees += FULL_ROTATION_DEGREES;
-de<cmath>
+#include <cmath>
 
 VelocityLimits::VelocityLimits(const RobotModel &model)
     : model_(model), angular_velocity_scaling_(DEFAULT_ANGULAR_SCALING) {
