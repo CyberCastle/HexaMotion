@@ -359,71 +359,67 @@ void LocomotionSystem::updateAdaptivePattern() {
 }
 
 bool LocomotionSystem::shouldAdaptGaitPattern() {
-    if (!system_enabled || !fsr_interface || !imu_interface) {
+    // Preconditions
+    if (!system_enabled || !fsr_interface || !imu_interface)
         return false;
+
+    // Read all FSR data once
+    std::array<FSRData, NUM_LEGS> fsr_readings;
+    for (int i = 0; i < NUM_LEGS; ++i) {
+        fsr_readings[i] = fsr_interface->readFSR(i);
     }
 
-    // Check terrain conditions
+    // Compute average pressure for legs in contact
     float avg_pressure = 0.0f;
     int contact_count = 0;
-    float pressure_variance = 0.0f;
-
-    for (int i = 0; i < NUM_LEGS; i++) {
-        FSRData fsr_data = fsr_interface->readFSR(i);
-        if (fsr_data.in_contact) {
-            avg_pressure += fsr_data.pressure;
-            contact_count++;
+    for (auto &d : fsr_readings) {
+        if (d.in_contact) {
+            avg_pressure += d.pressure;
+            ++contact_count;
         }
     }
-
     if (contact_count == 0)
         return false;
-
     avg_pressure /= contact_count;
 
-    // Calculate pressure variance to detect uneven terrain
-    for (int i = 0; i < NUM_LEGS; i++) {
-        FSRData fsr_data = fsr_interface->readFSR(i);
-        if (fsr_data.in_contact) {
-            float diff = fsr_data.pressure - avg_pressure;
+    // Compute variance
+    float pressure_variance = 0.0f;
+    for (auto &d : fsr_readings) {
+        if (d.in_contact) {
+            float diff = d.pressure - avg_pressure;
             pressure_variance += diff * diff;
         }
     }
     pressure_variance /= contact_count;
 
-    // Check IMU for slope/tilt with enhanced precision
+    // Read IMU data
     IMUData imu_data = imu_interface->readIMU();
-    float tilt_magnitude;
+    if (!imu_data.is_valid)
+        return false;
 
-    // Use enhanced orientation data if available (e.g., BNO055)
+    // Calculate tilt magnitude
+    float tilt_magnitude = 0.0f;
     if (imu_data.has_absolute_capability && imu_data.absolute_data.absolute_orientation_valid) {
-        // More precise tilt calculation using absolute orientation
-        tilt_magnitude = sqrt(
-            imu_data.absolute_data.absolute_roll * imu_data.absolute_data.absolute_roll +
-            imu_data.absolute_data.absolute_pitch * imu_data.absolute_data.absolute_pitch);
-
-        // Also check for dynamic motion using linear acceleration
+        tilt_magnitude = std::hypot(
+            imu_data.absolute_data.absolute_roll,
+            imu_data.absolute_data.absolute_pitch);
+        // Dynamic motion triggers adaptation
         if (imu_data.absolute_data.linear_acceleration_valid) {
-            float dynamic_motion = sqrt(
-                imu_data.absolute_data.linear_accel_x * imu_data.absolute_data.linear_accel_x +
-                imu_data.absolute_data.linear_accel_y * imu_data.absolute_data.linear_accel_y +
-                imu_data.absolute_data.linear_accel_z * imu_data.absolute_data.linear_accel_z);
-
-            // Consider dynamic motion in adaptation decision
-            if (dynamic_motion > 3.0f) { // m/s² threshold for dynamic adaptation
-                return true;             // Force adaptation during high acceleration
-            }
+            float dyn = std::hypot(
+                imu_data.absolute_data.linear_accel_x,
+                imu_data.absolute_data.linear_accel_y,
+                imu_data.absolute_data.linear_accel_z);
+            if (dyn > 3.0f)
+                return true;
         }
     } else {
-        // Fallback to basic IMU data
-        tilt_magnitude = sqrt(imu_data.roll * imu_data.roll + imu_data.pitch * imu_data.pitch);
+        tilt_magnitude = std::hypot(imu_data.roll, imu_data.pitch);
     }
 
-    // Adapt if terrain is uneven or tilted
+    // Adapt if any condition met
     bool high_variance = pressure_variance > (params.fsr_max_pressure * 0.1f);
-    bool significant_tilt = tilt_magnitude > 5.0f; // 5 degrees
+    bool significant_tilt = tilt_magnitude > 5.0f;
     bool high_pressure = avg_pressure > (params.fsr_max_pressure * 0.7f);
-
     return high_variance || significant_tilt || high_pressure;
 }
 
