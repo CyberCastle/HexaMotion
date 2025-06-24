@@ -64,6 +64,15 @@ JointAngles RobotModel::inverseKinematics(int leg, const Point3D &p_target) {
     local_target.y = p_target.y - base_y;
     local_target.z = p_target.z;
 
+    // Rotate target into leg's local coordinate frame to account for hexagonal mounting offset
+    {
+        float theta = -math_utils::degreesToRadians(base_angle_deg);
+        float x_rot = local_target.x * cos(theta) - local_target.y * sin(theta);
+        float y_rot = local_target.x * sin(theta) + local_target.y * cos(theta);
+        local_target.x = x_rot;
+        local_target.y = y_rot;
+    }
+
     // Quick workspace check using centralized reachability function
     float max_reach = params.coxa_length + params.femur_length + params.tibia_length;
     float min_reach = std::abs(params.femur_length - params.tibia_length);
