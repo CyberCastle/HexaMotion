@@ -18,6 +18,7 @@
 #include "math_utils.h"
 #include <algorithm>
 #include <vector>
+#include <cmath>
 #ifndef ARDUINO
 #include <chrono>
 #endif
@@ -405,10 +406,10 @@ bool LocomotionSystem::shouldAdaptGaitPattern() {
             imu_data.absolute_data.absolute_pitch);
         // Dynamic motion triggers adaptation
         if (imu_data.absolute_data.linear_acceleration_valid) {
-            float dyn = std::hypot(
-                imu_data.absolute_data.linear_accel_x,
-                imu_data.absolute_data.linear_accel_y,
-                imu_data.absolute_data.linear_accel_z);
+            float dyn = std::sqrt(
+                imu_data.absolute_data.linear_accel_x * imu_data.absolute_data.linear_accel_x +
+                imu_data.absolute_data.linear_accel_y * imu_data.absolute_data.linear_accel_y +
+                imu_data.absolute_data.linear_accel_z * imu_data.absolute_data.linear_accel_z);
             if (dyn > 3.0f)
                 return true;
         }
