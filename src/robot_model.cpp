@@ -14,26 +14,19 @@ RobotModel::RobotModel(const Parameters &p) : params(p) {
 }
 
 void RobotModel::initializeDH() {
-    bool custom = false;
-    // Check if custom DH parameters are provided
-    for (int l = 0; l < NUM_LEGS; ++l) {
-        for (int j = 0; j < DOF_PER_LEG; ++j) {
-            for (int k = 0; k < 4; ++k) {
-                dh_transforms[l][j][k] = params.dh_parameters[l][j][k];
-                if (params.dh_parameters[l][j][k] != 0.0f)
-                    custom = true;
-            }
-        }
-    }
 
     // Use default DH parameters if no custom parameters provided
-    if (!custom) {
+    if (!params.use_custom_dh_parameters) {
+        // Per-leg base joint (coxa) theta offsets in degrees, representing each leg's mounting orientation
+        // around the hexagonal body (legs spaced 60° apart, starting at front-right)
+        static const float base_theta_offsets[NUM_LEGS] = {
+            -30.0f, -90.0f, -150.0f, 150.0f, 90.0f, 30.0f};
         for (int l = 0; l < NUM_LEGS; ++l) {
             // Joint 1 (coxa): vertical axis rotation
-            dh_transforms[l][0][0] = 0.0f;   // a0 - link length
-            dh_transforms[l][0][1] = -90.0f; // alpha0 - rotate to femur axis
-            dh_transforms[l][0][2] = 0.0f;   // d1 - link offset
-            dh_transforms[l][0][3] = 0.0f;   // theta1 offset - joint angle offset
+            dh_transforms[l][0][0] = 0.0f;                  // a0 - link length
+            dh_transforms[l][0][1] = 90.0f;                 // alpha0 - rotate to femur axis
+            dh_transforms[l][0][2] = 0.0f;                  // d1 - link offset
+            dh_transforms[l][0][3] = base_theta_offsets[l]; // theta1 offset - mounting offset
 
             // Joint 2 (femur): pitch axis rotation
             dh_transforms[l][1][0] = params.coxa_length; // a1 - translation along rotated x
@@ -52,16 +45,7 @@ void RobotModel::initializeDH() {
 
 // Damped Least Squares (DLS) iterative inverse kinematics
 // Based on CSIRO syropod_highlevel_controller implementation
-// Enhanced with configurable joint angle sign multipliers for hardware adaptation
 JointAngles RobotModel::inverseKinematics(int leg, const Point3D &p_target) {
-    // Helper lambda to apply hardware-specific joint angle sign multipliers
-    // This allows adapting to different servo orientations without changing kinematic calculations
-    auto applySign = [&](const JointAngles &ja) {
-        return JointAngles(
-            ja.coxa * params.angle_sign_coxa,
-            ja.femur * params.angle_sign_femur,
-            ja.tibia * params.angle_sign_tibia);
-    };
 
     // Transform target to leg coordinate system
     const float base_angle_deg = leg * LEG_ANGLE_SPACING;
@@ -72,15 +56,6 @@ JointAngles RobotModel::inverseKinematics(int leg, const Point3D &p_target) {
     local_target.x = p_target.x - base_x;
     local_target.y = p_target.y - base_y;
     local_target.z = p_target.z;
-
-    // Rotate target into leg's local coordinate frame to account for hexagonal mounting offset
-    {
-        float theta = -math_utils::degreesToRadians(base_angle_deg);
-        float x_rot = local_target.x * cos(theta) - local_target.y * sin(theta);
-        float y_rot = local_target.x * sin(theta) + local_target.y * cos(theta);
-        local_target.x = x_rot;
-        local_target.y = y_rot;
-    }
 
     // Quick workspace check using centralized reachability function
     float max_reach = params.coxa_length + params.femur_length + params.tibia_length;
@@ -95,10 +70,10 @@ JointAngles RobotModel::inverseKinematics(int leg, const Point3D &p_target) {
         float target_distance = math_utils::magnitude(local_target);
         if (target_distance > max_reach * IK_MAX_REACH_MARGIN) {
             // Target too far - return extended pose within joint limits
-            return applySign(JointAngles(coxa_angle, IK_PRIMARY_FEMUR_ANGLE, IK_PRIMARY_TIBIA_ANGLE)); // Constrained extended pose
+            return JointAngles(coxa_angle, IK_PRIMARY_FEMUR_ANGLE, IK_PRIMARY_TIBIA_ANGLE);
         } else {
             // Target too close - return retracted pose within joint limits
-            return applySign(JointAngles(coxa_angle, IK_HIGH_FEMUR_ANGLE, IK_HIGH_TIBIA_ANGLE)); // Constrained retracted pose
+            return JointAngles(coxa_angle, IK_HIGH_FEMUR_ANGLE, IK_HIGH_TIBIA_ANGLE);
         }
     }
 
@@ -165,13 +140,13 @@ JointAngles RobotModel::inverseKinematics(int leg, const Point3D &p_target) {
 
             // Calculate position error (delta)
             Eigen::Vector3f position_delta;
-            position_delta << (p_target.x - current_pos.x),
-                (p_target.y - current_pos.y),
-                (p_target.z - current_pos.z);
+            position_delta << (local_target.x - current_pos.x),
+                (local_target.y - current_pos.y),
+                (local_target.z - current_pos.z);
 
             // Check for convergence
             float error_norm = position_delta.norm();
-            if (error_norm < IK_TOLERANCE) {
+            if (error_norm < IK_TOLERANCE * POSITION_TOLERANCE) {
                 // Found good solution, record it and break from both loops
                 best_result = current_angles;
                 best_error = error_norm;
@@ -272,7 +247,7 @@ JointAngles RobotModel::inverseKinematics(int leg, const Point3D &p_target) {
     }
 
 solution_found:
-    return applySign(best_result);
+    return best_result;
 }
 
 Point3D RobotModel::forwardKinematics(int leg_index, const JointAngles &angles) const {

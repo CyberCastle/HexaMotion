@@ -35,6 +35,7 @@ struct Parameters {
     float angle_sign_femur = 1.0f; ///< Sign multiplier for femur joint output (+1.0 or -1.0 to match servo direction)
     float angle_sign_tibia = 1.0f; ///< Sign multiplier for tibia joint output (+1.0 or -1.0 to match servo direction)
 
+    bool use_custom_dh_parameters = false; ///< Use custom Denavit-Hartenberg parameters
     float dh_parameters[NUM_LEGS][DOF_PER_LEG][4];
 
     Eigen::Vector3f imu_calibration_offset;

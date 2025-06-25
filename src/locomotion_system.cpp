@@ -17,8 +17,8 @@
 #include "hexamotion_constants.h"
 #include "math_utils.h"
 #include <algorithm>
-#include <vector>
 #include <cmath>
+#include <vector>
 #ifndef ARDUINO
 #include <chrono>
 #endif
@@ -225,9 +225,13 @@ bool LocomotionSystem::setLegJointAngles(int leg, const JointAngles &q) {
     float femur_speed = velocity_controller ? velocity_controller->getServoSpeed(leg, 1) : params.default_servo_speed;
     float tibia_speed = velocity_controller ? velocity_controller->getServoSpeed(leg, 2) : params.default_servo_speed;
 
-    servo_interface->setJointAngleAndSpeed(leg, 0, clamped.coxa, coxa_speed);
-    servo_interface->setJointAngleAndSpeed(leg, 1, clamped.femur, femur_speed);
-    servo_interface->setJointAngleAndSpeed(leg, 2, clamped.tibia, tibia_speed);
+    // Apply sign inversion/preservation per servo using params.angle_sign_* (adjust left/right or above/below servo orientation)
+    float servo_coxa = clamped.coxa * params.angle_sign_coxa;
+    float servo_femur = clamped.femur * params.angle_sign_femur;
+    float servo_tibia = clamped.tibia * params.angle_sign_tibia;
+    servo_interface->setJointAngleAndSpeed(leg, 0, servo_coxa, coxa_speed);
+    servo_interface->setJointAngleAndSpeed(leg, 1, servo_femur, femur_speed);
+    servo_interface->setJointAngleAndSpeed(leg, 2, servo_tibia, tibia_speed);
     return true;
 }
 
@@ -1083,13 +1087,15 @@ bool LocomotionSystem::performSelfTest() {
 
 // Helper functions
 void LocomotionSystem::initializeDefaultPose() {
+    // Compute default leg positions and use IK for safe stance angles
     for (int i = 0; i < NUM_LEGS; i++) {
-        float angle = i * 60.0f;
+        float angle = i * LEG_ANGLE_SPACING;
+        // Default foot target at body level offset by coxa length
         leg_positions[i].x = params.hexagon_radius * cos(math_utils::degreesToRadians(angle)) + params.coxa_length;
         leg_positions[i].y = params.hexagon_radius * sin(math_utils::degreesToRadians(angle));
         leg_positions[i].z = -params.robot_height;
-
-        joint_angles[i] = JointAngles(0, 45, -90); // Default angles
+        // Compute joint angles via IK to match foot position
+        joint_angles[i] = model.inverseKinematics(i, leg_positions[i]);
         leg_states[i] = STANCE_PHASE;
     }
 }
