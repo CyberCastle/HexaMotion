@@ -159,6 +159,9 @@ class PoseController {
     }
 
   private:
+    // Helper to compute fixed poses (standing, default, crouch)
+    void computePose(float height, float radius, Point3D leg_positions[NUM_LEGS], JointAngles joint_angles[NUM_LEGS]);
+
     RobotModel &model;
     IServoInterface *servos;
 

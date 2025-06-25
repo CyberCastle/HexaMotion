@@ -1,5 +1,6 @@
 #include "pose_controller.h"
 #include "hexamotion_constants.h"
+#include <cmath> // Add cmath for sqrtf
 /**
  * @file pose_controller.cpp
  * @brief Implementation of the kinematic pose controller.
@@ -80,88 +81,44 @@ bool PoseController::setLegPosition(int leg_index, const Point3D &position,
     return true;
 }
 
-void PoseController::initializeDefaultPose(Point3D leg_pos[NUM_LEGS], JointAngles joint_q[NUM_LEGS],
-                                           float hex_radius, float robot_height) {
-    // Use the same proper hexagonal geometry as setStandingPose
+// Add helper to compute raw pose for a given height and radius
+void PoseController::computePose(float height, float radius, Point3D leg_pos[NUM_LEGS], JointAngles joint_q[NUM_LEGS]) {
     for (int i = 0; i < NUM_LEGS; i++) {
         float angle_rad = math_utils::degreesToRadians(i * LEG_ANGLE_SPACING);
-
-        // Calculate leg's base attachment point on hexagon
-        float base_x = hex_radius * cos(angle_rad);
-        float base_y = hex_radius * sin(angle_rad);
-
-        // Position leg end-effector radially outward from the base attachment point
-        // This ensures coxa angle is close to 0 degrees (pointing outward)
-        float leg_extension = model.getParams().coxa_length +
-                              (model.getParams().femur_length + model.getParams().tibia_length) * 0.7f; // 70% extension for stable pose
-
-        Point3D target_pos_body;
-        target_pos_body.x = base_x + leg_extension * cos(angle_rad);
-        target_pos_body.y = base_y + leg_extension * sin(angle_rad);
-        target_pos_body.z = -robot_height;
-
-        leg_pos[i] = target_pos_body;
-        joint_q[i] = model.inverseKinematics(i, target_pos_body);
+        float base_x = radius * cos(angle_rad);
+        float base_y = radius * sin(angle_rad);
+        float link_sum = model.getParams().femur_length + model.getParams().tibia_length;
+        float horiz_offset = sqrtf(link_sum * link_sum - height * height);
+        float leg_extension = model.getParams().coxa_length + horiz_offset;
+        Point3D target_pos;
+        target_pos.x = base_x + leg_extension * cos(angle_rad);
+        target_pos.y = base_y + leg_extension * sin(angle_rad);
+        target_pos.z = -height;
+        leg_pos[i] = target_pos;
+        joint_q[i] = model.inverseKinematics(i, target_pos);
     }
 }
 
+void PoseController::initializeDefaultPose(Point3D leg_pos[NUM_LEGS], JointAngles joint_q[NUM_LEGS],
+                                           float hex_radius, float robot_height) {
+    computePose(robot_height, hex_radius, leg_pos, joint_q);
+}
+
 bool PoseController::setStandingPose(Point3D leg_pos[NUM_LEGS], JointAngles joint_q[NUM_LEGS], float robot_height) {
-    // Calculate proper standing pose considering hexagonal geometry
-    // Position legs radially outward from each leg's hexagon base attachment point
-    for (int i = 0; i < NUM_LEGS; i++) {
-        float angle_rad = math_utils::degreesToRadians(i * LEG_ANGLE_SPACING);
-
-        // Calculate leg's base attachment point on hexagon
-        float base_x = model.getParams().hexagon_radius * cos(angle_rad);
-        float base_y = model.getParams().hexagon_radius * sin(angle_rad);
-
-        // Position leg end-effector radially outward from the base attachment point
-        // This ensures coxa angle is close to 0 degrees (pointing outward)
-        float leg_extension = model.getParams().coxa_length +
-                              (model.getParams().femur_length + model.getParams().tibia_length) * 0.7f; // 70% extension for stable standing
-
-        Point3D target_pos_body;
-        target_pos_body.x = base_x + leg_extension * cos(angle_rad);
-        target_pos_body.y = base_y + leg_extension * sin(angle_rad);
-        target_pos_body.z = -robot_height;
-
-        JointAngles angles = model.inverseKinematics(i, target_pos_body);
-        if (!model.checkJointLimits(i, angles)) {
+    computePose(robot_height, model.getParams().hexagon_radius, leg_pos, joint_q);
+    for (int i = 0; i < NUM_LEGS; ++i) {
+        if (!model.checkJointLimits(i, joint_q[i]))
             return false;
-        }
-        leg_pos[i] = target_pos_body;
-        joint_q[i] = angles;
     }
     return true;
 }
 
 bool PoseController::setCrouchPose(Point3D leg_pos[NUM_LEGS], JointAngles joint_q[NUM_LEGS], float robot_height) {
-    // Calculate crouch pose by positioning legs at reduced height
-    // This creates a lower, more compact pose with bent legs
     float crouch_height = robot_height * 0.4f; // Significantly reduced height for dramatic crouch
-
-    for (int i = 0; i < NUM_LEGS; i++) {
-        float angle_rad = math_utils::degreesToRadians(i * LEG_ANGLE_SPACING);
-
-        // Calculate leg's base attachment point on hexagon
-        float base_x = model.getParams().hexagon_radius * cos(angle_rad);
-        float base_y = model.getParams().hexagon_radius * sin(angle_rad);
-
-        // Use same leg extension as standing pose - the height change will force joint bending
-        float leg_extension = model.getParams().coxa_length +
-                              (model.getParams().femur_length + model.getParams().tibia_length) * 0.7f;
-
-        Point3D target_pos_body;
-        target_pos_body.x = base_x + leg_extension * cos(angle_rad);
-        target_pos_body.y = base_y + leg_extension * sin(angle_rad);
-        target_pos_body.z = -crouch_height; // Much lower height forces leg bending
-
-        JointAngles angles = model.inverseKinematics(i, target_pos_body);
-        if (!model.checkJointLimits(i, angles)) {
+    computePose(crouch_height, model.getParams().hexagon_radius, leg_pos, joint_q);
+    for (int i = 0; i < NUM_LEGS; ++i) {
+        if (!model.checkJointLimits(i, joint_q[i]))
             return false;
-        }
-        leg_pos[i] = target_pos_body;
-        joint_q[i] = angles;
     }
     return true;
 }
