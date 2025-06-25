@@ -53,6 +53,13 @@ void RobotModel::initializeDH() {
 // Damped Least Squares (DLS) iterative inverse kinematics
 // Based on CSIRO syropod_highlevel_controller implementation
 JointAngles RobotModel::inverseKinematics(int leg, const Point3D &p_target) {
+    // Helper to apply sign multipliers from params
+    auto applySign = [&](const JointAngles &ja) {
+        return JointAngles(
+            ja.coxa * params.angle_sign_coxa,
+            ja.femur * params.angle_sign_femur,
+            ja.tibia * params.angle_sign_tibia);
+    };
 
     // Transform target to leg coordinate system
     const float base_angle_deg = leg * LEG_ANGLE_SPACING;
@@ -86,10 +93,10 @@ JointAngles RobotModel::inverseKinematics(int leg, const Point3D &p_target) {
         float target_distance = math_utils::magnitude(local_target);
         if (target_distance > max_reach * IK_MAX_REACH_MARGIN) {
             // Target too far - return extended pose within joint limits
-            return JointAngles(coxa_angle, IK_PRIMARY_FEMUR_ANGLE, IK_PRIMARY_TIBIA_ANGLE); // Constrained extended pose
+            return applySign(JointAngles(coxa_angle, IK_PRIMARY_FEMUR_ANGLE, IK_PRIMARY_TIBIA_ANGLE)); // Constrained extended pose
         } else {
             // Target too close - return retracted pose within joint limits
-            return JointAngles(coxa_angle, IK_HIGH_FEMUR_ANGLE, IK_HIGH_TIBIA_ANGLE); // Constrained retracted pose
+            return applySign(JointAngles(coxa_angle, IK_HIGH_FEMUR_ANGLE, IK_HIGH_TIBIA_ANGLE)); // Constrained retracted pose
         }
     }
 
@@ -263,7 +270,7 @@ JointAngles RobotModel::inverseKinematics(int leg, const Point3D &p_target) {
     }
 
 solution_found:
-    return best_result;
+    return applySign(best_result);
 }
 
 Point3D RobotModel::forwardKinematics(int leg_index, const JointAngles &angles) const {
