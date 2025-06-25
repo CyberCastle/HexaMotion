@@ -30,10 +30,10 @@ struct Parameters {
     float femur_angle_limits[2];
     float tibia_angle_limits[2];
 
-    // Sign multipliers for joint angle outputs
-    float angle_sign_coxa = 1.0f;  ///< Multiplier to invert coxa angle if needed
-    float angle_sign_femur = 1.0f; ///< Multiplier to invert femur angle if needed
-    float angle_sign_tibia = 1.0f; ///< Multiplier to invert tibia angle if needed
+    // Joint angle sign multipliers for hardware adaptation
+    float angle_sign_coxa = 1.0f;  ///< Sign multiplier for coxa joint output (+1.0 or -1.0 to match servo direction)
+    float angle_sign_femur = 1.0f; ///< Sign multiplier for femur joint output (+1.0 or -1.0 to match servo direction)
+    float angle_sign_tibia = 1.0f; ///< Sign multiplier for tibia joint output (+1.0 or -1.0 to match servo direction)
 
     float dh_parameters[NUM_LEGS][DOF_PER_LEG][4];
 

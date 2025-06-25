@@ -159,7 +159,8 @@ class PoseController {
     }
 
   private:
-    // Helper to compute fixed poses (standing, default, crouch)
+    // Helper function to compute fixed poses using analytical planar geometry
+    // Consolidates common pose calculation logic for standing, default, and crouch poses
     void computePose(float height, float radius, Point3D leg_positions[NUM_LEGS], JointAngles joint_angles[NUM_LEGS]);
 
     RobotModel &model;

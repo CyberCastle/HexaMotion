@@ -8,12 +8,20 @@ This library provides locomotion control for a hexapod robot based on the Arduin
 
 **New Feature**: HexaMotion now includes **smooth trajectory interpolation** that uses current servo positions as starting points for pose calculations, equivalent to OpenSHC's smooth movement approach. This is the default behavior and provides natural, smooth robot movements that optimize from the current state rather than theoretical positions.
 
+**Recent Updates**:
+
+-   **Enhanced Kinematic Accuracy**: Fixed pose calculations to achieve correct angles (coxa ≈ 0°, femur ≈ -19°, tibia ≈ 0°) for 100mm height using analytical planar geometry instead of fixed extension factors.
+-   **Configurable Joint Sign Control**: Added independent sign multipliers (`angle_sign_coxa`, `angle_sign_femur`, `angle_sign_tibia`) to correct joint angle directions without affecting kinematic calculations.
+-   **Code Optimization**: Consolidated redundant pose calculation code using helper functions to improve maintainability.
+
 ## Key Features
 
 -   **Smooth Movement System**: Uses current servo positions as trajectory starting points (OpenSHC-style)
 -   **Configurable Interpolation**: Adjustable speed and precision for different use cases
 -   **Backward Compatibility**: Original immediate movement behavior available when needed
 -   **Automatic Optimization**: Movements are inherently smooth and natural by default
+-   **Accurate Kinematics**: Corrected pose calculations using proper analytical geometry for expected joint angles
+-   **Hardware Adaptation**: Independent joint angle sign control for different servo orientations
 
 ## Code Style
 

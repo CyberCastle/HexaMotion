@@ -52,8 +52,10 @@ void RobotModel::initializeDH() {
 
 // Damped Least Squares (DLS) iterative inverse kinematics
 // Based on CSIRO syropod_highlevel_controller implementation
+// Enhanced with configurable joint angle sign multipliers for hardware adaptation
 JointAngles RobotModel::inverseKinematics(int leg, const Point3D &p_target) {
-    // Helper to apply sign multipliers from params
+    // Helper lambda to apply hardware-specific joint angle sign multipliers
+    // This allows adapting to different servo orientations without changing kinematic calculations
     auto applySign = [&](const JointAngles &ja) {
         return JointAngles(
             ja.coxa * params.angle_sign_coxa,

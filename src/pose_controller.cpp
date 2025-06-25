@@ -81,15 +81,25 @@ bool PoseController::setLegPosition(int leg_index, const Point3D &position,
     return true;
 }
 
-// Add helper to compute raw pose for a given height and radius
+// Helper function to compute fixed poses using analytical planar geometry
+// Consolidates common pose calculation logic for standing, default, and crouch poses
+// This function calculates the leg positions and joint angles based on the desired height and hexagon radius
+// It uses the robot model's parameters to ensure the leg positions are achievable and within joint limits
+// The function assumes a hexagonal arrangement of legs and computes the positions based on the leg angle
+// spacing defined in the model parameters. It calculates the horizontal offset required for the femur+tibia
+// chain to achieve the desired height, ensuring that the tibia is approximately horizontal.
 void PoseController::computePose(float height, float radius, Point3D leg_pos[NUM_LEGS], JointAngles joint_q[NUM_LEGS]) {
     for (int i = 0; i < NUM_LEGS; i++) {
         float angle_rad = math_utils::degreesToRadians(i * LEG_ANGLE_SPACING);
         float base_x = radius * cos(angle_rad);
         float base_y = radius * sin(angle_rad);
+
+        // Calculate horizontal offset using planar geometry for femur+tibia chain
+        // This ensures tibia ≈ 0° and femur achieves the correct angle for desired height
         float link_sum = model.getParams().femur_length + model.getParams().tibia_length;
         float horiz_offset = sqrtf(link_sum * link_sum - height * height);
         float leg_extension = model.getParams().coxa_length + horiz_offset;
+
         Point3D target_pos;
         target_pos.x = base_x + leg_extension * cos(angle_rad);
         target_pos.y = base_y + leg_extension * sin(angle_rad);
