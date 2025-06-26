@@ -34,11 +34,10 @@ LocomotionSystem::LocomotionSystem(const Parameters &params)
       model(params), pose_ctrl(nullptr), walk_ctrl(nullptr), admittance_ctrl(nullptr) {
 
     // Initialize leg states and phase offsets for tripod gait
+    static const float tripod_phase_offsets[NUM_LEGS] = {0.0f, 0.5f, 0.5f, 0.0f, 0.0f, 0.5f};
     for (int i = 0; i < NUM_LEGS; i++) {
         leg_states[i] = STANCE_PHASE;
-        // Tripod gait: legs 1,3,5 (indices 0,2,4) = group A (phase 0)
-        //              legs 2,4,6 (indices 1,3,5) = group B (phase 0.5)
-        leg_phase_offsets[i] = (i % 2) * 0.5f;
+        leg_phase_offsets[i] = tripod_phase_offsets[i];
     }
     // Initialize FSR contact history buffer and index
     fsr_history_index = -1;
