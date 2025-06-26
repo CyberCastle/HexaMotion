@@ -19,8 +19,11 @@ void RobotModel::initializeDH() {
     if (!params.use_custom_dh_parameters) {
         // Per-leg base joint (coxa) theta offsets in degrees, representing each leg's mounting orientation
         // around the hexagonal body (legs spaced 60° apart, starting at front-right)
+        // Align each leg so that a coxa joint angle of zero corresponds to a
+        // pose with the femur pointing directly away from the body center.
+        // This matches the expected convention used throughout the tests.
         static const float base_theta_offsets[NUM_LEGS] = {
-            -30.0f, -90.0f, -150.0f, 150.0f, 90.0f, 30.0f};
+            0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f};
         for (int l = 0; l < NUM_LEGS; ++l) {
             // Joint 1 (coxa): vertical axis rotation
             dh_transforms[l][0][0] = 0.0f;                  // a0 - link length
@@ -52,10 +55,26 @@ JointAngles RobotModel::inverseKinematics(int leg, const Point3D &p_target) {
     float base_x = params.hexagon_radius * cos(math_utils::degreesToRadians(base_angle_deg));
     float base_y = params.hexagon_radius * sin(math_utils::degreesToRadians(base_angle_deg));
 
+    // Convert the global target into the leg's local coordinate frame. Each leg
+    // is rotated around the body by base_angle_deg. Subtract the base position
+    // and rotate by -base_angle_deg so that the x-axis points radially outward.
+    Point3D delta;
+    delta.x = p_target.x - base_x;
+    delta.y = p_target.y - base_y;
+    delta.z = p_target.z;
+
+    float angle_rad = math_utils::degreesToRadians(base_angle_deg);
     Point3D local_target;
-    local_target.x = p_target.x - base_x;
-    local_target.y = p_target.y - base_y;
-    local_target.z = p_target.z;
+    local_target.x = cos(angle_rad) * delta.x + sin(angle_rad) * delta.y;
+    local_target.y = -sin(angle_rad) * delta.x + cos(angle_rad) * delta.y;
+    local_target.z = delta.z;
+
+    // Precompute rotation matrix for transforming vectors from the global frame
+    // to the leg-local frame. This is reused for Jacobian and FK conversions.
+    Eigen::Matrix3f R;
+    R << cos(angle_rad), sin(angle_rad), 0,
+        -sin(angle_rad), cos(angle_rad), 0,
+        0, 0, 1;
 
     // Quick workspace check using centralized reachability function
     float max_reach = params.coxa_length + params.femur_length + params.tibia_length;
@@ -135,14 +154,20 @@ JointAngles RobotModel::inverseKinematics(int leg, const Point3D &p_target) {
         int stagnation_count = 0;
 
         for (int iter = 0; iter < IK_MAX_ITERATIONS; ++iter) {
-            // Calculate current end-effector position using forward kinematics
-            Point3D current_pos = forwardKinematics(leg, current_angles);
+            // Calculate current end-effector position in the leg's local frame
+            Point3D fk_global = forwardKinematics(leg, current_angles);
+            Point3D fk_local;
+            fk_local.x = cos(angle_rad) * (fk_global.x - base_x) +
+                         sin(angle_rad) * (fk_global.y - base_y);
+            fk_local.y = -sin(angle_rad) * (fk_global.x - base_x) +
+                         cos(angle_rad) * (fk_global.y - base_y);
+            fk_local.z = fk_global.z;
 
-            // Calculate position error (delta)
+            // Calculate position error (delta) in local coordinates
             Eigen::Vector3f position_delta;
-            position_delta << (local_target.x - current_pos.x),
-                (local_target.y - current_pos.y),
-                (local_target.z - current_pos.z);
+            position_delta << (local_target.x - fk_local.x),
+                (local_target.y - fk_local.y),
+                (local_target.z - fk_local.z);
 
             // Check for convergence
             float error_norm = position_delta.norm();
@@ -165,18 +190,20 @@ JointAngles RobotModel::inverseKinematics(int leg, const Point3D &p_target) {
             }
             previous_error = error_norm;
 
-            // Calculate Jacobian matrix using DH parameters
+            // Calculate Jacobian matrix in global coordinates and convert to
+            // the leg-local frame
             Eigen::Matrix3f jacobian = calculateJacobian(leg, current_angles, p_target);
+            Eigen::Matrix3f jac_local = R * jacobian;
 
             // Check for singular configuration (determinant near zero)
-            float det = jacobian.determinant();
+            float det = jac_local.determinant();
             if (std::abs(det) < IK_SINGULAR_THRESHOLD) {
                 // Near singular configuration, increase damping
                 const float high_damping = IK_HIGH_DAMPING;
-                Eigen::Matrix3f JJT = jacobian * jacobian.transpose();
+                Eigen::Matrix3f JJT = jac_local * jac_local.transpose();
                 Eigen::Matrix3f identity = Eigen::Matrix3f::Identity();
                 Eigen::Matrix3f damped_inv = (JJT + high_damping * high_damping * identity).inverse();
-                Eigen::Matrix3f jacobian_inverse = jacobian.transpose() * damped_inv;
+                Eigen::Matrix3f jacobian_inverse = jac_local.transpose() * damped_inv;
 
                 // Calculate joint angle changes with smaller step
                 Eigen::Vector3f angle_delta = jacobian_inverse * position_delta * IK_STEP_SIZE_REDUCTION;
@@ -193,10 +220,10 @@ JointAngles RobotModel::inverseKinematics(int leg, const Point3D &p_target) {
             } else {
                 // Apply standard Damped Least Squares method
                 // J_inv = J^T * (J * J^T + λ^2 * I)^(-1)
-                Eigen::Matrix3f JJT = jacobian * jacobian.transpose();
+                Eigen::Matrix3f JJT = jac_local * jac_local.transpose();
                 Eigen::Matrix3f identity = Eigen::Matrix3f::Identity();
                 Eigen::Matrix3f damped_inv = (JJT + IK_DLS_COEFFICIENT * IK_DLS_COEFFICIENT * identity).inverse();
-                Eigen::Matrix3f jacobian_inverse = jacobian.transpose() * damped_inv;
+                Eigen::Matrix3f jacobian_inverse = jac_local.transpose() * damped_inv;
 
                 // Calculate joint angle changes
                 Eigen::Vector3f angle_delta = jacobian_inverse * position_delta;
@@ -221,10 +248,16 @@ JointAngles RobotModel::inverseKinematics(int leg, const Point3D &p_target) {
         }
 
         // Check if this attempt gave a better result than previous ones
-        Point3D final_pos = forwardKinematics(leg, current_angles);
-        float final_error = sqrt(pow(p_target.x - final_pos.x, 2) +
-                                 pow(p_target.y - final_pos.y, 2) +
-                                 pow(p_target.z - final_pos.z, 2));
+        Point3D final_global = forwardKinematics(leg, current_angles);
+        Point3D final_local;
+        final_local.x = cos(angle_rad) * (final_global.x - base_x) +
+                        sin(angle_rad) * (final_global.y - base_y);
+        final_local.y = -sin(angle_rad) * (final_global.x - base_x) +
+                        cos(angle_rad) * (final_global.y - base_y);
+        final_local.z = final_global.z;
+        float final_error = sqrt(pow(local_target.x - final_local.x, 2) +
+                                 pow(local_target.y - final_local.y, 2) +
+                                 pow(local_target.z - final_local.z, 2));
 
         // Prefer solutions with better accuracy, but also consider if solution is within joint limits
         bool current_within_limits = checkJointLimits(leg, current_angles);
