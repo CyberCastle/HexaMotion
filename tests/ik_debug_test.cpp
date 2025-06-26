@@ -9,7 +9,7 @@ int main() {
 
     // Set up basic parameters
     Parameters p{};
-    p.hexagon_radius = 400;
+    p.hexagon_radius = 200;
     p.coxa_length = 50;
     p.femur_length = 101;
     p.tibia_length = 208;
@@ -113,7 +113,7 @@ int main() {
     std::cout << "\n=== Test Default Standing Position ===" << std::endl;
     float angle = 0 * 60.0f; // Leg 0 angle
     Point3D default_pos;
-    default_pos.x = p.hexagon_radius * cos(0) + p.coxa_length; // 400 + 50 = 450
+    default_pos.x = p.hexagon_radius * cos(0) + p.coxa_length; // 200 + 50 = 250
     default_pos.y = p.hexagon_radius * sin(0);                 // 0
     default_pos.z = -p.robot_height;                           // -90
 
@@ -137,7 +137,7 @@ int main() {
     std::cout << "IK iteration analysis:" << std::endl;
 
     // Manual IK debugging - let's trace through what should happen
-    // For leg 0: base at (400, 0, 0), target at (450, 0, -90)
+    // For leg 0: base at (200, 0, 0), target at (250, 0, -90)
     // Relative to base: (50, 0, -90)
 
     // Analytical solution attempt for simple 2D case

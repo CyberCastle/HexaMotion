@@ -7,7 +7,7 @@
 int main() {
     // Configure test parameters
     Parameters params;
-    params.hexagon_radius = 400.0f;
+    params.hexagon_radius = 200.0f;
     params.coxa_length = 50.0f;
     params.femur_length = 100.0f;
     params.tibia_length = 159.0f;
@@ -65,7 +65,7 @@ int main() {
     float min_dist = 1000, max_dist = 0;
 
     // Leg 0 base position
-    float base_x = 400.0f;
+    float base_x = 200.0f;
     float base_y = 0.0f;
 
     for (const Point3D &pos : reachable_positions) {
@@ -101,8 +101,7 @@ int main() {
         {JointAngles{0.0f, -45.0f, 90.0f}, "Test 1 (working)"},
         {JointAngles{-45.0f, 45.0f, -90.0f}, "Test 3 (failing)"},
         {JointAngles{90.0f, 0.0f, 0.0f}, "Test 5 (failing)"},
-        {JointAngles{0.0f, 0.0f, 0.0f}, "Test 6 (failing)"}
-    };
+        {JointAngles{0.0f, 0.0f, 0.0f}, "Test 6 (failing)"}};
 
     for (const TestCase &test : test_cases) {
         Point3D target = model.forwardKinematics(0, test.config);

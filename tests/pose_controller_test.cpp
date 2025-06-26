@@ -18,7 +18,7 @@ This library provides locomotion control for a hexapod robot based on the Arduin
 
 robot height: 100 mm
 robot weight: 6.5 Kg
-body hexagon radius: 400 mm.
+body hexagon radius: 200 mm.
 coxa length: 50 mm
 femur length: 101 mm
 tibia length: 208 mm
@@ -27,7 +27,7 @@ Use the following `Parameters` configuration in the test files:
 
 ```cpp
 Parameters p{};
-p.hexagon_radius = 400;
+p.hexagon_radius = 200;
 p.coxa_length = 50;
 p.femur_length = 101;
 p.tibia_length = 208;
@@ -44,7 +44,7 @@ p.tibia_angle_limits[1] = 45;
 
 int main() {
     Parameters p{};
-    p.hexagon_radius = 400;
+    p.hexagon_radius = 200;
     p.coxa_length = 50;
     p.femur_length = 101;
     p.tibia_length = 208;

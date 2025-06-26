@@ -23,7 +23,7 @@
 
 Parameters createTestParameters() {
     Parameters params{};
-    params.hexagon_radius = 400.0f;
+    params.hexagon_radius = 200.0f;
     params.coxa_length = 50.0f;
     params.femur_length = 101.0f;
     params.tibia_length = 208.0f;
@@ -66,7 +66,7 @@ void testWalkspaceAnalysisConfigurable() {
         analyzer.generateWalkspace();
 
         // Test position reachability (femur + tibia = 101 + 208 = 309mm max reach)
-        Point3D test_position(450.0f, 0.0f, -90.0f); // Near leg 0 origin (400,0,0)
+        Point3D test_position(250.0f, 0.0f, -90.0f); // Near leg 0 origin (200,0,0)
         bool reachable = analyzer.isPositionReachable(0, test_position);
 
         if (!reachable) {

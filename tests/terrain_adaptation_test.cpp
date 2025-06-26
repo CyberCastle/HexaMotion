@@ -177,7 +177,7 @@ void testExternalTargets() {
 
     // Set external target for leg 0
     TerrainAdaptation::ExternalTarget target;
-    target.position = Point3D(400, 0, -100);
+    target.position = Point3D(200, 0, -100);
     target.swing_clearance = 30.0f;
     target.frame_id = "base_link";
     target.timestamp = 1000;
@@ -187,7 +187,7 @@ void testExternalTargets() {
 
     const TerrainAdaptation::ExternalTarget &retrieved = terrain_adaptation.getExternalTarget(0);
     assert(retrieved.defined);
-    assert(abs(retrieved.position.x - 400.0f) < 0.001f);
+    assert(abs(retrieved.position.x - 200.0f) < 0.001f);
     assert(abs(retrieved.swing_clearance - 30.0f) < 0.001f);
 
     std::cout << "✓ External target setting/getting working" << std::endl;
@@ -234,7 +234,7 @@ void testTerrainTrajectoryAdaptation() {
     TerrainIMUMock imu;
 
     // Base trajectory
-    Point3D base_trajectory(400, 0, -90);
+    Point3D base_trajectory(200, 0, -90);
 
     // Test without external target (should return base trajectory)
     Point3D adapted1 = terrain_adaptation.adaptTrajectoryForTerrain(0, base_trajectory, SWING_PHASE, 0.5f);
@@ -349,7 +349,7 @@ void testRoughTerrainModes() {
     TerrainFSRMock fsr;
     TerrainIMUMock imu;
 
-    Point3D base_trajectory(400, 0, -90);
+    Point3D base_trajectory(200, 0, -90);
 
     // With rough terrain mode enabled
     Point3D adapted_rough = terrain_adaptation.adaptTrajectoryForTerrain(0, base_trajectory, SWING_PHASE, 0.8f);

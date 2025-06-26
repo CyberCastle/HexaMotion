@@ -10,7 +10,8 @@
 
 static void printWelcome() {
     std::cout << "=========================================" << std::endl;
-    std::cout << "HEXAPOD TRIPOD GAIT SIMULATION WITH STATE MACHINE" << std::endl;
+    std::cout << "HEXAPOD TRIPOD GAIT SIMULATION WITH STATE MACHINE" << std : p2.hexagon_radius = 200;
+    endl;
     std::cout << "=========================================" << std::endl;
     std::cout << "Simulating 6-legged robot with 3DOF per leg" << std::endl;
     std::cout << "Distance: 800mm | Velocity: 400mm/s | Duration: 2s" << std::endl;
@@ -389,7 +390,7 @@ int main() {
     // Test configuration 1: Lower height (80mm)
     std::cout << "Configuration 1: Robot Height = 100mm" << std::endl;
     Parameters p1{};
-    p1.hexagon_radius = 400;
+    p1.hexagon_radius = 200;
     p1.coxa_length = 50;
     p1.femur_length = 101;
     p1.tibia_length = 208;
@@ -435,7 +436,7 @@ int main() {
     // Test configuration 2: Higher height (200mm)
     std::cout << "Configuration 2: Robot Height = 200mm" << std::endl;
     Parameters p2{};
-    p2.hexagon_radius = 400;
+    p2.hexagon_radius = 200;
     p2.coxa_length = 50;
     p2.femur_length = 101;
     p2.tibia_length = 208;
@@ -483,7 +484,7 @@ int main() {
 
     // Initialize robot parameters for main simulation (use 150mm height)
     Parameters p{};
-    p.hexagon_radius = 400;
+    p.hexagon_radius = 200;
     p.coxa_length = 50;
     p.femur_length = 101;
     p.tibia_length = 208;

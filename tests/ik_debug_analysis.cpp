@@ -5,7 +5,7 @@
 int main() {
     // Configure test parameters
     Parameters params;
-    params.hexagon_radius = 400.0f;
+    params.hexagon_radius = 200.0f;
     params.coxa_length = 50.0f;
     params.femur_length = 100.0f;
     params.tibia_length = 159.0f;

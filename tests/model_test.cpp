@@ -7,7 +7,7 @@ int main() {
     RobotModel model_bad(p);
     assert(!model_bad.validate());
 
-    p.hexagon_radius = 400;
+    p.hexagon_radius = 200;
     p.coxa_length = 50;
     p.femur_length = 101;
     p.tibia_length = 208;

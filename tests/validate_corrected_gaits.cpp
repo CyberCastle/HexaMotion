@@ -57,7 +57,7 @@ bool validateGaitImplementation(GaitType gait, const std::string &name,
     std::cout << "\n=== VALIDATING " << name << " GAIT ===" << std::endl;
 
     Parameters p{};
-    p.hexagon_radius = 400;
+    p.hexagon_radius = 200;
     p.coxa_length = 50;
     p.femur_length = 101;
     p.tibia_length = 208;
@@ -90,7 +90,7 @@ int main() {
     std::cout << "=========================================" << std::endl;
 
     Parameters p{};
-    p.hexagon_radius = 400;
+    p.hexagon_radius = 200;
     p.coxa_length = 50;
     p.femur_length = 101;
     p.tibia_length = 208;

@@ -281,7 +281,7 @@ typedef DummyFSR MockFSRInterface;
 
 inline Parameters createDefaultParameters() {
     Parameters params;
-    params.hexagon_radius = 400.0f;
+    params.hexagon_radius = 200.0f;
     params.coxa_length = 50.0f;
     params.femur_length = 101.0f;
     params.tibia_length = 208.0f;

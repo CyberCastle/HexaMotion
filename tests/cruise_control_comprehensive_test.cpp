@@ -42,7 +42,7 @@ class CruiseControlComprehensiveTest {
     }
 
     void setupParameters() {
-        params.hexagon_radius = 400;
+        params.hexagon_radius = 200;
         params.coxa_length = 50;
         params.femur_length = 101;
         params.tibia_length = 208;

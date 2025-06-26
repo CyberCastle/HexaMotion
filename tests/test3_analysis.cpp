@@ -5,7 +5,7 @@
 int main() {
     // Configure test parameters (same as DLS validation test)
     Parameters params;
-    params.hexagon_radius = 400.0f;
+    params.hexagon_radius = 200.0f;
     params.coxa_length = 50.0f;
     params.femur_length = 101.0f; // Updated to match other tests
     params.tibia_length = 208.0f; // Updated to match other tests
@@ -44,7 +44,7 @@ int main() {
     std::cout << "Target position: (" << target.x << ", " << target.y << ", " << target.z << ")" << std::endl;
 
     // Check workspace bounds
-    float base_x = 400.0f; // Leg 0 base
+    float base_x = 200.0f; // Leg 0 base
     float base_y = 0.0f;
     float local_x = target.x - base_x;
     float local_y = target.y - base_y;

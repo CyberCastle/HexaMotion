@@ -8,7 +8,7 @@ int main() {
     std::cout << "=== IK Coordinate System Analysis ===" << std::endl;
 
     Parameters p{};
-    p.hexagon_radius = 400;
+    p.hexagon_radius = 200;
     p.coxa_length = 50;
     p.femur_length = 101;
     p.tibia_length = 208;
@@ -27,14 +27,14 @@ int main() {
     sys.initialize(&imu, &fsr, &servos);
 
     std::cout << "\n=== Leg 0 Coordinate Analysis ===" << std::endl;
-    std::cout << "Leg 0 base should be at: (400, 0, 0)" << std::endl;
+    std::cout << "Leg 0 base should be at: (200, 0, 0)" << std::endl;
 
     // Test a simple case: leg straight out horizontally
     JointAngles straight(0, 0, 0);
     Point3D pos_straight = sys.calculateForwardKinematics(0, straight);
     std::cout << "Straight leg (0°, 0°, 0°): (" << pos_straight.x << ", " << pos_straight.y << ", " << pos_straight.z << ")" << std::endl;
 
-    // Expected: 400 + 50 + 101 + 208 = 759 in X direction
+    // Expected: 200 + 50 + 101 + 208 = 559 in X direction
     float expected_x = p.hexagon_radius + p.coxa_length + p.femur_length + p.tibia_length;
     std::cout << "Expected X: " << expected_x << std::endl;
 
@@ -71,7 +71,7 @@ int main() {
 
     // Debug the IK calculation step by step
     std::cout << "\n=== IK Step-by-Step Debug ===" << std::endl;
-    float base_x = 400; // hexagon_radius * cos(0)
+    float base_x = 200; // hexagon_radius * cos(0)
     float base_y = 0;   // hexagon_radius * sin(0)
     float rel_x = pos_bent.x - base_x;
     float rel_y = pos_bent.y - base_y;

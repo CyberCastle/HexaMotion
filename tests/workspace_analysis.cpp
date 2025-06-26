@@ -7,7 +7,7 @@
 int main() {
     // Configure test parameters
     Parameters params;
-    params.hexagon_radius = 400.0f;
+    params.hexagon_radius = 200.0f;
     params.coxa_length = 50.0f;
     params.femur_length = 100.0f;
     params.tibia_length = 159.0f;
@@ -72,8 +72,8 @@ int main() {
         // Check reachability
         float distance_from_origin = sqrt(target.x * target.x + target.y * target.y + target.z * target.z);
 
-        // For leg 0, base is at (400, 0, 0)
-        float base_x = 400.0f;
+        // For leg 0, base is at (200, 0, 0)
+        float base_x = 200.0f;
         float base_y = 0.0f;
         float distance_from_base = sqrt((target.x - base_x) * (target.x - base_x) +
                                         (target.y - base_y) * (target.y - base_y) +
@@ -97,7 +97,7 @@ int main() {
     // Test positions at different distances
     float test_distances[] = {100.0f, 200.0f, 300.0f, 309.0f, 350.0f};
     for (float dist : test_distances) {
-        Point3D test_pos(400.0f + dist, 0.0f, -100.0f); // Relative to leg 0 base
+        Point3D test_pos(200.0f + dist, 0.0f, -100.0f); // Relative to leg 0 base
 
         std::cout << "\nTesting position at distance " << dist << "mm from leg base:" << std::endl;
         std::cout << "  Position: (" << test_pos.x << ", " << test_pos.y << ", " << test_pos.z << ")" << std::endl;

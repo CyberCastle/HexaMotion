@@ -8,7 +8,7 @@ int main() {
     std::cout << "=== Geometry Validation Test ===" << std::endl;
 
     Parameters p{};
-    p.hexagon_radius = 400;
+    p.hexagon_radius = 200;
     p.coxa_length = 50;
     p.femur_length = 101;
     p.tibia_length = 208;
@@ -34,7 +34,7 @@ int main() {
 
     // Test basic leg 0 geometry
     std::cout << "\n=== Leg 0 FK Analysis ===" << std::endl;
-    std::cout << "Leg 0 base position: (400, 0, 0)" << std::endl;
+    std::cout << "Leg 0 base position: (200, 0, 0)" << std::endl;
 
     // Test some simple angles to understand the FK
     std::cout << "\nSimple test cases:" << std::endl;

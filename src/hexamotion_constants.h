@@ -92,7 +92,7 @@
 #define DEFAULT_MAX_ANGULAR_VELOCITY 90.0f // Default maximum angular velocity (degrees/s)
 
 // Common robot dimensions (typical values)
-#define DEFAULT_HEXAGON_RADIUS 400.0f // Default body radius (mm)
+#define DEFAULT_HEXAGON_RADIUS 200.0f // Default body radius (mm)
 #define DEFAULT_COXA_LENGTH 50.0f     // Default coxa segment length (mm)
 #define DEFAULT_FEMUR_LENGTH 101.0f   // Default femur segment length (mm)
 #define DEFAULT_TIBIA_LENGTH 208.0f   // Default tibia segment length (mm)

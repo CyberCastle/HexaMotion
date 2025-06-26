@@ -5,7 +5,7 @@
 
 int main() {
     Parameters p{};
-    p.hexagon_radius = 400;
+    p.hexagon_radius = 200;
     p.coxa_length = 50;
     p.femur_length = 101;
     p.tibia_length = 208;
@@ -22,7 +22,7 @@ int main() {
     std::cout << std::fixed << std::setprecision(6);
 
     // Target from failing case
-    float rel_x = 653.851 - 400; // 253.851
+    float rel_x = 453.851 - 200; // 253.851
     float rel_y = -8.00533e-06;
     float rel_z = -183.141;
 

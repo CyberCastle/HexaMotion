@@ -5,7 +5,7 @@
 
 int main() {
     Parameters p{};
-    p.hexagon_radius = 400;
+    p.hexagon_radius = 200;
     p.coxa_length = 50;
     p.femur_length = 101;
     p.tibia_length = 208;
@@ -29,10 +29,10 @@ int main() {
     std::vector<Point3D> test_targets = {
         Point3D{759, 0, 0},      // Horizontal straight
         Point3D{600, 300, -50},  // Forward-right, down
-        Point3D{400, 400, -100}, // Diagonal, down
+        Point3D{200, 200, -100}, // Diagonal, down
         Point3D{200, 500, 50},   // Near, right, up
         Point3D{700, -200, -30}, // Forward-left, down
-        Point3D{300, -400, 80},  // Near-left, up
+        Point3D{300, -200, 80},  // Near-left, up
         Point3D{500, 0, -150},   // Forward, far down
         Point3D{450, 350, 100}   // Forward-right, up
     };

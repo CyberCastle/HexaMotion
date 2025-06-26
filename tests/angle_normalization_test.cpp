@@ -5,7 +5,7 @@
 
 int main() {
     Parameters p{};
-    p.hexagon_radius = 400;
+    p.hexagon_radius = 200;
     p.coxa_length = 50;
     p.femur_length = 101;
     p.tibia_length = 208;
@@ -65,7 +65,7 @@ int main() {
 
         // Check workspace bounds manually
         Point3D local_target;
-        local_target.x = target.x - 400; // leg 0 base offset
+        local_target.x = target.x - 200; // leg 0 base offset
         local_target.y = target.y - 0;
         local_target.z = target.z;
         float target_distance = sqrt(local_target.x * local_target.x +

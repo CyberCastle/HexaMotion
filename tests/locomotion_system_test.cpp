@@ -5,7 +5,7 @@
 
 int main() {
     Parameters p{};
-    p.hexagon_radius = 400;
+    p.hexagon_radius = 200;
     p.coxa_length = 50;
     p.femur_length = 101;
     p.tibia_length = 208;
@@ -34,7 +34,7 @@ int main() {
 
     // Second system with invalid limits should report kinematics error
     Parameters bad{};
-    bad.hexagon_radius = 400;
+    bad.hexagon_radius = 200;
     bad.coxa_length = 50;
     bad.femur_length = 101;
     bad.tibia_length = 208;

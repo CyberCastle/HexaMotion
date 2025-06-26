@@ -78,7 +78,7 @@ void setup() {
 
     // Initialize robot model with realistic parameters from AGENTS.md
     Parameters params;
-    params.hexagon_radius = 400;   // 400mm hexagon
+    params.hexagon_radius = 200;   // 200mm hexagon
     params.coxa_length = 50;       // 50mm coxa
     params.femur_length = 101;     // 101mm femur
     params.tibia_length = 208;     // 208mm tibia

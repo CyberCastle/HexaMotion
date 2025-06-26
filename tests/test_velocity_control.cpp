@@ -2,7 +2,7 @@
  * @file te// Test parameters - same as other tests
 Parameters setupTestParameters() {
     Parameters p{};
-    p.hexagon_radius = 400;
+    p.hexagon_radius = 200;
     p.coxa_length = 50;
     p.femur_length = 101;
     p.tibia_length = 208;
@@ -35,7 +35,7 @@ Parameters setupTestParameters() {
 // Test parameters - same as other tests
 Parameters setupTestParameters() {
     Parameters p{};
-    p.hexagon_radius = 400;
+    p.hexagon_radius = 200;
     p.coxa_length = 50;
     p.femur_length = 101;
     p.tibia_length = 208;

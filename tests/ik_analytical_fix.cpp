@@ -55,7 +55,7 @@ int main() {
     std::cout << "=== Analytical IK Test ===" << std::endl;
 
     Parameters p{};
-    p.hexagon_radius = 400;
+    p.hexagon_radius = 200;
     p.coxa_length = 50;
     p.femur_length = 101;
     p.tibia_length = 208;

@@ -274,7 +274,7 @@ Parameters createBasicParameters() {
     Parameters params{};
 
     // Robot geometry (example values)
-    params.hexagon_radius = 400.0f; // mm
+    params.hexagon_radius = 200.0f; // mm
     params.coxa_length = 50.0f;     // mm
     params.femur_length = 101.0f;   // mm
     params.tibia_length = 208.0f;   // mm

@@ -24,7 +24,7 @@ class AdmittanceDerivativesTest {
   public:
     AdmittanceDerivativesTest() {
         // Initialize parameters as per AGENTS.md
-        params_.hexagon_radius = 400;
+        params_.hexagon_radius = 200;
         params_.coxa_length = 50;
         params_.femur_length = 101;
         params_.tibia_length = 208;
