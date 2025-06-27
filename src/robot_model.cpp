@@ -20,7 +20,7 @@ void RobotModel::initializeDH() {
         // Per-leg base joint (coxa) theta offsets in degrees, representing each leg's mounting orientation
         // around the hexagonal body (legs spaced 60° apart, starting at front-right)
         static const float base_theta_offsets[NUM_LEGS] = {
-            0.0f, -60.0f, -120.0f, 180.0f, 120.0f, 60.0f};
+            -30.0f, -90.0f, -150.0f, 150.0f, 90.0f, 30.0f};
         for (int l = 0; l < NUM_LEGS; ++l) {
             // Joint 1 (coxa): vertical axis rotation
             dh_transforms[l][0][0] = params.coxa_length;    // a0 - coxa length

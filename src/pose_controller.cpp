@@ -1,13 +1,13 @@
 #include "pose_controller.h"
 #include "hexamotion_constants.h"
-#include <cmath> // Add cmath for sqrtf
+#include <cmath>
 /**
  * @file pose_controller.cpp
  * @brief Implementation of the kinematic pose controller.
  */
 
-PoseController::PoseController(RobotModel &m, IServoInterface *s)
-    : model(m), servos(s), trajectory_in_progress(false), trajectory_progress(0.0f), trajectory_step_count(0) {
+PoseController::PoseController(RobotModel &m, IServoInterface *s, const PoseConfiguration &config)
+    : model(m), servos(s), pose_config(config), trajectory_in_progress(false), trajectory_progress(0.0f), trajectory_step_count(0) {
     // Initialize trajectory arrays
     for (int i = 0; i < NUM_LEGS; i++) {
         trajectory_start_positions[i] = Point3D(0, 0, 0);
@@ -19,6 +19,11 @@ PoseController::PoseController(RobotModel &m, IServoInterface *s)
 
 bool PoseController::setBodyPose(const Eigen::Vector3f &position, const Eigen::Vector3f &orientation,
                                  Point3D leg_pos[NUM_LEGS], JointAngles joint_q[NUM_LEGS]) {
+    // OpenSHC-style: Check pose limits before applying
+    if (!checkPoseLimits(position, orientation)) {
+        return false; // Pose exceeds configured limits
+    }
+
     // Use smooth trajectory as default behavior if enabled
     if (model.getParams().smooth_trajectory.use_current_servo_positions &&
         model.getParams().smooth_trajectory.enable_pose_interpolation) {
@@ -26,30 +31,7 @@ bool PoseController::setBodyPose(const Eigen::Vector3f &position, const Eigen::V
     }
 
     // Original implementation for compatibility when smooth trajectory is disabled
-    for (int i = 0; i < NUM_LEGS; ++i) {
-        Point3D old_leg_body(leg_pos[i].x - position[0], leg_pos[i].y - position[1], leg_pos[i].z - position[2]);
-        Point3D new_leg_body = math_utils::rotatePoint(old_leg_body, orientation);
-        Point3D new_leg_world(position[0] + new_leg_body.x,
-                              position[1] + new_leg_body.y,
-                              position[2] + new_leg_body.z);
-        JointAngles angles = model.inverseKinematics(i, new_leg_world);
-        if (!model.checkJointLimits(i, angles))
-            return false;
-        joint_q[i] = angles;
-        leg_pos[i] = new_leg_world;
-        if (servos) {
-            float speed = model.getParams().default_servo_speed;
-            for (int j = 0; j < DOF_PER_LEG; ++j) {
-                // Check servo status flags before movement
-                if (servos->hasBlockingStatusFlags(i, j)) {
-                    return false; // Servo blocked by status flags
-                }
-                float angle = (j == 0 ? angles.coxa : (j == 1 ? angles.femur : angles.tibia));
-                servos->setJointAngleAndSpeed(i, j, angle, speed);
-            }
-        }
-    }
-    return true;
+    return setBodyPoseImmediate(position, orientation, leg_pos, joint_q);
 }
 
 bool PoseController::setLegPosition(int leg_index, const Point3D &position,
@@ -81,55 +63,82 @@ bool PoseController::setLegPosition(int leg_index, const Point3D &position,
     return true;
 }
 
-// Helper function to compute fixed poses using analytical planar geometry
-// Consolidates common pose calculation logic for standing, default, and crouch poses
-// This function calculates the leg positions and joint angles based on the desired height and hexagon radius
-// It uses the robot model's parameters to ensure the leg positions are achievable and within joint limits
-// The function assumes a hexagonal arrangement of legs and computes the positions based on the leg angle
-// spacing defined in the model parameters. It calculates the horizontal offset required for the femur+tibia
-// chain to achieve the desired height, ensuring that the tibia is approximately horizontal.
-void PoseController::computePose(float height, float radius, Point3D leg_pos[NUM_LEGS], JointAngles joint_q[NUM_LEGS]) {
-    for (int i = 0; i < NUM_LEGS; i++) {
-        float angle_rad = math_utils::degreesToRadians(i * LEG_ANGLE_SPACING);
-        float base_x = radius * cos(angle_rad);
-        float base_y = radius * sin(angle_rad);
+// OpenSHC-style pose calculation using dynamic configuration
+// Calculates leg positions based on pose configuration and desired body height
+bool PoseController::calculatePoseFromConfig(float height_offset, Point3D leg_pos[NUM_LEGS], JointAngles joint_q[NUM_LEGS]) {
+    // Calculate Z position based on body clearance and height offset
+    float target_z = -(pose_config.body_clearance * 1000.0f + height_offset); // Convert to mm and apply offset
 
-        // Calculate horizontal offset using planar geometry for femur+tibia chain
-        // This ensures tibia ≈ 0° and femur achieves the correct angle for desired height
-        float link_sum = model.getParams().femur_length + model.getParams().tibia_length;
-        float horiz_offset = sqrtf(link_sum * link_sum - height * height);
-        float leg_extension = model.getParams().coxa_length + horiz_offset;
+    // Use configured stance positions for each leg
+    for (int i = 0; i < NUM_LEGS; i++) {
+        // Get stance position from configuration (convert from meters to mm)
+        float stance_x_mm = pose_config.leg_stance_positions[i].x * 1000.0f;
+        float stance_y_mm = pose_config.leg_stance_positions[i].y * 1000.0f;
 
         Point3D target_pos;
-        target_pos.x = base_x + leg_extension * cos(angle_rad);
-        target_pos.y = base_y + leg_extension * sin(angle_rad);
-        target_pos.z = -height;
+        target_pos.x = stance_x_mm;
+        target_pos.y = stance_y_mm;
+        target_pos.z = target_z;
+
+        // Calculate joint angles using inverse kinematics
+        JointAngles angles = model.inverseKinematics(i, target_pos);
+
+        // Check joint limits
+        if (!model.checkJointLimits(i, angles)) {
+            return false;
+        }
+
         leg_pos[i] = target_pos;
-        joint_q[i] = model.inverseKinematics(i, target_pos);
+        joint_q[i] = angles;
     }
+
+    return true;
 }
 
 void PoseController::initializeDefaultPose(Point3D leg_pos[NUM_LEGS], JointAngles joint_q[NUM_LEGS],
                                            float hex_radius, float robot_height) {
-    computePose(robot_height, hex_radius, leg_pos, joint_q);
+    // OpenSHC-style: Use configuration-based calculation instead of direct geometry
+    // The hex_radius and robot_height parameters are kept for compatibility but
+    // the actual calculation uses the dynamic pose configuration
+    calculatePoseFromConfig(0.0f, leg_pos, joint_q); // No height offset for default pose
 }
 
 bool PoseController::setStandingPose(Point3D leg_pos[NUM_LEGS], JointAngles joint_q[NUM_LEGS], float robot_height) {
-    computePose(robot_height, model.getParams().hexagon_radius, leg_pos, joint_q);
-    for (int i = 0; i < NUM_LEGS; ++i) {
-        if (!model.checkJointLimits(i, joint_q[i]))
-            return false;
-    }
-    return true;
-}
+    // OpenSHC-style: Standing pose uses pre-configured joint angles, not calculated positions
+    // This ensures coxa ≈ 0° and femur/tibia equal for all legs (symmetric posture)
 
-bool PoseController::setCrouchPose(Point3D leg_pos[NUM_LEGS], JointAngles joint_q[NUM_LEGS], float robot_height) {
-    float crouch_height = robot_height * 0.4f; // Significantly reduced height for dramatic crouch
-    computePose(crouch_height, model.getParams().hexagon_radius, leg_pos, joint_q);
-    for (int i = 0; i < NUM_LEGS; ++i) {
-        if (!model.checkJointLimits(i, joint_q[i]))
-            return false;
+    for (int i = 0; i < NUM_LEGS; i++) {
+        // Use configured standing pose joint angles
+        JointAngles angles;
+        angles.coxa = pose_config.standing_pose_joints[i].coxa;
+        angles.femur = pose_config.standing_pose_joints[i].femur;
+        angles.tibia = pose_config.standing_pose_joints[i].tibia;
+
+        // Check joint limits
+        angles.coxa = model.constrainAngle(angles.coxa, model.getParams().coxa_angle_limits[0],
+                                           model.getParams().coxa_angle_limits[1]);
+        angles.femur = model.constrainAngle(angles.femur, model.getParams().femur_angle_limits[0],
+                                            model.getParams().femur_angle_limits[1]);
+        angles.tibia = model.constrainAngle(angles.tibia, model.getParams().tibia_angle_limits[0],
+                                            model.getParams().tibia_angle_limits[1]);
+
+        // Calculate resulting position using forward kinematics
+        leg_pos[i] = model.forwardKinematics(i, angles);
+        joint_q[i] = angles;
+
+        // Apply to servos if available
+        if (servos) {
+            float speed = model.getParams().default_servo_speed;
+            for (int j = 0; j < DOF_PER_LEG; ++j) {
+                if (servos->hasBlockingStatusFlags(i, j)) {
+                    return false; // Servo blocked by status flags
+                }
+                float angle = (j == 0 ? angles.coxa : (j == 1 ? angles.femur : angles.tibia));
+                servos->setJointAngleAndSpeed(i, j, angle, speed);
+            }
+        }
     }
+
     return true;
 }
 
@@ -245,6 +254,11 @@ bool PoseController::getCurrentServoPositions(Point3D leg_positions[NUM_LEGS], J
 bool PoseController::initializeTrajectoryFromCurrent(const Eigen::Vector3f &target_position,
                                                      const Eigen::Vector3f &target_orientation,
                                                      Point3D leg_positions[NUM_LEGS], JointAngles joint_angles[NUM_LEGS]) {
+    // OpenSHC-style: Check pose limits before starting trajectory
+    if (!checkPoseLimits(target_position, target_orientation)) {
+        return false; // Target pose exceeds configured limits
+    }
+
     // Get current servo positions as starting point (OpenSHC-style)
     if (!getCurrentServoPositions(trajectory_start_positions, trajectory_start_angles)) {
         // If can't read current positions, fall back to passed positions
@@ -254,7 +268,7 @@ bool PoseController::initializeTrajectoryFromCurrent(const Eigen::Vector3f &targ
         }
     }
 
-    // Calculate target leg positions using standard pose calculation
+    // Calculate target leg positions using OpenSHC-style configuration-based calculation
     Point3D temp_leg_positions[NUM_LEGS];
     JointAngles temp_joint_angles[NUM_LEGS];
 
@@ -264,7 +278,7 @@ bool PoseController::initializeTrajectoryFromCurrent(const Eigen::Vector3f &targ
         temp_joint_angles[i] = trajectory_start_angles[i];
     }
 
-    // Calculate target pose using original method (bypassing smooth trajectory to avoid recursion)
+    // Calculate target pose using OpenSHC-style method (bypassing smooth trajectory to avoid recursion)
     if (!setBodyPoseImmediate(target_position, target_orientation, temp_leg_positions, temp_joint_angles)) {
         return false;
     }
@@ -372,18 +386,27 @@ bool PoseController::isTrajectoryComplete() const {
 
 bool PoseController::setBodyPoseImmediate(const Eigen::Vector3f &position, const Eigen::Vector3f &orientation,
                                           Point3D leg_pos[NUM_LEGS], JointAngles joint_q[NUM_LEGS]) {
-    // Original implementation - bypasses smooth trajectory
+    // OpenSHC-style: Transform stance positions based on body pose
     for (int i = 0; i < NUM_LEGS; ++i) {
-        Point3D old_leg_body(leg_pos[i].x - position[0], leg_pos[i].y - position[1], leg_pos[i].z - position[2]);
-        Point3D new_leg_body = math_utils::rotatePoint(old_leg_body, orientation);
-        Point3D new_leg_world(position[0] + new_leg_body.x,
-                              position[1] + new_leg_body.y,
-                              position[2] + new_leg_body.z);
-        JointAngles angles = model.inverseKinematics(i, new_leg_world);
+        // Start with configured stance position (convert from meters to mm)
+        Point3D stance_pos;
+        stance_pos.x = pose_config.leg_stance_positions[i].x * 1000.0f;
+        stance_pos.y = pose_config.leg_stance_positions[i].y * 1000.0f;
+        stance_pos.z = -(pose_config.body_clearance * 1000.0f); // Body clearance
+
+        // Apply body transformation: translate relative to body position, then rotate
+        Point3D leg_body_relative(stance_pos.x - position[0], stance_pos.y - position[1], stance_pos.z - position[2]);
+        Point3D leg_rotated = math_utils::rotatePoint(leg_body_relative, orientation);
+        Point3D leg_world(position[0] + leg_rotated.x,
+                          position[1] + leg_rotated.y,
+                          position[2] + leg_rotated.z);
+
+        JointAngles angles = model.inverseKinematics(i, leg_world);
         if (!model.checkJointLimits(i, angles))
             return false;
         joint_q[i] = angles;
-        leg_pos[i] = new_leg_world;
+        leg_pos[i] = leg_world;
+
         if (servos) {
             float speed = model.getParams().default_servo_speed;
             for (int j = 0; j < DOF_PER_LEG; ++j) {
@@ -396,6 +419,35 @@ bool PoseController::setBodyPoseImmediate(const Eigen::Vector3f &position, const
             }
         }
     }
+    return true;
+}
+
+// OpenSHC-style pose limit validation
+bool PoseController::checkPoseLimits(const Eigen::Vector3f &position, const Eigen::Vector3f &orientation) {
+    // Convert position to meters for comparison with config limits
+    float pos_x_m = position[0] / 1000.0f;
+    float pos_y_m = position[1] / 1000.0f;
+    float pos_z_m = position[2] / 1000.0f;
+
+    // Check translation limits
+    if (std::abs(pos_x_m) > pose_config.max_translation.x ||
+        std::abs(pos_y_m) > pose_config.max_translation.y ||
+        std::abs(pos_z_m) > pose_config.max_translation.z) {
+        return false;
+    }
+
+    // Convert orientation from degrees to radians for comparison
+    float roll_rad = math_utils::degreesToRadians(orientation[0]);
+    float pitch_rad = math_utils::degreesToRadians(orientation[1]);
+    float yaw_rad = math_utils::degreesToRadians(orientation[2]);
+
+    // Check rotation limits
+    if (std::abs(roll_rad) > pose_config.max_rotation.roll ||
+        std::abs(pitch_rad) > pose_config.max_rotation.pitch ||
+        std::abs(yaw_rad) > pose_config.max_rotation.yaw) {
+        return false;
+    }
+
     return true;
 }
 

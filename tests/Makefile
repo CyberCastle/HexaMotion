@@ -17,7 +17,7 @@ math_utils_test: math_utils_test.cpp ../src/math_utils.cpp
 model_test: model_test.cpp ../src/math_utils.cpp ../src/robot_model.cpp
 	$(CXX) $(CXXFLAGS) $^ -o $@
 
-pose_controller_test: pose_controller_test.cpp ../src/pose_controller.cpp ../src/robot_model.cpp ../src/math_utils.cpp
+pose_controller_test: pose_controller_test.cpp ../src/pose_controller.cpp ../src/robot_model.cpp ../src/math_utils.cpp ../src/pose_config_factory.cpp
 	$(CXX) $(CXXFLAGS) $^ -o $@
 
 walk_controller_test: walk_controller_test.cpp ../src/walk_controller.cpp ../src/terrain_adaptation.cpp ../src/robot_model.cpp ../src/velocity_limits.cpp ../src/math_utils.cpp

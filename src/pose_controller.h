@@ -2,6 +2,7 @@
 #define POSE_CONTROLLER_H
 
 #include "HexaModel.h"
+#include "pose_config.h"
 
 /**
  * @brief Kinematic pose controller for body and legs.
@@ -12,8 +13,9 @@ class PoseController {
      * @brief Construct a pose controller.
      * @param model  Reference to the robot model.
      * @param servos Servo interface used to command joints.
+     * @param config Initial pose configuration (use pose_config_factory.h to create)
      */
-    PoseController(RobotModel &model, IServoInterface *servos);
+    PoseController(RobotModel &model, IServoInterface *servos, const PoseConfiguration &config);
 
     /**
      * @brief Set the robot body pose.
@@ -83,15 +85,6 @@ class PoseController {
     bool setStandingPose(Point3D leg_positions[NUM_LEGS], JointAngles joint_angles[NUM_LEGS], float robot_height);
 
     /**
-     * @brief Set the robot to a crouch pose.
-     * @param leg_positions Array of leg positions to update.
-     * @param joint_angles Array of joint angles to update.
-     * @param robot_height Target body height for crouching.
-     * @return True on success.
-     */
-    bool setCrouchPose(Point3D leg_positions[NUM_LEGS], JointAngles joint_angles[NUM_LEGS], float robot_height);
-
-    /**
      * @brief Set body pose with smooth trajectory interpolation from current servo positions.
      * This is the default method that uses current servo positions as starting point,
      * equivalent to OpenSHC's smooth movement approach.
@@ -144,6 +137,36 @@ class PoseController {
     void configureSmoothTrajectory(bool use_current_positions, float interpolation_speed = 0.1f, uint8_t max_steps = 20);
 
     /**
+     * @brief Get current pose configuration
+     * @return Reference to current pose configuration
+     */
+    const PoseConfiguration &getPoseConfig() const { return pose_config; }
+
+    /**
+     * @brief Set pose configuration directly (decoupled approach)
+     * @param config Pre-configured pose configuration structure
+     */
+    void setPoseConfig(const PoseConfiguration &config) {
+        pose_config = config;
+    }
+
+    /**
+     * @brief Get configured standing pose joint angles (OpenSHC equivalent)
+     * @return Array of standing pose joint configurations
+     */
+    const std::array<StandingPoseJoints, NUM_LEGS> &getStandingPoseJoints() const {
+        return pose_config.standing_pose_joints;
+    }
+
+    /**
+     * @brief Set custom standing pose joint angles (OpenSHC equivalent)
+     * @param joints Array of standing pose joint configurations
+     */
+    void setStandingPoseJoints(const std::array<StandingPoseJoints, NUM_LEGS> &joints) {
+        pose_config.standing_pose_joints = joints;
+    }
+
+    /**
      * @brief Check if a trajectory interpolation is currently in progress.
      * @return True if trajectory is being interpolated.
      */
@@ -159,12 +182,17 @@ class PoseController {
     }
 
   private:
-    // Helper function to compute fixed poses using analytical planar geometry
-    // Consolidates common pose calculation logic for standing, default, and crouch poses
-    void computePose(float height, float radius, Point3D leg_positions[NUM_LEGS], JointAngles joint_angles[NUM_LEGS]);
+    // OpenSHC-style pose calculation using dynamic configuration
+    bool calculatePoseFromConfig(float height_offset, Point3D leg_positions[NUM_LEGS], JointAngles joint_angles[NUM_LEGS]);
+
+    // OpenSHC-style pose limit validation
+    bool checkPoseLimits(const Eigen::Vector3f &position, const Eigen::Vector3f &orientation);
 
     RobotModel &model;
     IServoInterface *servos;
+
+    // OpenSHC-style pose configuration
+    PoseConfiguration pose_config;
 
     // Smooth trajectory state variables
     bool trajectory_in_progress;
