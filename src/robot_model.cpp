@@ -23,22 +23,22 @@ void RobotModel::initializeDH() {
             -30.0f, -90.0f, -150.0f, 150.0f, 90.0f, 30.0f};
         for (int l = 0; l < NUM_LEGS; ++l) {
             // Joint 1 (coxa): vertical axis rotation
-            dh_transforms[l][0][0] = 0.0f;                  // a0 - link length
-            dh_transforms[l][0][1] = 90.0f;                 // alpha0 - rotate to femur axis
-            dh_transforms[l][0][2] = 0.0f;                  // d1 - link offset
+            dh_transforms[l][0][0] = params.coxa_length;   // a0 - coxa length
+            dh_transforms[l][0][1] = 90.0f;                // alpha0 - rotate to femur axis
+            dh_transforms[l][0][2] = 0.0f;                 // d1 - link offset
             dh_transforms[l][0][3] = base_theta_offsets[l]; // theta1 offset - mounting offset
 
             // Joint 2 (femur): pitch axis rotation
-            dh_transforms[l][1][0] = params.coxa_length; // a1 - translation along rotated x
+            dh_transforms[l][1][0] = params.femur_length; // a1 - femur length
             dh_transforms[l][1][1] = 0.0f;               // alpha1 - twist angle
             dh_transforms[l][1][2] = 0.0f;               // d2 - link offset
             dh_transforms[l][1][3] = 0.0f;               // theta2 offset - joint angle offset
 
             // Joint 3 (tibia): pitch axis rotation
-            dh_transforms[l][2][0] = params.femur_length; // a2 - translation along femur
+            dh_transforms[l][2][0] = params.tibia_length; // a2 - tibia length
             dh_transforms[l][2][1] = 0.0f;                // alpha2 - twist angle
             dh_transforms[l][2][2] = 0.0f;                // d3 - link offset
-            dh_transforms[l][2][3] = 0.0f;                // theta3 offset - joint angle offset
+            dh_transforms[l][2][3] = -90.0f;              // theta3 offset - knee offset
         }
     }
 }
@@ -277,7 +277,7 @@ Eigen::Matrix4f RobotModel::legTransform(int leg_index, const JointAngles &q) co
         float theta = theta0 + joint_deg[j];           // total joint angle
         T *= math_utils::dhTransform(a, alpha, d, theta);
     }
-    T *= math_utils::dhTransform(params.tibia_length, 0.0f, 0.0f, 0.0f);
+
     return T;
 }
 
@@ -310,8 +310,8 @@ Eigen::Matrix3f RobotModel::calculateJacobian(int leg, const JointAngles &q, con
         transforms[j + 1] = transforms[j] * math_utils::dhTransform(a, alpha, d, theta);
     }
 
-    // Add final transform to tip
-    Eigen::Matrix4f T_final = transforms[DOF_PER_LEG] * math_utils::dhTransform(params.tibia_length, 0.0f, 0.0f, 0.0f);
+    // End-effector transform
+    Eigen::Matrix4f T_final = transforms[DOF_PER_LEG];
 
     // End-effector position
     Eigen::Vector3f pe = T_final.block<3, 1>(0, 3);
