@@ -290,22 +290,21 @@ class IKFKValidator {
 int main() {
     // Configure robot parameters for HexaMotion
     Parameters params;
-    params.hexagon_radius = 200.0f;
-    params.coxa_length = 50.0f;
-    params.femur_length = 100.0f;
-    params.tibia_length = 159.0f;
-    params.robot_height = 150.0f;
-    params.robot_weight = 5.0f;
-
-    // Set realistic joint limits
-    params.coxa_angle_limits[0] = -180.0f;
-    params.coxa_angle_limits[1] = 180.0f;
-    params.femur_angle_limits[0] = -90.0f;
-    params.femur_angle_limits[1] = 90.0f;
-    params.tibia_angle_limits[0] = -180.0f;
-    params.tibia_angle_limits[1] = 180.0f;
+    params.hexagon_radius = 200;
+    params.coxa_length = 50;
+    params.femur_length = 101;
+    params.tibia_length = 208;
+    params.robot_height = 120;
+    params.control_frequency = 50;
+    params.coxa_angle_limits[0] = -65;
+    params.coxa_angle_limits[1] = 65;
+    params.femur_angle_limits[0] = -75;
+    params.femur_angle_limits[1] = 75;
+    params.tibia_angle_limits[0] = -45;
+    params.tibia_angle_limits[1] = 45;
 
     // Initialize other parameters
+    params.robot_weight = 6.5f;
     params.center_of_mass = Eigen::Vector3f(0, 0, 0);
     params.imu_calibration_offset = Eigen::Vector3f(0, 0, 0);
     params.fsr_touchdown_threshold = 50.0f;
