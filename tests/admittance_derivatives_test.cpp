@@ -28,7 +28,7 @@ class AdmittanceDerivativesTest {
         params_.coxa_length = 50;
         params_.femur_length = 101;
         params_.tibia_length = 208;
-        params_.robot_height = 100;
+        params_.robot_height = 120;
         params_.control_frequency = 50;
         params_.coxa_angle_limits[0] = -65;
         params_.coxa_angle_limits[1] = 65;

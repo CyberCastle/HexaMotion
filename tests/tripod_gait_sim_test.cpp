@@ -388,7 +388,7 @@ int main() {
     std::cout << "=========================================" << std::endl;
 
     // Test configuration 1: Lower height (80mm)
-    std::cout << "Configuration 1: Robot Height = 100mm" << std::endl;
+    std::cout << "Configuration 1: Robot Height = 120mm" << std::endl;
     Parameters p1{};
     p1.hexagon_radius = 200;
     p1.coxa_length = 50;

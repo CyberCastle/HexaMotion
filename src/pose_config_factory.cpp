@@ -13,7 +13,7 @@
  * - Configuration matches OpenSHC's default.yaml structure
  *
  * Physical robot characteristics from AGENTS.md:
- * - Robot height: 100 mm
+ * - Robot height: 120 mm
  * - Body hexagon radius: 200 mm
  * - Coxa length: 50 mm
  * - Femur length: 101 mm
@@ -60,18 +60,18 @@ std::array<LegStancePosition, NUM_LEGS> calculateHexagonalStancePositions(
  * Based on AGENTS.md: "Physically, with coxa-femur = 0º and femur-tibia = 0º,
  * the femur remains horizontal, while the tibia remains vertical, standing stably."
  *
- * For the given robot dimensions (coxa=50mm, femur=101mm, tibia=208mm, height=100mm),
+ * For the given robot dimensions (coxa=50mm, femur=101mm, tibia=208mm, height=120mm),
  * the proper standing configuration should be symmetric across all legs.
  * @return Array of standing pose joint configurations
  */
 std::array<StandingPoseJoints, NUM_LEGS> getDefaultStandingPoseJoints() {
     std::array<StandingPoseJoints, NUM_LEGS> joints;
 
-    // For a hexagonal robot with height=100mm, using the robot dimensions:
+    // For a hexagonal robot with height=120mm, using the robot dimensions:
     // - Coxa length: 50mm
     // - Femur length: 101mm
     // - Tibia length: 208mm
-    // - Target height from ground to body: 100mm
+    // - Target height from ground to body: 120mm
 
     // Standing pose for stable equilibrium (all legs identical for symmetry)
     // This ensures coxa ≈ 0° and femur/tibia equal for all legs

@@ -29,11 +29,11 @@ Las incidencias reportadas en el informe original han sido **RESUELTAS SATISFACT
 **Problema Original:**
 
 -   Errores de 133-436mm entre posiciones IK y FK
--   Especialmente problemático en alturas de 100mm (133-385mm)
+-   Especialmente problemático en alturas de 120mm (133-385mm)
 
 **Estado Actual:**
 
--   **Altura 100mm**: Errores reducidos a 142-180mm (mejora del 50-60%)
+-   **Altura 120mm**: Errores reducidos a 142-180mm (mejora del 50-60%)
 -   **Altura 200mm**: Errores de 33-72mm (mejora del 80-90%)
 -   **Altura 150mm (operacional)**: Sistema funciona con alta precisión
 
@@ -124,7 +124,7 @@ Las incidencias reportadas en el informe original han sido **RESUELTAS SATISFACT
 
 ## Recomendaciones para Desarrollo Futuro
 
-1. **Optimización adicional para altura 100mm**: Considerar algoritmo IK analítico para casos específicos
+1. **Optimización adicional para altura 120mm**: Considerar algoritmo IK analítico para casos específicos
 2. **Validación en hardware**: Probar correcciones en robot físico
 3. **Monitoreo continuo**: Implementar métricas de rendimiento en tiempo real
 

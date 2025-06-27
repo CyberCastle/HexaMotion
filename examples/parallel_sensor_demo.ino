@@ -227,7 +227,7 @@ void setup() {
     params.coxa_length = 50.0f;
     params.femur_length = 80.0f;
     params.tibia_length = 120.0f;
-    params.robot_height = 100.0f;
+    params.robot_height = 120.0f;
 
     locomotion_system = LocomotionSystem(params);
 

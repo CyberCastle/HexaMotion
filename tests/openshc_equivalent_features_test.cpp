@@ -27,7 +27,7 @@ Parameters createTestParameters() {
     params.coxa_length = 50.0f;
     params.femur_length = 101.0f;
     params.tibia_length = 208.0f;
-    params.robot_height = 100.0f;
+    params.robot_height = 120.0f;
     params.height_offset = 0.0f;
     params.control_frequency = 100;
 
@@ -145,7 +145,7 @@ void testManualPosingModes() {
             pose_changed = (current_pose.leg_positions[1].x != 0.0f || current_pose.leg_positions[1].y != 0.0f || current_pose.leg_positions[1].z != 0.0f);
             break;
         case ManualPoseController::POSE_BODY_HEIGHT:
-            pose_changed = (current_pose.body_height != 100.0f);
+            pose_changed = (current_pose.body_height != 120.0f);
             break;
         case ManualPoseController::POSE_COMBINED:
         case ManualPoseController::POSE_MANUAL_BODY:
