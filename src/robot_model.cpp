@@ -20,7 +20,7 @@ void RobotModel::initializeDH() {
         // Per-leg base joint (coxa) theta offsets in degrees, representing each leg's mounting orientation
         // around the hexagonal body (legs spaced 60° apart, starting at front-right)
         static const float base_theta_offsets[NUM_LEGS] = {
-            -30.0f, -90.0f, -150.0f, 150.0f, 90.0f, 30.0f};
+            0.0f, -60.0f, -120.0f, 180.0f, 120.0f, 60.0f};
         for (int l = 0; l < NUM_LEGS; ++l) {
             // Joint 1 (coxa): vertical axis rotation
             dh_transforms[l][0][0] = 0.0f;                  // a0 - link length
@@ -29,16 +29,18 @@ void RobotModel::initializeDH() {
             dh_transforms[l][0][3] = base_theta_offsets[l]; // theta1 offset - mounting offset
 
             // Joint 2 (femur): pitch axis rotation
+            // PHYSICS CORRECTION: When femur angle = 0°, femur should be horizontal
             dh_transforms[l][1][0] = params.coxa_length; // a1 - translation along rotated x
             dh_transforms[l][1][1] = 0.0f;               // alpha1 - twist angle
             dh_transforms[l][1][2] = 0.0f;               // d2 - link offset
-            dh_transforms[l][1][3] = 0.0f;               // theta2 offset - joint angle offset
+            dh_transforms[l][1][3] = 0.0f;               // theta2 offset - femur horizontal at 0°
 
             // Joint 3 (tibia): pitch axis rotation
+            // PHYSICS CORRECTION: When tibia angle = 0°, tibia should be vertical pointing DOWN
             dh_transforms[l][2][0] = params.femur_length; // a2 - translation along femur
             dh_transforms[l][2][1] = 0.0f;                // alpha2 - twist angle
             dh_transforms[l][2][2] = 0.0f;                // d3 - link offset
-            dh_transforms[l][2][3] = 0.0f;                // theta3 offset - joint angle offset
+            dh_transforms[l][2][3] = -90.0f;              // theta3 offset - tibia pointing down at 0°
         }
     }
 }
