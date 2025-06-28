@@ -106,14 +106,14 @@ int main() {
     std::cout << "\n=== Testing OpenSHC-style Pose Calculations ===" << std::endl;
 
     // Test default pose using OpenSHC-style configuration
-    pc.initializeDefaultPose(legs, joints, p.hexagon_radius, p.robot_height);
+    pc.initializeDefaultPose(legs, joints);
     std::cout << "Default Pose Leg Positions (using OpenSHC config):" << std::endl;
     for (int i = 0; i < NUM_LEGS; ++i) {
         std::cout << "Leg " << i << ": X=" << legs[i].x << "mm, Y=" << legs[i].y << "mm, Z=" << legs[i].z << "mm" << std::endl;
     }
 
     // Test standing pose
-    if (!pc.setStandingPose(legs, joints, p.robot_height)) {
+    if (!pc.setStandingPose(legs, joints)) {
         std::cerr << "Error: setStandingPose failed" << std::endl;
         return -1;
     }

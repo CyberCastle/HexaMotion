@@ -95,15 +95,12 @@ bool PoseController::calculatePoseFromConfig(float height_offset, Point3D leg_po
     return true;
 }
 
-void PoseController::initializeDefaultPose(Point3D leg_pos[NUM_LEGS], JointAngles joint_q[NUM_LEGS],
-                                           float hex_radius, float robot_height) {
+void PoseController::initializeDefaultPose(Point3D leg_pos[NUM_LEGS], JointAngles joint_q[NUM_LEGS]) {
     // OpenSHC-style: Use configuration-based calculation instead of direct geometry
-    // The hex_radius and robot_height parameters are kept for compatibility but
-    // the actual calculation uses the dynamic pose configuration
     calculatePoseFromConfig(0.0f, leg_pos, joint_q); // No height offset for default pose
 }
 
-bool PoseController::setStandingPose(Point3D leg_pos[NUM_LEGS], JointAngles joint_q[NUM_LEGS], float robot_height) {
+bool PoseController::setStandingPose(Point3D leg_pos[NUM_LEGS], JointAngles joint_q[NUM_LEGS]) {
     // OpenSHC-style: Standing pose uses pre-configured joint angles, not calculated positions
     // This ensures coxa ≈ 0° and femur/tibia equal for all legs (symmetric posture)
 

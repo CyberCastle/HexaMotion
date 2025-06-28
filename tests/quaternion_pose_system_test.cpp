@@ -23,7 +23,7 @@ int main() {
 
     // Initialize default leg positions
     // Use a smaller leg radius to keep the feet within reach
-    pose_controller.initializeDefaultPose(leg_positions, joint_angles, 150.0f, params.robot_height);
+    pose_controller.initializeDefaultPose(leg_positions, joint_angles);
 
     std::cout << "\n1. Testing quaternion conversion functions..." << std::endl;
 

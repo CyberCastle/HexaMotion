@@ -1164,8 +1164,8 @@ int StateController::executePackSequence() {
         transition_progress_.current_step = 1;
         return 50;
     } else if (pack_step_ == 1) {
-        // Move to packed position (crouch pose as approximation)
-        if (locomotion_system_.setCrouchPose()) {
+        // Move to packed position (standing pose as approximation)
+        if (locomotion_system_.setStandingPose()) {
             pack_step_ = 0; // Reset for next time
             transition_progress_.current_step = 2;
             transition_progress_.is_complete = true;

@@ -19,7 +19,7 @@ void setup() {
     Serial.println("PoseController Servo Flags Example");
 
     // Initialize with default pose
-    pose_controller.initializeDefaultPose(leg_positions, joint_angles, 100.0f, 80.0f);
+    pose_controller.initializeDefaultPose(leg_positions, joint_angles);
     Serial.println("Default pose initialized");
 
     // Test 1: Normal operation (no flags set)

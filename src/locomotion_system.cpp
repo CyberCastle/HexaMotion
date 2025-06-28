@@ -883,14 +883,7 @@ bool LocomotionSystem::setBodyPose(const Eigen::Vector3f &position, const Eigen:
 bool LocomotionSystem::setStandingPose() {
     if (!pose_ctrl)
         return false;
-    return pose_ctrl->setStandingPose(leg_positions, joint_angles, params.robot_height);
-}
-
-// Set crouch pose
-bool LocomotionSystem::setCrouchPose() {
-    if (!pose_ctrl)
-        return false;
-    return pose_ctrl->setCrouchPose(leg_positions, joint_angles, params.robot_height);
+    return pose_ctrl->setStandingPose(leg_positions, joint_angles);
 }
 
 // Smooth trajectory configuration methods (OpenSHC-style movement)
@@ -1080,7 +1073,7 @@ bool LocomotionSystem::handleError(ErrorCode error) {
 
     case STABILITY_ERROR:
         // Adopt a more stable pose
-        return setCrouchPose();
+        return setStandingPose();
 
     case KINEMATICS_ERROR:
         // Return to a safe pose

@@ -69,20 +69,16 @@ class PoseController {
      * @brief Initialize default leg pose around the body.
      * @param leg_positions Array of leg tip positions to fill.
      * @param joint_angles Array of joint angles to fill.
-     * @param hex_radius  Body hexagon radius in millimeters.
-     * @param robot_height Nominal body height.
      */
-    void initializeDefaultPose(Point3D leg_positions[NUM_LEGS], JointAngles joint_angles[NUM_LEGS],
-                               float hex_radius, float robot_height);
+    void initializeDefaultPose(Point3D leg_positions[NUM_LEGS], JointAngles joint_angles[NUM_LEGS]);
 
     /**
      * @brief Set the robot to a standing pose.
      * @param leg_positions Array of leg positions to update.
      * @param joint_angles Array of joint angles to update.
-     * @param robot_height Target body height.
      * @return True on success.
      */
-    bool setStandingPose(Point3D leg_positions[NUM_LEGS], JointAngles joint_angles[NUM_LEGS], float robot_height);
+    bool setStandingPose(Point3D leg_positions[NUM_LEGS], JointAngles joint_angles[NUM_LEGS]);
 
     /**
      * @brief Set body pose with smooth trajectory interpolation from current servo positions.

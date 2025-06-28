@@ -163,8 +163,6 @@ class LocomotionSystem {
     bool setLegPosition(int leg_index, const Point3D &position);
     /** Command the default standing pose. */
     bool setStandingPose();
-    /** Command a crouched pose for shutdown. */
-    bool setCrouchPose();
 
     // Inverse kinematics
     /** Compute joint angles for a desired leg tip position. */
