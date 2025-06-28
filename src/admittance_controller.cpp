@@ -24,7 +24,7 @@ AdmittanceController::AdmittanceController(RobotModel &model, IIMUInterface *imu
       current_time_(0.0) {
 
     // Initialize unified workspace validator for position calculations
-    WorkspaceValidator::ValidationConfig validator_config;
+    ValidationConfig validator_config;
     validator_config.enable_collision_checking = false;   // Disable for performance in admittance control
     validator_config.enable_joint_limit_checking = false; // Not needed for stiffness calculations
     unified_validator_ = std::make_unique<WorkspaceValidator>(model_, validator_config);

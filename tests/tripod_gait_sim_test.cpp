@@ -1,4 +1,6 @@
 #include "../src/locomotion_system.h"
+#include "../src/pose_config.h"
+#include "../src/pose_config_factory.h"
 #include "../src/state_controller.h"
 #include "test_stubs.h"
 #include <cassert>
@@ -10,8 +12,7 @@
 
 static void printWelcome() {
     std::cout << "=========================================" << std::endl;
-    std::cout << "HEXAPOD TRIPOD GAIT SIMULATION WITH STATE MACHINE" << std : p2.hexagon_radius = 200;
-    endl;
+    std::cout << "HEXAPOD TRIPOD GAIT SIMULATION WITH STATE MACHINE" << std::endl;
     std::cout << "=========================================" << std::endl;
     std::cout << "Simulating 6-legged robot with 3DOF per leg" << std::endl;
     std::cout << "Distance: 800mm | Velocity: 400mm/s | Duration: 2s" << std::endl;
@@ -409,7 +410,10 @@ int main() {
     DummyFSR fsr1;
     DummyServo servos1;
 
-    assert(sys1.initialize(&imu1, &fsr1, &servos1));
+    // Create pose configuration for first test system
+    PoseConfiguration pose_config1 = getDefaultPoseConfig(p1);
+
+    assert(sys1.initialize(&imu1, &fsr1, &servos1, pose_config1));
     assert(sys1.calibrateSystem());
     assert(sys1.setGaitType(TRIPOD_GAIT));
     assert(sys1.walkForward(400.0f));
@@ -455,7 +459,10 @@ int main() {
     DummyFSR fsr2;
     DummyServo servos2;
 
-    assert(sys2.initialize(&imu2, &fsr2, &servos2));
+    // Create pose configuration for second test system
+    PoseConfiguration pose_config2 = getDefaultPoseConfig(p2);
+
+    assert(sys2.initialize(&imu2, &fsr2, &servos2, pose_config2));
     assert(sys2.calibrateSystem());
     assert(sys2.setGaitType(TRIPOD_GAIT));
     assert(sys2.walkForward(400.0f));
@@ -514,8 +521,11 @@ int main() {
     DummyFSR fsr;
     DummyServo servos;
 
+    // Create pose configuration for the robot
+    PoseConfiguration pose_config = getDefaultPoseConfig(p);
+
     std::cout << "Initializing locomotion system..." << std::endl;
-    assert(sys.initialize(&imu, &fsr, &servos));
+    assert(sys.initialize(&imu, &fsr, &servos, pose_config));
     assert(sys.calibrateSystem());
 
     // Test parallel sensor functionality
@@ -541,7 +551,7 @@ int main() {
     stateConfig.transition_timeout = 10.0f;
 
     StateController stateController(sys, stateConfig);
-    assert(stateController.initialize());
+    assert(stateController.initialize(pose_config));
 
     std::cout << "✓ State Controller initialized successfully" << std::endl;
     printStateControllerStatus(stateController, 0);

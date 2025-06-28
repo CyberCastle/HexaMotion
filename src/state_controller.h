@@ -191,9 +191,10 @@ class StateController {
 
     /**
      * @brief Initialize the state controller.
+     * @param pose_config Pose configuration for the robot.
      * @return True if initialization successful
      */
-    bool initialize();
+    bool initialize(const PoseConfiguration &pose_config);
 
     /**
      * @brief Main update loop for the state machine.

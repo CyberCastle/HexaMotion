@@ -77,6 +77,7 @@ struct ScalingFactors {
     float collision_scale;
     float velocity_scale;     // Added for velocity scaling
     float acceleration_scale; // Added for acceleration scaling
+    float safety_margin;      // Added for safety margin scaling
 };
 
 /**
@@ -105,7 +106,7 @@ class WorkspaceValidator {
      * @param model Reference to robot model
      * @param config Configuration for validation behavior
      */
-    WorkspaceValidator(RobotModel &model, const ValidationConfig &config = ValidationConfig());
+    WorkspaceValidator(const RobotModel &model, const ValidationConfig &config = ValidationConfig());
 
     /**
      * @brief Validate a target position with comprehensive checking
@@ -276,7 +277,7 @@ class WorkspaceValidator {
                                      const Point3D adjacent_positions[NUM_LEGS]) const;
 
   private:
-    RobotModel &model_;
+    const RobotModel &model_;
     ValidationConfig config_;
 
     /**

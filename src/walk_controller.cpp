@@ -25,7 +25,7 @@ WalkController::WalkController(RobotModel &m)
     }
 
     // Initialize unified workspace validator with optimized settings
-    WorkspaceValidator::ValidationConfig config;
+    ValidationConfig config;
     config.safety_margin_factor = 0.65f;        // Same as original 65% safety margin
     config.collision_safety_margin = 30.0f;     // 30mm safety between legs
     config.enable_collision_checking = true;    // Enable collision avoidance

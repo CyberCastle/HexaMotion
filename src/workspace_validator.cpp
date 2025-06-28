@@ -4,7 +4,7 @@
 #include <algorithm>
 #include <cmath>
 
-WorkspaceValidator::WorkspaceValidator(RobotModel &model, const ValidationConfig &config)
+WorkspaceValidator::WorkspaceValidator(const RobotModel &model, const ValidationConfig &config)
     : model_(model), config_(config) {
 }
 

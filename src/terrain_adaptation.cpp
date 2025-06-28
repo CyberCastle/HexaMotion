@@ -22,7 +22,7 @@ TerrainAdaptation::TerrainAdaptation(RobotModel &model)
       gravity_estimate_(0, 0, -GRAVITY_ACCELERATION) {
 
     // Initialize unified workspace validator for reachability checking
-    WorkspaceValidator::ValidationConfig validator_config;
+    ValidationConfig validator_config;
     validator_config.enable_collision_checking = false;  // Disable for terrain adaptation
     validator_config.enable_joint_limit_checking = true; // Enable for accuracy
     unified_validator_ = std::make_unique<WorkspaceValidator>(model_, validator_config);

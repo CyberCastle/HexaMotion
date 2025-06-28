@@ -334,7 +334,7 @@ class RobotModel {
     void initializeDH();
 
     /** Compute inverse kinematics for a leg. */
-    JointAngles inverseKinematics(int leg, const Point3D &p);
+    JointAngles inverseKinematics(int leg, const Point3D &p) const;
     /** Compute forward kinematics for a leg. */
     Point3D forwardKinematics(int leg, const JointAngles &q) const;
     /** Analytic Jacobian for a leg. */

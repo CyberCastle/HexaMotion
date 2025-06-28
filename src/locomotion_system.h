@@ -140,9 +140,10 @@ class LocomotionSystem {
      * @param imu   IMU interface implementation.
      * @param fsr   FSR interface implementation.
      * @param servo Servo interface implementation.
+     * @param pose_config Pose configuration for the robot.
      * @return True on successful initialization.
      */
-    bool initialize(IIMUInterface *imu, IFSRInterface *fsr, IServoInterface *servo);
+    bool initialize(IIMUInterface *imu, IFSRInterface *fsr, IServoInterface *servo, const PoseConfiguration &pose_config);
 
     /**
      * @brief Run calibration sequence for sensors and servos.

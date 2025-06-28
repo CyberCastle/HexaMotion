@@ -47,7 +47,7 @@ void RobotModel::initializeDH() {
 }
 
 // OpenSHC-style Damped Least Squares (DLS) iterative inverse kinematics
-JointAngles RobotModel::inverseKinematics(int leg, const Point3D &p_target) {
+JointAngles RobotModel::inverseKinematics(int leg, const Point3D &p_target) const {
     // Inverse kinematics: Damped Least Squares solver using DH parameters
 
     // Transform target to leg coordinate system

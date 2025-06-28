@@ -1,7 +1,7 @@
 /**
  * @file velocity_limits_unified.cpp
  * @brief Migrated velocity limits using WorkspaceValidator
- * 
+ *
  * This is the migrated version that delegates all workspace-related calculations
  * to WorkspaceValidator for consistency and reduced code duplication.
  */
@@ -15,33 +15,33 @@
 #include <memory>
 
 class VelocityLimits::Impl {
-public:
+  public:
     std::unique_ptr<WorkspaceValidator> unified_validator_;
     const RobotModel &model_;
     LimitMap limit_map_;
     WorkspaceConfig workspace_config_;
     GaitConfig current_gait_config_;
     float angular_velocity_scaling_;
-    
-    explicit Impl(const RobotModel &model) 
+
+    explicit Impl(const RobotModel &model)
         : model_(model), angular_velocity_scaling_(DEFAULT_ANGULAR_SCALING) {
         // Initialize WorkspaceValidator for all workspace calculations
-        WorkspaceValidator::ValidationConfig config;
+        ValidationConfig config;
         config.enable_collision_checking = true;
         config.enable_joint_limit_checking = true;
-        config.enable_workspace_scaling = true;
-        config.safety_margin_mm = 30.0f;
-        
+        config.safety_margin = 30.0f;
+
         unified_validator_ = std::make_unique<WorkspaceValidator>(model, config);
-        
+
         // Initialize with default gait configuration
         current_gait_config_ = GaitConfig();
-        generateLimits(current_gait_config_);
     }
 };
 
 VelocityLimits::VelocityLimits(const RobotModel &model)
     : pimpl_(std::make_unique<Impl>(model)) {
+    // Initialize limits with default gait configuration
+    generateLimits(pimpl_->current_gait_config_);
 }
 
 VelocityLimits::~VelocityLimits() = default;
@@ -72,26 +72,26 @@ VelocityLimits::LimitValues VelocityLimits::getLimit(float bearing_degrees) cons
 
 void VelocityLimits::calculateWorkspace(const GaitConfig &gait_config) {
     // UNIFIED: Replace complex workspace calculation with WorkspaceValidator
-    
+
     // Get unified workspace bounds for all legs
     float min_walkspace_radius = 1000.0f; // Start with large value
     float min_stance_radius = 1000.0f;
-    
+
     for (int leg = 0; leg < NUM_LEGS; ++leg) {
         auto bounds = pimpl_->unified_validator_->getWorkspaceBounds(leg);
-        
+
         // Use the most restrictive values across all legs
         min_walkspace_radius = std::min(min_walkspace_radius, bounds.max_radius);
         min_stance_radius = std::min(min_stance_radius, bounds.max_radius * 0.8f);
     }
-    
+
     // Apply unified safety scaling
     auto scaling_factors = pimpl_->unified_validator_->getScalingFactors();
-    
+
     pimpl_->workspace_config_.walkspace_radius = min_walkspace_radius * scaling_factors.workspace_scale;
     pimpl_->workspace_config_.stance_radius = min_stance_radius * scaling_factors.workspace_scale;
     pimpl_->workspace_config_.safety_margin = scaling_factors.safety_margin;
-    
+
     // Ensure minimum reasonable values using unified constants
     pimpl_->workspace_config_.walkspace_radius = std::max(pimpl_->workspace_config_.walkspace_radius, 0.05f);
     pimpl_->workspace_config_.stance_radius = std::max(pimpl_->workspace_config_.stance_radius, 0.03f);
@@ -110,7 +110,7 @@ VelocityLimits::LimitValues VelocityLimits::scaleVelocityLimits(
     // Scale linear velocities based on angular velocity demand
     // High angular velocities reduce available linear velocity
     float linear_scale = 1.0f - (std::abs(angular_scale) * 0.3f); // 30% coupling factor
-    linear_scale = std::max(0.1f, linear_scale); // Minimum 10% linear velocity
+    linear_scale = std::max(0.1f, linear_scale);                  // Minimum 10% linear velocity
 
     scaled_limits.linear_x *= linear_scale;
     scaled_limits.linear_y *= linear_scale;
@@ -131,18 +131,18 @@ bool VelocityLimits::validateVelocityInputs(float vx, float vy, float omega) con
 VelocityLimits::LimitValues VelocityLimits::interpolateLimits(float bearing_degrees) const {
     int index1 = getBearingIndex(bearing_degrees);
     int index2 = (index1 + 1) % 360;
-    
+
     float t = bearing_degrees - static_cast<float>(index1);
-    
+
     const LimitValues &limits1 = pimpl_->limit_map_.limits[index1];
     const LimitValues &limits2 = pimpl_->limit_map_.limits[index2];
-    
+
     LimitValues interpolated;
     interpolated.linear_x = interpolateValue(limits1.linear_x, limits2.linear_x, t);
     interpolated.linear_y = interpolateValue(limits1.linear_y, limits2.linear_y, t);
     interpolated.angular_z = interpolateValue(limits1.angular_z, limits2.angular_z, t);
     interpolated.acceleration = interpolateValue(limits1.acceleration, limits2.acceleration, t);
-    
+
     return interpolated;
 }
 
@@ -150,42 +150,42 @@ VelocityLimits::LimitValues VelocityLimits::applyAccelerationLimits(
     const LimitValues &target_velocities,
     const LimitValues &current_velocities,
     float dt) const {
-    
+
     LimitValues limited_velocities = target_velocities;
-    
+
     // Calculate required accelerations
     float accel_x = (target_velocities.linear_x - current_velocities.linear_x) / dt;
     float accel_y = (target_velocities.linear_y - current_velocities.linear_y) / dt;
     float accel_z = (target_velocities.angular_z - current_velocities.angular_z) / dt;
-    
+
     // Apply acceleration limits using unified constraints
     auto scaling_factors = pimpl_->unified_validator_->getScalingFactors();
     float max_accel = target_velocities.acceleration * scaling_factors.acceleration_scale;
-    
+
     if (std::abs(accel_x) > max_accel) {
-        limited_velocities.linear_x = current_velocities.linear_x + 
-            (accel_x > 0 ? max_accel : -max_accel) * dt;
+        limited_velocities.linear_x = current_velocities.linear_x +
+                                      (accel_x > 0 ? max_accel : -max_accel) * dt;
     }
-    
+
     if (std::abs(accel_y) > max_accel) {
-        limited_velocities.linear_y = current_velocities.linear_y + 
-            (accel_y > 0 ? max_accel : -max_accel) * dt;
+        limited_velocities.linear_y = current_velocities.linear_y +
+                                      (accel_y > 0 ? max_accel : -max_accel) * dt;
     }
-    
+
     if (std::abs(accel_z) > max_accel) {
-        limited_velocities.angular_z = current_velocities.angular_z + 
-            (accel_z > 0 ? max_accel : -max_accel) * dt;
+        limited_velocities.angular_z = current_velocities.angular_z +
+                                       (accel_z > 0 ? max_accel : -max_accel) * dt;
     }
-    
+
     return limited_velocities;
 }
 
 void VelocityLimits::calculateOvershoot(const GaitConfig &gait_config) {
     // UNIFIED: Use unified velocity constraints instead of custom calculation
-    
+
     // Get velocity constraints from unified validator for forward direction (0 degrees)
     auto constraints = pimpl_->unified_validator_->calculateVelocityConstraints(0, 0.0f);
-    
+
     float max_speed = constraints.max_linear_velocity;
     float max_acceleration = constraints.max_acceleration;
 
@@ -295,7 +295,7 @@ float VelocityLimits::calculateMaxAngularSpeed(float max_linear_speed, float sta
     }
 
     float max_angular = max_linear_speed / stance_radius;
-    
+
     // Apply unified angular scaling
     auto scaling_factors = pimpl_->unified_validator_->getScalingFactors();
     max_angular *= scaling_factors.angular_scale;
@@ -311,7 +311,7 @@ float VelocityLimits::calculateMaxAcceleration(float max_speed, float time_to_ma
     }
 
     float max_accel = max_speed / time_to_max;
-    
+
     // Apply unified acceleration scaling
     auto scaling_factors = pimpl_->unified_validator_->getScalingFactors();
     max_accel *= scaling_factors.acceleration_scale;
@@ -324,14 +324,14 @@ VelocityLimits::LimitValues VelocityLimits::calculateLimitsForBearing(
     float bearing_degrees, const GaitConfig &gait_config) const {
 
     // UNIFIED: Use WorkspaceValidator instead of complex leg analysis
-    
+
     // Find the most constraining leg using unified validation
     float min_effective_radius = pimpl_->workspace_config_.walkspace_radius;
-    WorkspaceValidator::VelocityConstraints most_restrictive;
-    
+    VelocityConstraints most_restrictive;
+
     for (int leg = 0; leg < NUM_LEGS; ++leg) {
         auto constraints = pimpl_->unified_validator_->calculateVelocityConstraints(leg, bearing_degrees);
-        
+
         // Use the most restrictive constraints
         if (leg == 0 || constraints.workspace_radius < min_effective_radius) {
             min_effective_radius = constraints.workspace_radius;
@@ -370,22 +370,22 @@ int VelocityLimits::getBearingIndex(float bearing_degrees) const {
 
 void VelocityLimits::setSafetyMargin(float margin) {
     pimpl_->workspace_config_.safety_margin = margin;
-    
+
     // Update unified validator safety margin
     pimpl_->unified_validator_->updateSafetyMargin(margin);
 }
 
 void VelocityLimits::setAngularVelocityScaling(float scaling) {
     pimpl_->angular_velocity_scaling_ = scaling;
-    
+
     // Update unified validator angular scaling
     pimpl_->unified_validator_->updateAngularScaling(scaling);
 }
 
-float VelocityLimits::getOvershootX() const { 
-    return pimpl_->workspace_config_.overshoot_x; 
+float VelocityLimits::getOvershootX() const {
+    return pimpl_->workspace_config_.overshoot_x;
 }
 
-float VelocityLimits::getOvershootY() const { 
-    return pimpl_->workspace_config_.overshoot_y; 
+float VelocityLimits::getOvershootY() const {
+    return pimpl_->workspace_config_.overshoot_y;
 }

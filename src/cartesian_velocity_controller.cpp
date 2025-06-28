@@ -9,7 +9,7 @@ CartesianVelocityController::CartesianVelocityController(const RobotModel &model
     : model_(model), velocity_control_enabled_(true) {
 
     // Initialize unified workspace validator for velocity constraints
-    WorkspaceValidator::ValidationConfig config;
+    ValidationConfig config;
     config.enable_collision_checking = false;  // Disable for performance in velocity control
     config.enable_joint_limit_checking = true; // Enable for accurate servo speed calculation
     unified_validator_ = std::make_unique<WorkspaceValidator>(

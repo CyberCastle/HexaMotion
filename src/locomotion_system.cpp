@@ -16,6 +16,7 @@
 #include "locomotion_system.h"
 #include "hexamotion_constants.h"
 #include "math_utils.h"
+#include "pose_config_factory.h"
 #include "workspace_validator.h" // Add unified validator
 #include <algorithm>
 #include <cmath>
@@ -61,7 +62,7 @@ LocomotionSystem::~LocomotionSystem() {
 }
 
 // System initialization
-bool LocomotionSystem::initialize(IIMUInterface *imu, IFSRInterface *fsr, IServoInterface *servo) {
+bool LocomotionSystem::initialize(IIMUInterface *imu, IFSRInterface *fsr, IServoInterface *servo, const PoseConfiguration &pose_config) {
     if (!imu || !fsr || !servo) {
         last_error = PARAMETER_ERROR;
         return false;
@@ -87,7 +88,7 @@ bool LocomotionSystem::initialize(IIMUInterface *imu, IFSRInterface *fsr, IServo
         return false;
     }
 
-    pose_ctrl = new PoseController(model, servo_interface);
+    pose_ctrl = new PoseController(model, servo_interface, pose_config);
     walk_ctrl = new WalkController(model);
     admittance_ctrl = new AdmittanceController(model, imu_interface, fsr_interface);
     velocity_controller = new CartesianVelocityController(model);
@@ -174,32 +175,6 @@ Point3D LocomotionSystem::constrainToWorkspace(int leg_index, const Point3D &tar
         dummy_positions[i] = Point3D(0, 0, 0);
     }
     return temp_validator.constrainToValidWorkspace(leg_index, target, dummy_positions);
-}
-float min_reach = std::abs(params.femur_length - params.tibia_length);
-
-Point3D constrained_local = local_target;
-
-if (distance > max_reach * 0.95f) {
-    // Scale down to maximum reach
-    float scale = (max_reach * 0.95f) / distance;
-    constrained_local.x *= scale;
-    constrained_local.y *= scale;
-    constrained_local.z *= scale;
-} else if (distance < min_reach * 1.05f) {
-    // Scale up to minimum reach
-    float scale = (min_reach * 1.05f) / distance;
-    constrained_local.x *= scale;
-    constrained_local.y *= scale;
-    constrained_local.z *= scale;
-}
-
-// Transform back to global coordinates
-Point3D constrained_global;
-constrained_global.x = constrained_local.x + base_x;
-constrained_global.y = constrained_local.y + base_y;
-constrained_global.z = constrained_local.z;
-
-return constrained_global;
 }
 
 float LocomotionSystem::getJointLimitProximity(int leg_index, const JointAngles &angles) {

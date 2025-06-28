@@ -83,7 +83,7 @@ class VelocityLimits {
 
     // Workspace generation and calculation
     void calculateWorkspace(const GaitConfig &gait_config);
-    const WorkspaceConfig &getWorkspaceConfig() const { return workspace_config_; }
+    const WorkspaceConfig &getWorkspaceConfig() const;
 
     // Velocity scaling and validation
     LimitValues scaleVelocityLimits(const LimitValues &input_velocities,
@@ -100,13 +100,13 @@ class VelocityLimits {
 
     // Overshoot compensation
     void calculateOvershoot(const GaitConfig &gait_config);
-    float getOvershootX() const { return workspace_config_.overshoot_x; }
-    float getOvershootY() const { return workspace_config_.overshoot_y; }
+    float getOvershootX() const;
+    float getOvershootY() const;
 
     // Configuration and parameter updates
     void updateGaitParameters(const GaitConfig &gait_config);
-    void setSafetyMargin(float margin) { workspace_config_.safety_margin = margin; }
-    void setAngularVelocityScaling(float scaling) { angular_velocity_scaling_ = scaling; }
+    void setSafetyMargin(float margin);
+    void setAngularVelocityScaling(float scaling);
 
     // Debug and analysis functions
     LimitValues getMaxLimits() const;

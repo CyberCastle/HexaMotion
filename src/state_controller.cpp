@@ -1,5 +1,6 @@
 #include "state_controller.h"
 #include "hexamotion_constants.h"
+#include "pose_config_factory.h"
 
 /**
  * @file state_controller.cpp
@@ -171,7 +172,7 @@ StateController::~StateController() {
 // INITIALIZATION
 // ==============================
 
-bool StateController::initialize() {
+bool StateController::initialize(const PoseConfiguration &pose_config) {
     logDebug("Initializing StateController...");
 
     // Check if locomotion system is available
@@ -208,7 +209,8 @@ bool StateController::initialize() {
     // Initialize pose controller (equivalent to OpenSHC poser_)
     try {
         pose_controller_ = std::make_unique<PoseController>(locomotion_system_.getRobotModel(),
-                                                            locomotion_system_.getServoInterface());
+                                                            locomotion_system_.getServoInterface(),
+                                                            pose_config);
         logDebug("PoseController initialized successfully");
     } catch (const std::exception &e) {
         pose_controller_.reset();
