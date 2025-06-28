@@ -82,35 +82,42 @@ Point3D WalkController::footTrajectory(int leg_index, float phase, float step_he
     // Calculate default foot position within reachable workspace
     float leg_reach = p.coxa_length + p.femur_length + p.tibia_length;
 
-    // Keep a safety margin so the target remains achievable, 65% of leg reach
-    // This prevents the foot from trying to reach too far during swing phase
-    // and ensures it stays within the leg's reachable workspace
-    // This is especially important for the swing phase where the foot moves
-    // through the air and needs to land safely within the leg's range
-    // Reduced from 75% to 65% to improve IK accuracy at all robot heights
-    float safe_reach = leg_reach * 0.65f;
+    // Maintain a safety margin so the foot target is comfortably within the
+    // reachable workspace. 65% of the leg reach works well across gaits.
+    // Use a conservative default reach so targets stay well within joint limits.
+    float safe_reach = leg_reach * 0.45f;
+
+    // Default foot position relative to the body centre.
     float default_foot_x = base_x + safe_reach * cos(math_utils::degreesToRadians(base_angle));
     float default_foot_y = base_y + safe_reach * sin(math_utils::degreesToRadians(base_angle));
 
     if (leg_phase < stance_duration) {
         leg_states[leg_index] = STANCE_PHASE;
         float support_progress = leg_phase / stance_duration;
-        trajectory.x = default_foot_x + step_length * (WORKSPACE_SCALING_FACTOR - support_progress);
-        trajectory.y = default_foot_y;
+        float stance_radius = safe_reach +
+                              step_length * WORKSPACE_SCALING_FACTOR * (1.0f - 2.0f * support_progress);
+        trajectory.x = base_x + stance_radius * cos(math_utils::degreesToRadians(base_angle));
+        trajectory.y = base_y + stance_radius * sin(math_utils::degreesToRadians(base_angle));
         trajectory.z = -robot_height;
     } else {
         leg_states[leg_index] = SWING_PHASE;
         float swing_progress = (leg_phase - stance_duration) / swing_duration;
 
         Eigen::Vector3f ctrl[5];
-        float start_x = default_foot_x - step_length * WORKSPACE_SCALING_FACTOR;
-        float end_x = default_foot_x + step_length * WORKSPACE_SCALING_FACTOR;
+        float start_radius = safe_reach - step_length * WORKSPACE_SCALING_FACTOR;
+        float end_radius = safe_reach + step_length * WORKSPACE_SCALING_FACTOR;
+        float start_x = base_x + start_radius * cos(math_utils::degreesToRadians(base_angle));
+        float end_x = base_x + end_radius * cos(math_utils::degreesToRadians(base_angle));
+        float start_y = base_y + start_radius * sin(math_utils::degreesToRadians(base_angle));
+        float end_y = base_y + end_radius * sin(math_utils::degreesToRadians(base_angle));
         float z_base = -robot_height;
-        ctrl[0] = Eigen::Vector3f(start_x, default_foot_y, z_base);
-        ctrl[1] = Eigen::Vector3f(start_x, default_foot_y, z_base + step_height * WORKSPACE_SCALING_FACTOR);
-        ctrl[2] = Eigen::Vector3f((start_x + end_x) / ANGULAR_ACCELERATION_FACTOR, default_foot_y, z_base + step_height);
-        ctrl[3] = Eigen::Vector3f(end_x, default_foot_y, z_base + step_height * WORKSPACE_SCALING_FACTOR);
-        ctrl[4] = Eigen::Vector3f(end_x, default_foot_y, z_base);
+        ctrl[0] = Eigen::Vector3f(start_x, start_y, z_base);
+        ctrl[1] = Eigen::Vector3f(start_x, start_y, z_base + step_height * WORKSPACE_SCALING_FACTOR);
+        ctrl[2] = Eigen::Vector3f((start_x + end_x) / ANGULAR_ACCELERATION_FACTOR,
+                                  (start_y + end_y) / ANGULAR_ACCELERATION_FACTOR,
+                                  z_base + step_height);
+        ctrl[3] = Eigen::Vector3f(end_x, end_y, z_base + step_height * WORKSPACE_SCALING_FACTOR);
+        ctrl[4] = Eigen::Vector3f(end_x, end_y, z_base);
         Eigen::Vector3f pos = math_utils::quarticBezier(ctrl, swing_progress);
         trajectory.x = pos[0];
         trajectory.y = pos[1];

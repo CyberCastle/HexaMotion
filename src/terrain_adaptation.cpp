@@ -250,6 +250,8 @@ void TerrainAdaptation::detectTouchdownEvents(int leg_index, const FSRData &fsr_
         float safe_reach = bounds.max_radius * scaling_factors.workspace_scale;
 
         Point3D foot_position;
+        // Position the foot relative to the coxa base so the detected step
+        // plane remains within the leg's reachable workspace.
         foot_position.x = base_x + safe_reach * cos(math_utils::degreesToRadians(base_angle));
         foot_position.y = base_y + safe_reach * sin(math_utils::degreesToRadians(base_angle));
         foot_position.z = -params.robot_height;
