@@ -81,42 +81,34 @@ Point3D WalkController::footTrajectory(int leg_index, float phase, float step_he
 
     // Calculate default foot position within reachable workspace
     float leg_reach = p.coxa_length + p.femur_length + p.tibia_length;
-    float min_reach = std::abs(p.femur_length - p.tibia_length);
 
-    // Keep a safety margin so the target remains achievable, 65% of leg reach.
-    // The previous implementation summed the hexagon radius and the safe reach
-    // which could place the target well outside or inside the workspace.  Here
-    // we compute a radial distance that also respects the minimum reachable
-    // distance considering the current robot height.
+    // Maintain a safety margin so the foot target is comfortably within the
+    // reachable workspace. 65% of the leg reach works well across gaits.
     float safe_reach = leg_reach * 0.65f;
-    float min_xy = sqrtf(std::max(0.0f, min_reach * min_reach - robot_height * robot_height));
 
-    float desired_radius = std::max(safe_reach,
-                                    p.hexagon_radius + min_xy + step_length * WORKSPACE_SCALING_FACTOR);
-
-    float default_foot_x = desired_radius * cos(math_utils::degreesToRadians(base_angle));
-    float default_foot_y = desired_radius * sin(math_utils::degreesToRadians(base_angle));
+    // Default foot position relative to the body centre.
+    float default_foot_x = base_x + safe_reach * cos(math_utils::degreesToRadians(base_angle));
+    float default_foot_y = base_y + safe_reach * sin(math_utils::degreesToRadians(base_angle));
 
     if (leg_phase < stance_duration) {
         leg_states[leg_index] = STANCE_PHASE;
         float support_progress = leg_phase / stance_duration;
-        float stance_radius = desired_radius +
+        float stance_radius = safe_reach +
                               step_length * WORKSPACE_SCALING_FACTOR * (1.0f - 2.0f * support_progress);
-        trajectory.x = stance_radius * cos(math_utils::degreesToRadians(base_angle));
-        trajectory.y = stance_radius * sin(math_utils::degreesToRadians(base_angle));
+        trajectory.x = base_x + stance_radius * cos(math_utils::degreesToRadians(base_angle));
+        trajectory.y = base_y + stance_radius * sin(math_utils::degreesToRadians(base_angle));
         trajectory.z = -robot_height;
     } else {
         leg_states[leg_index] = SWING_PHASE;
         float swing_progress = (leg_phase - stance_duration) / swing_duration;
 
         Eigen::Vector3f ctrl[5];
-        float start_radius = std::max(desired_radius - step_length * WORKSPACE_SCALING_FACTOR,
-                                      p.hexagon_radius + min_xy);
-        float end_radius = desired_radius + step_length * WORKSPACE_SCALING_FACTOR;
-        float start_x = start_radius * cos(math_utils::degreesToRadians(base_angle));
-        float end_x = end_radius * cos(math_utils::degreesToRadians(base_angle));
-        float start_y = start_radius * sin(math_utils::degreesToRadians(base_angle));
-        float end_y = end_radius * sin(math_utils::degreesToRadians(base_angle));
+        float start_radius = safe_reach - step_length * WORKSPACE_SCALING_FACTOR;
+        float end_radius = safe_reach + step_length * WORKSPACE_SCALING_FACTOR;
+        float start_x = base_x + start_radius * cos(math_utils::degreesToRadians(base_angle));
+        float end_x = base_x + end_radius * cos(math_utils::degreesToRadians(base_angle));
+        float start_y = base_y + start_radius * sin(math_utils::degreesToRadians(base_angle));
+        float end_y = base_y + end_radius * sin(math_utils::degreesToRadians(base_angle));
         float z_base = -robot_height;
         ctrl[0] = Eigen::Vector3f(start_x, start_y, z_base);
         ctrl[1] = Eigen::Vector3f(start_x, start_y, z_base + step_height * WORKSPACE_SCALING_FACTOR);

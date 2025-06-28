@@ -74,34 +74,107 @@ JointAngles RobotModel::inverseKinematics(int leg, const Point3D &p_target) cons
         return JointAngles(coxa_angle, -45.0f, 60.0f);
     }
 
-    // Geometric inverse kinematics solution
-    float coxa_angle = atan2(local_target.y, local_target.x);
-    float planar_dist = sqrt(local_target.x * local_target.x + local_target.y * local_target.y) - params.coxa_length;
-    float leg_dist = sqrt(planar_dist * planar_dist + local_target.z * local_target.z);
+    // Initial guess based on target direction and realistic kinematics
+    float coxa_start = atan2(local_target.y, local_target.x) * RADIANS_TO_DEGREES_FACTOR;
+    coxa_start = constrainAngle(coxa_start, params.coxa_angle_limits[0], params.coxa_angle_limits[1]);
 
-    if (leg_dist > max_reach || leg_dist < min_reach) {
-        coxa_angle = constrainAngle(coxa_angle * RADIANS_TO_DEGREES_FACTOR, params.coxa_angle_limits[0], params.coxa_angle_limits[1]);
-        return JointAngles(coxa_angle, -45.0f, 60.0f);
+    // Better initial guess for femur and tibia based on target position
+    float target_distance_xy = sqrt(local_target.x * local_target.x + local_target.y * local_target.y);
+    float target_height = -local_target.z; // Convert to positive height
+
+    // Initial estimates for femur and tibia
+    float femur_estimate = 0.0f;
+    float tibia_estimate = 0.0f;
+
+    // Optional: geometric approximation fallback
+    if (femur_estimate == 0.0f && tibia_estimate == 0.0f && target_distance_xy > params.coxa_length && target_height > 0) {
+        float remaining_xy = target_distance_xy - params.coxa_length;
+        float leg_reach = sqrt(remaining_xy * remaining_xy + target_height * target_height);
+        if (leg_reach <= (params.femur_length + params.tibia_length) * 0.95f) {
+            float c = leg_reach;
+            float a = params.femur_length;
+            float b = params.tibia_length;
+            float cos_alpha = (a * a + c * c - b * b) / (2 * a * c);
+            if (cos_alpha >= -1.0f && cos_alpha <= 1.0f) {
+                float alpha = acos(cos_alpha);
+                float theta = atan2(target_height, remaining_xy);
+                femur_estimate = (theta - alpha) * RADIANS_TO_DEGREES_FACTOR;
+                float cos_beta = (a * a + b * b - c * c) / (2 * a * b);
+                if (cos_beta >= -1.0f && cos_beta <= 1.0f) {
+                    float beta = acos(cos_beta);
+                    tibia_estimate = (M_PI - beta) * RADIANS_TO_DEGREES_FACTOR;
+                }
+            }
+        }
     }
 
-    float alpha = acos((params.femur_length * params.femur_length + leg_dist * leg_dist - params.tibia_length * params.tibia_length) /
-                       (2.0f * params.femur_length * leg_dist));
-    float beta = acos((params.femur_length * params.femur_length + params.tibia_length * params.tibia_length - leg_dist * leg_dist) /
-                      (2.0f * params.femur_length * params.tibia_length));
-    float theta = atan2(-local_target.z, planar_dist);
+    // Clamp initial estimates to joint limits
+    femur_estimate = constrainAngle(femur_estimate, params.femur_angle_limits[0], params.femur_angle_limits[1]);
+    tibia_estimate = constrainAngle(tibia_estimate, params.tibia_angle_limits[0], params.tibia_angle_limits[1]);
 
-    float femur_angle = theta + alpha;
-    float tibia_angle = M_PI - beta;
+    JointAngles current_angles(coxa_start, femur_estimate, tibia_estimate);
 
-    JointAngles result(coxa_angle * RADIANS_TO_DEGREES_FACTOR,
-                       femur_angle * RADIANS_TO_DEGREES_FACTOR,
-                       tibia_angle * RADIANS_TO_DEGREES_FACTOR);
+    // Clamp to joint limits
+    current_angles.coxa = constrainAngle(current_angles.coxa, params.coxa_angle_limits[0], params.coxa_angle_limits[1]);
+    current_angles.femur = constrainAngle(current_angles.femur, params.femur_angle_limits[0], params.femur_angle_limits[1]);
+    current_angles.tibia = constrainAngle(current_angles.tibia, params.tibia_angle_limits[0], params.tibia_angle_limits[1]);
 
-    result.coxa = constrainAngle(result.coxa, params.coxa_angle_limits[0], params.coxa_angle_limits[1]);
-    result.femur = constrainAngle(result.femur, params.femur_angle_limits[0], params.femur_angle_limits[1]);
-    result.tibia = constrainAngle(result.tibia, params.tibia_angle_limits[0], params.tibia_angle_limits[1]);
+    // DLS iterative solution - production-ready 3x3 solver
+    const int max_iterations = params.ik.max_iterations;
+    const float tolerance = 0.001f;
+    const float dls_coefficient = 0.05f;
 
-    return result;
+    for (int iter = 0; iter < max_iterations; ++iter) {
+        // Calculate current position using forward kinematics
+        Point3D current_pos = forwardKinematics(leg, current_angles);
+
+        // Position error (3D)
+        Eigen::Vector3f position_error3;
+        position_error3 << (local_target.x - current_pos.x),
+            (local_target.y - current_pos.y),
+            (local_target.z - current_pos.z);
+
+        // Check for convergence
+        if (position_error3.norm() < tolerance)
+            break;
+
+        // 3x3 Jacobian for position only
+        Eigen::Matrix3f jacobian3 = calculateJacobian(leg, current_angles, p_target);
+
+        // Damped least squares inverse: J_inv = J^T * (J*J^T + λ^2 I)^(-1)
+        Eigen::Matrix3f JJT3 = jacobian3 * jacobian3.transpose();
+        Eigen::Matrix3f identity3 = Eigen::Matrix3f::Identity();
+        Eigen::Matrix3f damped_inv3 = (JJT3 + dls_coefficient * dls_coefficient * identity3).inverse();
+        Eigen::Matrix3f jacobian_inverse3 = jacobian3.transpose() * damped_inv3;
+
+        // Calculate joint angle changes
+        Eigen::Vector3f angle_delta = jacobian_inverse3 * position_error3;
+
+        // Apply adaptive step scaling to prevent large jumps
+        float step_scale = 1.0f;
+        float max_angle_change = 5.0f; // Max 5 degrees per iteration (more conservative)
+        float max_delta = std::max({std::abs(angle_delta(0)), std::abs(angle_delta(1)), std::abs(angle_delta(2))});
+        if (max_delta > math_utils::degreesToRadians(max_angle_change)) {
+            step_scale = math_utils::degreesToRadians(max_angle_change) / max_delta;
+        }
+
+        // Update joint angles (convert from radians to degrees)
+        current_angles.coxa += angle_delta(0) * RADIANS_TO_DEGREES_FACTOR * step_scale;
+        current_angles.femur += angle_delta(1) * RADIANS_TO_DEGREES_FACTOR * step_scale;
+        current_angles.tibia += angle_delta(2) * RADIANS_TO_DEGREES_FACTOR * step_scale;
+
+        // Normalize angles
+        current_angles.coxa = normalizeAngle(current_angles.coxa);
+        current_angles.femur = normalizeAngle(current_angles.femur);
+        current_angles.tibia = normalizeAngle(current_angles.tibia);
+
+        // Apply joint limits
+        current_angles.coxa = constrainAngle(current_angles.coxa, params.coxa_angle_limits[0], params.coxa_angle_limits[1]);
+        current_angles.femur = constrainAngle(current_angles.femur, params.femur_angle_limits[0], params.femur_angle_limits[1]);
+        current_angles.tibia = constrainAngle(current_angles.tibia, params.tibia_angle_limits[0], params.tibia_angle_limits[1]);
+    }
+
+    return current_angles;
 }
 
 Point3D RobotModel::forwardKinematics(int leg_index, const JointAngles &angles) const {
