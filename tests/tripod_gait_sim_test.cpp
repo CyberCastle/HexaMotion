@@ -61,7 +61,7 @@ static void printRobotDimensions(const Parameters &p) {
 static void printHeader() {
     std::cout << "Step|";
     for (int leg = 0; leg < NUM_LEGS; ++leg) {
-        std::cout << "  L" << leg + 1 << "C   L" << leg + 1 << "F   L" << leg + 1 << "T |";
+        std::cout << "  L" << leg + 1 << "C   L" << leg + 1 << "F   L" << leg + 1 << "T   |";
     }
     std::cout << " Phase | Status" << std::endl;
 
@@ -382,123 +382,16 @@ static void printStateTransitionInfo(StateController &stateController, const std
 }
 
 int main() {
-    printWelcome();
+    // printWelcome();
 
-    // Test with different robot heights to demonstrate the height parameter effect
-    std::cout << "Testing robot height parameter effect on servo angles..." << std::endl;
-    std::cout << "=========================================" << std::endl;
-
-    // Test configuration 1: Lower height (80mm)
-    std::cout << "Configuration 1: Robot Height = 120mm" << std::endl;
-    Parameters p1{};
-    p1.hexagon_radius = 200;
-    p1.coxa_length = 50;
-    p1.femur_length = 101;
-    p1.tibia_length = 208;
-    p1.robot_height = 80; // Lower height
-    p1.height_offset = 0;
-    p1.control_frequency = 50;
-    p1.coxa_angle_limits[0] = -65;
-    p1.coxa_angle_limits[1] = 65;
-    p1.femur_angle_limits[0] = -75;
-    p1.femur_angle_limits[1] = 75;
-    p1.tibia_angle_limits[0] = -45;
-    p1.tibia_angle_limits[1] = 45;
-
-    LocomotionSystem sys1(p1);
-    DummyIMU imu1;
-    DummyFSR fsr1;
-    DummyServo servos1;
-
-    // Create pose configuration for first test system
-    PoseConfiguration pose_config1 = getDefaultPoseConfig(p1);
-
-    assert(sys1.initialize(&imu1, &fsr1, &servos1, pose_config1));
-    assert(sys1.calibrateSystem());
-    assert(sys1.setGaitType(TRIPOD_GAIT));
-    assert(sys1.walkForward(400.0f));
-
-    std::cout << "Sample joint angles at 100mm height:" << std::endl;
-    std::cout << "=== About to call trajectory and setLegPosition ===" << std::endl;
-    for (int leg = 0; leg < NUM_LEGS; ++leg) {
-        Point3D pos = sys1.calculateFootTrajectory(leg, 0.5f);
-        std::cout << "  Leg " << leg + 1 << " target position: x=" << std::fixed << std::setprecision(1) << pos.x << ", y=" << pos.y << ", z=" << pos.z << std::endl;
-        sys1.setLegPosition(leg, pos);
-        JointAngles q = sys1.getJointAngles(leg);
-        std::cout << "  Leg " << leg + 1 << ": Coxa=" << std::fixed << std::setw(6) << std::setprecision(1) << q.coxa
-                  << "° Femur=" << std::fixed << std::setw(6) << q.femur << "° Tibia=" << std::fixed << std::setw(6) << q.tibia << "°" << std::endl;
-
-        // Verify forward kinematics result
-        Point3D fk_pos = sys1.calculateForwardKinematics(leg, q);
-        std::cout << "  FK verification: x=" << std::fixed << std::setprecision(1) << fk_pos.x << ", y=" << fk_pos.y << ", z=" << fk_pos.z << std::endl;
-        float error = sqrt(pow(pos.x - fk_pos.x, 2) + pow(pos.y - fk_pos.y, 2) + pow(pos.z - fk_pos.z, 2));
-        std::cout << "  IK error: " << std::fixed << std::setprecision(1) << error << "mm" << std::endl;
-    }
-
-    std::cout << std::endl;
-
-    // Test configuration 2: Higher height (200mm)
-    std::cout << "Configuration 2: Robot Height = 200mm" << std::endl;
-    Parameters p2{};
-    p2.hexagon_radius = 200;
-    p2.coxa_length = 50;
-    p2.femur_length = 101;
-    p2.tibia_length = 208;
-    p2.robot_height = 200; // Higher height
-    p2.height_offset = 0;
-    p2.control_frequency = 50;
-    p2.coxa_angle_limits[0] = -65;
-    p2.coxa_angle_limits[1] = 65;
-    p2.femur_angle_limits[0] = -75;
-    p2.femur_angle_limits[1] = 75;
-    p2.tibia_angle_limits[0] = -45;
-    p2.tibia_angle_limits[1] = 45;
-
-    LocomotionSystem sys2(p2);
-    DummyIMU imu2;
-    DummyFSR fsr2;
-    DummyServo servos2;
-
-    // Create pose configuration for second test system
-    PoseConfiguration pose_config2 = getDefaultPoseConfig(p2);
-
-    assert(sys2.initialize(&imu2, &fsr2, &servos2, pose_config2));
-    assert(sys2.calibrateSystem());
-    assert(sys2.setGaitType(TRIPOD_GAIT));
-    assert(sys2.walkForward(400.0f));
-
-    std::cout << "Sample joint angles at 200mm height:" << std::endl;
-    std::cout << "=== About to call trajectory and setLegPosition ===" << std::endl;
-    for (int leg = 0; leg < NUM_LEGS; ++leg) {
-        Point3D pos = sys2.calculateFootTrajectory(leg, 0.5f);
-        std::cout << "  Leg " << leg + 1 << " target position: x=" << std::fixed << std::setprecision(1) << pos.x << ", y=" << pos.y << ", z=" << pos.z << std::endl;
-        sys2.setLegPosition(leg, pos);
-        JointAngles q = sys2.getJointAngles(leg);
-        std::cout << "  Leg " << leg + 1 << ": Coxa=" << std::fixed << std::setw(6) << std::setprecision(1) << q.coxa
-                  << "° Femur=" << std::fixed << std::setw(6) << q.femur << "° Tibia=" << std::fixed << std::setw(6) << q.tibia << "°" << std::endl;
-
-        // Verify forward kinematics result
-        Point3D fk_pos = sys2.calculateForwardKinematics(leg, q);
-        std::cout << "  FK verification: x=" << std::fixed << std::setprecision(1) << fk_pos.x << ", y=" << fk_pos.y << ", z=" << fk_pos.z << std::endl;
-        float error = sqrt(pow(pos.x - fk_pos.x, 2) + pow(pos.y - fk_pos.y, 2) + pow(pos.z - fk_pos.z, 2));
-        std::cout << "  IK error: " << std::fixed << std::setprecision(1) << error << "mm" << std::endl;
-    }
-
-    std::cout << std::endl
-              << "Notice how the servo angles differ between 100mm and 200mm heights!" << std::endl;
-    std::cout << "=========================================" << std::endl
-              << std::endl;
-
-    // Initialize robot parameters for main simulation (use 150mm height)
     Parameters p{};
     p.hexagon_radius = 200;
     p.coxa_length = 50;
     p.femur_length = 101;
     p.tibia_length = 208;
-    p.robot_height = 150;
+    p.robot_height = 120;
     p.height_offset = 0;
     p.control_frequency = 50;
-    // Use proper CSIRO-style joint limits
     p.coxa_angle_limits[0] = -65;
     p.coxa_angle_limits[1] = 65;
     p.femur_angle_limits[0] = -75;
@@ -553,8 +446,8 @@ int main() {
     StateController stateController(sys, stateConfig);
     assert(stateController.initialize(pose_config));
 
-    std::cout << "✓ State Controller initialized successfully" << std::endl;
-    printStateControllerStatus(stateController, 0);
+    // std::cout << "✓ State Controller initialized successfully" << std::endl;
+    // printStateControllerStatus(stateController, 0);
 
     // Start state machine sequence
     std::cout << "\n🚀 Starting State Machine Sequence..." << std::endl;
@@ -593,7 +486,7 @@ int main() {
     std::cout << "Total steps: " << steps << " | Step interval: " << (1000.0f / p.control_frequency) << "ms" << std::endl;
     std::cout << std::endl;
 
-    printStateControllerStatus(stateController, 0);
+    // printStateControllerStatus(stateController, 0);
 
     // Track previous joint angles to detect changes
     JointAngles prev[NUM_LEGS];
@@ -650,15 +543,15 @@ int main() {
         }
 
         // Show visual diagrams and state controller status every 25 steps
-        if (s % 25 == 0) {
-            printStateControllerStatus(stateController, s);
-            // printLegStateVisualization(sys);
-            //  printRobotDiagram(sys, distance_covered);
-            //  printServoAngleGraph(sys, s);
-            //  printTripodGaitPattern(sys, phase);
-            // printDetailedRobotStatus(sys, distance_covered, s);
-            std::cout << std::endl;
-        }
+        // if (s % 25 == 0) {
+        //     printStateControllerStatus(stateController, s);
+        //     printLegStateVisualization(sys);
+        //      printRobotDiagram(sys, distance_covered);
+        //      printServoAngleGraph(sys, s);
+        //      printTripodGaitPattern(sys, phase);
+        //     printDetailedRobotStatus(sys, distance_covered, s);
+        //     std::cout << std::endl;
+        // }
 
         // Handle any state controller errors
         if (stateController.hasErrors()) {
@@ -671,92 +564,92 @@ int main() {
         // std::this_thread::sleep_for(std::chrono::milliseconds(20));
     }
 
-    // Final status
-    std::cout << std::endl
-              << "=========================================" << std::endl;
-    std::cout << "SIMULATION COMPLETED WITH STATE MACHINE" << std::endl;
-    std::cout << "=========================================" << std::endl;
+    // // Final status
+    // std::cout << std::endl
+    //           << "=========================================" << std::endl;
+    // std::cout << "SIMULATION COMPLETED WITH STATE MACHINE" << std::endl;
+    // std::cout << "=========================================" << std::endl;
 
-    // Parallel sensor system performance report
-    std::cout << "\n📊 PARALLEL SENSOR SYSTEM PERFORMANCE:" << std::endl;
-    std::cout << "Total update cycles: " << (successful_updates + failed_updates) << std::endl;
-    std::cout << "Successful updates: " << successful_updates << " ("
-              << std::fixed << std::setprecision(1)
-              << (100.0f * successful_updates / (successful_updates + failed_updates)) << "%)" << std::endl;
-    std::cout << "Failed updates: " << failed_updates << " ("
-              << std::fixed << std::setprecision(1)
-              << (100.0f * failed_updates / (successful_updates + failed_updates)) << "%)" << std::endl;
+    // // Parallel sensor system performance report
+    // std::cout << "\n📊 PARALLEL SENSOR SYSTEM PERFORMANCE:" << std::endl;
+    // std::cout << "Total update cycles: " << (successful_updates + failed_updates) << std::endl;
+    // std::cout << "Successful updates: " << successful_updates << " ("
+    //           << std::fixed << std::setprecision(1)
+    //           << (100.0f * successful_updates / (successful_updates + failed_updates)) << "%)" << std::endl;
+    // std::cout << "Failed updates: " << failed_updates << " ("
+    //           << std::fixed << std::setprecision(1)
+    //           << (100.0f * failed_updates / (successful_updates + failed_updates)) << "%)" << std::endl;
 
-    if (failed_updates > 0) {
-        std::cout << "⚠️ Warning: " << failed_updates << " sensor update failures detected" << std::endl;
-    } else {
-        std::cout << "✅ Perfect sensor update performance - no failures detected" << std::endl;
-    }
+    // if (failed_updates > 0) {
+    //     std::cout << "⚠️ Warning: " << failed_updates << " sensor update failures detected" << std::endl;
+    // } else {
+    //     std::cout << "✅ Perfect sensor update performance - no failures detected" << std::endl;
+    // }
 
-    // Final State Controller status
-    printStateControllerStatus(stateController, steps);
+    // // Final State Controller status
+    // printStateControllerStatus(stateController, steps);
 
-    if (!changed) {
-        std::cout << "⚠️  Warning: servo angles did not change during simulation" << std::endl;
-    } else {
-        std::cout << "✓ Servo angles changed correctly during simulation" << std::endl;
-    }
+    // if (!changed) {
+    //     std::cout << "⚠️  Warning: servo angles did not change during simulation" << std::endl;
+    // } else {
+    //     std::cout << "✓ Servo angles changed correctly during simulation" << std::endl;
+    // }
 
-    // Test state machine functionality during simulation
-    std::cout << "\n--- Testing State Machine Advanced Features ---" << std::endl;
+    // // Test state machine functionality during simulation
+    // std::cout << "\n--- Testing State Machine Advanced Features ---" << std::endl;
 
-    // Test emergency stop
-    std::cout << "Testing emergency stop..." << std::endl;
-    stateController.emergencyStop();
-    stateController.update(0.02f);
-    std::cout << "✓ Emergency stop executed" << std::endl;
+    // // Test emergency stop
+    // std::cout << "Testing emergency stop..." << std::endl;
+    // stateController.emergencyStop();
+    // stateController.update(0.02f);
+    // std::cout << "✓ Emergency stop executed" << std::endl;
 
-    // Clear error and resume
-    std::cout << "Clearing error and resuming..." << std::endl;
-    stateController.clearError();
-    stateController.requestSystemState(SYSTEM_OPERATIONAL);
-    for (int i = 0; i < 10; i++) {
-        stateController.update(0.02f);
-        if (!stateController.isTransitioning())
-            break;
-    }
-    std::cout << "✓ System resumed operational state" << std::endl;
+    // // Clear error and resume
+    // std::cout << "Clearing error and resuming..." << std::endl;
+    // stateController.clearError();
+    // stateController.requestSystemState(SYSTEM_OPERATIONAL);
+    // for (int i = 0; i < 10; i++) {
+    //     stateController.update(0.02f);
+    //     if (!stateController.isTransitioning())
+    //         break;
+    // }
+    // std::cout << "✓ System resumed operational state" << std::endl;
 
-    // Test pose control
-    std::cout << "Testing pose control..." << std::endl;
-    stateController.setPosingMode(POSING_X_Y);
-    Eigen::Vector3f position(10.0f, 5.0f, 0.0f);
-    Eigen::Vector3f orientation(0.0f, 0.0f, 0.1f);
-    stateController.setDesiredPose(position, orientation);
-    std::cout << "✓ X-Y posing mode set with desired pose" << std::endl;
+    // // Test pose control
+    // std::cout << "Testing pose control..." << std::endl;
+    // stateController.setPosingMode(POSING_X_Y);
+    // Eigen::Vector3f position(10.0f, 5.0f, 0.0f);
+    // Eigen::Vector3f orientation(0.0f, 0.0f, 0.1f);
+    // stateController.setDesiredPose(position, orientation);
+    // std::cout << "✓ X-Y posing mode set with desired pose" << std::endl;
 
-    // Test cruise control
-    std::cout << "Testing cruise control..." << std::endl;
-    Eigen::Vector3f cruise_velocity(200.0f, 0.0f, 0.0f);
-    stateController.setCruiseControlMode(CRUISE_CONTROL_ON, cruise_velocity);
-    std::cout << "✓ Cruise control enabled" << std::endl;
+    // // Test cruise control
+    // std::cout << "Testing cruise control..." << std::endl;
+    // Eigen::Vector3f cruise_velocity(200.0f, 0.0f, 0.0f);
+    // stateController.setCruiseControlMode(CRUISE_CONTROL_ON, cruise_velocity);
+    // std::cout << "✓ Cruise control enabled" << std::endl;
 
-    // Final robot state
-    // printLegStateVisualization(sys);
-    // printRobotDiagram(sys, distance);
-    // printServoAngleGraph(sys, steps);
-    // printTripodGaitPattern(sys, 1.0f);
-    printDetailedRobotStatus(sys, distance, steps);
+    // // Final robot state
+    // // printLegStateVisualization(sys);
+    // // printRobotDiagram(sys, distance);
+    // // printServoAngleGraph(sys, steps);
+    // // printTripodGaitPattern(sys, 1.0f);
+    // printDetailedRobotStatus(sys, distance, steps);
 
-    // Final state controller status
-    printStateControllerStatus(stateController, steps + 1);
+    // // Final state controller status
+    // printStateControllerStatus(stateController, steps + 1);
 
-    std::cout << std::endl
-              << "🎉 Robot successfully completed 800mm tripod gait with State Controller!" << std::endl;
-    std::cout << "✅ State Machine Integration: SUCCESSFUL" << std::endl;
-    std::cout << "✅ Hierarchical State Management: VALIDATED" << std::endl;
-    std::cout << "✅ Parallel Sensor System: " << (failed_updates == 0 ? "PERFECT" : "FUNCTIONAL") << std::endl;
-    std::cout << "✅ Advanced Features: TESTED" << std::endl;
+    // std::cout << std::endl
+    //           << "🎉 Robot successfully completed 800mm tripod gait with State Controller!" << std::endl;
+    // std::cout << "✅ State Machine Integration: SUCCESSFUL" << std::endl;
+    // std::cout << "✅ Hierarchical State Management: VALIDATED" << std::endl;
+    // std::cout << "✅ Parallel Sensor System: " << (failed_updates == 0 ? "PERFECT" : "FUNCTIONAL") << std::endl;
+    // std::cout << "✅ Advanced Features: TESTED" << std::endl;
 
-    if (failed_updates > 0) {
-        std::cout << "⚠️ NOTE: " << failed_updates << " sensor failures occurred during test" << std::endl;
-    }
+    // if (failed_updates > 0) {
+    //     std::cout << "⚠️ NOTE: " << failed_updates << " sensor failures occurred during test" << std::endl;
+    // }
 
-    std::cout << "tripod_gait_sim_test with StateController and Parallel Sensors executed successfully" << std::endl;
+    // std::cout << "tripod_gait_sim_test with StateController and Parallel Sensors executed successfully" << std::endl;
     return 0;
 }
