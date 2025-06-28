@@ -25,10 +25,11 @@ std::array<LegStancePosition, NUM_LEGS> calculateHexagonalStancePositions(
  * @brief Get default standing pose joint angles (OpenSHC equivalent)
  * For a hexagonal robot in static equilibrium, this should return:
  * - Coxa ≈ 0° (radially aligned with mounting)
- * - Femur and Tibia equal for all legs (symmetric posture)
+ * - Femur and Tibia calculated using inverse kinematics for target height
+ * @param params Robot parameters containing dimensions and joint limits
  * @return Array of standing pose joint configurations
  */
-std::array<StandingPoseJoints, NUM_LEGS> getDefaultStandingPoseJoints();
+std::array<StandingPoseJoints, NUM_LEGS> getDefaultStandingPoseJoints(const Parameters &params);
 
 /**
  * @brief Get default pose configuration using robot parameters (OpenSHC equivalent)

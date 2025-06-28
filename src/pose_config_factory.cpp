@@ -52,33 +52,121 @@ std::array<LegStancePosition, NUM_LEGS> calculateHexagonalStancePositions(
 }
 
 /**
+ * @brief Calculate joint angles for a given height using inverse kinematics
+ * Based on the angle_calculus.cpp implementation
+ * @param target_height_mm Target height in millimeters
+ * @param params Robot parameters containing dimensions and joint limits
+ * @return Calculated individual servo angles or default values if no solution found
+ */
+struct CalculatedServoAngles {
+    float coxa;  // coxa servo angle (degrees)
+    float femur; // femur servo angle (degrees)
+    float tibia; // tibia servo angle (degrees)
+    bool valid;  // solution validity flag
+};
+
+CalculatedServoAngles calculateServoAnglesForHeight(float target_height_mm, const Parameters &params) {
+    // Robot dimensions from parameters
+    const float coxa_length = params.coxa_length;
+    const float femur_length = params.femur_length;
+    const float tibia_length = params.tibia_length;
+
+    // Joint limits from parameters (converted to radians)
+    const float alphaMin = params.femur_angle_limits[0] * DEGREES_TO_RADIANS_FACTOR;
+    const float alphaMax = params.femur_angle_limits[1] * DEGREES_TO_RADIANS_FACTOR;
+    const float betaMin = params.tibia_angle_limits[0] * DEGREES_TO_RADIANS_FACTOR;
+    const float betaMax = params.tibia_angle_limits[1] * DEGREES_TO_RADIANS_FACTOR;
+
+    const float Ytarget = target_height_mm - tibia_length;
+
+    CalculatedServoAngles best;
+    best.coxa = 0;
+    best.femur = 0;
+    best.tibia = 0;
+    best.valid = false;
+    float bestScore = 1e9f;
+
+    // Iterative search for optimal angles (following angle_calculus.cpp algorithm)
+    for (float beta = betaMin; beta <= betaMax; beta += 0.5f * DEGREES_TO_RADIANS_FACTOR) {
+        float yRem = Ytarget - femur_length * sin(beta);
+        float s = yRem / coxa_length; // argument of asin
+
+        if (s < -1.0f || s > 1.0f)
+            continue;
+
+        float alpha = asin(s);
+
+        if (alpha < alphaMin || alpha > alphaMax)
+            continue;
+
+        // Calculate relative angles
+        float theta1 = (beta - alpha) * RADIANS_TO_DEGREES_FACTOR; // coxa-femur relative angle
+        if (theta1 < params.femur_angle_limits[0] || theta1 > params.femur_angle_limits[1])
+            continue;
+
+        float theta2 = -beta * RADIANS_TO_DEGREES_FACTOR; // femur-tibia relative angle
+
+        // Convert to individual servo angles based on geometric relationships:
+        // From angle_calculus.cpp geometric relationships:
+        //   θ₂ = −β     ⇒  β = −θ₂
+        //   θ₁ = β − α  ⇒  α = β − θ₁
+        // Therefore:
+        //   femur_angle = α = β − θ₁
+        //   tibia_angle = β = −θ₂
+        float coxa_angle = 0.0f;                               // Coxa remains aligned radially
+        float femur_angle = alpha * RADIANS_TO_DEGREES_FACTOR; // Convert alpha to degrees
+        float tibia_angle = beta * RADIANS_TO_DEGREES_FACTOR;  // Convert beta to degrees
+
+        float score = fabs(alpha) + fabs(beta);
+        if (score < bestScore) {
+            best.coxa = coxa_angle;
+            best.femur = femur_angle;
+            best.tibia = tibia_angle;
+            best.valid = true;
+            bestScore = score;
+        }
+    }
+    return best;
+}
+
+/**
  * @brief Get default standing pose joint angles (OpenSHC equivalent)
  * For a hexagonal robot in static equilibrium:
  * - Coxa ≈ 0° (each leg aligned radially with mounting at 60°)
- * - Femur and Tibia equal for all legs (symmetric posture)
+ * - Femur and Tibia calculated using inverse kinematics for target height
  *
- * Based on AGENTS.md: "Physically, with coxa-femur = 0º and femur-tibia = 0º,
- * the femur remains horizontal, while the tibia remains vertical, standing stably."
+ * Based on AGENTS.md: "Physically, if the robot has all servo angles at 0°,
+ * the femur remains horizontal, in line with the coxa. The tibia, on the other hand,
+ * remains vertical, perpendicular to the ground. This allows the robot to stand stably by default."
+ * However, with 0° angles, the robot height would be 208mm (full tibia length).
+ * To achieve the target height of 120mm, we calculate the optimal joint angles.
  *
  * For the given robot dimensions (coxa=50mm, femur=101mm, tibia=208mm, height=120mm),
  * the proper standing configuration should be symmetric across all legs.
  * @return Array of standing pose joint configurations
  */
-std::array<StandingPoseJoints, NUM_LEGS> getDefaultStandingPoseJoints() {
+std::array<StandingPoseJoints, NUM_LEGS> getDefaultStandingPoseJoints(const Parameters &params) {
     std::array<StandingPoseJoints, NUM_LEGS> joints;
 
-    // For a hexagonal robot with height=120mm, using the robot dimensions:
-    // - Coxa length: 50mm
-    // - Femur length: 101mm
-    // - Tibia length: 208mm
-    // - Target height from ground to body: 120mm
+    // Target height for standing pose (use robot_height from parameters)
+    const float target_height_mm = params.robot_height;
+
+    // Calculate optimal servo angles for the target height using inverse kinematics
+    CalculatedServoAngles calculated = calculateServoAnglesForHeight(target_height_mm, params);
 
     // Standing pose for stable equilibrium (all legs identical for symmetry)
-    // This ensures coxa ≈ 0° and femur/tibia equal for all legs
     for (int i = 0; i < NUM_LEGS; i++) {
-        joints[i].coxa = 0.0f;    // Radially aligned (0° relative to mounting)
-        joints[i].femur = 30.0f;  // Slight forward angle for stability
-        joints[i].tibia = -60.0f; // Knee bent to achieve target height
+        if (calculated.valid) {
+            // Use calculated individual servo angles from inverse kinematics
+            joints[i].coxa = calculated.coxa;   // Calculated coxa angle (typically 0°)
+            joints[i].femur = calculated.femur; // Calculated femur servo angle
+            joints[i].tibia = calculated.tibia; // Calculated tibia servo angle
+        } else {
+            // Fallback to safe default values if calculation fails
+            joints[i].coxa = 0.0f;   // Radially aligned (0° relative to mounting)
+            joints[i].femur = 30.0f; // Conservative forward angle for stability
+            joints[i].tibia = 20.0f; // Conservative knee bend for target height
+        }
     }
 
     return joints;
@@ -97,8 +185,8 @@ PoseConfiguration createPoseConfiguration(const Parameters &params, const std::s
     config.leg_stance_positions = calculateHexagonalStancePositions(
         params.hexagon_radius, params.coxa_length);
 
-    // Set standing pose joints (OpenSHC equivalent - configured, not calculated)
-    config.standing_pose_joints = getDefaultStandingPoseJoints();
+    // Set standing pose joints (OpenSHC equivalent - calculated using parameters)
+    config.standing_pose_joints = getDefaultStandingPoseJoints(params);
 
     // OpenSHC equivalent pose controller parameters
     config.auto_pose_type = "auto";
