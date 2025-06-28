@@ -60,14 +60,14 @@ JointAngles RobotModel::inverseKinematics(int leg, const Point3D &p_target) {
     local_target.y = p_target.y - base_y;
     local_target.z = p_target.z;
 
-    // Workspace validation
+    // SIMPLIFIED: Basic workspace validation only (detailed validation done by WorkspaceValidator)
     float max_reach = params.coxa_length + params.femur_length + params.tibia_length;
     float min_reach = std::abs(params.femur_length - params.tibia_length);
     float distance = sqrt(local_target.x * local_target.x +
                           local_target.y * local_target.y +
                           local_target.z * local_target.z);
 
-    if (distance > max_reach * 0.95f || distance < min_reach * 1.05f) {
+    if (distance > max_reach * 0.98f || distance < min_reach * 1.02f) {
         // Target outside workspace - return safe default angles
         float coxa_angle = atan2(local_target.y, local_target.x) * RADIANS_TO_DEGREES_FACTOR;
         coxa_angle = constrainAngle(coxa_angle, params.coxa_angle_limits[0], params.coxa_angle_limits[1]);

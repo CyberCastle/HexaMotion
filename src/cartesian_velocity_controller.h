@@ -5,6 +5,10 @@
 #include "hexamotion_constants.h"
 #include "velocity_limits.h"
 #include <array>
+#include <memory>
+
+// Forward declaration to avoid circular dependency
+class WorkspaceValidator;
 
 /**
  * @brief Cartesian velocity controller equivalent to OpenSHC's velocity control system.
@@ -75,6 +79,7 @@ class CartesianVelocityController {
      * @param model Reference to robot model for kinematics.
      */
     explicit CartesianVelocityController(const RobotModel &model);
+    ~CartesianVelocityController(); // Needed for unique_ptr with forward declaration
 
     /**
      * @brief Update servo speeds based on commanded Cartesian velocity.
@@ -139,6 +144,7 @@ class CartesianVelocityController {
 
   private:
     const RobotModel &model_;
+    std::unique_ptr<WorkspaceValidator> unified_validator_; // Unified workspace validation
     std::array<LegServoSpeeds, NUM_LEGS> leg_servo_speeds_;
     VelocityScaling velocity_scaling_;
     GaitSpeedModifiers gait_modifiers_;

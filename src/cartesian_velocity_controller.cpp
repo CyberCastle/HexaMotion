@@ -1,15 +1,25 @@
 #include "cartesian_velocity_controller.h"
 #include "hexamotion_constants.h"
 #include "math_utils.h"
+#include "workspace_validator.h" // Use unified validator for workspace constraints
 #include <algorithm>
 #include <cmath>
 
 CartesianVelocityController::CartesianVelocityController(const RobotModel &model)
     : model_(model), velocity_control_enabled_(true) {
 
+    // Initialize unified workspace validator for velocity constraints
+    WorkspaceValidator::ValidationConfig config;
+    config.enable_collision_checking = false;  // Disable for performance in velocity control
+    config.enable_joint_limit_checking = true; // Enable for accurate servo speed calculation
+    unified_validator_ = std::make_unique<WorkspaceValidator>(
+        const_cast<RobotModel &>(model), config);
+
     // Initialize with default configurations
     resetToDefaults();
 }
+
+CartesianVelocityController::~CartesianVelocityController() = default;
 
 bool CartesianVelocityController::updateServoSpeeds(float linear_velocity_x, float linear_velocity_y,
                                                     float angular_velocity, GaitType current_gait) {
@@ -280,31 +290,43 @@ float CartesianVelocityController::calculateLegSpeedCompensation(int leg_index, 
 }
 
 float CartesianVelocityController::applyWorkspaceConstraints(int leg_index, int joint_index, float base_speed) const {
-    // Apply basic constraints based on joint type
-    // Different joints may have different speed characteristics
+    // UNIFIED: Use WorkspaceValidator for workspace constraints instead of hardcoded factors
+
+    if (!unified_validator_) {
+        return base_speed; // Safety fallback
+    }
 
     float constrained_speed = base_speed;
 
-    // Joint-specific constraints
+    // Get unified scaling factors instead of hardcoded constants
+    auto scaling_factors = unified_validator_->getScalingFactors();
+
+    // Apply joint-specific constraints using unified scaling
     switch (joint_index) {
     case 0: // Coxa joint
         // Coxa typically has lower speed requirements
-        constrained_speed *= COXA_SPEED_FACTOR;
+        constrained_speed *= scaling_factors.workspace_scale; // Use unified workspace scaling
         break;
     case 1: // Femur joint
-        // Femur carries most of the leg motion load
-        constrained_speed *= FEMUR_SPEED_FACTOR;
+        // Femur carries most of the leg motion load - use velocity scaling
+        constrained_speed *= scaling_factors.velocity_scale;
         break;
     case 2: // Tibia joint
-        // Tibia provides fine positioning and may need higher speeds
-        constrained_speed *= TIBIA_SPEED_FACTOR;
+        // Tibia provides fine positioning - use full scaling
+        constrained_speed *= scaling_factors.velocity_scale * 1.1f; // 10% boost for precision
         break;
     }
 
-    // Apply velocity scaling constraints
-    constrained_speed = std::max(velocity_scaling_.minimum_speed_ratio * model_.getParams().default_servo_speed,
-                                 std::min(velocity_scaling_.maximum_speed_ratio * model_.getParams().default_servo_speed,
-                                          constrained_speed));
+    // Apply unified velocity scaling constraints
+    const Parameters &params = model_.getParams();
+    float min_speed = velocity_scaling_.minimum_speed_ratio * params.default_servo_speed;
+    float max_speed = velocity_scaling_.maximum_speed_ratio * params.default_servo_speed;
+
+    // Apply unified safety margin
+    min_speed *= scaling_factors.safety_margin;
+    max_speed *= scaling_factors.safety_margin;
+
+    constrained_speed = std::max(min_speed, std::min(max_speed, constrained_speed));
 
     // Final servo speed limits (typical servo constraints)
     return std::max(SERVO_SPEED_MIN, std::min(SERVO_SPEED_MAX, constrained_speed));

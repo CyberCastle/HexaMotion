@@ -3,7 +3,11 @@
 
 #include "HexaModel.h"
 #include <ArduinoEigen.h>
+#include <memory>
 #include <vector>
+
+// Forward declaration to avoid circular dependency
+class WorkspaceValidator;
 
 /**
  * @brief Terrain adaptation system for hexapod locomotion
@@ -58,6 +62,7 @@ class TerrainAdaptation {
 
   private:
     RobotModel &model_;
+    std::unique_ptr<WorkspaceValidator> unified_validator_; // Unified workspace validation
     bool rough_terrain_mode_;
     bool force_normal_touchdown_;
     bool gravity_aligned_tips_;
@@ -83,6 +88,7 @@ class TerrainAdaptation {
 
   public:
     explicit TerrainAdaptation(RobotModel &model);
+    ~TerrainAdaptation(); // Needed for unique_ptr with forward declaration
 
     /**
      * @brief Initialize terrain adaptation system

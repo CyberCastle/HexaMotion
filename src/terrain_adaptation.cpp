@@ -1,5 +1,6 @@
 #include "terrain_adaptation.h"
 #include "hexamotion_constants.h"
+#include "workspace_validator.h" // Use unified validator for workspace logic
 
 /**
  * @file terrain_adaptation.cpp
@@ -20,6 +21,12 @@ TerrainAdaptation::TerrainAdaptation(RobotModel &model)
       gravity_aligned_tips_(false), step_depth_(STEP_DEPTH_DEFAULT),
       gravity_estimate_(0, 0, -GRAVITY_ACCELERATION) {
 
+    // Initialize unified workspace validator for reachability checking
+    WorkspaceValidator::ValidationConfig validator_config;
+    validator_config.enable_collision_checking = false;  // Disable for terrain adaptation
+    validator_config.enable_joint_limit_checking = true; // Enable for accuracy
+    unified_validator_ = std::make_unique<WorkspaceValidator>(model_, validator_config);
+
     // Initialize FSR thresholds from model parameters or use defaults
     const Parameters &params = model_.getParams();
 
@@ -34,6 +41,8 @@ TerrainAdaptation::TerrainAdaptation(RobotModel &model)
         touchdown_detection_[i] = false;
     }
 }
+
+TerrainAdaptation::~TerrainAdaptation() = default;
 
 void TerrainAdaptation::initialize() {
     // Initialize walk plane to horizontal
@@ -153,26 +162,30 @@ Point3D TerrainAdaptation::adaptTrajectoryForTerrain(int leg_index, const Point3
 }
 
 bool TerrainAdaptation::isTargetReachableOnTerrain(int leg_index, const Point3D &target) {
-    // First check basic reachability
-    JointAngles angles = model_.inverseKinematics(leg_index, target);
-    Point3D fk_check = model_.forwardKinematics(leg_index, angles);
+    // UNIFIED: Use WorkspaceValidator instead of custom IK validation
+    if (!unified_validator_) {
+        return false; // Safety fallback
+    }
 
-    float error = sqrt(pow(target.x - fk_check.x, 2) +
-                       pow(target.y - fk_check.y, 2) +
-                       pow(target.z - fk_check.z, 2));
+    // Use high-precision IK validation for terrain adaptation
+    bool is_reachable = unified_validator_->isPositionReachable(leg_index, target, true);
 
-    if (error > 10.0f) { // 10mm tolerance
+    if (!is_reachable) {
         return false;
     }
 
-    // Additional terrain-specific checks
+    // Additional terrain-specific checks using unified workspace bounds
     if (current_walk_plane_.valid) {
         // Check if target is reasonable relative to walk plane
         Point3D projected = projectOntoWalkPlane(target);
         float walk_plane_deviation = abs(target.z - projected.z);
 
-        // Allow deviation up to step height + some margin
-        if (walk_plane_deviation > 100.0f) { // 100mm max deviation
+        // Use unified workspace bounds for step height validation
+        auto bounds = unified_validator_->getWorkspaceBounds(leg_index);
+        float max_step_height = bounds.max_height - bounds.min_height;
+
+        // Allow deviation up to 50% of workspace height range
+        if (walk_plane_deviation > max_step_height * 0.5f) {
             return false;
         }
     }
@@ -218,14 +231,23 @@ void TerrainAdaptation::detectTouchdownEvents(int leg_index, const FSRData &fsr_
 
     // Touchdown detection
     if (fsr_data.pressure > touchdown_threshold_ && !step_plane.valid) {
-        // Touchdown detected - estimate step plane position
-        // Calculate foot position using robot geometry parameters
+        // UNIFIED: Use WorkspaceValidator for foot position calculation
+        if (!unified_validator_) {
+            return; // Safety fallback
+        }
+
+        // Get unified workspace bounds instead of manual calculation
+        auto bounds = unified_validator_->getWorkspaceBounds(leg_index);
+        auto scaling_factors = unified_validator_->getScalingFactors();
+
+        // Calculate foot position using unified workspace scaling
         const Parameters &params = model_.getParams();
         float base_angle = leg_index * LEG_ANGLE_SPACING;
         float base_x = params.hexagon_radius * cos(math_utils::degreesToRadians(base_angle));
         float base_y = params.hexagon_radius * sin(math_utils::degreesToRadians(base_angle));
-        float leg_reach = params.coxa_length + params.femur_length + params.tibia_length;
-        float safe_reach = leg_reach * 0.65f; // Use 65% of max reach for safety
+
+        // Use unified scaling instead of hardcoded 65%
+        float safe_reach = bounds.max_radius * scaling_factors.workspace_scale;
 
         Point3D foot_position;
         foot_position.x = base_x + safe_reach * cos(math_utils::degreesToRadians(base_angle));

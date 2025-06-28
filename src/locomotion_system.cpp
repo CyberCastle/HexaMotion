@@ -16,6 +16,7 @@
 #include "locomotion_system.h"
 #include "hexamotion_constants.h"
 #include "math_utils.h"
+#include "workspace_validator.h" // Add unified validator
 #include <algorithm>
 #include <cmath>
 #include <vector>
@@ -156,72 +157,49 @@ Eigen::Matrix4f LocomotionSystem::calculateLegTransform(int leg_index,
 }
 
 bool LocomotionSystem::isTargetReachable(int leg_index, const Point3D &target) {
-    // Basic reachability check using OpenSHC-style workspace validation
-    float max_reach = params.coxa_length + params.femur_length + params.tibia_length;
-    float min_reach = std::abs(params.femur_length - params.tibia_length);
-
-    // Transform to leg coordinate system for distance check
-    const float base_angle_deg = leg_index * LEG_ANGLE_SPACING;
-    float base_x = params.hexagon_radius * cos(math_utils::degreesToRadians(base_angle_deg));
-    float base_y = params.hexagon_radius * sin(math_utils::degreesToRadians(base_angle_deg));
-
-    Point3D local_target;
-    local_target.x = target.x - base_x;
-    local_target.y = target.y - base_y;
-    local_target.z = target.z;
-
-    float distance = sqrt(local_target.x * local_target.x +
-                          local_target.y * local_target.y +
-                          local_target.z * local_target.z);
-
-    return (distance >= min_reach * 0.9f && distance <= max_reach * 0.95f);
+    // SIMPLIFIED: Delegate to WorkspaceValidator for consistency
+    // Note: This creates a temporary validator. For better performance,
+    // consider using a shared validator instance in production code.
+    WorkspaceValidator temp_validator(model);
+    return temp_validator.isReachable(leg_index, target);
 }
 
 Point3D LocomotionSystem::constrainToWorkspace(int leg_index, const Point3D &target) {
-    if (isTargetReachable(leg_index, target)) {
-        return target;
+    // SIMPLIFIED: Delegate to WorkspaceValidator for consistency
+    // Note: This creates a temporary validator. For better performance,
+    // consider using a shared validator instance in production code.
+    WorkspaceValidator temp_validator(model);
+    Point3D dummy_positions[6]; // Empty positions for basic geometric constraint
+    for (int i = 0; i < 6; i++) {
+        dummy_positions[i] = Point3D(0, 0, 0);
     }
+    return temp_validator.constrainToValidWorkspace(leg_index, target, dummy_positions);
+}
+float min_reach = std::abs(params.femur_length - params.tibia_length);
 
-    // Transform to leg coordinate system
-    const float base_angle_deg = leg_index * LEG_ANGLE_SPACING;
-    float base_x = params.hexagon_radius * cos(math_utils::degreesToRadians(base_angle_deg));
-    float base_y = params.hexagon_radius * sin(math_utils::degreesToRadians(base_angle_deg));
+Point3D constrained_local = local_target;
 
-    Point3D local_target;
-    local_target.x = target.x - base_x;
-    local_target.y = target.y - base_y;
-    local_target.z = target.z;
+if (distance > max_reach * 0.95f) {
+    // Scale down to maximum reach
+    float scale = (max_reach * 0.95f) / distance;
+    constrained_local.x *= scale;
+    constrained_local.y *= scale;
+    constrained_local.z *= scale;
+} else if (distance < min_reach * 1.05f) {
+    // Scale up to minimum reach
+    float scale = (min_reach * 1.05f) / distance;
+    constrained_local.x *= scale;
+    constrained_local.y *= scale;
+    constrained_local.z *= scale;
+}
 
-    float distance = sqrt(local_target.x * local_target.x +
-                          local_target.y * local_target.y +
-                          local_target.z * local_target.z);
+// Transform back to global coordinates
+Point3D constrained_global;
+constrained_global.x = constrained_local.x + base_x;
+constrained_global.y = constrained_local.y + base_y;
+constrained_global.z = constrained_local.z;
 
-    float max_reach = params.coxa_length + params.femur_length + params.tibia_length;
-    float min_reach = std::abs(params.femur_length - params.tibia_length);
-
-    Point3D constrained_local = local_target;
-
-    if (distance > max_reach * 0.95f) {
-        // Scale down to maximum reach
-        float scale = (max_reach * 0.95f) / distance;
-        constrained_local.x *= scale;
-        constrained_local.y *= scale;
-        constrained_local.z *= scale;
-    } else if (distance < min_reach * 1.05f) {
-        // Scale up to minimum reach
-        float scale = (min_reach * 1.05f) / distance;
-        constrained_local.x *= scale;
-        constrained_local.y *= scale;
-        constrained_local.z *= scale;
-    }
-
-    // Transform back to global coordinates
-    Point3D constrained_global;
-    constrained_global.x = constrained_local.x + base_x;
-    constrained_global.y = constrained_local.y + base_y;
-    constrained_global.z = constrained_local.z;
-
-    return constrained_global;
+return constrained_global;
 }
 
 float LocomotionSystem::getJointLimitProximity(int leg_index, const JointAngles &angles) {

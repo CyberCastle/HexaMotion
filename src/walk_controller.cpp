@@ -1,5 +1,6 @@
 #include "walk_controller.h"
 #include "hexamotion_constants.h"
+#include "workspace_validator.h" // Use unified validator instead
 
 WalkController::WalkController(RobotModel &m)
     : model(m), current_gait(TRIPOD_GAIT), gait_phase(0.0f),
@@ -17,6 +18,19 @@ WalkController::WalkController(RobotModel &m)
 
     // Initialize current velocities to zero
     current_velocities_ = VelocityLimits::LimitValues();
+
+    // Initialize current leg positions array for collision tracking
+    for (int i = 0; i < NUM_LEGS; i++) {
+        current_leg_positions_[i] = Point3D(0, 0, 0);
+    }
+
+    // Initialize unified workspace validator with optimized settings
+    WorkspaceValidator::ValidationConfig config;
+    config.safety_margin_factor = 0.65f;        // Same as original 65% safety margin
+    config.collision_safety_margin = 30.0f;     // 30mm safety between legs
+    config.enable_collision_checking = true;    // Enable collision avoidance
+    config.enable_joint_limit_checking = false; // Disable for performance (IK already checks)
+    workspace_validator_ = std::make_unique<WorkspaceValidator>(m, config);
 }
 
 bool WalkController::setGaitType(GaitType gait) {
@@ -106,6 +120,17 @@ Point3D WalkController::footTrajectory(int leg_index, float phase, float step_he
         trajectory = terrain_adaptation_.adaptTrajectoryForTerrain(leg_index, trajectory,
                                                                    leg_states[leg_index], swing_progress);
     }
+
+    // SIMPLIFIED & UNIFIED: Use WorkspaceValidator for all validation
+    // This replaces the old scattered validation code with a single, optimized system
+    auto validation_result = workspace_validator_->validateTarget(
+        leg_index, trajectory, current_leg_positions_, true);
+
+    // Use the validated and constrained position
+    trajectory = validation_result.constrained_position;
+
+    // Update current leg position for future collision checks
+    current_leg_positions_[leg_index] = trajectory;
 
     return trajectory;
 }

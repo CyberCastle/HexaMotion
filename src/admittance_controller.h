@@ -3,7 +3,11 @@
 
 #include "HexaModel.h"
 #include "precision_config.h"
+#include <memory>
 #include <vector>
+
+// Forward declaration to avoid circular dependency
+class WorkspaceValidator;
 
 /**
  * @brief Enhanced admittance controller with ODE integration
@@ -72,6 +76,7 @@ class AdmittanceController {
 
   private:
     RobotModel &model_;
+    std::unique_ptr<WorkspaceValidator> unified_validator_; // Unified workspace validation
     IIMUInterface *imu_;
     IFSRInterface *fsr_;
     ComputeConfig config_;
@@ -97,6 +102,7 @@ class AdmittanceController {
      */
     AdmittanceController(RobotModel &model, IIMUInterface *imu, IFSRInterface *fsr,
                          ComputeConfig config = ComputeConfig::medium());
+    ~AdmittanceController(); // Needed for unique_ptr with forward declaration
 
     /**
      * @brief Initialize admittance controller

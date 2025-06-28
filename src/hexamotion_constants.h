@@ -92,7 +92,11 @@
 #define DEFAULT_MAX_ANGULAR_VELOCITY 90.0f // Default maximum angular velocity (degrees/s)
 
 // Common robot dimensions (typical values)
-#define DEFAULT_HEXAGON_RADIUS 200.0f // Default body radius (mm)
+// FIXED: Increased from 200mm to prevent leg collisions
+// Original value was too small and caused workspace overlap between adjacent legs
+// New value calculated using LegCollisionAvoidance::calculateSafeHexagonRadius()
+// Based on total leg reach (359mm) and 65% safe reach (233mm) with 30mm safety margin
+#define DEFAULT_HEXAGON_RADIUS 280.0f // Default body radius (mm) - COLLISION-SAFE VALUE
 #define DEFAULT_COXA_LENGTH 50.0f     // Default coxa segment length (mm)
 #define DEFAULT_FEMUR_LENGTH 101.0f   // Default femur segment length (mm)
 #define DEFAULT_TIBIA_LENGTH 208.0f   // Default tibia segment length (mm)

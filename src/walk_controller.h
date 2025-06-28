@@ -3,7 +3,9 @@
 
 #include "HexaModel.h"
 #include "terrain_adaptation.h"
+#include "workspace_validator.h"
 #include "velocity_limits.h"
+#include <memory>
 
 /**
  * @brief High level walking controller handling gaits and terrain adaptation.
@@ -165,6 +167,12 @@ class WalkController {
     VelocityLimits velocity_limits_;
     VelocityLimits::LimitValues current_velocity_limits_;
     VelocityLimits::LimitValues current_velocities_;
+
+    // Unified workspace validation (replaces scattered validation code)
+    std::unique_ptr<WorkspaceValidator> workspace_validator_;
+
+    // Collision avoidance: track current leg positions
+    Point3D current_leg_positions_[NUM_LEGS];
 };
 
 #endif // WALK_CONTROLLER_H

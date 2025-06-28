@@ -5,6 +5,7 @@
 #include <algorithm>
 #include <array>
 #include <cmath>
+#include <memory>
 #include <vector>
 
 /**
@@ -74,6 +75,7 @@ class VelocityLimits {
     };
 
     explicit VelocityLimits(const RobotModel &model);
+    ~VelocityLimits(); // Needed for PIMPL idiom
 
     // Main velocity limiting functions (equivalent to OpenSHC's generateLimits/getLimit)
     void generateLimits(const GaitConfig &gait_config);
@@ -116,30 +118,21 @@ class VelocityLimits {
     static float calculateBearing(float vx, float vy);
 
   private:
-    const RobotModel &model_;
-    LimitMap limit_map_;
-    WorkspaceConfig workspace_config_;
-    GaitConfig current_gait_config_;
-    float angular_velocity_scaling_;
+    // PIMPL idiom to hide WorkspaceValidator dependency
+    class Impl;
+    std::unique_ptr<Impl> pimpl_;
 
-    // Internal calculation methods
+    // Utility functions that don't require PIMPL access
+    float interpolateValue(float value1, float value2, float factor) const;
+    int getBearingIndex(float bearing_degrees) const;
+
+    // Internal calculation methods (now implemented via WorkspaceValidator)
     float calculateMaxLinearSpeed(float walkspace_radius, float on_ground_ratio,
                                   float frequency) const;
     float calculateMaxAngularSpeed(float max_linear_speed, float stance_radius) const;
     float calculateMaxAcceleration(float max_speed, float time_to_max) const;
-
-    // Workspace geometry calculations
-    void calculateLegWorkspaces();
-    float calculateEffectiveRadius(int leg_index, float bearing_degrees) const;
-    Point3D getLegBasePosition(int leg_index) const;
-
-    // Limit generation for specific bearings
     LimitValues calculateLimitsForBearing(float bearing_degrees,
                                           const GaitConfig &gait_config) const;
-
-    // Interpolation utilities
-    float interpolateValue(float value1, float value2, float factor) const;
-    int getBearingIndex(float bearing_degrees) const;
 };
 
 #endif // VELOCITY_LIMITS_H

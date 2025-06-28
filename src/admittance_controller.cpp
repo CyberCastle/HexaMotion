@@ -1,5 +1,6 @@
 #include "admittance_controller.h"
 #include "hexamotion_constants.h"
+#include "workspace_validator.h" // Use unified validator for workspace utilities
 
 /**
  * @file admittance_controller.cpp
@@ -21,6 +22,13 @@ AdmittanceController::AdmittanceController(RobotModel &model, IIMUInterface *imu
       dynamic_stiffness_enabled_(false), swing_stiffness_scaler_(WORKSPACE_SCALING_FACTOR),
       load_stiffness_scaler_(1.5f), step_clearance_(40.0f),
       current_time_(0.0) {
+
+    // Initialize unified workspace validator for position calculations
+    WorkspaceValidator::ValidationConfig validator_config;
+    validator_config.enable_collision_checking = false;   // Disable for performance in admittance control
+    validator_config.enable_joint_limit_checking = false; // Not needed for stiffness calculations
+    unified_validator_ = std::make_unique<WorkspaceValidator>(model_, validator_config);
+
     delta_time_ = config_.getDeltaTime();
     selectIntegrationMethod();
 
@@ -30,6 +38,8 @@ AdmittanceController::AdmittanceController(RobotModel &model, IIMUInterface *imu
         external_forces_[i] = Point3D(0, 0, 0);
     }
 }
+
+AdmittanceController::~AdmittanceController() = default;
 
 void AdmittanceController::initialize() {
     initializeDefaultParameters();
@@ -182,12 +192,22 @@ float AdmittanceController::calculateStiffnessScale(int leg_index, LegState leg_
     if (leg_state != SWING_PHASE)
         return 1.0f;
 
-    // Calculate height difference from default position for stiffness scaling
-    Point3D default_pos = model_.getLegOrigin(leg_index);
+    // UNIFIED: Use WorkspaceValidator for default position calculation
+    if (!unified_validator_) {
+        return 1.0f; // Safety fallback
+    }
+
+    // Get unified workspace bounds for more accurate default position
+    auto bounds = unified_validator_->getWorkspaceBounds(leg_index);
+    Point3D default_pos = bounds.center_position; // Use workspace center as reference
+
     float z_diff = abs(leg_position.z - default_pos.z);
 
-    // Scale based on step clearance (equivalent to OpenSHC implementation)
-    float step_reference = z_diff / step_clearance_;
+    // Scale based on step clearance using unified workspace height range
+    float workspace_height_range = bounds.max_height - bounds.min_height;
+    float normalized_clearance = std::max(step_clearance_, workspace_height_range * 0.1f); // Min 10% of workspace
+
+    float step_reference = z_diff / normalized_clearance;
     step_reference = std::min(1.0f, step_reference);
 
     return step_reference;

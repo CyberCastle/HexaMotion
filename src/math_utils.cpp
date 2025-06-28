@@ -39,6 +39,11 @@ float distance3D(const Point3D &p1, const Point3D &p2) {
                 (p1.z - p2.z) * (p1.z - p2.z));
 }
 
+float distance2D(const Point3D &p1, const Point3D &p2) {
+    return sqrt((p1.x - p2.x) * (p1.x - p2.x) +
+                (p1.y - p2.y) * (p1.y - p2.y));
+}
+
 float magnitude(const Point3D &point) {
     return sqrt(point.x * point.x + point.y * point.y + point.z * point.z);
 }
