@@ -155,13 +155,98 @@ Eigen::Matrix4f LocomotionSystem::calculateLegTransform(int leg_index,
     return model.legTransform(leg_index, q);
 }
 
-// Jacobian calculation
-Eigen::Matrix3f LocomotionSystem::calculateAnalyticJacobian(int leg, const JointAngles &q) {
-    return model.analyticJacobian(leg, q);
+bool LocomotionSystem::isTargetReachable(int leg_index, const Point3D &target) {
+    // Basic reachability check using OpenSHC-style workspace validation
+    float max_reach = params.coxa_length + params.femur_length + params.tibia_length;
+    float min_reach = std::abs(params.femur_length - params.tibia_length);
+
+    // Transform to leg coordinate system for distance check
+    const float base_angle_deg = leg_index * LEG_ANGLE_SPACING;
+    float base_x = params.hexagon_radius * cos(math_utils::degreesToRadians(base_angle_deg));
+    float base_y = params.hexagon_radius * sin(math_utils::degreesToRadians(base_angle_deg));
+
+    Point3D local_target;
+    local_target.x = target.x - base_x;
+    local_target.y = target.y - base_y;
+    local_target.z = target.z;
+
+    float distance = sqrt(local_target.x * local_target.x +
+                          local_target.y * local_target.y +
+                          local_target.z * local_target.z);
+
+    return (distance >= min_reach * 0.9f && distance <= max_reach * 0.95f);
 }
 
-Eigen::MatrixXf LocomotionSystem::calculateJacobian(int leg, const JointAngles &q) {
-    return model.analyticJacobian(leg, q);
+Point3D LocomotionSystem::constrainToWorkspace(int leg_index, const Point3D &target) {
+    if (isTargetReachable(leg_index, target)) {
+        return target;
+    }
+
+    // Transform to leg coordinate system
+    const float base_angle_deg = leg_index * LEG_ANGLE_SPACING;
+    float base_x = params.hexagon_radius * cos(math_utils::degreesToRadians(base_angle_deg));
+    float base_y = params.hexagon_radius * sin(math_utils::degreesToRadians(base_angle_deg));
+
+    Point3D local_target;
+    local_target.x = target.x - base_x;
+    local_target.y = target.y - base_y;
+    local_target.z = target.z;
+
+    float distance = sqrt(local_target.x * local_target.x +
+                          local_target.y * local_target.y +
+                          local_target.z * local_target.z);
+
+    float max_reach = params.coxa_length + params.femur_length + params.tibia_length;
+    float min_reach = std::abs(params.femur_length - params.tibia_length);
+
+    Point3D constrained_local = local_target;
+
+    if (distance > max_reach * 0.95f) {
+        // Scale down to maximum reach
+        float scale = (max_reach * 0.95f) / distance;
+        constrained_local.x *= scale;
+        constrained_local.y *= scale;
+        constrained_local.z *= scale;
+    } else if (distance < min_reach * 1.05f) {
+        // Scale up to minimum reach
+        float scale = (min_reach * 1.05f) / distance;
+        constrained_local.x *= scale;
+        constrained_local.y *= scale;
+        constrained_local.z *= scale;
+    }
+
+    // Transform back to global coordinates
+    Point3D constrained_global;
+    constrained_global.x = constrained_local.x + base_x;
+    constrained_global.y = constrained_local.y + base_y;
+    constrained_global.z = constrained_local.z;
+
+    return constrained_global;
+}
+
+float LocomotionSystem::getJointLimitProximity(int leg_index, const JointAngles &angles) {
+    // OpenSHC-style joint limit proximity calculation
+    float min_proximity = 1.0f;
+
+    // Check each joint proximity to limits
+    float joints[3] = {angles.coxa, angles.femur, angles.tibia};
+    float limits[3][2] = {
+        {params.coxa_angle_limits[0], params.coxa_angle_limits[1]},
+        {params.femur_angle_limits[0], params.femur_angle_limits[1]},
+        {params.tibia_angle_limits[0], params.tibia_angle_limits[1]}};
+
+    for (int j = 0; j < 3; ++j) {
+        float range = limits[j][1] - limits[j][0];
+        if (range > 0.0f) {
+            float half_range = range * 0.5f;
+            float center = (limits[j][1] + limits[j][0]) * 0.5f;
+            float distance_from_center = std::abs(joints[j] - center);
+            float proximity = std::max(0.0f, (half_range - distance_from_center) / half_range);
+            min_proximity = std::min(min_proximity, proximity);
+        }
+    }
+
+    return min_proximity;
 }
 
 /* Transform world point to body frame = Rᵀ·(p - p0) */
@@ -214,7 +299,7 @@ bool LocomotionSystem::setLegJointAngles(int leg, const JointAngles &q) {
     clamped.tibia = constrainAngle(q.tibia, params.tibia_angle_limits[0],
                                    params.tibia_angle_limits[1]);
 
-    if (!params.ik.clamp_joints && !within_limits)
+    if (!within_limits)
         return false;
 
     joint_angles[leg] = clamped; // internal state

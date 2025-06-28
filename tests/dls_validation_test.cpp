@@ -5,6 +5,8 @@
 int main() {
     // Configure test parameters
     Parameters params;
+    // Use DH-based kinematics for DLS validation
+    params.use_custom_dh_parameters = true;
     params.hexagon_radius = 200.0f;
     params.coxa_length = 50.0f;
     params.femur_length = 100.0f;

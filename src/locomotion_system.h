@@ -172,15 +172,12 @@ class LocomotionSystem {
     /** Compute tip position from current joint angles. */
     Point3D calculateForwardKinematics(int leg_index, const JointAngles &angles);
 
-    // Jacobian calculation
-    /**
-     * @brief Calculate the geometric Jacobian for a leg.
-     */
-    Eigen::MatrixXf calculateJacobian(int leg_index, const JointAngles &angles);
-    /**
-     * @brief Calculate the analytic Jacobian for a leg.
-     */
-    Eigen::Matrix3f calculateAnalyticJacobian(int leg_index, const JointAngles &q);
+    /** Check if target is within workspace. */
+    bool isTargetReachable(int leg_index, const Point3D &target);
+    /** Project target to workspace boundary if outside. */
+    Point3D constrainToWorkspace(int leg_index, const Point3D &target);
+    /** Get joint limit proximity (1.0 = far from limits, 0.0 = at limits). */
+    float getJointLimitProximity(int leg_index, const JointAngles &angles);
 
     // Denavit-Hartenberg transforms
     /** Compute a DH transform matrix. */
