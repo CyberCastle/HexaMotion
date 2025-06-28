@@ -50,7 +50,7 @@ These are the characteristics of a real robot, used to test this library.
 -   tibia length: 208 mm
 -   tibia weight: 200 g
 
-**Note:** Physically, the robot, with the angles coxa-femur = 0º and femur-tibia = 0º, the femur remains horizontal, while the tibia remains vertical, standing stably.
+**Note:** Physically, if the robot has all servo angles at 0°, the femur remains horizontal, in line with the coxa. The tibia, on the other hand, remains vertical, perpendicular to the ground. This allows the robot to stand stably by default when all angles are at 0°.
 
 ### Test Parameters
 
