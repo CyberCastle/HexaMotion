@@ -36,7 +36,11 @@ struct Parameters {
     float angle_sign_tibia = 1.0f; ///< Sign multiplier for tibia joint output (+1.0 or -1.0 to match servo direction)
 
     bool use_custom_dh_parameters = false; ///< Use custom Denavit-Hartenberg parameters
-    float dh_parameters[NUM_LEGS][DOF_PER_LEG][4];
+    /**
+     * @brief DH parameter table for each leg.
+     * The first entry represents the fixed base transform.
+     */
+    float dh_parameters[NUM_LEGS][DOF_PER_LEG + 1][4];
 
     Eigen::Vector3f imu_calibration_offset;
     float fsr_touchdown_threshold;
@@ -363,8 +367,9 @@ class RobotModel {
 
   private:
     const Parameters &params;
-    // DH parameter table: [leg][joint][param] where param = [a, alpha, d, theta_offset]
-    float dh_transforms[NUM_LEGS][DOF_PER_LEG][4];
+    // DH parameter table: [leg][index][param] where index=0 is the base
+    // transform and param = [a, alpha, d, theta_offset]
+    float dh_transforms[NUM_LEGS][DOF_PER_LEG + 1][4];
 };
 
 #endif // MODEL_H
