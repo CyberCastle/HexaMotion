@@ -134,7 +134,7 @@ JointAngles RobotModel::inverseKinematics(int leg, const Point3D &p_target) {
         float stagnation_threshold = IK_STAGNATION_THRESHOLD; // If error doesn't improve by this much, consider stagnant
         int stagnation_count = 0;
 
-        for (int iter = 0; iter < IK_MAX_ITERATIONS; ++iter) {
+        for (int iter = 0; iter < params.ik.max_iterations; ++iter) {
             // Calculate current end-effector position using forward kinematics
             Point3D current_pos = forwardKinematics(leg, current_angles);
 
