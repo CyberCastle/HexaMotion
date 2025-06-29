@@ -71,7 +71,6 @@ struct Parameters {
         bool use_damping = true;
         float damping_lambda = 30.0f;
         bool clamp_joints = true;
-        bool use_multiple_starts = true; ///< Enable multiple starting configurations for better convergence
     } ik;
 
     /**

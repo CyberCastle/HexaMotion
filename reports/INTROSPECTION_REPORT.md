@@ -207,16 +207,6 @@ JointAngles RobotModel::inverseKinematics(int leg, const Point3D &p_target) {
     const float IK_TOLERANCE = 0.005f;    // 5mm tolerance
     const int MAX_ITERATIONS = 75;        // Increased for better convergence
 
-    // KEY IMPROVEMENT: Multiple starting configurations
-    std::vector<JointAngles> starting_configs;
-    if (params.ik.use_multiple_starts) {
-        starting_configs.push_back(JointAngles(coxa_start, -45.0f, 60.0f)); // Primary
-        starting_configs.push_back(JointAngles(coxa_start, 30.0f, -60.0f));  // High
-        starting_configs.push_back(JointAngles(coxa_start, -30.0f, 45.0f));  // Medium
-        starting_configs.push_back(JointAngles(coxa_start, 0.0f, 0.0f));     // Straight
-        starting_configs.push_back(JointAngles(coxa_start, -60.0f, 80.0f));  // Extended
-    }
-
     // Standard DLS method with improvements
     for (const auto &start_config : starting_configs) {
         for (int iter = 0; iter < params.ik.max_iterations; ++iter) {
