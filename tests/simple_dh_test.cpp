@@ -1,45 +1,55 @@
 #include "HexaModel.h"
 #include <iostream>
 #include <iomanip>
+#include <cmath>
 
 int main() {
-    Parameters params;
-    params.hexagon_radius = 200.0f;
-    params.coxa_length = 50.0f;
-    params.femur_length = 101.0f;
-    params.tibia_length = 208.0f;
-    params.robot_height = 120.0f;
-    params.use_custom_dh_parameters = false;
+    Parameters p{};
+    p.hexagon_radius = 200;
+    p.coxa_length = 50;
+    p.femur_length = 101;
+    p.tibia_length = 208;
+    p.robot_height = 100;
+    p.control_frequency = 50;
+    p.coxa_angle_limits[0] = -65;
+    p.coxa_angle_limits[1] = 65;
+    p.femur_angle_limits[0] = -75;
+    p.femur_angle_limits[1] = 75;
+    p.tibia_angle_limits[0] = -45;
+    p.tibia_angle_limits[1] = 45;
 
-    RobotModel model(params);
+    RobotModel model(p);
 
-    std::cout << "=== Simple DH Test ===" << std::endl;
-    std::cout << "Testing with coxa=0, femur=0, tibia=0" << std::endl;
+    std::cout << std::fixed << std::setprecision(3);
+    std::cout << "=== DH Parameter Validation ===" << std::endl;
 
-    JointAngles angles(0.0f, 0.0f, 0.0f);
-    Point3D result = model.forwardKinematics(0, angles);
+    static const float base_theta_offsets[NUM_LEGS] = {0.0f, -60.0f, -120.0f, 180.0f, 120.0f, 60.0f};
 
-    std::cout << std::fixed << std::setprecision(2);
-    std::cout << "Result: (" << result.x << ", " << result.y << ", " << result.z << ")" << std::endl;
-    std::cout << "Expected: (351, -208, 0) for DH parameters with coxa=0, femur=0, tibia=0" << std::endl;
+    JointAngles q(0, 0, 0);
 
-    // Test with different angles to verify DH chain
-    std::cout << "\n=== Additional DH Tests ===" << std::endl;
+    bool ok = true;
+    for (int leg = 0; leg < NUM_LEGS; ++leg) {
+        Point3D pos = model.forwardKinematics(leg, q);
+        float theta_rad = base_theta_offsets[leg] * M_PI / 180.0f;
+        float expected_x = (p.hexagon_radius + p.coxa_length + p.femur_length) * cos(theta_rad);
+        float expected_y = (p.hexagon_radius + p.coxa_length + p.femur_length) * sin(theta_rad);
+        float expected_z = -p.tibia_length;
+        float err = std::sqrt(std::pow(pos.x - expected_x, 2) +
+                              std::pow(pos.y - expected_y, 2) +
+                              std::pow(pos.z - expected_z, 2));
+        std::cout << "Leg " << leg << ": (" << pos.x << ", " << pos.y << ", " << pos.z
+                  << ") expected (" << expected_x << ", " << expected_y << ", " << expected_z
+                  << ") error=" << err << "\n";
+        if (err > 1e-3f) {
+            ok = false;
+        }
+    }
 
-    // Test with femur = 90 degrees (pointing down)
-    JointAngles angles2(0.0f, 90.0f, 0.0f);
-    Point3D result2 = model.forwardKinematics(0, angles2);
-    std::cout << "coxa=0, femur=90, tibia=0: (" << result2.x << ", " << result2.y << ", " << result2.z << ")" << std::endl;
-
-    // Test with femur = -90 degrees (pointing up)
-    JointAngles angles3(0.0f, -90.0f, 0.0f);
-    Point3D result3 = model.forwardKinematics(0, angles3);
-    std::cout << "coxa=0, femur=-90, tibia=0: (" << result3.x << ", " << result3.y << ", " << result3.z << ")" << std::endl;
-
-    // Test with coxa = 90 degrees (pointing to the right)
-    JointAngles angles4(90.0f, 0.0f, 0.0f);
-    Point3D result4 = model.forwardKinematics(0, angles4);
-    std::cout << "coxa=90, femur=0, tibia=0: (" << result4.x << ", " << result4.y << ", " << result4.z << ")" << std::endl;
-
-    return 0;
+    if (ok) {
+        std::cout << "DH parameters appear to be consistent." << std::endl;
+        return 0;
+    } else {
+        std::cerr << "DH parameter validation failed." << std::endl;
+        return 1;
+    }
 }
