@@ -8,7 +8,7 @@ int main() {
     float rad = degreesToRadians(deg);
     assert(static_cast<int>(radiansToDegrees(rad)) == 90);
 
-    auto R = rotationMatrixZ(45.0f);
+    auto R = rotationMatrixZ(degreesToRadians(45.0f));
     Eigen::Matrix3f I = R * R.transpose();
     assert((I - Eigen::Matrix3f::Identity()).norm() < 1e-5);
     std::cout << "math_utils_test executed successfully" << std::endl;

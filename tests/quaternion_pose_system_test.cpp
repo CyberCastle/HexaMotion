@@ -28,17 +28,23 @@ int main() {
     std::cout << "\n1. Testing quaternion conversion functions..." << std::endl;
 
     // Test conversion functions
-    Point3D euler_test(30.0f, 45.0f, 60.0f); // degrees
+    Point3D euler_test_deg(30.0f, 45.0f, 60.0f);
+    Point3D euler_test(math_utils::degreesToRadians(euler_test_deg.x),
+                       math_utils::degreesToRadians(euler_test_deg.y),
+                       math_utils::degreesToRadians(euler_test_deg.z));
     Eigen::Vector4f quat_test = math_utils::eulerPoint3DToQuaternion(euler_test);
-    Point3D euler_back = math_utils::quaternionToEulerPoint3D(quat_test);
+    Point3D euler_back_rad = math_utils::quaternionToEulerPoint3D(quat_test);
+    Point3D euler_back(math_utils::radiansToDegrees(euler_back_rad.x),
+                       math_utils::radiansToDegrees(euler_back_rad.y),
+                       math_utils::radiansToDegrees(euler_back_rad.z));
 
-    std::cout << "Original Euler: (" << euler_test.x << ", " << euler_test.y << ", " << euler_test.z << ")" << std::endl;
+    std::cout << "Original Euler: (" << euler_test_deg.x << ", " << euler_test_deg.y << ", " << euler_test_deg.z << ")" << std::endl;
     std::cout << "Quaternion: (" << quat_test[0] << ", " << quat_test[1] << ", " << quat_test[2] << ", " << quat_test[3] << ")" << std::endl;
     std::cout << "Converted back: (" << euler_back.x << ", " << euler_back.y << ", " << euler_back.z << ")" << std::endl;
 
-    float conversion_error = std::abs(euler_test.x - euler_back.x) +
-                             std::abs(euler_test.y - euler_back.y) +
-                             std::abs(euler_test.z - euler_back.z);
+    float conversion_error = std::abs(euler_test_deg.x - euler_back.x) +
+                             std::abs(euler_test_deg.y - euler_back.y) +
+                             std::abs(euler_test_deg.z - euler_back.z);
     std::cout << "Conversion error: " << conversion_error << " degrees" << std::endl;
     std::cout << "Conversion test: " << (conversion_error < 0.1f ? "PASS" : "FAIL") << std::endl;
 

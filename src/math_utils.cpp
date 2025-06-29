@@ -80,10 +80,10 @@ Eigen::Vector4f quaternionInverse(const Eigen::Vector4f &q) {
 }
 
 Eigen::Matrix4f dhTransform(float a, float alpha, float d, float theta) {
-    float cos_theta = cos(math_utils::degreesToRadians(theta));
-    float sin_theta = sin(math_utils::degreesToRadians(theta));
-    float cos_alpha = cos(math_utils::degreesToRadians(alpha));
-    float sin_alpha = sin(math_utils::degreesToRadians(alpha));
+    float cos_theta = cos(theta);
+    float sin_theta = sin(theta);
+    float cos_alpha = cos(alpha);
+    float sin_alpha = sin(alpha);
 
     Eigen::Matrix4f transform;
     transform << cos_theta, -sin_theta * cos_alpha, sin_theta * sin_alpha, a * cos_theta,
@@ -111,17 +111,13 @@ Eigen::Vector3f quaternionToEuler(const Eigen::Vector4f &quaternion) {
     float cosy_cosp = 1 - 2 * (y * y + z * z);
     euler[2] = atan2(siny_cosp, cosy_cosp);
 
-    euler[0] = math_utils::radiansToDegrees(euler[0]);
-    euler[1] = math_utils::radiansToDegrees(euler[1]);
-    euler[2] = math_utils::radiansToDegrees(euler[2]);
-
     return euler;
 }
 
 Eigen::Vector4f eulerToQuaternion(const Eigen::Vector3f &euler) {
-    float roll = math_utils::degreesToRadians(euler[0]);
-    float pitch = math_utils::degreesToRadians(euler[1]);
-    float yaw = math_utils::degreesToRadians(euler[2]);
+    float roll = euler[0];
+    float pitch = euler[1];
+    float yaw = euler[2];
 
     float cy = cos(yaw * 0.5);
     float sy = sin(yaw * 0.5);
@@ -140,28 +136,25 @@ Eigen::Vector4f eulerToQuaternion(const Eigen::Vector3f &euler) {
 }
 
 Eigen::Matrix3f rotationMatrixX(float angle) {
-    float rad = math_utils::degreesToRadians(angle);
     Eigen::Matrix3f R;
     R << 1, 0, 0,
-        0, cos(rad), -sin(rad),
-        0, sin(rad), cos(rad);
+        0, cos(angle), -sin(angle),
+        0, sin(angle), cos(angle);
     return R;
 }
 
 Eigen::Matrix3f rotationMatrixY(float angle) {
-    float rad = math_utils::degreesToRadians(angle);
     Eigen::Matrix3f R;
-    R << cos(rad), 0, sin(rad),
+    R << cos(angle), 0, sin(angle),
         0, 1, 0,
-        -sin(rad), 0, cos(rad);
+        -sin(angle), 0, cos(angle);
     return R;
 }
 
 Eigen::Matrix3f rotationMatrixZ(float angle) {
-    float rad = math_utils::degreesToRadians(angle);
     Eigen::Matrix3f R;
-    R << cos(rad), -sin(rad), 0,
-        sin(rad), cos(rad), 0,
+    R << cos(angle), -sin(angle), 0,
+        sin(angle), cos(angle), 0,
         0, 0, 1;
     return R;
 }
@@ -175,8 +168,8 @@ Point3D vector3fToPoint3D(const Eigen::Vector3f &vec) {
     return Point3D(vec[0], vec[1], vec[2]);
 }
 
-Eigen::Vector4f eulerPoint3DToQuaternion(const Point3D &euler_degrees) {
-    Eigen::Vector3f euler_vec = point3DToVector3f(euler_degrees);
+Eigen::Vector4f eulerPoint3DToQuaternion(const Point3D &euler) {
+    Eigen::Vector3f euler_vec = point3DToVector3f(euler);
     return eulerToQuaternion(euler_vec);
 }
 

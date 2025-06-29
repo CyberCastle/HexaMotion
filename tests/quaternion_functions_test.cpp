@@ -6,17 +6,25 @@ int main() {
     std::cout << "=== Test quaternion functions in math_utils ===" << std::endl;
 
     // Test eulerToQuaternion and quaternionToEuler
-    Eigen::Vector3f euler_input(30.0f, 45.0f, 60.0f); // degrees
+    Eigen::Vector3f euler_input_deg(30.0f, 45.0f, 60.0f);
+    Eigen::Vector3f euler_input(
+        math_utils::degreesToRadians(euler_input_deg[0]),
+        math_utils::degreesToRadians(euler_input_deg[1]),
+        math_utils::degreesToRadians(euler_input_deg[2]));
     Eigen::Vector4f quat = math_utils::eulerToQuaternion(euler_input);
     Eigen::Vector3f euler_output = math_utils::quaternionToEuler(quat);
+    Eigen::Vector3f euler_output_deg(
+        math_utils::radiansToDegrees(euler_output[0]),
+        math_utils::radiansToDegrees(euler_output[1]),
+        math_utils::radiansToDegrees(euler_output[2]));
 
-    std::cout << "Input Euler (deg): " << euler_input.transpose() << std::endl;
+    std::cout << "Input Euler (deg): " << euler_input_deg.transpose() << std::endl;
     std::cout << "Quaternion: " << quat.transpose() << std::endl;
-    std::cout << "Output Euler (deg): " << euler_output.transpose() << std::endl;
+    std::cout << "Output Euler (deg): " << euler_output_deg.transpose() << std::endl;
 
     // Check if conversion is consistent
     float tolerance = 0.01f;
-    bool conversion_ok = (euler_input - euler_output).norm() < tolerance;
+    bool conversion_ok = (euler_input_deg - euler_output_deg).norm() < tolerance;
     std::cout << "Euler<->Quaternion conversion: " << (conversion_ok ? "PASS" : "FAIL") << std::endl;
 
     // Test quaternionMultiply

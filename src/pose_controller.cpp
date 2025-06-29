@@ -149,8 +149,11 @@ bool PoseController::setBodyPoseQuaternion(const Eigen::Vector3f &position, cons
     }
 
     // Original implementation for compatibility
-    Point3D euler_degrees = math_utils::quaternionToEulerPoint3D(quaternion);
-    Eigen::Vector3f orientation = math_utils::point3DToVector3f(euler_degrees);
+    Point3D euler_rad = math_utils::quaternionToEulerPoint3D(quaternion);
+    Eigen::Vector3f orientation(
+        math_utils::radiansToDegrees(euler_rad.x),
+        math_utils::radiansToDegrees(euler_rad.y),
+        math_utils::radiansToDegrees(euler_rad.z));
     return setBodyPose(position, orientation, leg_positions, joint_angles);
 }
 
@@ -225,8 +228,11 @@ bool PoseController::setBodyPoseSmooth(const Eigen::Vector3f &position, const Ei
 bool PoseController::setBodyPoseSmoothQuaternion(const Eigen::Vector3f &position, const Eigen::Vector4f &quaternion,
                                                  Point3D leg_positions[NUM_LEGS], JointAngles joint_angles[NUM_LEGS]) {
     // Convert quaternion to Euler angles and use smooth method
-    Point3D euler_degrees = math_utils::quaternionToEulerPoint3D(quaternion);
-    Eigen::Vector3f orientation = math_utils::point3DToVector3f(euler_degrees);
+    Point3D euler_rad = math_utils::quaternionToEulerPoint3D(quaternion);
+    Eigen::Vector3f orientation(
+        math_utils::radiansToDegrees(euler_rad.x),
+        math_utils::radiansToDegrees(euler_rad.y),
+        math_utils::radiansToDegrees(euler_rad.z));
     return setBodyPoseSmooth(position, orientation, leg_positions, joint_angles);
 }
 
@@ -393,7 +399,10 @@ bool PoseController::setBodyPoseImmediate(const Eigen::Vector3f &position, const
 
         // Apply body transformation: translate relative to body position, then rotate
         Point3D leg_body_relative(stance_pos.x - position[0], stance_pos.y - position[1], stance_pos.z - position[2]);
-        Point3D leg_rotated = math_utils::rotatePoint(leg_body_relative, orientation);
+        Eigen::Vector3f orientation_rad(math_utils::degreesToRadians(orientation[0]),
+                                       math_utils::degreesToRadians(orientation[1]),
+                                       math_utils::degreesToRadians(orientation[2]));
+        Point3D leg_rotated = math_utils::rotatePoint(leg_body_relative, orientation_rad);
         Point3D leg_world(position[0] + leg_rotated.x,
                           position[1] + leg_rotated.y,
                           position[2] + leg_rotated.z);
