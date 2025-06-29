@@ -12,7 +12,9 @@ float degreesToRadians(float degrees);
 float radiansToDegrees(float radians);
 /** Normalize an angle to the [-180,180] range. */
 float normalizeAngle(float angle);
-/** Rotate a 3D point by roll/pitch/yaw angles. */
+/**
+ * Rotate a 3D point by roll/pitch/yaw angles (radians).
+ */
 Point3D rotatePoint(const Point3D &point, const Eigen::Vector3f &rotation);
 /** Euclidean distance between two points. */
 float distance3D(const Point3D &p1, const Point3D &p2);
@@ -29,16 +31,16 @@ float distance(const Point3D &p1, const Point3D &p2);
 /** Calculate perpendicular distance from point to line segment. */
 float pointToLineDistance(const Point3D &point, const Point3D &line_start, const Point3D &line_end);
 
-/** Rotation matrix about X axis. */
+/** Rotation matrix about X axis (angle in radians). */
 Eigen::Matrix3f rotationMatrixX(float angle);
-/** Rotation matrix about Y axis. */
+/** Rotation matrix about Y axis (angle in radians). */
 Eigen::Matrix3f rotationMatrixY(float angle);
-/** Rotation matrix about Z axis. */
+/** Rotation matrix about Z axis (angle in radians). */
 Eigen::Matrix3f rotationMatrixZ(float angle);
 
-/** Convert quaternion to Euler angles (degrees). */
+/** Convert quaternion to Euler angles (radians). */
 Eigen::Vector3f quaternionToEuler(const Eigen::Vector4f &quaternion);
-/** Convert Euler angles (degrees) to quaternion. */
+/** Convert Euler angles (radians) to quaternion. */
 Eigen::Vector4f eulerToQuaternion(const Eigen::Vector3f &euler);
 /** Multiply two quaternions. */
 Eigen::Vector4f quaternionMultiply(const Eigen::Vector4f &q1, const Eigen::Vector4f &q2);
@@ -49,12 +51,12 @@ Eigen::Vector4f quaternionInverse(const Eigen::Vector4f &q);
 Eigen::Vector3f point3DToVector3f(const Point3D &point);
 /** Convert Eigen::Vector3f to Point3D for pose operations. */
 Point3D vector3fToPoint3D(const Eigen::Vector3f &vec);
-/** Convert Point3D Euler angles to quaternion using centralized functions. */
-Eigen::Vector4f eulerPoint3DToQuaternion(const Point3D &euler_degrees);
-/** Convert quaternion to Point3D Euler angles using centralized functions. */
+/** Convert Point3D Euler angles (radians) to quaternion. */
+Eigen::Vector4f eulerPoint3DToQuaternion(const Point3D &euler);
+/** Convert quaternion to Point3D Euler angles (radians). */
 Point3D quaternionToEulerPoint3D(const Eigen::Vector4f &quaternion);
 
-/** Denavit-Hartenberg transform matrix helper. */
+/** Denavit-Hartenberg transform matrix helper (angles in radians). */
 Eigen::Matrix4f dhTransform(float a, float alpha, float d, float theta);
 
 /**

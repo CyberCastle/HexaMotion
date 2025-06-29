@@ -148,7 +148,9 @@ Point3D LocomotionSystem::calculateForwardKinematics(int leg_index, const JointA
 
 // DH transformation calculation
 Eigen::Matrix4f LocomotionSystem::calculateDHTransform(float a, float alpha, float d, float theta) {
-    return math_utils::dhTransform(a, alpha, d, theta);
+    float alpha_rad = math_utils::degreesToRadians(alpha);
+    float theta_rad = math_utils::degreesToRadians(theta);
+    return math_utils::dhTransform(a, alpha_rad, d, theta_rad);
 }
 
 // Complete leg transform
@@ -210,9 +212,9 @@ Point3D LocomotionSystem::transformWorldToBody(const Point3D &p_world) const {
                 p_world.z - body_position[2]);
 
     // Rotate with negative angles (inverse)
-    Eigen::Vector3f neg_rpy(-body_orientation[0],
-                            -body_orientation[1],
-                            -body_orientation[2]);
+    Eigen::Vector3f neg_rpy(math_utils::degreesToRadians(-body_orientation[0]),
+                            math_utils::degreesToRadians(-body_orientation[1]),
+                            math_utils::degreesToRadians(-body_orientation[2]));
     return math_utils::rotatePoint(rel, neg_rpy);
 }
 

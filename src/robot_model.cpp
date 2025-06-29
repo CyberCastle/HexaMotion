@@ -199,7 +199,9 @@ Eigen::Matrix4f RobotModel::legTransform(int leg_index, const JointAngles &q) co
         float d = dh_transforms[leg_index][j][2];      // link offset
         float theta0 = dh_transforms[leg_index][j][3]; // joint angle offset
         float theta = theta0 + joint_deg[j];           // total joint angle
-        T *= math_utils::dhTransform(a, alpha, d, theta);
+        float alpha_rad = math_utils::degreesToRadians(alpha);
+        float theta_rad = math_utils::degreesToRadians(theta);
+        T *= math_utils::dhTransform(a, alpha_rad, d, theta_rad);
     }
 
     return T;
@@ -231,7 +233,10 @@ Eigen::Matrix3f RobotModel::calculateJacobian(int leg, const JointAngles &q, con
         float theta0 = dh_transforms[leg][j][3]; // joint angle offset
         float theta = theta0 + joint_deg[j];     // total joint angle
 
-        transforms[j + 1] = transforms[j] * math_utils::dhTransform(a, alpha, d, theta);
+        float alpha_rad = math_utils::degreesToRadians(alpha);
+        float theta_rad = math_utils::degreesToRadians(theta);
+
+        transforms[j + 1] = transforms[j] * math_utils::dhTransform(a, alpha_rad, d, theta_rad);
     }
 
     // End-effector transform
