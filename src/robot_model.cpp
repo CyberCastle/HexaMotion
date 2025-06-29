@@ -23,8 +23,8 @@ void RobotModel::initializeDH() {
         for (int l = 0; l < NUM_LEGS; ++l) {
             // Base transform from body center to leg mount
             dh_transforms[l][0][0] = params.hexagon_radius; // a
-            dh_transforms[l][0][1] = 0.0f;                 // alpha
-            dh_transforms[l][0][2] = 0.0f;                 // d
+            dh_transforms[l][0][1] = 0.0f;                  // alpha
+            dh_transforms[l][0][2] = 0.0f;                  // d
             dh_transforms[l][0][3] = BASE_THETA_OFFSETS[l]; // theta
 
             // Coxa link
@@ -35,15 +35,15 @@ void RobotModel::initializeDH() {
 
             // Femur link
             dh_transforms[l][2][0] = params.femur_length; // a
-            dh_transforms[l][2][1] = 0.0f;               // alpha
-            dh_transforms[l][2][2] = 0.0f;               // d
-            dh_transforms[l][2][3] = 0.0f;               // theta offset
+            dh_transforms[l][2][1] = 0.0f;                // alpha
+            dh_transforms[l][2][2] = 0.0f;                // d
+            dh_transforms[l][2][3] = 0.0f;                // theta offset
 
             // Tibia link
             dh_transforms[l][3][0] = params.tibia_length; // a
-            dh_transforms[l][3][1] = 0.0f;               // alpha
-            dh_transforms[l][3][2] = 0.0f;               // d
-            dh_transforms[l][3][3] = -90.0f;             // theta offset
+            dh_transforms[l][3][1] = 0.0f;                // alpha
+            dh_transforms[l][3][2] = 0.0f;                // d
+            dh_transforms[l][3][3] = -90.0f;              // theta offset
         }
     }
 }
@@ -91,9 +91,12 @@ JointAngles RobotModel::inverseKinematics(int leg, const Point3D &p_target) cons
     JointAngles current_angles(coxa_start, femur_estimate, tibia_estimate);
 
     // Clamp to joint limits
-    current_angles.coxa = constrainAngle(current_angles.coxa, params.coxa_angle_limits[0], params.coxa_angle_limits[1]);
-    current_angles.femur = constrainAngle(current_angles.femur, params.femur_angle_limits[0], params.femur_angle_limits[1]);
-    current_angles.tibia = constrainAngle(current_angles.tibia, params.tibia_angle_limits[0], params.tibia_angle_limits[1]);
+
+    if (params.ik.clamp_joints) {
+        current_angles.coxa = constrainAngle(current_angles.coxa, params.coxa_angle_limits[0], params.coxa_angle_limits[1]);
+        current_angles.femur = constrainAngle(current_angles.femur, params.femur_angle_limits[0], params.femur_angle_limits[1]);
+        current_angles.tibia = constrainAngle(current_angles.tibia, params.tibia_angle_limits[0], params.tibia_angle_limits[1]);
+    }
 
     // DLS iterative solution - 6x6 solver including orientation
     const float tolerance = 0.001f;
@@ -197,9 +200,11 @@ JointAngles RobotModel::inverseKinematics(int leg, const Point3D &p_target) cons
         current_angles.tibia = normalizeAngle(current_angles.tibia);
 
         // Apply joint limits
-        current_angles.coxa = constrainAngle(current_angles.coxa, params.coxa_angle_limits[0], params.coxa_angle_limits[1]);
-        current_angles.femur = constrainAngle(current_angles.femur, params.femur_angle_limits[0], params.femur_angle_limits[1]);
-        current_angles.tibia = constrainAngle(current_angles.tibia, params.tibia_angle_limits[0], params.tibia_angle_limits[1]);
+        if (params.ik.clamp_joints) {
+            current_angles.coxa = constrainAngle(current_angles.coxa, params.coxa_angle_limits[0], params.coxa_angle_limits[1]);
+            current_angles.femur = constrainAngle(current_angles.femur, params.femur_angle_limits[0], params.femur_angle_limits[1]);
+            current_angles.tibia = constrainAngle(current_angles.tibia, params.tibia_angle_limits[0], params.tibia_angle_limits[1]);
+        }
     }
 
     return current_angles;
