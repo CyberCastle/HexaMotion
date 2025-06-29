@@ -25,12 +25,15 @@ int main() {
 
     std::cout << "=== Simple Horizontal Test ===" << std::endl;
 
-    float reach = p.hexagon_radius + p.coxa_length + p.femur_length + p.tibia_length;
+    bool ok = true;
     for (int leg = 0; leg < NUM_LEGS; ++leg) {
         float theta_rad = base_theta_offsets[leg] * M_PI / 180.0f;
         Point3D target;
-        target.x = reach * cos(theta_rad);
-        target.y = reach * sin(theta_rad);
+        float reach = p.hexagon_radius + p.coxa_length + p.femur_length;
+        float default_x = reach * cos(theta_rad) + p.tibia_length * sin(theta_rad);
+        float default_y = reach * sin(theta_rad) - p.tibia_length * cos(theta_rad);
+        target.x = 0.8f * default_x;
+        target.y = 0.8f * default_y;
         target.z = 0.0f;
 
         JointAngles ik = model.inverseKinematics(leg, target);
@@ -42,7 +45,16 @@ int main() {
                   << ", " << target.z << ") -> IK(" << ik.coxa << ", "
                   << ik.femur << ", " << ik.tibia << ") FK(" << fk.x << ", "
                   << fk.y << ", " << fk.z << ") error=" << err << std::endl;
+        if (err > 1e-2f) {
+            ok = false;
+        }
     }
 
-    return 0;
+    if (ok) {
+        std::cout << "IK results within tolerance." << std::endl;
+        return 0;
+    } else {
+        std::cerr << "IK validation failed." << std::endl;
+        return 1;
+    }
 }
