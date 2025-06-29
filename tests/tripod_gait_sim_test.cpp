@@ -10,8 +10,7 @@
 
 static void printWelcome() {
     std::cout << "=========================================" << std::endl;
-    std::cout << "HEXAPOD TRIPOD GAIT SIMULATION WITH STATE MACHINE" << std : p2.hexagon_radius = 200;
-    endl;
+    std::cout << "HEXAPOD TRIPOD GAIT SIMULATION WITH STATE MACHINE" << std::endl;
     std::cout << "=========================================" << std::endl;
     std::cout << "Simulating 6-legged robot with 3DOF per leg" << std::endl;
     std::cout << "Distance: 800mm | Velocity: 400mm/s | Duration: 2s" << std::endl;
