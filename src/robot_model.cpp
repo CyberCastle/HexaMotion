@@ -120,11 +120,10 @@ JointAngles RobotModel::inverseKinematics(int leg, const Point3D &p_target) cons
     current_angles.tibia = constrainAngle(current_angles.tibia, params.tibia_angle_limits[0], params.tibia_angle_limits[1]);
 
     // DLS iterative solution - production-ready 3x3 solver
-    const int max_iterations = params.ik.max_iterations;
     const float tolerance = 0.001f;
     const float dls_coefficient = 0.05f;
 
-    for (int iter = 0; iter < max_iterations; ++iter) {
+    for (int iter = 0; iter < params.ik.max_iterations; ++iter) {
         // Calculate current position using forward kinematics
         Point3D current_pos = forwardKinematics(leg, current_angles);
 

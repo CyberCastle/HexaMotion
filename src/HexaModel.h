@@ -66,7 +66,7 @@ struct Parameters {
      * @brief Inverse kinematics solver settings.
      */
     struct IKConfig {
-        uint8_t max_iterations = 30;
+        uint8_t max_iterations = IK_DEFAULT_MAX_ITERATIONS; ///< Maximum iterations for RobotModel::inverseKinematics
         float pos_threshold_mm = 0.5f;
         bool use_damping = true;
         float damping_lambda = 30.0f;

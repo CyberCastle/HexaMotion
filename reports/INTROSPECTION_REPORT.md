@@ -219,7 +219,7 @@ JointAngles RobotModel::inverseKinematics(int leg, const Point3D &p_target) {
 
     // Standard DLS method with improvements
     for (const auto &start_config : starting_configs) {
-        for (int iter = 0; iter < MAX_ITERATIONS; ++iter) {
+        for (int iter = 0; iter < params.ik.max_iterations; ++iter) {
             // Calculate jacobian using DH parameters
             Eigen::Matrix3f jacobian = calculateJacobian(leg, current_angles, p_target);
 

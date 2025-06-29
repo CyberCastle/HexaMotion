@@ -121,7 +121,7 @@
 // DLS (Damped Least Squares) IK parameters
 #define IK_DLS_COEFFICIENT 0.02f       // Damping factor for numerical stability in DLS method
 #define IK_TOLERANCE 1.0f              // Position tolerance for IK convergence (1mm)
-#define IK_MAX_ITERATIONS 75           // Maximum iterations for IK solver
+#define IK_DEFAULT_MAX_ITERATIONS 30   // Default maximum iterations for IK solver
 #define IK_HIGH_DAMPING 0.1f           // High damping factor for singular configurations
 #define IK_STAGNATION_THRESHOLD 0.001f // Threshold for detecting stagnation in IK iteration
 #define IK_STAGNATION_COUNT_MAX 5      // Maximum stagnation count before trying next start
