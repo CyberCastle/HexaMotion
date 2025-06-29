@@ -29,7 +29,7 @@ void RobotModel::initializeDH() {
 
             // Coxa link
             dh_transforms[l][1][0] = params.coxa_length; // a
-            dh_transforms[l][1][1] = 90.0f;              // alpha
+            dh_transforms[l][1][1] = 0.0f;              // alpha
             dh_transforms[l][1][2] = 0.0f;               // d
             dh_transforms[l][1][3] = 0.0f;               // theta offset
 
