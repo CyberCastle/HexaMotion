@@ -381,16 +381,34 @@ std::pair<float, float> RobotModel::calculateHeightRange() const {
     return {min_h, max_h};
 }
 
-Point3D RobotModel::getLegOrigin(int leg) const {
-    if (leg < 0 || leg >= NUM_LEGS) {
-        return Point3D(0, 0, 0);
-    }
+Pose RobotModel::getPoseRobotFrame(int leg_index, const JointAngles &joint_angles, const Pose &leg_frame_pose) const {
+    // Get the full transform from robot frame to leg frame
+    Eigen::Matrix4f transform = legTransform(leg_index, joint_angles);
 
-    // Calculate leg origin based on hexagon geometry
-    float angle = leg * M_PI / 3.0f; // 60 degrees between legs
-    float x = params.hexagon_radius * cos(angle);
-    float y = params.hexagon_radius * sin(angle);
-    float z = 0.0f; // At body level
+    // Transform the leg frame pose to robot frame
+    return leg_frame_pose.transform(transform);
+}
 
-    return Point3D(x, y, z);
+Pose RobotModel::getPoseLegFrame(int leg_index, const JointAngles &joint_angles, const Pose &robot_frame_pose) const {
+    // Get the full transform from robot frame to leg frame
+    Eigen::Matrix4f transform = legTransform(leg_index, joint_angles);
+
+    // Transform the robot frame pose to leg frame (inverse transform)
+    return robot_frame_pose.transform(transform.inverse());
+}
+
+Pose RobotModel::getTipPoseRobotFrame(int leg_index, const JointAngles &joint_angles, const Pose &tip_frame_pose) const {
+    // Get the full transform from robot frame to tip frame
+    Eigen::Matrix4f transform = legTransform(leg_index, joint_angles);
+
+    // Transform the tip frame pose to robot frame
+    return tip_frame_pose.transform(transform);
+}
+
+Pose RobotModel::getTipPoseLegFrame(int leg_index, const JointAngles &joint_angles, const Pose &robot_frame_pose) const {
+    // Get the full transform from robot frame to tip frame
+    Eigen::Matrix4f transform = legTransform(leg_index, joint_angles);
+
+    // Transform the robot frame pose to tip frame (inverse transform)
+    return robot_frame_pose.transform(transform.inverse());
 }

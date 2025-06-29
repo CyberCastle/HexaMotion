@@ -34,9 +34,15 @@ void WalkspaceAnalyzer::generateWalkspace() {
             int adjacent1 = (leg + 1) % NUM_LEGS;
             int adjacent2 = (leg + NUM_LEGS - 1) % NUM_LEGS;
 
-            Point3D leg_origin = model_.getLegOrigin(leg);
-            Point3D adj1_origin = model_.getLegOrigin(adjacent1);
-            Point3D adj2_origin = model_.getLegOrigin(adjacent2);
+            // Get leg origins using frame transformation with zero joint angles
+            JointAngles zero_angles(0, 0, 0);
+            Pose leg_origin_pose = model_.getPoseRobotFrame(leg, zero_angles, Pose::Identity());
+            Pose adj1_origin_pose = model_.getPoseRobotFrame(adjacent1, zero_angles, Pose::Identity());
+            Pose adj2_origin_pose = model_.getPoseRobotFrame(adjacent2, zero_angles, Pose::Identity());
+
+            Point3D leg_origin = leg_origin_pose.position;
+            Point3D adj1_origin = adj1_origin_pose.position;
+            Point3D adj2_origin = adj2_origin_pose.position;
 
             float dist_to_adj1 = math_utils::distance(leg_origin, adj1_origin) / 2.0f;
             float dist_to_adj2 = math_utils::distance(leg_origin, adj2_origin) / 2.0f;
@@ -62,7 +68,11 @@ bool WalkspaceAnalyzer::isPositionReachable(int leg_index, const Point3D &positi
     if (leg_index >= NUM_LEGS)
         return false;
 
-    Point3D leg_origin = model_.getLegOrigin(leg_index);
+    // Get leg origin using frame transformation with zero joint angles
+    JointAngles zero_angles(0, 0, 0);
+    Pose leg_origin_pose = model_.getPoseRobotFrame(leg_index, zero_angles, Pose::Identity());
+    Point3D leg_origin = leg_origin_pose.position;
+
     Point3D relative_pos = position - leg_origin;
     float distance = math_utils::magnitude(relative_pos);
 
@@ -390,7 +400,11 @@ bool WalkspaceAnalyzer::balancedStepOptimization(const Point3D &movement,
             optimal[i] = desired;
         } else {
             // Find closest reachable position
-            Point3D leg_origin = model_.getLegOrigin(i);
+            // Get leg origin using frame transformation with zero joint angles
+            JointAngles zero_angles(0, 0, 0);
+            Pose leg_origin_pose = model_.getPoseRobotFrame(i, zero_angles, Pose::Identity());
+            Point3D leg_origin = leg_origin_pose.position;
+
             Point3D relative = desired - leg_origin;
             float distance = math_utils::magnitude(relative);
 

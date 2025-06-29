@@ -153,18 +153,68 @@ struct Point3D {
         return Point3D(x / scalar, y / scalar, z / scalar);
     }
 
-    Point3D &operator+=(const Point3D &other) {
-        x += other.x;
-        y += other.y;
-        z += other.z;
-        return *this;
+    bool operator==(const Point3D &other) const {
+        return (x == other.x && y == other.y && z == other.z);
     }
 
-    Point3D &operator-=(const Point3D &other) {
-        x -= other.x;
-        y -= other.y;
-        z -= other.z;
-        return *this;
+    bool operator!=(const Point3D &other) const {
+        return !(*this == other);
+    }
+
+    float norm() const {
+        return sqrt(x * x + y * y + z * z);
+    }
+
+    Point3D normalized() const {
+        float n = norm();
+        if (n > 0) {
+            return Point3D(x / n, y / n, z / n);
+        }
+        return Point3D(0, 0, 0);
+    }
+};
+
+/**
+ * @brief Pose structure with position and orientation (equivalent to OpenSHC's Pose)
+ */
+struct Pose {
+    Point3D position;
+    Eigen::Quaternionf rotation;
+
+    explicit Pose(const Point3D &pos = Point3D(), const Eigen::Quaternionf &rot = Eigen::Quaternionf::Identity())
+        : position(pos), rotation(rot) {}
+
+    explicit Pose(const Point3D &pos, const Eigen::Vector3f &euler_angles_deg)
+        : position(pos) {
+        Eigen::Vector3f euler_rad = euler_angles_deg * M_PI / 180.0f;
+        rotation = Eigen::AngleAxisf(euler_rad.z(), Eigen::Vector3f::UnitZ()) *
+                   Eigen::AngleAxisf(euler_rad.y(), Eigen::Vector3f::UnitY()) *
+                   Eigen::AngleAxisf(euler_rad.x(), Eigen::Vector3f::UnitX());
+    }
+
+    static Pose Identity() {
+        return Pose(Point3D(), Eigen::Quaternionf::Identity());
+    }
+
+    bool operator==(const Pose &other) const {
+        return (position == other.position && rotation.isApprox(other.rotation));
+    }
+
+    bool operator!=(const Pose &other) const {
+        return !(*this == other);
+    }
+
+    /**
+     * Transform a pose by this pose (equivalent to OpenSHC's transform method)
+     */
+    Pose transform(const Eigen::Matrix4f &transform_matrix) const {
+        Eigen::Vector4f pos_homogeneous(position.x, position.y, position.z, 1.0f);
+        Eigen::Vector4f transformed_pos = transform_matrix * pos_homogeneous;
+
+        Eigen::Matrix3f rot_matrix = transform_matrix.block<3, 3>(0, 0);
+        Eigen::Quaternionf transformed_rot = Eigen::Quaternionf(rot_matrix) * rotation;
+
+        return Pose(Point3D(transformed_pos.x(), transformed_pos.y(), transformed_pos.z()), transformed_rot);
     }
 };
 
@@ -361,8 +411,41 @@ class RobotModel {
     std::pair<float, float> calculateHeightRange() const;
     const Parameters &getParams() const { return params; }
 
-    /** Get leg origin position in robot frame. */
-    Point3D getLegOrigin(int leg) const;
+    /**
+     * @brief Get pose in robot frame (equivalent to OpenSHC's getPoseRobotFrame)
+     * @param leg_index Index of the leg
+     * @param joint_angles Current joint angles
+     * @param leg_frame_pose Pose relative to leg frame (default: identity)
+     * @return Pose transformed to robot frame
+     */
+    Pose getPoseRobotFrame(int leg_index, const JointAngles &joint_angles, const Pose &leg_frame_pose = Pose::Identity()) const;
+
+    /**
+     * @brief Get pose in leg frame (equivalent to OpenSHC's getPoseJointFrame)
+     * @param leg_index Index of the leg
+     * @param joint_angles Current joint angles
+     * @param robot_frame_pose Pose relative to robot frame (default: identity)
+     * @return Pose transformed to leg frame
+     */
+    Pose getPoseLegFrame(int leg_index, const JointAngles &joint_angles, const Pose &robot_frame_pose = Pose::Identity()) const;
+
+    /**
+     * @brief Get tip pose in robot frame (equivalent to OpenSHC's tip getPoseRobotFrame)
+     * @param leg_index Index of the leg
+     * @param joint_angles Current joint angles
+     * @param tip_frame_pose Pose relative to tip frame (default: identity)
+     * @return Tip pose transformed to robot frame
+     */
+    Pose getTipPoseRobotFrame(int leg_index, const JointAngles &joint_angles, const Pose &tip_frame_pose = Pose::Identity()) const;
+
+    /**
+     * @brief Get tip pose in leg frame (equivalent to OpenSHC's tip getPoseTipFrame)
+     * @param leg_index Index of the leg
+     * @param joint_angles Current joint angles
+     * @param robot_frame_pose Pose relative to robot frame (default: identity)
+     * @return Tip pose transformed to leg frame
+     */
+    Pose getTipPoseLegFrame(int leg_index, const JointAngles &joint_angles, const Pose &robot_frame_pose = Pose::Identity()) const;
 
   private:
     const Parameters &params;

@@ -288,7 +288,11 @@ void ManualPoseController::constrainHeight(float &height) const {
 }
 
 void ManualPoseController::constrainLegPosition(int leg_index, Point3D &position) {
-    Point3D leg_origin = model_.getLegOrigin(leg_index);
+    // Get leg origin using frame transformation with zero joint angles
+    JointAngles zero_angles(0, 0, 0);
+    Pose leg_origin_pose = model_.getPoseRobotFrame(leg_index, zero_angles, Pose::Identity());
+    Point3D leg_origin = leg_origin_pose.position;
+
     Point3D relative_pos = position - leg_origin;
     float distance = math_utils::magnitude(relative_pos);
 
