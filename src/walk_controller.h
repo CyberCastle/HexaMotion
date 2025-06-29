@@ -3,8 +3,8 @@
 
 #include "HexaModel.h"
 #include "terrain_adaptation.h"
-#include "workspace_validator.h"
 #include "velocity_limits.h"
+#include "workspace_validator.h"
 #include <memory>
 
 /**
@@ -168,7 +168,7 @@ class WalkController {
     VelocityLimits::LimitValues current_velocity_limits_;
     VelocityLimits::LimitValues current_velocities_;
 
-    // Unified workspace validation (replaces scattered validation code)
+    // Workspace validation
     std::unique_ptr<WorkspaceValidator> workspace_validator_;
 
     // Collision avoidance: track current leg positions

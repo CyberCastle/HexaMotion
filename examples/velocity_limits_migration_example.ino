@@ -8,8 +8,8 @@
  */
 
 #include "HexaModel.h"
-#include "workspace_validator.h"
 #include "velocity_limits.h"
+#include "workspace_validator.h"
 
 // Robot model instance
 RobotModel robot_model;
@@ -20,7 +20,7 @@ VelocityLimits *velocity_limiter;
 void setup() {
     Serial.begin(115200);
     Serial.println("=== Velocity Limits Migration Example ===");
-    Serial.println("Demonstrating unified workspace validation");
+    Serial.println("Demonstrating workspace validation");
 
     // Initialize robot model with default parameters
     robot_model.setDefaultParameters();
@@ -28,7 +28,7 @@ void setup() {
     // Create velocity limits system (now uses WorkspaceValidator internally)
     velocity_limiter = new VelocityLimits(robot_model);
 
-    Serial.println("Velocity limits system initialized with unified workspace validation");
+    Serial.println("Velocity limits system initialized with workspace validation");
 
     // Configure gait parameters
     VelocityLimits::GaitConfig gait_config;
@@ -36,11 +36,11 @@ void setup() {
     gait_config.stance_ratio = 0.65f;      // 65% stance phase
     gait_config.time_to_max_stride = 2.0f; // 2 seconds to max stride
 
-    // Generate velocity limits using unified workspace calculations
+    // Generate velocity limits using workspace calculations
     Serial.println("Generating velocity limits using unified validation...");
     velocity_limiter->generateLimits(gait_config);
 
-    // Test various bearings to show unified workspace scaling
+    // Test various bearings to show workspace scaling
     Serial.println("\n=== Velocity Limits by Bearing (Unified Calculation) ===");
     for (int bearing = 0; bearing < 360; bearing += 45) {
         VelocityLimits::LimitValues limits = velocity_limiter->getLimit(bearing);

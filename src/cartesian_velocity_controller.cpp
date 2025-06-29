@@ -1,18 +1,18 @@
 #include "cartesian_velocity_controller.h"
 #include "hexamotion_constants.h"
 #include "math_utils.h"
-#include "workspace_validator.h" // Use unified validator for workspace constraints
+#include "workspace_validator.h" // Use validator for workspace constraints
 #include <algorithm>
 #include <cmath>
 
 CartesianVelocityController::CartesianVelocityController(const RobotModel &model)
     : model_(model), velocity_control_enabled_(true) {
 
-    // Initialize unified workspace validator for velocity constraints
+    // Initialize workspace validator for velocity constraints
     ValidationConfig config;
     config.enable_collision_checking = false;  // Disable for performance in velocity control
     config.enable_joint_limit_checking = true; // Enable for accurate servo speed calculation
-    unified_validator_ = std::make_unique<WorkspaceValidator>(
+    workspace_validator_ = std::make_unique<WorkspaceValidator>(
         const_cast<RobotModel &>(model), config);
 
     // Initialize with default configurations
@@ -290,22 +290,22 @@ float CartesianVelocityController::calculateLegSpeedCompensation(int leg_index, 
 }
 
 float CartesianVelocityController::applyWorkspaceConstraints(int leg_index, int joint_index, float base_speed) const {
-    // UNIFIED: Use WorkspaceValidator for workspace constraints instead of hardcoded factors
+    // Use WorkspaceValidator for workspace constraints instead of hardcoded factors
 
-    if (!unified_validator_) {
+    if (!workspace_validator_) {
         return base_speed; // Safety fallback
     }
 
     float constrained_speed = base_speed;
 
-    // Get unified scaling factors instead of hardcoded constants
-    auto scaling_factors = unified_validator_->getScalingFactors();
+    // Get scaling factors instead of hardcoded constants
+    auto scaling_factors = workspace_validator_->getScalingFactors();
 
-    // Apply joint-specific constraints using unified scaling
+    // Apply joint-specific constraints using scaling
     switch (joint_index) {
     case 0: // Coxa joint
         // Coxa typically has lower speed requirements
-        constrained_speed *= scaling_factors.workspace_scale; // Use unified workspace scaling
+        constrained_speed *= scaling_factors.workspace_scale; // Use workspace scaling
         break;
     case 1: // Femur joint
         // Femur carries most of the leg motion load - use velocity scaling
@@ -317,12 +317,12 @@ float CartesianVelocityController::applyWorkspaceConstraints(int leg_index, int 
         break;
     }
 
-    // Apply unified velocity scaling constraints
+    // Apply velocity scaling constraints
     const Parameters &params = model_.getParams();
     float min_speed = velocity_scaling_.minimum_speed_ratio * params.default_servo_speed;
     float max_speed = velocity_scaling_.maximum_speed_ratio * params.default_servo_speed;
 
-    // Apply unified safety margin
+    // Apply safety margin
     min_speed *= scaling_factors.safety_margin;
     max_speed *= scaling_factors.safety_margin;
 

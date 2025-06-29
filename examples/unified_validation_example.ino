@@ -1,6 +1,6 @@
 /**
- * @file unified_validation_example.ino
- * @brief Example demonstrating the simplified, unified workspace validation system
+ * @file v_validation_example.ino
+ * @brief Example demonstrating the simplified, workspace validation system
  *
  * This example shows how the scattered workspace validation code has been
  * consolidated into a single, efficient WorkspaceValidator system.
@@ -10,8 +10,8 @@
  */
 
 #include "hexamotion_constants.h"
-#include "workspace_validator.h"
 #include "walk_controller.h"
+#include "workspace_validator.h"
 
 // Mock interfaces for demonstration
 #include "mock_interfaces.h"
@@ -52,7 +52,7 @@ void loop() {
 }
 
 void demonstrateUnifiedValidation(RobotModel &model) {
-    Serial.println("Creating unified workspace validator...");
+    Serial.println("Creating workspace validator...");
 
     // Configure validator for optimal performance
     WorkspaceValidator::ValidationConfig config;
@@ -118,7 +118,7 @@ void compareOldVsNewApproach(RobotModel &model) {
     Serial.println("  RESULT: Inconsistent thresholds, duplicated code, multiple function calls");
 
     Serial.println("\nNEW APPROACH (unified validation):");
-    Serial.println("  - unified_workspace_validator.cpp: Single comprehensive system");
+    Serial.println("  - v_workspace_validator.cpp: Single comprehensive system");
     Serial.println("  - Configurable thresholds via ValidationConfig");
     Serial.println("  - Single function call: validateTarget()");
     Serial.println("  - Automatic constraint application");
@@ -162,14 +162,14 @@ void performanceComparison(RobotModel &model) {
         auto result = validator.validateTarget(i % 6, test_pos, dummy_positions, true);
     }
 
-    unsigned long unified_time = micros() - start_time;
+    unsigned long v_time = micros() - start_time;
 
     Serial.print("Unified validation time: ");
-    Serial.print(unified_time);
+    Serial.print(v_time);
     Serial.println(" microseconds");
 
     Serial.print("Average per validation: ");
-    Serial.print(unified_time / NUM_TESTS);
+    Serial.print(v_time / NUM_TESTS);
     Serial.println(" microseconds");
 
     Serial.println("Note: Old scattered approach would be ~3-5x slower due to");

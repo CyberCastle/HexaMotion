@@ -1,9 +1,9 @@
 /**
  * @file collision_prevention_example.ino
- * @brief Example demonstrating the unified workspace validation for HexaMotion
+ * @brief Example demonstrating the workspace validation for HexaMotion
  *
  * This example shows how the critical collision issue in HexaMotion has been resolved
- * through the unified workspace validation system that replaces all legacy modules.
+ * through the workspace validation system that replaces all legacy modules.
  *
  * MIGRATION COMPLETED:
  * 1. All workspace/collision logic unified in WorkspaceValidator
@@ -14,8 +14,8 @@
 
 #include "collision_diagnostics.cpp"
 #include "hexamotion_constants.h"
-#include "workspace_validator.h"
 #include "walk_controller.h"
+#include "workspace_validator.h"
 
 // Mock interfaces for demonstration
 #include "mock_interfaces.h"
@@ -87,7 +87,7 @@ void compareConfigurations() {
 void testCollisionAvoidance(RobotModel &model) {
     WalkController walk_controller(model);
 
-    // Create unified workspace validator
+    // Create workspace validator
     ValidationConfig config;
     config.safety_margin = 30.0f;
     WorkspaceValidator validator(model, config);

@@ -11,18 +11,18 @@
 #include "admittance_controller.h"
 #include "cartesian_velocity_controller.h"
 #include "terrain_adaptation.h"
-#include "workspace_validator.h"
 #include "velocity_limits.h"
+#include "workspace_validator.h"
 
 // Robot model instance
 RobotModel robot_model;
 
-// All modules using unified workspace validation
+// All modules using workspace validation
 VelocityLimits *velocity_limiter;
 TerrainAdaptation *terrain_adapter;
 CartesianVelocityController *velocity_controller;
 AdmittanceController *admittance_controller;
-WorkspaceValidator *unified_validator;
+WorkspaceValidator *v_validator;
 
 void setup() {
     Serial.begin(115200);
@@ -32,11 +32,11 @@ void setup() {
     // Initialize robot model
     robot_model.setDefaultParameters();
 
-    // Create unified workspace validator
+    // Create workspace validator
     WorkspaceValidator::ValidationConfig config;
     config.enable_collision_checking = true;
     config.enable_joint_limit_checking = true;
-    unified_validator = new WorkspaceValidator(robot_model, config);
+    v_validator = new WorkspaceValidator(robot_model, config);
 
     // Initialize all modules (they now use WorkspaceValidator internally)
     velocity_limiter = new VelocityLimits(robot_model);
@@ -44,9 +44,9 @@ void setup() {
     velocity_controller = new CartesianVelocityController(robot_model);
     admittance_controller = new AdmittanceController(robot_model, nullptr, nullptr);
 
-    Serial.println("All modules initialized with unified workspace validation");
+    Serial.println("All modules initialized with workspace validation");
 
-    // Demonstrate unified workspace validation
+    // Demonstrate workspace validation
     demonstrateUnifiedWorkspace();
 
     // Show migration benefits
@@ -76,8 +76,8 @@ void loop() {
 void demonstrateUnifiedWorkspace() {
     Serial.println("\n=== Unified Workspace Validation ===");
 
-    // Get unified scaling factors used by all modules
-    auto scaling_factors = unified_validator->getScalingFactors();
+    // Get scaling factors used by all modules
+    auto scaling_factors = v_validator->getScalingFactors();
     Serial.println("Unified Scaling Factors:");
     Serial.print("  Workspace scale: ");
     Serial.println(scaling_factors.workspace_scale, 3);
@@ -91,7 +91,7 @@ void demonstrateUnifiedWorkspace() {
     // Test workspace bounds for all legs (now unified across modules)
     Serial.println("\nUnified Workspace Bounds (all modules use these):");
     for (int leg = 0; leg < 6; leg++) {
-        auto bounds = unified_validator->getWorkspaceBounds(leg);
+        auto bounds = v_validator->getWorkspaceBounds(leg);
         Serial.print("Leg ");
         Serial.print(leg);
         Serial.print(": ");
@@ -108,7 +108,7 @@ void demonstrateUnifiedWorkspace() {
 
     // Test position reachability (used by terrain_adaptation)
     Point3D test_position(100, 100, -50);
-    bool is_reachable = unified_validator->isPositionReachable(0, test_position, true);
+    bool is_reachable = v_validator->isPositionReachable(0, test_position, true);
     Serial.print("\nTest position (100,100,-50) reachable: ");
     Serial.println(is_reachable ? "YES" : "NO");
 }
@@ -139,7 +139,7 @@ void demonstrateMigrationBenefits() {
     // 2. PHASE 2: terrain_adaptation.cpp
     Serial.println("\n✅ PHASE 2 - terrain_adaptation.cpp:");
     Serial.println("  • Replaced custom IK validation with unified reachability");
-    Serial.println("  • Uses unified workspace bounds for foot positioning");
+    Serial.println("  • Uses workspace bounds for foot positioning");
     Serial.println("  • Consistent safety margins with other modules");
 
     Point3D target_position(80, 80, -40);
@@ -149,8 +149,8 @@ void demonstrateMigrationBenefits() {
 
     // 3. PHASE 3: cartesian_velocity_controller.cpp
     Serial.println("\n✅ PHASE 3 - cartesian_velocity_controller.cpp:");
-    Serial.println("  • Replaced hardcoded joint factors with unified scaling");
-    Serial.println("  • Uses unified workspace constraints for servo speeds");
+    Serial.println("  • Replaced hardcoded joint factors with scaling");
+    Serial.println("  • Uses workspace constraints for servo speeds");
     Serial.println("  • Consistent velocity scaling across all joints");
 
     velocity_controller->updateServoSpeeds(0.5f, 0.0f, 0.0f, TRIPOD_GAIT);
@@ -161,11 +161,11 @@ void demonstrateMigrationBenefits() {
 
     // 4. PHASE 4: admittance_controller.cpp
     Serial.println("\n✅ PHASE 4 - admittance_controller.cpp:");
-    Serial.println("  • Uses unified workspace bounds for stiffness calculation");
+    Serial.println("  • Uses workspace bounds for stiffness calculation");
     Serial.println("  • Consistent position references across modules");
-    Serial.println("  • Unified workspace height ranges for scaling");
+    Serial.println("  • Workspace height ranges for scaling");
 
-    // Test stiffness calculation with unified workspace
+    // Test stiffness calculation with workspace
     Point3D leg_position(60, 60, -30);
     // Note: This would require public access to test the stiffness calculation
     Serial.println("  • Unified stiffness scaling: INTEGRATED");
@@ -180,13 +180,13 @@ void demonstratePerformanceImprovements() {
     start_time = micros();
     for (int i = 0; i < 100; i++) {
         for (int leg = 0; leg < 6; leg++) {
-            auto bounds = unified_validator->getWorkspaceBounds(leg);
+            auto bounds = v_validator->getWorkspaceBounds(leg);
             (void)bounds; // Suppress unused variable warning
         }
     }
     end_time = micros();
 
-    Serial.print("Unified workspace bounds (600 calls): ");
+    Serial.print("Workspace bounds (600 calls): ");
     Serial.print(end_time - start_time);
     Serial.println(" μs");
 
@@ -194,7 +194,7 @@ void demonstratePerformanceImprovements() {
     start_time = micros();
     for (int i = 0; i < 100; i++) {
         for (int bearing = 0; bearing < 360; bearing += 45) {
-            auto constraints = unified_validator->calculateVelocityConstraints(0, bearing);
+            auto constraints = v_validator->calculateVelocityConstraints(0, bearing);
             (void)constraints; // Suppress unused variable warning
         }
     }
@@ -274,7 +274,6 @@ void printMigrationSummary() {
     Serial.println("\nCode Quality Metrics:");
     Serial.println("• Lines of code eliminated: 400+");
     Serial.println("• Duplicate functions removed: 15+");
-    Serial.println("• Scaling constants unified: 8+");
     Serial.println("• Modules using unified validation: 4/4 (100%)");
     Serial.println("• Performance improvement: ~30% for workspace operations");
     Serial.println("• Maintainability improvement: Significant (single source of truth)");

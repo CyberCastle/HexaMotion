@@ -144,7 +144,7 @@ class CartesianVelocityController {
 
   private:
     const RobotModel &model_;
-    std::unique_ptr<WorkspaceValidator> unified_validator_; // Unified workspace validation
+    std::unique_ptr<WorkspaceValidator> workspace_validator_; // Workspace validation
     std::array<LegServoSpeeds, NUM_LEGS> leg_servo_speeds_;
     VelocityScaling velocity_scaling_;
     GaitSpeedModifiers gait_modifiers_;

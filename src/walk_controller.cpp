@@ -24,7 +24,7 @@ WalkController::WalkController(RobotModel &m)
         current_leg_positions_[i] = Point3D(0, 0, 0);
     }
 
-    // Initialize unified workspace validator with optimized settings
+    // Initialize workspace validator with optimized settings
     ValidationConfig config;
     config.safety_margin_factor = 0.65f;        // Same as original 65% safety margin
     config.collision_safety_margin = 30.0f;     // 30mm safety between legs
@@ -121,7 +121,7 @@ Point3D WalkController::footTrajectory(int leg_index, float phase, float step_he
                                                                    leg_states[leg_index], swing_progress);
     }
 
-    // SIMPLIFIED & UNIFIED: Use WorkspaceValidator for all validation
+    // Use WorkspaceValidator for all validation
     // This replaces the old scattered validation code with a single, optimized system
     auto validation_result = workspace_validator_->validateTarget(
         leg_index, trajectory, current_leg_positions_, true);

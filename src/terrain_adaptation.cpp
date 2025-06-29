@@ -21,11 +21,11 @@ TerrainAdaptation::TerrainAdaptation(RobotModel &model)
       gravity_aligned_tips_(false), step_depth_(STEP_DEPTH_DEFAULT),
       gravity_estimate_(0, 0, -GRAVITY_ACCELERATION) {
 
-    // Initialize unified workspace validator for reachability checking
+    // Initialize workspace validator for reachability checking
     ValidationConfig validator_config;
     validator_config.enable_collision_checking = false;  // Disable for terrain adaptation
     validator_config.enable_joint_limit_checking = true; // Enable for accuracy
-    unified_validator_ = std::make_unique<WorkspaceValidator>(model_, validator_config);
+    workspace_validator_ = std::make_unique<WorkspaceValidator>(model_, validator_config);
 
     // Initialize FSR thresholds from model parameters or use defaults
     const Parameters &params = model_.getParams();
@@ -162,26 +162,26 @@ Point3D TerrainAdaptation::adaptTrajectoryForTerrain(int leg_index, const Point3
 }
 
 bool TerrainAdaptation::isTargetReachableOnTerrain(int leg_index, const Point3D &target) {
-    // UNIFIED: Use WorkspaceValidator instead of custom IK validation
-    if (!unified_validator_) {
+    // Use WorkspaceValidator instead of custom IK validation
+    if (!workspace_validator_) {
         return false; // Safety fallback
     }
 
     // Use high-precision IK validation for terrain adaptation
-    bool is_reachable = unified_validator_->isPositionReachable(leg_index, target, true);
+    bool is_reachable = workspace_validator_->isPositionReachable(leg_index, target, true);
 
     if (!is_reachable) {
         return false;
     }
 
-    // Additional terrain-specific checks using unified workspace bounds
+    // Additional terrain-specific checks using workspace bounds
     if (current_walk_plane_.valid) {
         // Check if target is reasonable relative to walk plane
         Point3D projected = projectOntoWalkPlane(target);
         float walk_plane_deviation = abs(target.z - projected.z);
 
-        // Use unified workspace bounds for step height validation
-        auto bounds = unified_validator_->getWorkspaceBounds(leg_index);
+        // Use workspace bounds for step height validation
+        auto bounds = workspace_validator_->getWorkspaceBounds(leg_index);
         float max_step_height = bounds.max_height - bounds.min_height;
 
         // Allow deviation up to 50% of workspace height range
@@ -231,22 +231,22 @@ void TerrainAdaptation::detectTouchdownEvents(int leg_index, const FSRData &fsr_
 
     // Touchdown detection
     if (fsr_data.pressure > touchdown_threshold_ && !step_plane.valid) {
-        // UNIFIED: Use WorkspaceValidator for foot position calculation
-        if (!unified_validator_) {
+        // Use WorkspaceValidator for foot position calculation
+        if (!workspace_validator_) {
             return; // Safety fallback
         }
 
-        // Get unified workspace bounds instead of manual calculation
-        auto bounds = unified_validator_->getWorkspaceBounds(leg_index);
-        auto scaling_factors = unified_validator_->getScalingFactors();
+        // Get workspace bounds instead of manual calculation
+        auto bounds = workspace_validator_->getWorkspaceBounds(leg_index);
+        auto scaling_factors = workspace_validator_->getScalingFactors();
 
-        // Calculate foot position using unified workspace scaling
+        // Calculate foot position using workspace scaling
         const Parameters &params = model_.getParams();
         float base_angle = leg_index * LEG_ANGLE_SPACING;
         float base_x = params.hexagon_radius * cos(math_utils::degreesToRadians(base_angle));
         float base_y = params.hexagon_radius * sin(math_utils::degreesToRadians(base_angle));
 
-        // Use unified scaling instead of hardcoded 65%
+        // Use scaling instead of hardcoded 65%
         float safe_reach = bounds.max_radius * scaling_factors.workspace_scale;
 
         Point3D foot_position;

@@ -9,7 +9,7 @@ class RobotModel; // Forward declaration
 
 /**
  * @file workspace_validator.h
- * @brief Unified workspace validation and collision avoidance system
+ * @brief Workspace validation and collision avoidance system
  *
  * This is the single source of truth for all workspace validation,
  * collision detection, and spatial constraints in HexaMotion.
@@ -97,7 +97,7 @@ struct ValidationResult {
 };
 
 /**
- * @brief Unified workspace validator and collision avoidance system
+ * @brief Workspace validator and collision avoidance system
  */
 class WorkspaceValidator {
   public:
@@ -184,7 +184,7 @@ class WorkspaceValidator {
     bool isPositionReachable(int leg_index, const Point3D &position, bool use_ik_validation = false) const;
 
     /**
-     * @brief Get unified scaling factors
+     * @brief Get scaling factors
      * @return Current scaling factors used across all modules
      */
     ScalingFactors getScalingFactors() const;

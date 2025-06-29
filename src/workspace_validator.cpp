@@ -181,7 +181,7 @@ WorkspaceValidator::calculateVelocityConstraints(int leg_index, float bearing_de
         // Maximum linear speed: can traverse workspace diameter in one cycle
         constraints.max_linear_velocity = (constraints.workspace_radius * 2.0f) / cycle_time;
 
-        // Apply unified scaling factors
+        // Apply scaling factors
         ScalingFactors scaling = getScalingFactors();
         constraints.max_linear_velocity *= scaling.velocity_scale;
 
@@ -216,7 +216,7 @@ bool WorkspaceValidator::isPositionReachable(int leg_index, const Point3D &posit
 ScalingFactors WorkspaceValidator::getScalingFactors() const {
     ScalingFactors factors;
 
-    // These unified scaling factors replace the scattered constants across the codebase:
+    // These scaling factors replace the scattered constants across the codebase:
     // - WORKSPACE_SCALING_FACTOR (0.8f) -> workspace_scale (0.65f) - more conservative
     // - WALKSPACE_SCALING_FACTOR (0.65f) -> workspace_scale (0.65f) - consistent
     // - DEFAULT_ANGULAR_SCALING (1.0f) -> angular_scale (1.0f) - maintained

@@ -23,11 +23,11 @@ AdmittanceController::AdmittanceController(RobotModel &model, IIMUInterface *imu
       load_stiffness_scaler_(1.5f), step_clearance_(40.0f),
       current_time_(0.0) {
 
-    // Initialize unified workspace validator for position calculations
+    // Initialize workspace validator for position calculations
     ValidationConfig validator_config;
     validator_config.enable_collision_checking = false;   // Disable for performance in admittance control
     validator_config.enable_joint_limit_checking = false; // Not needed for stiffness calculations
-    unified_validator_ = std::make_unique<WorkspaceValidator>(model_, validator_config);
+    workspace_validator_ = std::make_unique<WorkspaceValidator>(model_, validator_config);
 
     delta_time_ = config_.getDeltaTime();
     selectIntegrationMethod();
@@ -192,18 +192,18 @@ float AdmittanceController::calculateStiffnessScale(int leg_index, LegState leg_
     if (leg_state != SWING_PHASE)
         return 1.0f;
 
-    // UNIFIED: Use WorkspaceValidator for default position calculation
-    if (!unified_validator_) {
+    // Use WorkspaceValidator for default position calculation
+    if (!workspace_validator_) {
         return 1.0f; // Safety fallback
     }
 
-    // Get unified workspace bounds for more accurate default position
-    auto bounds = unified_validator_->getWorkspaceBounds(leg_index);
+    // Get workspace bounds for more accurate default position
+    auto bounds = workspace_validator_->getWorkspaceBounds(leg_index);
     Point3D default_pos = bounds.center_position; // Use workspace center as reference
 
     float z_diff = abs(leg_position.z - default_pos.z);
 
-    // Scale based on step clearance using unified workspace height range
+    // Scale based on step clearance using workspace height range
     float workspace_height_range = bounds.max_height - bounds.min_height;
     float normalized_clearance = std::max(step_clearance_, workspace_height_range * 0.1f); // Min 10% of workspace
 

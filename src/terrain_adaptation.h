@@ -62,7 +62,7 @@ class TerrainAdaptation {
 
   private:
     RobotModel &model_;
-    std::unique_ptr<WorkspaceValidator> unified_validator_; // Unified workspace validation
+    std::unique_ptr<WorkspaceValidator> workspace_validator_; // Workspace validation
     bool rough_terrain_mode_;
     bool force_normal_touchdown_;
     bool gravity_aligned_tips_;

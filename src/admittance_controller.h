@@ -76,7 +76,7 @@ class AdmittanceController {
 
   private:
     RobotModel &model_;
-    std::unique_ptr<WorkspaceValidator> unified_validator_; // Unified workspace validation
+    std::unique_ptr<WorkspaceValidator> workspace_validator_; // Workspace validation
     IIMUInterface *imu_;
     IFSRInterface *fsr_;
     ComputeConfig config_;
