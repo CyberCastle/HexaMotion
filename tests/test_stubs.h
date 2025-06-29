@@ -124,7 +124,7 @@ struct DummyFSR : IFSRInterface {
 
     DummyFSR() {
         for (int i = 0; i < NUM_LEGS; i++) {
-            // SIMPLIFIED: Pre-set contact data for testing
+            // Pre-set contact data for testing
             // Real FSR starts with no contact and requires calibration
             test_data[i] = FSRData{5.0f, true, 0.0f};
         }
@@ -141,7 +141,7 @@ struct DummyFSR : IFSRInterface {
     bool calibrateFSR(int) override { return true; }
     float getRawReading(int leg) override {
         if (leg >= 0 && leg < NUM_LEGS) {
-            // SIMPLIFIED: Returns processed pressure value
+            // Returns processed pressure value
             // Real implementation returns raw ADC reading requiring conversion
             return test_data[leg].pressure;
         }
@@ -149,7 +149,7 @@ struct DummyFSR : IFSRInterface {
     }
 
     bool update() override {
-        // SIMPLIFIED: In real implementation, this would:
+        // In real implementation, this would:
         // 1. Trigger AdvancedAnalog DMA to read all FSR channels simultaneously
         // 2. Update internal ADC value registers for all legs
         // 3. Apply calibration curves and noise filtering

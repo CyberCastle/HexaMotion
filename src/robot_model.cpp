@@ -60,7 +60,7 @@ JointAngles RobotModel::inverseKinematics(int leg, const Point3D &p_target) cons
     local_target.y = p_target.y - base_y;
     local_target.z = p_target.z;
 
-    // SIMPLIFIED: Basic workspace validation only (detailed validation done by WorkspaceValidator)
+    // Basic workspace validation only (detailed validation done by WorkspaceValidator)
     float max_reach = params.coxa_length + params.femur_length + params.tibia_length;
     float min_reach = std::abs(params.femur_length - params.tibia_length);
     float distance = sqrt(local_target.x * local_target.x +

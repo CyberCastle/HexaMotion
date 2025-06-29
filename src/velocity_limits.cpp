@@ -191,7 +191,7 @@ void VelocityLimits::calculateOvershoot(const GaitConfig &gait_config) {
 
     // Overshoot distance during acceleration phase
     float accel_time = gait_config.time_to_max_stride;
-    pimpl_->workspace_config_.overshoot_x = 0.5f * max_acceleration * accel_time * accel_time;
+    pimpl_->workspace_config_.overshoot_x = WORKSPACE_SCALING_FACTOR * max_acceleration * accel_time * accel_time;
     pimpl_->workspace_config_.overshoot_y = pimpl_->workspace_config_.overshoot_x; // Symmetric for now
 
     // Apply safety margin

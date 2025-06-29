@@ -50,11 +50,6 @@
 #define DEFAULT_METACHRONAL_SPEED_FACTOR 1.0f // Default metachronal gait speed factor
 #define DEFAULT_ADAPTIVE_SPEED_FACTOR 1.1f    // Default adaptive gait speed factor
 
-// Joint-specific speed adjustments
-#define COXA_SPEED_FACTOR 0.9f  // Coxa joint speed adjustment (10% slower)
-#define FEMUR_SPEED_FACTOR 1.0f // Femur joint speed adjustment (normal)
-#define TIBIA_SPEED_FACTOR 1.1f // Tibia joint speed adjustment (10% faster)
-
 // Velocity multipliers for different joints
 #define FEMUR_VELOCITY_MULTIPLIER 1.1f // Femur velocity scaling multiplier
 #define TIBIA_VELOCITY_MULTIPLIER 1.2f // Tibia velocity scaling multiplier
@@ -90,17 +85,6 @@
 // Default velocity limits
 #define DEFAULT_MAX_LINEAR_VELOCITY 200.0f // Default maximum linear velocity (mm/s)
 #define DEFAULT_MAX_ANGULAR_VELOCITY 90.0f // Default maximum angular velocity (degrees/s)
-
-// Common robot dimensions (typical values)
-// FIXED: Increased from 200mm to prevent leg collisions
-// Original value was too small and caused workspace overlap between adjacent legs
-// New value calculated using LegCollisionAvoidance::calculateSafeHexagonRadius()
-// Based on total leg reach (359mm) and 65% safe reach (233mm) with 30mm safety margin
-#define DEFAULT_HEXAGON_RADIUS 280.0f // Default body radius (mm) - COLLISION-SAFE VALUE
-#define DEFAULT_COXA_LENGTH 50.0f     // Default coxa segment length (mm)
-#define DEFAULT_FEMUR_LENGTH 101.0f   // Default femur segment length (mm)
-#define DEFAULT_TIBIA_LENGTH 208.0f   // Default tibia segment length (mm)
-#define DEFAULT_ROBOT_HEIGHT 90.0f    // Default robot height (mm)
 
 // Control system defaults
 #define DEFAULT_CONTROL_FREQUENCY 50.0f // Default control frequency (Hz)
