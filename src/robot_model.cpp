@@ -9,6 +9,9 @@
 #include <math.h>
 #include <vector>
 
+// Per-leg base orientation offsets (degrees)
+static const float BASE_THETA_OFFSETS[NUM_LEGS] = {0.0f, -60.0f, -120.0f, 180.0f, 120.0f, 60.0f};
+
 RobotModel::RobotModel(const Parameters &p) : params(p) {
     initializeDH();
 }
@@ -17,31 +20,30 @@ void RobotModel::initializeDH() {
 
     // Initialize default DH parameters if custom parameters are not used
     if (!params.use_custom_dh_parameters) {
-        // Per-leg base joint (coxa) theta offsets (degrees) for mounting orientation
-        // Leg 0 points toward +X (0°), remaining legs are spaced 60° apart
-        static const float base_theta_offsets[NUM_LEGS] = {
-            0.0f, 60.0f, 120.0f, 180.0f, 240.0f, 300.0f};
         for (int l = 0; l < NUM_LEGS; ++l) {
-            // Simplified DH configuration to mimic angle_calculus.cpp behavior
-            // Geometry: H_mm = coxa_length * sin(femur_angle) + femur_length * sin(tibia_angle) + tibia_length
+            // Base transform from body center to leg mount
+            dh_transforms[l][0][0] = params.hexagon_radius; // a
+            dh_transforms[l][0][1] = 0.0f;                 // alpha
+            dh_transforms[l][0][2] = 0.0f;                 // d
+            dh_transforms[l][0][3] = BASE_THETA_OFFSETS[l]; // theta
 
-            // Joint 1 (coxa): rotation about body Z-axis (horizontal plane)
-            dh_transforms[l][0][0] = params.coxa_length;    // a0 - coxa length
-            dh_transforms[l][0][1] = 0.0f;                  // alpha0 - no twist
-            dh_transforms[l][0][2] = 0.0f;                  // d1 - no vertical offset
-            dh_transforms[l][0][3] = base_theta_offsets[l]; // theta1 offset
+            // Coxa link
+            dh_transforms[l][1][0] = params.coxa_length; // a
+            dh_transforms[l][1][1] = 90.0f;              // alpha
+            dh_transforms[l][1][2] = 0.0f;               // d
+            dh_transforms[l][1][3] = 0.0f;               // theta offset
 
-            // Joint 2 (femur): vertical rotation to contribute to coxa_length * sin(femur_angle) height
-            dh_transforms[l][1][0] = 0.0f;               // a1 - no horizontal extension
-            dh_transforms[l][1][1] = 90.0f;              // alpha1 - twist to convert to Z movement
-            dh_transforms[l][1][2] = params.coxa_length; // d2 - coxa offset in Z to allow sin(femur_angle)
-            dh_transforms[l][1][3] = 0.0f;               // theta2 offset
+            // Femur link
+            dh_transforms[l][2][0] = params.femur_length; // a
+            dh_transforms[l][2][1] = 0.0f;               // alpha
+            dh_transforms[l][2][2] = 0.0f;               // d
+            dh_transforms[l][2][3] = 0.0f;               // theta offset
 
-            // Joint 3 (tibia): vertical rotation to contribute to femur_length * sin(tibia_angle) + tibia_length
-            dh_transforms[l][2][0] = 0.0f;                                         // a2 - no horizontal extension
-            dh_transforms[l][2][1] = 0.0f;                                         // alpha2 - no twist
-            dh_transforms[l][2][2] = -(params.femur_length + params.tibia_length); // d3 - total vertical length
-            dh_transforms[l][2][3] = 0.0f;                                         // theta3 offset
+            // Tibia link
+            dh_transforms[l][3][0] = params.tibia_length; // a
+            dh_transforms[l][3][1] = 0.0f;               // alpha
+            dh_transforms[l][3][2] = 0.0f;               // d
+            dh_transforms[l][3][3] = -90.0f;             // theta offset
         }
     }
 }
@@ -51,7 +53,7 @@ JointAngles RobotModel::inverseKinematics(int leg, const Point3D &p_target) cons
     // Inverse kinematics: Damped Least Squares solver using DH parameters
 
     // Transform target to leg coordinate system
-    const float base_angle_deg = leg * LEG_ANGLE_SPACING;
+    const float base_angle_deg = BASE_THETA_OFFSETS[leg];
     float base_x = params.hexagon_radius * cos(math_utils::degreesToRadians(base_angle_deg));
     float base_y = params.hexagon_radius * sin(math_utils::degreesToRadians(base_angle_deg));
 
@@ -78,35 +80,9 @@ JointAngles RobotModel::inverseKinematics(int leg, const Point3D &p_target) cons
     float coxa_start = atan2(local_target.y, local_target.x) * RADIANS_TO_DEGREES_FACTOR;
     coxa_start = constrainAngle(coxa_start, params.coxa_angle_limits[0], params.coxa_angle_limits[1]);
 
-    // Better initial guess for femur and tibia based on target position
-    float target_distance_xy = sqrt(local_target.x * local_target.x + local_target.y * local_target.y);
-    float target_height = -local_target.z; // Convert to positive height
-
-    // Initial estimates for femur and tibia
+    // Initial estimates for femur and tibia based only on DH model
     float femur_estimate = 0.0f;
     float tibia_estimate = 0.0f;
-
-    // Optional: geometric approximation fallback
-    if (femur_estimate == 0.0f && tibia_estimate == 0.0f && target_distance_xy > params.coxa_length && target_height > 0) {
-        float remaining_xy = target_distance_xy - params.coxa_length;
-        float leg_reach = sqrt(remaining_xy * remaining_xy + target_height * target_height);
-        if (leg_reach <= (params.femur_length + params.tibia_length) * 0.95f) {
-            float c = leg_reach;
-            float a = params.femur_length;
-            float b = params.tibia_length;
-            float cos_alpha = (a * a + c * c - b * b) / (2 * a * c);
-            if (cos_alpha >= -1.0f && cos_alpha <= 1.0f) {
-                float alpha = acos(cos_alpha);
-                float theta = atan2(target_height, remaining_xy);
-                femur_estimate = (theta - alpha) * RADIANS_TO_DEGREES_FACTOR;
-                float cos_beta = (a * a + b * b - c * c) / (2 * a * b);
-                if (cos_beta >= -1.0f && cos_beta <= 1.0f) {
-                    float beta = acos(cos_beta);
-                    tibia_estimate = (M_PI - beta) * RADIANS_TO_DEGREES_FACTOR;
-                }
-            }
-        }
-    }
 
     // Clamp initial estimates to joint limits
     femur_estimate = constrainAngle(femur_estimate, params.femur_angle_limits[0], params.femur_angle_limits[1]);
@@ -119,13 +95,22 @@ JointAngles RobotModel::inverseKinematics(int leg, const Point3D &p_target) cons
     current_angles.femur = constrainAngle(current_angles.femur, params.femur_angle_limits[0], params.femur_angle_limits[1]);
     current_angles.tibia = constrainAngle(current_angles.tibia, params.tibia_angle_limits[0], params.tibia_angle_limits[1]);
 
-    // DLS iterative solution - production-ready 3x3 solver
+    // DLS iterative solution - 6x6 solver including orientation
     const float tolerance = 0.001f;
     const float dls_coefficient = 0.05f;
 
     for (int iter = 0; iter < params.ik.max_iterations; ++iter) {
-        // Calculate current position using forward kinematics
-        Point3D current_pos = forwardKinematics(leg, current_angles);
+        // Calculate full transform for current joint angles
+        Eigen::Matrix4f current_tf = legTransform(leg, current_angles);
+        Point3D current_pos{current_tf(0, 3), current_tf(1, 3), current_tf(2, 3)};
+
+        // Orientation error relative to identity (no rotation target)
+        Eigen::Matrix3f R = current_tf.block<3, 3>(0, 0);
+        Eigen::Vector3f orientation_error;
+        orientation_error << (R(2, 1) - R(1, 2)),
+            (R(0, 2) - R(2, 0)),
+            (R(1, 0) - R(0, 1));
+        orientation_error *= 0.5f;
 
         // Position error (3D)
         Eigen::Vector3f position_error3;
@@ -133,21 +118,65 @@ JointAngles RobotModel::inverseKinematics(int leg, const Point3D &p_target) cons
             (local_target.y - current_pos.y),
             (local_target.z - current_pos.z);
 
+        // Combined error vector (orientation + position)
+        Eigen::Matrix<float, 6, 1> error6;
+        error6.segment<3>(0) = orientation_error;
+        error6.segment<3>(3) = position_error3;
+
         // Check for convergence
         if (position_error3.norm() < tolerance)
             break;
 
-        // 3x3 Jacobian for position only
-        Eigen::Matrix3f jacobian3 = calculateJacobian(leg, current_angles, p_target);
+        // Calculate both position and orientation Jacobians
+        // Build transforms for Jacobian computation
+        const float joint_deg[DOF_PER_LEG] = {current_angles.coxa, current_angles.femur, current_angles.tibia};
+        std::vector<Eigen::Matrix4f> transforms(DOF_PER_LEG + 1);
+        // Base transform from DH table
+        float a0 = dh_transforms[leg][0][0];
+        float alpha0 = dh_transforms[leg][0][1];
+        float d0 = dh_transforms[leg][0][2];
+        float theta0 = dh_transforms[leg][0][3];
+        transforms[0] = math_utils::dhTransform(a0, math_utils::degreesToRadians(alpha0), d0, math_utils::degreesToRadians(theta0));
+
+        for (int j = 1; j <= DOF_PER_LEG; ++j) {
+            float a = dh_transforms[leg][j][0];
+            float alpha = dh_transforms[leg][j][1];
+            float d = dh_transforms[leg][j][2];
+            float theta_off = dh_transforms[leg][j][3];
+            float theta = theta_off + joint_deg[j - 1];
+            float alpha_rad = math_utils::degreesToRadians(alpha);
+            float theta_rad = math_utils::degreesToRadians(theta);
+            transforms[j] = transforms[j - 1] * math_utils::dhTransform(a, alpha_rad, d, theta_rad);
+        }
+
+        Eigen::Matrix3f jacobian_pos;
+        Eigen::Matrix3f jacobian_ori;
+
+        Eigen::Vector3f pe = transforms[DOF_PER_LEG].block<3, 1>(0, 3);
+        Eigen::Vector3f z0(0, 0, 1);
+        Eigen::Vector3f p0 = transforms[0].block<3, 1>(0, 3);
+        jacobian_pos.col(0) = z0.cross(pe - p0);
+        jacobian_ori.col(0) = z0;
+
+        for (int j = 1; j < DOF_PER_LEG; ++j) {
+            Eigen::Vector3f zj = transforms[j].block<3, 1>(0, 2);
+            Eigen::Vector3f pj = transforms[j].block<3, 1>(0, 3);
+            jacobian_pos.col(j) = zj.cross(pe - pj);
+            jacobian_ori.col(j) = zj;
+        }
+
+        Eigen::Matrix<float, 6, 3> jacobian6;
+        jacobian6.block<3, 3>(0, 0) = jacobian_ori;
+        jacobian6.block<3, 3>(3, 0) = jacobian_pos;
 
         // Damped least squares inverse: J_inv = J^T * (J*J^T + λ^2 I)^(-1)
-        Eigen::Matrix3f JJT3 = jacobian3 * jacobian3.transpose();
-        Eigen::Matrix3f identity3 = Eigen::Matrix3f::Identity();
-        Eigen::Matrix3f damped_inv3 = (JJT3 + dls_coefficient * dls_coefficient * identity3).inverse();
-        Eigen::Matrix3f jacobian_inverse3 = jacobian3.transpose() * damped_inv3;
+        Eigen::Matrix<float, 6, 6> JJT6 = jacobian6 * jacobian6.transpose();
+        Eigen::Matrix<float, 6, 6> identity6 = Eigen::Matrix<float, 6, 6>::Identity();
+        Eigen::Matrix<float, 6, 6> damped_inv6 = (JJT6 + dls_coefficient * dls_coefficient * identity6).inverse();
+        Eigen::Matrix<float, 3, 6> jacobian_inverse6 = jacobian6.transpose() * damped_inv6;
 
         // Calculate joint angle changes
-        Eigen::Vector3f angle_delta = jacobian_inverse3 * position_error3;
+        Eigen::Vector3f angle_delta = jacobian_inverse6 * error6;
 
         // Apply adaptive step scaling to prevent large jumps
         float step_scale = 1.0f;
@@ -183,21 +212,22 @@ Point3D RobotModel::forwardKinematics(int leg_index, const JointAngles &angles) 
 }
 
 Eigen::Matrix4f RobotModel::legTransform(int leg_index, const JointAngles &q) const {
-    const float base_angle_deg = leg_index * LEG_ANGLE_SPACING;
-    Eigen::Matrix4f T = Eigen::Matrix4f::Identity();
-    T(0, 3) = params.hexagon_radius * cos(math_utils::degreesToRadians(base_angle_deg));
-    T(1, 3) = params.hexagon_radius * sin(math_utils::degreesToRadians(base_angle_deg));
-    T.block<3, 3>(0, 0) = math_utils::rotationMatrixZ(base_angle_deg);
+    // Base transform from DH parameters
+    Eigen::Matrix4f T = math_utils::dhTransform(
+        dh_transforms[leg_index][0][0],
+        math_utils::degreesToRadians(dh_transforms[leg_index][0][1]),
+        dh_transforms[leg_index][0][2],
+        math_utils::degreesToRadians(dh_transforms[leg_index][0][3]));
 
     const float joint_deg[DOF_PER_LEG] = {q.coxa, q.femur, q.tibia};
 
-    for (int j = 0; j < DOF_PER_LEG; ++j) {
+    for (int j = 1; j <= DOF_PER_LEG; ++j) {
         // Extract DH parameters for this joint
         float a = dh_transforms[leg_index][j][0];      // link length
         float alpha = dh_transforms[leg_index][j][1];  // twist angle
         float d = dh_transforms[leg_index][j][2];      // link offset
         float theta0 = dh_transforms[leg_index][j][3]; // joint angle offset
-        float theta = theta0 + joint_deg[j];           // total joint angle
+        float theta = theta0 + joint_deg[j - 1];       // total joint angle
         float alpha_rad = math_utils::degreesToRadians(alpha);
         float theta_rad = math_utils::degreesToRadians(theta);
         T *= math_utils::dhTransform(a, alpha_rad, d, theta_rad);
@@ -211,11 +241,11 @@ Eigen::Matrix3f RobotModel::calculateJacobian(int leg, const JointAngles &q, con
     // Based on syropod_highlevel_controller implementation
 
     // Get base transform for this leg
-    const float base_angle_deg = leg * LEG_ANGLE_SPACING;
-    Eigen::Matrix4f T_base = Eigen::Matrix4f::Identity();
-    T_base(0, 3) = params.hexagon_radius * cos(math_utils::degreesToRadians(base_angle_deg));
-    T_base(1, 3) = params.hexagon_radius * sin(math_utils::degreesToRadians(base_angle_deg));
-    T_base.block<3, 3>(0, 0) = math_utils::rotationMatrixZ(base_angle_deg);
+    Eigen::Matrix4f T_base = math_utils::dhTransform(
+        dh_transforms[leg][0][0],
+        math_utils::degreesToRadians(dh_transforms[leg][0][1]),
+        dh_transforms[leg][0][2],
+        math_utils::degreesToRadians(dh_transforms[leg][0][3]));
 
     // Calculate transforms and positions for each joint
     std::vector<Eigen::Matrix4f> transforms(DOF_PER_LEG + 1);
@@ -224,18 +254,18 @@ Eigen::Matrix3f RobotModel::calculateJacobian(int leg, const JointAngles &q, con
     const float joint_deg[DOF_PER_LEG] = {q.coxa, q.femur, q.tibia};
 
     // Build transforms step by step using DH parameters
-    for (int j = 0; j < DOF_PER_LEG; ++j) {
+    for (int j = 1; j <= DOF_PER_LEG; ++j) {
         // Extract DH parameters for this joint
         float a = dh_transforms[leg][j][0];      // link length
         float alpha = dh_transforms[leg][j][1];  // twist angle
         float d = dh_transforms[leg][j][2];      // link offset
         float theta0 = dh_transforms[leg][j][3]; // joint angle offset
-        float theta = theta0 + joint_deg[j];     // total joint angle
+        float theta = theta0 + joint_deg[j - 1]; // total joint angle
 
         float alpha_rad = math_utils::degreesToRadians(alpha);
         float theta_rad = math_utils::degreesToRadians(theta);
 
-        transforms[j + 1] = transforms[j] * math_utils::dhTransform(a, alpha_rad, d, theta_rad);
+        transforms[j] = transforms[j - 1] * math_utils::dhTransform(a, alpha_rad, d, theta_rad);
     }
 
     // End-effector transform
