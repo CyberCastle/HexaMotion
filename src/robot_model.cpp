@@ -58,8 +58,11 @@ JointAngles RobotModel::inverseKinematics(int leg, const Point3D &p_target) cons
     float base_y = params.hexagon_radius * sin(math_utils::degreesToRadians(base_angle_deg));
 
     Point3D local_target;
-    local_target.x = p_target.x - base_x;
-    local_target.y = p_target.y - base_y;
+    float dx = p_target.x - base_x;
+    float dy = p_target.y - base_y;
+    float angle_rad = math_utils::degreesToRadians(-base_angle_deg);
+    local_target.x = cos(angle_rad) * dx - sin(angle_rad) * dy;
+    local_target.y = sin(angle_rad) * dx + cos(angle_rad) * dy;
     local_target.z = p_target.z;
 
     // Basic workspace validation only (detailed validation done by WorkspaceValidator)
@@ -103,17 +106,23 @@ JointAngles RobotModel::inverseKinematics(int leg, const Point3D &p_target) cons
     const float dls_coefficient = 0.05f;
 
     for (int iter = 0; iter < params.ik.max_iterations; ++iter) {
-        // Calculate full transform for current joint angles
-        Eigen::Matrix4f current_tf = legTransform(leg, current_angles);
+        // Calculate transform relative to the leg base
+        const float joint_deg[DOF_PER_LEG] = {current_angles.coxa, current_angles.femur, current_angles.tibia};
+        Eigen::Matrix4f current_tf = Eigen::Matrix4f::Identity();
+        for (int j = 1; j <= DOF_PER_LEG; ++j) {
+            float a = dh_transforms[leg][j][0];
+            float alpha = dh_transforms[leg][j][1];
+            float d = dh_transforms[leg][j][2];
+            float theta_off = dh_transforms[leg][j][3];
+            float theta = theta_off + joint_deg[j - 1];
+            float alpha_rad = math_utils::degreesToRadians(alpha);
+            float theta_rad = math_utils::degreesToRadians(theta);
+            current_tf *= math_utils::dhTransform(a, alpha_rad, d, theta_rad);
+        }
         Point3D current_pos{current_tf(0, 3), current_tf(1, 3), current_tf(2, 3)};
 
         // Orientation error relative to identity (no rotation target)
-        Eigen::Matrix3f R = current_tf.block<3, 3>(0, 0);
-        Eigen::Vector3f orientation_error;
-        orientation_error << (R(2, 1) - R(1, 2)),
-            (R(0, 2) - R(2, 0)),
-            (R(1, 0) - R(0, 1));
-        orientation_error *= 0.5f;
+        Eigen::Vector3f orientation_error = Eigen::Vector3f::Zero();
 
         // Position error (3D)
         Eigen::Vector3f position_error3;
@@ -130,17 +139,10 @@ JointAngles RobotModel::inverseKinematics(int leg, const Point3D &p_target) cons
         if (position_error3.norm() < tolerance)
             break;
 
-        // Calculate both position and orientation Jacobians
+        // Calculate both position and orientation Jacobians in leg frame
         // Build transforms for Jacobian computation
-        const float joint_deg[DOF_PER_LEG] = {current_angles.coxa, current_angles.femur, current_angles.tibia};
         std::vector<Eigen::Matrix4f> transforms(DOF_PER_LEG + 1);
-        // Base transform from DH table
-        float a0 = dh_transforms[leg][0][0];
-        float alpha0 = dh_transforms[leg][0][1];
-        float d0 = dh_transforms[leg][0][2];
-        float theta0 = dh_transforms[leg][0][3];
-        transforms[0] = math_utils::dhTransform(a0, math_utils::degreesToRadians(alpha0), d0, math_utils::degreesToRadians(theta0));
-
+        transforms[0] = Eigen::Matrix4f::Identity();
         for (int j = 1; j <= DOF_PER_LEG; ++j) {
             float a = dh_transforms[leg][j][0];
             float alpha = dh_transforms[leg][j][1];
