@@ -9,7 +9,7 @@ int main() {
     p.coxa_length = 50;
     p.femur_length = 101;
     p.tibia_length = 208;
-    p.robot_height = 100;
+    p.robot_height = 120;
     p.control_frequency = 50;
     p.coxa_angle_limits[0] = -65;
     p.coxa_angle_limits[1] = 65;
@@ -31,9 +31,10 @@ int main() {
     for (int leg = 0; leg < NUM_LEGS; ++leg) {
         Point3D pos = model.forwardKinematics(leg, q);
         float theta_rad = base_theta_offsets[leg] * M_PI / 180.0f;
-        float expected_x = (p.hexagon_radius + p.coxa_length + p.femur_length) * cos(theta_rad);
-        float expected_y = (p.hexagon_radius + p.coxa_length + p.femur_length) * sin(theta_rad);
-        float expected_z = -p.tibia_length;
+        float reach = p.hexagon_radius + p.coxa_length + p.femur_length;
+        float expected_x = reach * cos(theta_rad) + p.tibia_length * sin(theta_rad);
+        float expected_y = reach * sin(theta_rad) - p.tibia_length * cos(theta_rad);
+        float expected_z = 0.0f;
         float err = std::sqrt(std::pow(pos.x - expected_x, 2) +
                               std::pow(pos.y - expected_y, 2) +
                               std::pow(pos.z - expected_z, 2));
