@@ -26,28 +26,28 @@ struct ValidationConfig {
     bool enable_collision_checking = true;
     bool enable_joint_limit_checking = true;
     bool enable_terrain_adaptation = true;
-    float safety_margin = 20.0f;           // Safety margin for collision avoidance (mm)
-    float angular_velocity_scaling = 0.8f; // Scaling factor for angular velocities
-    float max_velocity_scale = 1.2f;       // Maximum velocity scaling factor
-    float workspace_margin_factor = 0.95f; // Factor for workspace boundary margins
-    float collision_safety_margin = 25.0f; // Specific margin for collision avoidance (mm)
-    float safety_margin_factor = 0.9f;     // Factor for total reach calculations
-    float minimum_reach_factor = 0.1f;     // Factor for minimum reach calculations
+    double safety_margin = 20.0f;           // Safety margin for collision avoidance (mm)
+    double angular_velocity_scaling = 0.8f; // Scaling factor for angular velocities
+    double max_velocity_scale = 1.2f;       // Maximum velocity scaling factor
+    double workspace_margin_factor = 0.95f; // Factor for workspace boundary margins
+    double collision_safety_margin = 25.0f; // Specific margin for collision avoidance (mm)
+    double safety_margin_factor = 0.9f;     // Factor for total reach calculations
+    double minimum_reach_factor = 0.1f;     // Factor for minimum reach calculations
 };
 
 /**
  * @brief Workspace bounds information
  */
 struct WorkspaceBounds {
-    float min_reach;
-    float max_reach;
-    float preferred_min_reach;
-    float preferred_max_reach;
+    double min_reach;
+    double max_reach;
+    double preferred_min_reach;
+    double preferred_max_reach;
     bool has_height_restrictions;
-    float min_height;
-    float max_height;
-    float min_radius;        // Added for compatibility
-    float max_radius;        // Added for compatibility
+    double min_height;
+    double max_height;
+    double min_radius;        // Added for compatibility
+    double max_radius;        // Added for compatibility
     Point3D center_position; // Added for center position tracking
 };
 
@@ -55,29 +55,29 @@ struct WorkspaceBounds {
  * @brief Velocity constraints for a specific direction and configuration
  */
 struct VelocityConstraints {
-    float max_forward_velocity;
-    float max_backward_velocity;
-    float max_lateral_velocity;
-    float max_angular_velocity;
+    double max_forward_velocity;
+    double max_backward_velocity;
+    double max_lateral_velocity;
+    double max_angular_velocity;
     bool direction_blocked;
-    float scaling_factor;
-    float max_linear_velocity; // Added for compatibility
-    float max_acceleration;    // Added for compatibility
-    float workspace_radius;    // Added for workspace calculations
-    float stance_radius;       // Added for angular calculations
+    double scaling_factor;
+    double max_linear_velocity; // Added for compatibility
+    double max_acceleration;    // Added for compatibility
+    double workspace_radius;    // Added for workspace calculations
+    double stance_radius;       // Added for angular calculations
 };
 
 /**
  * @brief Scaling factors for different movement types
  */
 struct ScalingFactors {
-    float linear_scale;
-    float angular_scale;
-    float workspace_scale;
-    float collision_scale;
-    float velocity_scale;     // Added for velocity scaling
-    float acceleration_scale; // Added for acceleration scaling
-    float safety_margin;      // Added for safety margin scaling
+    double linear_scale;
+    double angular_scale;
+    double workspace_scale;
+    double collision_scale;
+    double velocity_scale;     // Added for velocity scaling
+    double acceleration_scale; // Added for acceleration scaling
+    double safety_margin;      // Added for safety margin scaling
 };
 
 /**
@@ -88,8 +88,8 @@ struct ValidationResult {
     bool is_reachable;
     bool is_collision_free;
     bool is_within_joint_limits;
-    float distance_from_base;
-    float collision_risk_factor;
+    double distance_from_base;
+    double collision_risk_factor;
 
     bool isValid() const {
         return is_reachable && is_collision_free && is_within_joint_limits;
@@ -135,7 +135,7 @@ class WorkspaceValidator {
      * @param current_leg_positions Current positions of all legs
      * @return Risk factor (0.0 = no risk, 1.0 = high risk)
      */
-    float checkCollisionRisk(int leg_index, const Point3D &target_position,
+    double checkCollisionRisk(int leg_index, const Point3D &target_position,
                              const Point3D current_leg_positions[NUM_LEGS]) const;
 
     /**
@@ -154,7 +154,7 @@ class WorkspaceValidator {
      * @param min_reach Output: minimum reachable distance
      * @param max_reach Output: maximum reachable distance
      */
-    void getWorkspaceBounds(int leg_index, float &min_reach, float &max_reach) const;
+    void getWorkspaceBounds(int leg_index, double &min_reach, double &max_reach) const;
 
     /**
      * @brief Get comprehensive workspace bounds for a leg
@@ -171,8 +171,8 @@ class WorkspaceValidator {
      * @param stance_ratio Fraction of time leg is on ground
      * @return Velocity constraints for this configuration
      */
-    VelocityConstraints calculateVelocityConstraints(int leg_index, float bearing_degrees = 0.0f,
-                                                     float gait_frequency = 1.0f, float stance_ratio = 0.6f) const;
+    VelocityConstraints calculateVelocityConstraints(int leg_index, double bearing_degrees = 0.0f,
+                                                     double gait_frequency = 1.0f, double stance_ratio = 0.6f) const;
 
     /**
      * @brief Check if position is reachable (optimized for WalkspaceAnalyzer)
@@ -193,13 +193,13 @@ class WorkspaceValidator {
      * @brief Update safety margin
      * @param margin New safety margin value
      */
-    void updateSafetyMargin(float margin);
+    void updateSafetyMargin(double margin);
 
     /**
      * @brief Update angular scaling
      * @param scaling New angular scaling value
      */
-    void updateAngularScaling(float scaling);
+    void updateAngularScaling(double scaling);
 
     /**
      * @brief Update configuration
@@ -219,7 +219,7 @@ class WorkspaceValidator {
      * @param safety_margin Safety margin between adjacent leg workspaces (mm)
      * @return Minimum safe hexagon radius
      */
-    static float calculateSafeHexagonRadius(float leg_reach, float safety_margin = 30.0f);
+    static double calculateSafeHexagonRadius(double leg_reach, double safety_margin = 30.0f);
 
     /**
      * @brief Get distance between two 2D points (ignoring Z coordinate)
@@ -227,7 +227,7 @@ class WorkspaceValidator {
      * @param p2 Second point
      * @return Distance in mm
      */
-    static float getDistance2D(const Point3D &p1, const Point3D &p2);
+    static double getDistance2D(const Point3D &p1, const Point3D &p2);
 
     /**
      * @brief Get the indices of adjacent legs for a given leg
@@ -246,9 +246,9 @@ class WorkspaceValidator {
      * @param safety_margin Safety margin to maintain
      * @return true if workspaces would overlap
      */
-    static bool checkWorkspaceOverlap(const Point3D &leg1_base, float leg1_reach,
-                                      const Point3D &leg2_base, float leg2_reach,
-                                      float safety_margin = 20.0f);
+    static bool checkWorkspaceOverlap(const Point3D &leg1_base, double leg1_reach,
+                                      const Point3D &leg2_base, double leg2_reach,
+                                      double safety_margin = 20.0f);
 
     /**
      * @brief Check if a target would collide with adjacent legs
@@ -260,7 +260,7 @@ class WorkspaceValidator {
      * @return true if collision would occur
      */
     bool wouldCollideWithAdjacent(int leg_index, const Point3D &target_position,
-                                  float hexagon_radius, float leg_reach,
+                                  double hexagon_radius, double leg_reach,
                                   const Point3D adjacent_positions[NUM_LEGS]) const;
 
     /**
@@ -273,7 +273,7 @@ class WorkspaceValidator {
      * @return true if adjustment was successful
      */
     bool adjustForCollisionAvoidance(int leg_index, Point3D &target_position,
-                                     float hexagon_radius, float leg_reach,
+                                     double hexagon_radius, double leg_reach,
                                      const Point3D adjacent_positions[NUM_LEGS]) const;
 
   private:
@@ -298,7 +298,7 @@ class WorkspaceValidator {
     /**
      * @brief Calculate distance from leg base to target
      */
-    float getDistanceFromBase(int leg_index, const Point3D &target) const;
+    double getDistanceFromBase(int leg_index, const Point3D &target) const;
 
     /**
      * @brief Check if position respects joint limits (requires IK)
@@ -317,8 +317,8 @@ class WorkspaceValidator {
                                                 const Point3D current_leg_positions[NUM_LEGS]) const;
 
     // Constants
-    static constexpr float LEG_ANGLE_SPACING_DEGREES = 60.0f;
-    static constexpr float MIN_LEG_SEPARATION = 50.0f; // Minimum distance between leg tips (mm)
+    static constexpr double LEG_ANGLE_SPACING_DEGREES = 60.0f;
+    static constexpr double MIN_LEG_SEPARATION = 50.0f; // Minimum distance between leg tips (mm)
 };
 
 #endif // WORKSPACE_VALIDATOR_H

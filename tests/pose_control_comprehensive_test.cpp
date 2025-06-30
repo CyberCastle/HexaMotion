@@ -47,7 +47,7 @@ class PoseControlTest {
         std::cout << "✓ X/Y posing mode set correctly" << std::endl;
 
         // Test setting body position
-        Eigen::Vector3f test_position(10.0f, -15.0f, 5.0f);
+        Eigen::Vector3d test_position(10.0f, -15.0f, 5.0f);
         success = state_controller_->setDesiredBodyPosition(test_position);
         assert(success);
         std::cout << "✓ Body position set for X/Y control" << std::endl;
@@ -59,7 +59,7 @@ class PoseControlTest {
         std::cout << "✓ Pitch/Roll posing mode set correctly" << std::endl;
 
         // Test setting body orientation
-        Eigen::Vector3f test_orientation(5.0f, -10.0f, 0.0f); // roll, pitch, yaw
+        Eigen::Vector3d test_orientation(5.0f, -10.0f, 0.0f); // roll, pitch, yaw
         success = state_controller_->setDesiredBodyOrientation(test_orientation);
         assert(success);
         std::cout << "✓ Body orientation set for Pitch/Roll control" << std::endl;
@@ -118,8 +118,8 @@ class PoseControlTest {
         state_controller_->setPosingMode(PosingMode::POSING_EXTERNAL);
 
         // Set desired pose
-        Eigen::Vector3f position(20.0f, -10.0f, 5.0f);
-        Eigen::Vector3f orientation(10.0f, -5.0f, 15.0f);
+        Eigen::Vector3d position(20.0f, -10.0f, 5.0f);
+        Eigen::Vector3d orientation(10.0f, -5.0f, 15.0f);
 
         state_controller_->setDesiredPose(position, orientation);
         std::cout << "✓ Desired pose set" << std::endl;
@@ -146,22 +146,22 @@ class PoseControlTest {
 
         // Test OpenSHC equivalent X_Y mode
         state_controller_->setPosingMode(PosingMode::POSING_X_Y);
-        Eigen::Vector3f xy_position(15.0f, -20.0f, 0.0f);
+        Eigen::Vector3d xy_position(15.0f, -20.0f, 0.0f);
         state_controller_->setDesiredBodyPosition(xy_position);
         state_controller_->update(0.02f);
         std::cout << "✓ OpenSHC equivalent X_Y mode executed" << std::endl;
 
         // Test OpenSHC equivalent PITCH_ROLL mode
         state_controller_->setPosingMode(PosingMode::POSING_PITCH_ROLL);
-        Eigen::Vector3f pr_orientation(8.0f, -12.0f, 0.0f);
+        Eigen::Vector3d pr_orientation(8.0f, -12.0f, 0.0f);
         state_controller_->setDesiredBodyOrientation(pr_orientation);
         state_controller_->update(0.02f);
         std::cout << "✓ OpenSHC equivalent PITCH_ROLL mode executed" << std::endl;
 
         // Test OpenSHC equivalent Z_YAW mode
         state_controller_->setPosingMode(PosingMode::POSING_Z_YAW);
-        Eigen::Vector3f z_position(0.0f, 0.0f, 25.0f);
-        Eigen::Vector3f yaw_orientation(0.0f, 0.0f, 30.0f);
+        Eigen::Vector3d z_position(0.0f, 0.0f, 25.0f);
+        Eigen::Vector3d yaw_orientation(0.0f, 0.0f, 30.0f);
         state_controller_->setDesiredBodyPosition(z_position);
         state_controller_->setDesiredBodyOrientation(yaw_orientation);
         state_controller_->update(0.02f);
@@ -169,8 +169,8 @@ class PoseControlTest {
 
         // Test OpenSHC equivalent EXTERNAL mode
         state_controller_->setPosingMode(PosingMode::POSING_EXTERNAL);
-        Eigen::Vector3f ext_position(12.0f, -8.0f, 15.0f);
-        Eigen::Vector3f ext_orientation(5.0f, -3.0f, 20.0f);
+        Eigen::Vector3d ext_position(12.0f, -8.0f, 15.0f);
+        Eigen::Vector3d ext_orientation(5.0f, -3.0f, 20.0f);
         state_controller_->setDesiredPose(ext_position, ext_orientation);
         state_controller_->update(0.02f);
         std::cout << "✓ OpenSHC equivalent EXTERNAL mode executed" << std::endl;

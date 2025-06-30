@@ -33,7 +33,7 @@ void demonstrateGaitImplementation(GaitType gait, const std::string &name) {
     std::cout << "Phase |   Leg 0   |   Leg 1   |   Leg 2   |   Leg 3   |   Leg 4   |   Leg 5" << std::endl;
     std::cout << "------+-----------+-----------+-----------+-----------+-----------+-----------" << std::endl;
 
-    for (float phase = 0.0f; phase <= 1.0f; phase += 0.25f) {
+    for (double phase = 0.0f; phase <= 1.0f; phase += 0.25f) {
         std::cout << std::setw(5) << std::setprecision(2) << std::fixed << phase << " |";
 
         for (int leg = 0; leg < NUM_LEGS; leg++) {

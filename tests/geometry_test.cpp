@@ -60,7 +60,7 @@ int main() {
     std::cout << "IK result: (" << ik_bent.coxa << "°, " << ik_bent.femur << "°, " << ik_bent.tibia << "°)" << std::endl;
     std::cout << "FK verify: " << verify_bent.x << ", " << verify_bent.y << ", " << verify_bent.z << std::endl;
 
-    float error = sqrt(pow(pos_bent.x - verify_bent.x, 2) +
+    double error = sqrt(pow(pos_bent.x - verify_bent.x, 2) +
                        pow(pos_bent.y - verify_bent.y, 2) +
                        pow(pos_bent.z - verify_bent.z, 2));
     std::cout << "Error: " << error << "mm" << std::endl;

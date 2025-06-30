@@ -69,10 +69,10 @@ void demonstrateUnifiedValidation(RobotModel &model) {
     // Initialize with default positions
     const Parameters &params = model.getParams();
     for (int leg = 0; leg < NUM_LEGS; leg++) {
-        float angle = leg * 60.0f;
-        float base_x = params.hexagon_radius * cos(angle * M_PI / 180.0f);
-        float base_y = params.hexagon_radius * sin(angle * M_PI / 180.0f);
-        float reach = (params.coxa_length + params.femur_length + params.tibia_length) * 0.6f;
+        double angle = leg * 60.0f;
+        double base_x = params.hexagon_radius * cos(angle * M_PI / 180.0f);
+        double base_y = params.hexagon_radius * sin(angle * M_PI / 180.0f);
+        double reach = (params.coxa_length + params.femur_length + params.tibia_length) * 0.6f;
 
         current_leg_positions[leg].x = base_x + reach * cos(angle * M_PI / 180.0f);
         current_leg_positions[leg].y = base_y + reach * sin(angle * M_PI / 180.0f);

@@ -87,15 +87,15 @@
 #define DEFAULT_MAX_ANGULAR_VELOCITY 90.0f // Default maximum angular velocity (degrees/s)
 
 // Control system defaults
-#define DEFAULT_CONTROL_FREQUENCY 50.0f // Default control frequency (Hz)
+#define DEFAULT_CONTROL_FREQUENCY 50.0 // Default control frequency (Hz)
 
 // Velocity scaling and coupling factors
-#define DEFAULT_ANGULAR_SCALING 1.0f     // Default angular velocity scaling
-#define ANGULAR_LINEAR_COUPLING 0.3f     // Coupling factor between angular and linear velocity
-#define ANGULAR_ACCELERATION_FACTOR 2.0f // Angular acceleration multiplier
-#define WORKSPACE_SCALING_FACTOR 0.5f    // Workspace scaling factor
-#define WALKSPACE_SCALING_FACTOR 0.7f    // Walkspace scaling factor
-#define MIN_SERVO_VELOCITY 0.1f          // Minimum servo velocity (10% of max)
+#define DEFAULT_ANGULAR_SCALING 1.0     // Default angular velocity scaling
+#define ANGULAR_LINEAR_COUPLING 0.3     // Coupling factor between angular and linear velocity
+#define ANGULAR_ACCELERATION_FACTOR 2.0 // Angular acceleration multiplier
+#define WORKSPACE_SCALING_FACTOR 0.5    // Workspace scaling factor
+#define WALKSPACE_SCALING_FACTOR 0.7    // Walkspace scaling factor
+#define MIN_SERVO_VELOCITY 0.1          // Minimum servo velocity (10% of max)
 #define FULL_ROTATION_DEGREES 360.0f     // Full rotation in degrees
 #define HALF_ROTATION_DEGREES 180.0f     // Half rotation in degrees
 #define BEARING_STEP_DEGREES 30.0f       // Bearing sampling step in degrees

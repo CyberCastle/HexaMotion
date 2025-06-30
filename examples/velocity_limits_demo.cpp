@@ -29,9 +29,9 @@ void demonstrateBearingBasedLimits(VelocityLimits &velocity_limits) {
     std::cout << "=== Bearing-Based Velocity Limits ===\n";
 
     // Test limits at different bearings
-    std::vector<float> test_bearings = {0.0f, TIBIA_ANGLE_MAX, DEFAULT_MAX_ANGULAR_VELOCITY, 135.0f, HALF_ROTATION_DEGREES, 225.0f, 270.0f, 315.0f};
+    std::vector<double> test_bearings = {0.0f, TIBIA_ANGLE_MAX, DEFAULT_MAX_ANGULAR_VELOCITY, 135.0f, HALF_ROTATION_DEGREES, 225.0f, 270.0f, 315.0f};
 
-    for (float bearing : test_bearings) {
+    for (double bearing : test_bearings) {
         auto limits = velocity_limits.getLimit(bearing);
         std::cout << "Bearing " << std::setw(3) << bearing << "°: "
                   << "Vx=" << std::setw(6) << limits.linear_x
@@ -84,9 +84,9 @@ void demonstrateVelocityScaling(VelocityLimits &velocity_limits) {
 
     VelocityLimits::LimitValues base_limits(DEFAULT_ANGULAR_SCALING, DEFAULT_ANGULAR_SCALING, ANGULAR_ACCELERATION_FACTOR, DEFAULT_ANGULAR_SCALING);
 
-    std::vector<float> angular_percentages = {0.0f, 0.25f, WORKSPACE_SCALING_FACTOR, 0.75f, DEFAULT_ANGULAR_SCALING};
+    std::vector<double> angular_percentages = {0.0f, 0.25f, WORKSPACE_SCALING_FACTOR, 0.75f, DEFAULT_ANGULAR_SCALING};
 
-    for (float percentage : angular_percentages) {
+    for (double percentage : angular_percentages) {
         auto scaled = velocity_limits.scaleVelocityLimits(base_limits, percentage);
 
         std::cout << "Angular demand " << std::setw(4) << (percentage * 100) << "%: "
@@ -101,7 +101,7 @@ void demonstrateAccelerationLimiting(VelocityLimits &velocity_limits) {
 
     VelocityLimits::LimitValues target(DEFAULT_ANGULAR_SCALING, WORKSPACE_SCALING_FACTOR, 1.5f, 0.8f);
     VelocityLimits::LimitValues current(0.0f, 0.0f, 0.0f, 0.8f);
-    float dt = MIN_SERVO_VELOCITY;
+    double dt = MIN_SERVO_VELOCITY;
 
     std::cout << "Target velocities: Vx=" << target.linear_x
               << " Vy=" << target.linear_y << " ω=" << target.angular_z << "\n";
@@ -135,7 +135,7 @@ void demonstrateWalkControllerIntegration(WalkController &walk_controller) {
     printWorkspaceConfig(workspace);
 
     // Test velocity limiting through WalkController
-    std::vector<std::tuple<float, float, float>> test_velocities = {
+    std::vector<std::tuple<double, double, double>> test_velocities = {
         {WORKSPACE_SCALING_FACTOR, 0.0f, 0.0f}, // Forward
         {0.0f, WORKSPACE_SCALING_FACTOR, 0.0f}, // Sideways
         {0.0f, 0.0f, DEFAULT_ANGULAR_SCALING},  // Rotation
@@ -177,10 +177,10 @@ void demonstrateOpenSHCEquivalence(VelocityLimits &velocity_limits) {
     std::cout << "  Time to Max Stride: " << test_gait.time_to_max_stride << " s\n\n";
 
     // Show OpenSHC-equivalent calculations
-    float cycle_time = test_gait.stance_ratio / test_gait.frequency;
-    float opensc_max_speed = (workspace.walkspace_radius * 2.0f) / cycle_time;
-    float opensc_max_angular = opensc_max_speed / workspace.stance_radius;
-    float opensc_max_accel = opensc_max_speed / test_gait.time_to_max_stride;
+    double cycle_time = test_gait.stance_ratio / test_gait.frequency;
+    double opensc_max_speed = (workspace.walkspace_radius * 2.0f) / cycle_time;
+    double opensc_max_angular = opensc_max_speed / workspace.stance_radius;
+    double opensc_max_accel = opensc_max_speed / test_gait.time_to_max_stride;
 
     std::cout << "OpenSHC Equivalent Calculations:\n";
     std::cout << "  max_speed = (walkspace_radius * 2.0) / (stance_ratio / frequency)\n";

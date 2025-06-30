@@ -29,7 +29,7 @@ class MockFSR : public IFSRInterface {
   public:
     bool initialize() override { return true; }
     bool isConnected() override { return true; }
-    float readForce(int leg_index) override { return 0.5f; }
+    double readForce(int leg_index) override { return 0.5f; }
     bool isGroundContact(int leg_index) override { return true; }
     bool update() override { return true; }
 };
@@ -37,9 +37,9 @@ class MockFSR : public IFSRInterface {
 // Example servo interface that simulates realistic servo positions
 class SmoothServo : public IServoInterface {
   private:
-    float current_angles[NUM_LEGS][DOF_PER_LEG];
-    float target_angles[NUM_LEGS][DOF_PER_LEG];
-    float speeds[NUM_LEGS][DOF_PER_LEG];
+    double current_angles[NUM_LEGS][DOF_PER_LEG];
+    double target_angles[NUM_LEGS][DOF_PER_LEG];
+    double speeds[NUM_LEGS][DOF_PER_LEG];
 
   public:
     SmoothServo() {
@@ -72,7 +72,7 @@ class SmoothServo : public IServoInterface {
         return false; // No blocking flags
     }
 
-    bool setJointAngleAndSpeed(int leg_index, int joint_index, float angle, float speed) override {
+    bool setJointAngleAndSpeed(int leg_index, int joint_index, double angle, double speed) override {
         if (leg_index < 0 || leg_index >= NUM_LEGS)
             return false;
         if (joint_index < 0 || joint_index >= DOF_PER_LEG)
@@ -96,7 +96,7 @@ class SmoothServo : public IServoInterface {
         return true;
     }
 
-    float getJointAngle(int leg_index, int joint_index) override {
+    double getJointAngle(int leg_index, int joint_index) override {
         if (leg_index < 0 || leg_index >= NUM_LEGS)
             return 0.0f;
         if (joint_index < 0 || joint_index >= DOF_PER_LEG)
@@ -111,7 +111,7 @@ class SmoothServo : public IServoInterface {
         if (joint_index < 0 || joint_index >= DOF_PER_LEG)
             return false;
 
-        float diff = abs(target_angles[leg_index][joint_index] - current_angles[leg_index][joint_index]);
+        double diff = abs(target_angles[leg_index][joint_index] - current_angles[leg_index][joint_index]);
         return diff > 0.5f; // Consider moving if difference > 0.5 degrees
     }
 
@@ -123,10 +123,10 @@ class SmoothServo : public IServoInterface {
     void updateServoPositions() {
         for (int i = 0; i < NUM_LEGS; i++) {
             for (int j = 0; j < DOF_PER_LEG; j++) {
-                float diff = target_angles[i][j] - current_angles[i][j];
+                double diff = target_angles[i][j] - current_angles[i][j];
                 if (abs(diff) > 0.1f) {
                     // Move towards target at speed-controlled rate
-                    float step = diff * speeds[i][j] * 0.1f; // Scale factor for simulation
+                    double step = diff * speeds[i][j] * 0.1f; // Scale factor for simulation
                     current_angles[i][j] += step;
                 }
             }
@@ -237,48 +237,48 @@ void loop() {
         switch (demo_step % 6) {
         case 0: {
             Serial.println("Smooth body height increase");
-            Eigen::Vector3f pos(0, 0, 120.0f); // Raise body
-            Eigen::Vector3f orient(0, 0, 0);
+            Eigen::Vector3d pos(0, 0, 120.0f); // Raise body
+            Eigen::Vector3d orient(0, 0, 0);
             locomotion_system.setBodyPoseSmooth(pos, orient);
             break;
         }
 
         case 1: {
             Serial.println("Smooth forward lean");
-            Eigen::Vector3f pos(0, 0, 120.0f);
-            Eigen::Vector3f orient(0, 10.0f, 0); // 10° pitch forward
+            Eigen::Vector3d pos(0, 0, 120.0f);
+            Eigen::Vector3d orient(0, 10.0f, 0); // 10° pitch forward
             locomotion_system.setBodyPoseSmooth(pos, orient);
             break;
         }
 
         case 2: {
             Serial.println("Smooth lateral tilt");
-            Eigen::Vector3f pos(0, 0, 120.0f);
-            Eigen::Vector3f orient(15.0f, 0, 0); // 15° roll right
+            Eigen::Vector3d pos(0, 0, 120.0f);
+            Eigen::Vector3d orient(15.0f, 0, 0); // 15° roll right
             locomotion_system.setBodyPoseSmooth(pos, orient);
             break;
         }
 
         case 3: {
             Serial.println("Smooth rotation");
-            Eigen::Vector3f pos(0, 0, 120.0f);
-            Eigen::Vector3f orient(0, 0, 20.0f); // 20° yaw rotation
+            Eigen::Vector3d pos(0, 0, 120.0f);
+            Eigen::Vector3d orient(0, 0, 20.0f); // 20° yaw rotation
             locomotion_system.setBodyPoseSmooth(pos, orient);
             break;
         }
 
         case 4: {
             Serial.println("Smooth crouch position");
-            Eigen::Vector3f pos(0, 0, 80.0f); // Lower body
-            Eigen::Vector3f orient(0, 0, 0);
+            Eigen::Vector3d pos(0, 0, 80.0f); // Lower body
+            Eigen::Vector3d orient(0, 0, 0);
             locomotion_system.setBodyPoseSmooth(pos, orient);
             break;
         }
 
         case 5: {
             Serial.println("Return to neutral (compare with immediate movement)");
-            Eigen::Vector3f pos(0, 0, 100.0f);
-            Eigen::Vector3f orient(0, 0, 0);
+            Eigen::Vector3d pos(0, 0, 100.0f);
+            Eigen::Vector3d orient(0, 0, 0);
             // Use immediate movement to show the difference
             locomotion_system.setBodyPoseImmediate(pos, orient);
             break;

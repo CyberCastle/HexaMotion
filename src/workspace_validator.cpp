@@ -57,35 +57,35 @@ WorkspaceValidator::validateTarget(int leg_index, Point3D target_position,
 }
 
 bool WorkspaceValidator::isReachable(int leg_index, const Point3D &target_position) const {
-    float min_reach, max_reach;
+    double min_reach, max_reach;
     getWorkspaceBounds(leg_index, min_reach, max_reach);
 
-    float distance = getDistanceFromBase(leg_index, target_position);
+    double distance = getDistanceFromBase(leg_index, target_position);
     return (distance >= min_reach && distance <= max_reach);
 }
 
-float WorkspaceValidator::checkCollisionRisk(int leg_index, const Point3D &target_position,
+double WorkspaceValidator::checkCollisionRisk(int leg_index, const Point3D &target_position,
                                              const Point3D current_leg_positions[NUM_LEGS]) const {
     // Get adjacent leg indices
     int left_adjacent = (leg_index + NUM_LEGS - 1) % NUM_LEGS;
     int right_adjacent = (leg_index + 1) % NUM_LEGS;
 
-    float max_risk = 0.0f;
+    double max_risk = 0.0f;
 
     // Check distance to adjacent legs
-    float distance_to_left = math_utils::distance2D(target_position, current_leg_positions[left_adjacent]);
-    float distance_to_right = math_utils::distance2D(target_position, current_leg_positions[right_adjacent]);
+    double distance_to_left = math_utils::distance2D(target_position, current_leg_positions[left_adjacent]);
+    double distance_to_right = math_utils::distance2D(target_position, current_leg_positions[right_adjacent]);
 
     // Convert distances to risk factors (closer = higher risk)
-    float min_safe_distance = config_.collision_safety_margin;
+    double min_safe_distance = config_.collision_safety_margin;
 
     if (distance_to_left < min_safe_distance) {
-        float risk = 1.0f - (distance_to_left / min_safe_distance);
+        double risk = 1.0f - (distance_to_left / min_safe_distance);
         max_risk = std::max(max_risk, risk);
     }
 
     if (distance_to_right < min_safe_distance) {
-        float risk = 1.0f - (distance_to_right / min_safe_distance);
+        double risk = 1.0f - (distance_to_right / min_safe_distance);
         max_risk = std::max(max_risk, risk);
     }
 
@@ -101,7 +101,7 @@ Point3D WorkspaceValidator::constrainToValidWorkspace(int leg_index, const Point
 
     // Step 2: Apply collision avoidance if enabled
     if (config_.enable_collision_checking) {
-        float total_reach = model_.getParams().coxa_length + model_.getParams().femur_length + model_.getParams().tibia_length;
+        double total_reach = model_.getParams().coxa_length + model_.getParams().femur_length + model_.getParams().tibia_length;
         adjustForCollisionAvoidance(leg_index, constrained, model_.getParams().hexagon_radius, total_reach, current_leg_positions);
     }
 
@@ -111,11 +111,11 @@ Point3D WorkspaceValidator::constrainToValidWorkspace(int leg_index, const Point
     return constrained;
 }
 
-void WorkspaceValidator::getWorkspaceBounds(int leg_index, float &min_reach, float &max_reach) const {
+void WorkspaceValidator::getWorkspaceBounds(int leg_index, double &min_reach, double &max_reach) const {
     const Parameters &params = model_.getParams();
 
-    float total_reach = params.coxa_length + params.femur_length + params.tibia_length;
-    float theoretical_min = std::abs(params.femur_length - params.tibia_length);
+    double total_reach = params.coxa_length + params.femur_length + params.tibia_length;
+    double theoretical_min = std::abs(params.femur_length - params.tibia_length);
 
     max_reach = total_reach * config_.safety_margin_factor;
     min_reach = theoretical_min * config_.minimum_reach_factor;
@@ -133,7 +133,7 @@ WorkspaceValidator::getWorkspaceBounds(int leg_index) const {
     Point3D leg_base = getLegBase(leg_index);
 
     // Calculate theoretical reach limits
-    float total_leg_length = params.coxa_length + params.femur_length + params.tibia_length;
+    double total_leg_length = params.coxa_length + params.femur_length + params.tibia_length;
 
     // Apply safety factors from configuration
     bounds.max_radius = total_leg_length * config_.safety_margin_factor;
@@ -149,8 +149,8 @@ WorkspaceValidator::getWorkspaceBounds(int leg_index) const {
 }
 
 VelocityConstraints
-WorkspaceValidator::calculateVelocityConstraints(int leg_index, float bearing_degrees,
-                                                 float gait_frequency, float stance_ratio) const {
+WorkspaceValidator::calculateVelocityConstraints(int leg_index, double bearing_degrees,
+                                                 double gait_frequency, double stance_ratio) const {
     VelocityConstraints constraints;
 
     if (leg_index < 0 || leg_index >= NUM_LEGS || stance_ratio <= 0.0f || gait_frequency <= 0.0f) {
@@ -162,21 +162,21 @@ WorkspaceValidator::calculateVelocityConstraints(int leg_index, float bearing_de
 
     // Calculate effective workspace radius based on bearing
     Point3D leg_base = getLegBase(leg_index);
-    float leg_angle = leg_index * LEG_ANGLE_SPACING;
-    float bearing_offset = std::abs(bearing_degrees - leg_angle);
+    double leg_angle = leg_index * LEG_ANGLE_SPACING;
+    double bearing_offset = std::abs(bearing_degrees - leg_angle);
     if (bearing_offset > 180.0f) {
         bearing_offset = 360.0f - bearing_offset;
     }
 
     // Efficiency decreases as we move away from leg's natural direction
-    float directional_efficiency = std::cos(math_utils::degreesToRadians(bearing_offset));
+    double directional_efficiency = std::cos(math_utils::degreesToRadians(bearing_offset));
     directional_efficiency = std::max(0.3f, directional_efficiency); // Minimum 30% efficiency
 
     constraints.workspace_radius = bounds.max_radius * directional_efficiency;
     constraints.stance_radius = bounds.max_radius * 0.8f; // For angular calculations
 
     // Calculate velocity limits based on gait parameters
-    float cycle_time = stance_ratio / gait_frequency;
+    double cycle_time = stance_ratio / gait_frequency;
     if (cycle_time > 0.0f) {
         // Maximum linear speed: can traverse workspace diameter in one cycle
         constraints.max_linear_velocity = (constraints.workspace_radius * 2.0f) / cycle_time;
@@ -232,11 +232,11 @@ ScalingFactors WorkspaceValidator::getScalingFactors() const {
     return factors;
 }
 
-void WorkspaceValidator::updateSafetyMargin(float margin) {
+void WorkspaceValidator::updateSafetyMargin(double margin) {
     config_.safety_margin_factor = std::max(0.1f, std::min(1.0f, margin)); // Clamp to 10-100%
 }
 
-void WorkspaceValidator::updateAngularScaling(float scaling) {
+void WorkspaceValidator::updateAngularScaling(double scaling) {
     // Store angular scaling in configuration for future use
     // Note: This could be extended to modify a stored scaling factor if needed
     // For now, angular scaling is handled in getScalingFactors()
@@ -244,7 +244,7 @@ void WorkspaceValidator::updateAngularScaling(float scaling) {
 
 // ===== MIGRATED FROM LegCollisionAvoidance =====
 
-float WorkspaceValidator::calculateSafeHexagonRadius(float leg_reach, float safety_margin) {
+double WorkspaceValidator::calculateSafeHexagonRadius(double leg_reach, double safety_margin) {
     // For a hexagon with 60° between legs, we need to ensure that adjacent leg
     // workspaces don't overlap. Using the law of cosines:
     //
@@ -256,8 +256,8 @@ float WorkspaceValidator::calculateSafeHexagonRadius(float leg_reach, float safe
     // Using law of cosines: c² = a² + b² - 2ab*cos(C)
     // Where c = minimum separation, a = b = hexagon_radius + leg_reach, C = 60°
 
-    float min_separation = 2.0f * leg_reach + safety_margin;
-    float cos_60 = 0.5f; // cos(60°) = 0.5
+    double min_separation = 2.0f * leg_reach + safety_margin;
+    double cos_60 = 0.5f; // cos(60°) = 0.5
 
     // Solving: min_separation² = 2 * (hexagon_radius + leg_reach)² * (1 - cos_60)
     // min_separation² = 2 * (hexagon_radius + leg_reach)² * 0.5
@@ -267,9 +267,9 @@ float WorkspaceValidator::calculateSafeHexagonRadius(float leg_reach, float safe
     return min_separation - leg_reach;
 }
 
-float WorkspaceValidator::getDistance2D(const Point3D &p1, const Point3D &p2) {
-    float dx = p1.x - p2.x;
-    float dy = p1.y - p2.y;
+double WorkspaceValidator::getDistance2D(const Point3D &p1, const Point3D &p2) {
+    double dx = p1.x - p2.x;
+    double dy = p1.y - p2.y;
     return sqrt(dx * dx + dy * dy);
 }
 
@@ -278,30 +278,30 @@ void WorkspaceValidator::getAdjacentLegIndices(int leg_index, int &left_adjacent
     right_adjacent = (leg_index + 1) % NUM_LEGS;           // Next leg (clockwise)
 }
 
-bool WorkspaceValidator::checkWorkspaceOverlap(const Point3D &leg1_base, float leg1_reach,
-                                               const Point3D &leg2_base, float leg2_reach,
-                                               float safety_margin) {
-    float distance = getDistance2D(leg1_base, leg2_base);
-    float combined_reach = leg1_reach + leg2_reach + safety_margin;
+bool WorkspaceValidator::checkWorkspaceOverlap(const Point3D &leg1_base, double leg1_reach,
+                                               const Point3D &leg2_base, double leg2_reach,
+                                               double safety_margin) {
+    double distance = getDistance2D(leg1_base, leg2_base);
+    double combined_reach = leg1_reach + leg2_reach + safety_margin;
 
     // If the distance between leg bases is less than combined reach, workspaces overlap
     return distance < combined_reach;
 }
 
 bool WorkspaceValidator::wouldCollideWithAdjacent(int leg_index, const Point3D &target_position,
-                                                  float hexagon_radius, float leg_reach,
+                                                  double hexagon_radius, double leg_reach,
                                                   const Point3D adjacent_positions[NUM_LEGS]) const {
     int left_adjacent, right_adjacent;
     getAdjacentLegIndices(leg_index, left_adjacent, right_adjacent);
 
     // Check collision with left adjacent leg
-    float distance_to_left = getDistance2D(target_position, adjacent_positions[left_adjacent]);
+    double distance_to_left = getDistance2D(target_position, adjacent_positions[left_adjacent]);
     if (distance_to_left < MIN_LEG_SEPARATION) {
         return true;
     }
 
     // Check collision with right adjacent leg
-    float distance_to_right = getDistance2D(target_position, adjacent_positions[right_adjacent]);
+    double distance_to_right = getDistance2D(target_position, adjacent_positions[right_adjacent]);
     if (distance_to_right < MIN_LEG_SEPARATION) {
         return true;
     }
@@ -310,7 +310,7 @@ bool WorkspaceValidator::wouldCollideWithAdjacent(int leg_index, const Point3D &
 }
 
 bool WorkspaceValidator::adjustForCollisionAvoidance(int leg_index, Point3D &target_position,
-                                                     float hexagon_radius, float leg_reach,
+                                                     double hexagon_radius, double leg_reach,
                                                      const Point3D adjacent_positions[NUM_LEGS]) const {
     // Check if adjustment is needed
     if (!wouldCollideWithAdjacent(leg_index, target_position, hexagon_radius, leg_reach, adjacent_positions)) {
@@ -318,17 +318,17 @@ bool WorkspaceValidator::adjustForCollisionAvoidance(int leg_index, Point3D &tar
     }
 
     // Calculate leg base position
-    float base_angle = leg_index * LEG_ANGLE_SPACING;
-    float base_x = hexagon_radius * cos(base_angle * M_PI / 180.0f);
-    float base_y = hexagon_radius * sin(base_angle * M_PI / 180.0f);
+    double base_angle = leg_index * LEG_ANGLE_SPACING;
+    double base_x = hexagon_radius * cos(base_angle * M_PI / 180.0f);
+    double base_y = hexagon_radius * sin(base_angle * M_PI / 180.0f);
 
-    float dx = target_position.x - base_x;
-    float dy = target_position.y - base_y;
-    float distance = sqrt(dx * dx + dy * dy);
+    double dx = target_position.x - base_x;
+    double dy = target_position.y - base_y;
+    double distance = sqrt(dx * dx + dy * dy);
 
     if (distance > 0.001f) {
         // Start with 90% scale and iteratively reduce if still colliding
-        for (float scale = 0.9f; scale >= 0.5f; scale -= 0.1f) {
+        for (double scale = 0.9f; scale >= 0.5f; scale -= 0.1f) {
             Point3D test_position;
             test_position.x = base_x + dx * scale;
             test_position.y = base_y + dy * scale;
@@ -341,7 +341,7 @@ bool WorkspaceValidator::adjustForCollisionAvoidance(int leg_index, Point3D &tar
         }
 
         // If we couldn't find a good scale, use minimum safe distance
-        float safe_scale = std::max(0.5f, (leg_reach * 0.7f) / distance);
+        double safe_scale = std::max(0.5f, (leg_reach * 0.7f) / distance);
         target_position.x = base_x + dx * safe_scale;
         target_position.y = base_y + dy * safe_scale;
         return true;
@@ -358,7 +358,7 @@ Point3D WorkspaceValidator::getLegBase(int leg_index) const {
     }
 
     const Parameters &params = model_.getParams();
-    float angle_rad = math_utils::degreesToRadians(leg_index * LEG_ANGLE_SPACING_DEGREES);
+    double angle_rad = math_utils::degreesToRadians(leg_index * LEG_ANGLE_SPACING_DEGREES);
 
     return Point3D{
         params.hexagon_radius * cos(angle_rad),
@@ -376,9 +376,9 @@ bool WorkspaceValidator::checkJointLimits(int leg_index, const Point3D &target_p
         JointAngles angles = model_.inverseKinematics(leg_index, target_position);
 
         // Basic joint limit checks (these would be robot-specific)
-        const float COXA_MIN = -45.0f, COXA_MAX = 45.0f;
-        const float FEMUR_MIN = -90.0f, FEMUR_MAX = 90.0f;
-        const float TIBIA_MIN = -135.0f, TIBIA_MAX = 45.0f;
+        const double COXA_MIN = -45.0f, COXA_MAX = 45.0f;
+        const double FEMUR_MIN = -90.0f, FEMUR_MAX = 90.0f;
+        const double TIBIA_MIN = -135.0f, TIBIA_MAX = 45.0f;
 
         return (angles.coxa >= COXA_MIN && angles.coxa <= COXA_MAX &&
                 angles.femur >= FEMUR_MIN && angles.femur <= FEMUR_MAX &&
@@ -388,7 +388,7 @@ bool WorkspaceValidator::checkJointLimits(int leg_index, const Point3D &target_p
     }
 }
 
-float WorkspaceValidator::getDistanceFromBase(int leg_index, const Point3D &target_position) const {
+double WorkspaceValidator::getDistanceFromBase(int leg_index, const Point3D &target_position) const {
     Point3D leg_base = getLegBase(leg_index);
     return math_utils::distance3D(leg_base, target_position);
 }
@@ -402,18 +402,18 @@ Point3D WorkspaceValidator::constrainToGeometricWorkspace(int leg_index, const P
     Point3D leg_base = getLegBase(leg_index);
 
     // Calculate max reach
-    float max_reach = params.coxa_length + params.femur_length + params.tibia_length;
+    double max_reach = params.coxa_length + params.femur_length + params.tibia_length;
     max_reach *= config_.safety_margin_factor;
 
     // Calculate distance from base
-    float distance = getDistanceFromBase(leg_index, target_position);
+    double distance = getDistanceFromBase(leg_index, target_position);
 
     if (distance <= max_reach) {
         return target_position; // Already within bounds
     }
 
     // Constrain to max reach
-    float scale = max_reach / distance;
+    double scale = max_reach / distance;
     Point3D constrained = target_position;
     constrained.x = leg_base.x + (target_position.x - leg_base.x) * scale;
     constrained.y = leg_base.y + (target_position.y - leg_base.y) * scale;

@@ -155,8 +155,8 @@ int main() {
 
     // Test velocity control
     std::cout << "\n--- Testing Velocity Control ---" << std::endl;
-    Eigen::Vector2f linear_velocity(25.0f, 0.0f);
-    float angular_velocity = 5.0f;
+    Eigen::Vector2d linear_velocity(25.0f, 0.0f);
+    double angular_velocity = 5.0f;
     controller.setDesiredVelocity(linear_velocity, angular_velocity);
     std::cout << "✓ Desired velocity set to [25, 0] linear, 5 angular" << std::endl;
 
@@ -165,8 +165,8 @@ int main() {
     if (controller.setPosingMode(POSING_X_Y)) {
         std::cout << "✓ X-Y posing mode enabled" << std::endl;
 
-        Eigen::Vector3f position(10.0f, 5.0f, 0.0f);
-        Eigen::Vector3f orientation(0.0f, 0.0f, 0.1f);
+        Eigen::Vector3d position(10.0f, 5.0f, 0.0f);
+        Eigen::Vector3d orientation(0.0f, 0.0f, 0.1f);
         controller.setDesiredPose(position, orientation);
         std::cout << "✓ Desired pose set" << std::endl;
     } else {
@@ -176,7 +176,7 @@ int main() {
 
     // Test cruise control
     std::cout << "\n--- Testing Cruise Control ---" << std::endl;
-    Eigen::Vector3f cruise_velocity(25.0f, 0.0f, 5.0f);
+    Eigen::Vector3d cruise_velocity(25.0f, 0.0f, 5.0f);
     if (controller.setCruiseControlMode(CRUISE_CONTROL_ON, cruise_velocity)) {
         std::cout << "✓ Cruise control enabled" << std::endl;
     } else {

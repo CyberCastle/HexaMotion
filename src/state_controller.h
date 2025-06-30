@@ -147,7 +147,7 @@ enum SequenceType {
 struct TransitionProgress {
     int current_step = 0;
     int total_steps = 0;
-    float completion_percentage = 0.0f;
+    double completion_percentage = 0.0f;
     bool is_complete = false;
     bool has_error = false;
     String error_message = "";
@@ -159,12 +159,12 @@ struct TransitionProgress {
 struct StateMachineConfig {
     bool enable_startup_sequence = true;    ///< Enable multi-step startup sequence
     bool enable_direct_startup = false;     ///< Allow direct startup without sequences
-    float transition_timeout = 10.0f;       ///< Maximum time for state transitions (seconds)
-    float pack_unpack_time = 2.0f;          ///< Time for pack/unpack sequences (seconds)
+    double transition_timeout = 10.0f;       ///< Maximum time for state transitions (seconds)
+    double pack_unpack_time = 2.0f;          ///< Time for pack/unpack sequences (seconds)
     bool enable_auto_posing = false;        ///< Enable automatic body posing
     bool enable_manual_posing = true;       ///< Enable manual body posing
     bool enable_cruise_control = true;      ///< Enable cruise control mode
-    float cruise_control_time_limit = 0.0f; ///< Time limit for cruise control (0 = unlimited)
+    double cruise_control_time_limit = 0.0f; ///< Time limit for cruise control (0 = unlimited)
     int max_manual_legs = 2;                ///< Maximum number of manually controlled legs
 };
 
@@ -201,7 +201,7 @@ class StateController {
      * This should be called regularly from the main control loop.
      * @param dt Delta time since last update (seconds)
      */
-    void update(float dt);
+    void update(double dt);
 
     // ==============================
     // STATE ACCESSORS
@@ -247,7 +247,7 @@ class StateController {
      * @brief Get the current cruise control velocity.
      * @return Current cruise velocity vector (x, y, angular_z)
      */
-    inline Eigen::Vector3f getCruiseVelocity() const { return cruise_velocity_; }
+    inline Eigen::Vector3d getCruiseVelocity() const { return cruise_velocity_; }
 
     /**
      * @brief Get the cruise control start time.
@@ -259,7 +259,7 @@ class StateController {
      * @brief Get the cruise control remaining time.
      * @return Remaining time in seconds (0 if unlimited)
      */
-    float getCruiseRemainingTime() const {
+    double getCruiseRemainingTime() const {
         if (cruise_end_time_ == 0 || current_cruise_control_mode_ != CruiseControlMode::CRUISE_CONTROL_ON) {
             return 0.0f; // Unlimited or not active
         }
@@ -327,7 +327,7 @@ class StateController {
      * @param velocity Cruise velocity (for CRUISE_CONTROL_ON mode)
      * @return True if mode change successful
      */
-    bool setCruiseControlMode(CruiseControlMode mode, const Eigen::Vector3f &velocity = Eigen::Vector3f::Zero());
+    bool setCruiseControlMode(CruiseControlMode mode, const Eigen::Vector3d &velocity = Eigen::Vector3d::Zero());
 
     /**
      * @brief Set pose reset mode.
@@ -370,21 +370,21 @@ class StateController {
      * @param linear_velocity Linear velocity [x, y] in mm/s
      * @param angular_velocity Angular velocity in degrees/s
      */
-    void setDesiredVelocity(const Eigen::Vector2f &linear_velocity, float angular_velocity);
+    void setDesiredVelocity(const Eigen::Vector2d &linear_velocity, double angular_velocity);
 
     /**
      * @brief Set desired body pose.
      * @param position Desired position [x, y, z] in mm
      * @param orientation Desired orientation [roll, pitch, yaw] in degrees
      */
-    void setDesiredPose(const Eigen::Vector3f &position, const Eigen::Vector3f &orientation);
+    void setDesiredPose(const Eigen::Vector3d &position, const Eigen::Vector3d &orientation);
 
     /**
      * @brief Set desired tip velocity for manual leg control.
      * @param leg_index Index of the leg (0-5)
      * @param velocity Desired tip velocity [x, y, z] in mm/s
      */
-    void setLegTipVelocity(int leg_index, const Eigen::Vector3f &velocity);
+    void setLegTipVelocity(int leg_index, const Eigen::Vector3d &velocity);
 
     /**
      * @brief Update velocity control based on current mode.
@@ -397,26 +397,26 @@ class StateController {
      * @param position Desired body position (x, y, z)
      * @return True if position is valid and set
      */
-    bool setDesiredBodyPosition(const Eigen::Vector3f &position);
+    bool setDesiredBodyPosition(const Eigen::Vector3d &position);
 
     /**
      * @brief Set desired body orientation for pose control.
      * @param orientation Desired body orientation (roll, pitch, yaw in degrees)
      * @return True if orientation is valid and set
      */
-    bool setDesiredBodyOrientation(const Eigen::Vector3f &orientation);
+    bool setDesiredBodyOrientation(const Eigen::Vector3d &orientation);
 
     /**
      * @brief Get current body position.
      * @return Current body position
      */
-    inline Eigen::Vector3f getDesiredBodyPosition() const { return desired_body_position_; }
+    inline Eigen::Vector3d getDesiredBodyPosition() const { return desired_body_position_; }
 
     /**
      * @brief Get current body orientation.
      * @return Current body orientation
      */
-    inline Eigen::Vector3f getDesiredBodyOrientation() const { return desired_body_orientation_; }
+    inline Eigen::Vector3d getDesiredBodyOrientation() const { return desired_body_orientation_; }
 
     // ==============================
     // GAIT CONTROL
@@ -508,20 +508,20 @@ class StateController {
     unsigned long transition_start_time_;
 
     // Control inputs
-    Eigen::Vector2f desired_linear_velocity_;
-    float desired_angular_velocity_;
-    Eigen::Vector3f desired_body_position_;
-    Eigen::Vector3f desired_body_orientation_;
-    Eigen::Vector3f leg_tip_velocities_[NUM_LEGS];
+    Eigen::Vector2d desired_linear_velocity_;
+    double desired_angular_velocity_;
+    Eigen::Vector3d desired_body_position_;
+    Eigen::Vector3d desired_body_orientation_;
+    Eigen::Vector3d leg_tip_velocities_[NUM_LEGS];
 
     // Cruise control
-    Eigen::Vector3f cruise_velocity_;
+    Eigen::Vector3d cruise_velocity_;
     unsigned long cruise_start_time_;
     unsigned long cruise_end_time_; ///< End time for cruise control (when time limit is set)
 
     // Timing
     unsigned long last_update_time_;
-    float dt_;
+    double dt_;
 
     // Error handling
     bool has_error_;

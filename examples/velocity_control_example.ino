@@ -106,7 +106,7 @@ void demonstrateVelocityControl() {
 
     // Test 5: Diagonal motion
     Serial.println("\n5. Diagonal motion (0.08 m/s at 45°):");
-    float diagonal_vel = 0.08f / sqrt(2.0f); // Split between X and Y
+    double diagonal_vel = 0.08f / sqrt(2.0f); // Split between X and Y
     locomotion.planGaitSequence(diagonal_vel, diagonal_vel, 0.0f);
     printServoSpeeds("Diagonal motion");
 
@@ -163,7 +163,7 @@ void printServoSpeeds(const char *scenario) {
         Serial.print(": ");
 
         for (int joint = 0; joint < DOF_PER_LEG; joint++) {
-            float speed = locomotion.getCurrentServoSpeed(leg, joint);
+            double speed = locomotion.getCurrentServoSpeed(leg, joint);
             const char *joint_names[] = {"Coxa", "Femur", "Tibia"};
             Serial.print(joint_names[joint]);
             Serial.print("=");

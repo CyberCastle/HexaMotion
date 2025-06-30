@@ -35,10 +35,10 @@ class ManualPoseController {
     struct PoseState {
         Point3D body_position;           ///< Body position offset
         Point3D body_rotation;           ///< Body rotation (roll, pitch, yaw) in radians
-        Eigen::Vector4f body_quaternion; ///< Body orientation as quaternion [w, x, y, z]
+        Eigen::Vector4d body_quaternion; ///< Body orientation as quaternion [w, x, y, z]
         Point3D leg_positions[NUM_LEGS]; ///< Individual leg positions
-        float body_height;               ///< Body height above ground
-        float pose_blend_factor;         ///< Blending factor for pose transitions
+        double body_height;               ///< Body height above ground
+        double pose_blend_factor;         ///< Blending factor for pose transitions
         bool pose_active;                ///< Whether pose is actively applied
         bool use_quaternion;             ///< Whether to use quaternion or Euler angles
 
@@ -56,10 +56,10 @@ class ManualPoseController {
      * @brief Input scaling configuration
      */
     struct InputScaling {
-        float translation_scale; ///< Translation input scaling
-        float rotation_scale;    ///< Rotation input scaling
-        float height_scale;      ///< Height input scaling
-        float leg_scale;         ///< Individual leg scaling
+        double translation_scale; ///< Translation input scaling
+        double rotation_scale;    ///< Rotation input scaling
+        double height_scale;      ///< Height input scaling
+        double leg_scale;         ///< Individual leg scaling
 
         InputScaling() : translation_scale(1.0f), rotation_scale(0.017453f),
                          height_scale(1.0f), leg_scale(1.0f) {}
@@ -76,12 +76,12 @@ class ManualPoseController {
     struct PoseLimits {
         Point3D translation_limits; // ±X, ±Y, ±Z limits
         Point3D rotation_limits;    // ±Roll, ±Pitch, ±Yaw limits
-        float height_min, height_max;
-        float leg_reach_limit;
+        double height_min, height_max;
+        double leg_reach_limit;
     } pose_limits_;
 
     // Pose interpolation
-    float interpolation_speed_;
+    double interpolation_speed_;
     bool smooth_transitions_;
 
     // Pose presets
@@ -113,7 +113,7 @@ class ManualPoseController {
      * @param y Y-axis input value
      * @param z Z-axis input value
      */
-    void processInput(float x, float y, float z);
+    void processInput(double x, double y, double z);
 
     /**
      * @brief Set pose using quaternion for orientation
@@ -121,7 +121,7 @@ class ManualPoseController {
      * @param quaternion Body orientation as quaternion [w, x, y, z]
      * @param blend_factor Blending factor for smooth transitions
      */
-    void setPoseQuaternion(const Point3D &position, const Eigen::Vector4f &quaternion, float blend_factor = 1.0f);
+    void setPoseQuaternion(const Point3D &position, const Eigen::Vector4d &quaternion, double blend_factor = 1.0f);
 
     /**
      * @brief Interpolate to target pose using quaternions
@@ -129,13 +129,13 @@ class ManualPoseController {
      * @param target_quat Target quaternion
      * @param speed Interpolation speed (0.0 to 1.0)
      */
-    void interpolateToQuaternionPose(const Point3D &target_pos, const Eigen::Vector4f &target_quat, float speed);
+    void interpolateToQuaternionPose(const Point3D &target_pos, const Eigen::Vector4d &target_quat, double speed);
 
     /**
      * @brief Convert current Euler rotation to quaternion
      * @return Current orientation as quaternion
      */
-    Eigen::Vector4f getCurrentQuaternion() const;
+    Eigen::Vector4d getCurrentQuaternion() const;
 
     /**
      * @brief Update pose state to use quaternions instead of Euler angles
@@ -150,7 +150,7 @@ class ManualPoseController {
      * @param z Z-axis input
      * @param aux Auxiliary parameter
      */
-    void processInputExtended(float x, float y, float z, float aux);
+    void processInputExtended(double x, double y, double z, double aux);
 
     /**
      * @brief Get current pose state
@@ -168,7 +168,7 @@ class ManualPoseController {
      * @brief Update pose interpolation (call at regular intervals)
      * @param dt Delta time in seconds
      */
-    void updatePoseInterpolation(float dt);
+    void updatePoseInterpolation(double dt);
 
     /**
      * @brief Reset to neutral/default pose
@@ -180,7 +180,7 @@ class ManualPoseController {
      * @param enable Whether to enable smooth transitions
      * @param speed Interpolation speed (0-1)
      */
-    void setSmoothTransitions(bool enable, float speed = 0.1f);
+    void setSmoothTransitions(bool enable, double speed = 0.1f);
 
     /**
      * @brief Save current pose as preset
@@ -216,25 +216,25 @@ class ManualPoseController {
     void initializeDefaultPresets();
 
     // Mode-specific input handlers
-    void handleTranslationInput(float x, float y, float z);
-    void handleRotationInput(float roll, float pitch, float yaw);
-    void handleIndividualLegInput(int leg_index, float x, float y, float z);
-    void handleHeightInput(float delta_height);
-    void handleCombinedInput(float x, float y, float z);
+    void handleTranslationInput(double x, double y, double z);
+    void handleRotationInput(double roll, double pitch, double yaw);
+    void handleIndividualLegInput(int leg_index, double x, double y, double z);
+    void handleHeightInput(double delta_height);
+    void handleCombinedInput(double x, double y, double z);
 
     // Pose validation and constraints
     void constrainTranslation(Point3D &translation) const;
     void constrainRotation(Point3D &rotation) const;
-    void constrainHeight(float &height) const;
+    void constrainHeight(double &height) const;
     void constrainLegPosition(int leg_index, Point3D &position);
 
     // Pose interpolation utilities
-    Point3D interpolatePoint3D(const Point3D &from, const Point3D &to, float t);
-    float interpolateFloat(float from, float to, float t);
+    Point3D interpolatePoint3D(const Point3D &from, const Point3D &to, double t);
+    double interpolateFloat(double from, double to, double t);
 
     // Default pose calculation
     void calculateDefaultLegPositions();
-    Point3D calculateDefaultLegPosition(int leg_index, float height);
+    Point3D calculateDefaultLegPosition(int leg_index, double height);
 };
 
 #endif // MANUAL_POSE_CONTROLLER_H

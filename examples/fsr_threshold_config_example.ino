@@ -13,21 +13,21 @@ class MockServoInterface : public IServoInterface {
   public:
     bool initialize() override { return true; }
     bool hasBlockingStatusFlags(int, int) override { return false; }
-    bool setJointAngleAndSpeed(int, int, float, float) override { return true; }
-    float getJointAngle(int, int) override { return 0.0f; }
+    bool setJointAngleAndSpeed(int, int, double, double) override { return true; }
+    double getJointAngle(int, int) override { return 0.0f; }
     bool isJointMoving(int, int) override { return false; }
     bool enableTorque(int, int, bool) override { return true; }
-    bool setSpeed(int, int, float) override { return true; }
+    bool setSpeed(int, int, double) override { return true; }
 };
 
 class MockFSRInterface : public IFSRInterface {
   private:
-    float readings_[NUM_LEGS] = {0};
+    double readings_[NUM_LEGS] = {0};
 
   public:
     bool initialize() override { return true; }
     bool calibrateFSR(int) override { return true; }
-    float getRawReading(int leg) override {
+    double getRawReading(int leg) override {
         return readings_[leg];
     }
 
@@ -36,7 +36,7 @@ class MockFSRInterface : public IFSRInterface {
     }
 
     // Helper method to simulate FSR readings
-    void setReading(int leg, float pressure) {
+    void setReading(int leg, double pressure) {
         if (leg >= 0 && leg < NUM_LEGS) {
             readings_[leg] = pressure;
         }
@@ -138,8 +138,8 @@ void demonstrateTerrainAdaptiveThresholds() {
     // Simulate different terrain types
     struct TerrainConfig {
         const char *name;
-        float touchdown_threshold;
-        float liftoff_threshold;
+        double touchdown_threshold;
+        double liftoff_threshold;
         const char *description;
     };
 
@@ -173,18 +173,18 @@ void demonstrateCalibrationBasedThresholds() {
     Serial.println("Performing FSR calibration...");
 
     // Simulate reading unloaded FSR values (noise floor)
-    float noise_floor = 5.0f;
+    double noise_floor = 5.0f;
     Serial.print("Measured noise floor: ");
     Serial.println(noise_floor);
 
     // Simulate reading loaded FSR values (robot weight)
-    float weight_reading = 80.0f;
+    double weight_reading = 80.0f;
     Serial.print("Measured weight reading: ");
     Serial.println(weight_reading);
 
     // Calculate optimal thresholds based on calibration
-    float touchdown_threshold = noise_floor + (weight_reading - noise_floor) * 0.3f; // 30% above noise
-    float liftoff_threshold = noise_floor + (weight_reading - noise_floor) * 0.1f;   // 10% above noise
+    double touchdown_threshold = noise_floor + (weight_reading - noise_floor) * 0.3f; // 30% above noise
+    double liftoff_threshold = noise_floor + (weight_reading - noise_floor) * 0.1f;   // 10% above noise
 
     Serial.print("Calculated touchdown threshold: ");
     Serial.println(touchdown_threshold);
@@ -209,13 +209,13 @@ void loop() {
         Serial.println("\n=== Simulating Ground Contact Events ===");
 
         auto &terrain_adaptation = locomotion_system->getTerrainAdaptation();
-        float touchdown_threshold = terrain_adaptation.getTouchdownThreshold();
-        float liftoff_threshold = terrain_adaptation.getLiftoffThreshold();
+        double touchdown_threshold = terrain_adaptation.getTouchdownThreshold();
+        double liftoff_threshold = terrain_adaptation.getLiftoffThreshold();
 
         switch (demo_state) {
         case 0: {
             // Simulate leg 0 touching down
-            float pressure = touchdown_threshold + 5.0f; // Above threshold
+            double pressure = touchdown_threshold + 5.0f; // Above threshold
             fsr_interface.setReading(0, pressure);
             Serial.print("Leg 0 touchdown detected (pressure: ");
             Serial.print(pressure);
@@ -227,7 +227,7 @@ void loop() {
 
         case 1: {
             // Simulate leg 0 lifting off
-            float pressure = liftoff_threshold - 2.0f; // Below threshold
+            double pressure = liftoff_threshold - 2.0f; // Below threshold
             fsr_interface.setReading(0, pressure);
             Serial.print("Leg 0 liftoff detected (pressure: ");
             Serial.print(pressure);
@@ -239,7 +239,7 @@ void loop() {
 
         case 2: {
             // Demonstrate hysteresis (pressure between thresholds)
-            float pressure = (touchdown_threshold + liftoff_threshold) / 2.0f;
+            double pressure = (touchdown_threshold + liftoff_threshold) / 2.0f;
             fsr_interface.setReading(0, pressure);
             Serial.print("Pressure in hysteresis zone (");
             Serial.print(pressure);

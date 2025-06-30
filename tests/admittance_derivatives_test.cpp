@@ -59,9 +59,9 @@ class AdmittanceDerivativesTest {
         controller.initialize();
 
         // Set up realistic admittance parameters
-        float mass = 0.5f;        // 500g virtual mass
-        float damping = 2.0f;     // Light damping
-        float stiffness = 100.0f; // Moderate stiffness
+        double mass = 0.5f;        // 500g virtual mass
+        double damping = 2.0f;     // Light damping
+        double stiffness = 100.0f; // Moderate stiffness
 
         controller.setLegAdmittance(0, mass, damping, stiffness);
 

@@ -115,7 +115,7 @@ class MyFSR : public IFSRInterface {
         data.contact_time = 0.0f;
         return data;
     }
-    float getRawReading(int leg_index) override { return 0.0f; }
+    double getRawReading(int leg_index) override { return 0.0f; }
     bool update() override {
         // Update FSR readings using AdvancedAnalog DMA
         // This method should trigger simultaneous ADC reads on all FSR channels
@@ -136,7 +136,7 @@ class MyServo : public IServoInterface {
         return false; // No blocking flags
     }
 
-    bool setJointAngleAndSpeed(int leg_index, int joint_index, float angle, float speed) override {
+    bool setJointAngleAndSpeed(int leg_index, int joint_index, double angle, double speed) override {
         // Send actual servo commands here with both angle and speed
         (void)leg_index;
         (void)joint_index;
@@ -144,7 +144,7 @@ class MyServo : public IServoInterface {
         (void)speed;
         return true;
     }
-    float getJointAngle(int leg_index, int joint_index) override {
+    double getJointAngle(int leg_index, int joint_index) override {
         // Read actual servo positions here
         (void)leg_index;
         (void)joint_index;
@@ -231,7 +231,7 @@ void loop() {
     // Calculate delta time
     static unsigned long last_time = millis();
     unsigned long current_time = millis();
-    float dt = (current_time - last_time) / 1000.0f;
+    double dt = (current_time - last_time) / 1000.0f;
     last_time = current_time;
 
     // Limit dt to avoid large jumps
@@ -265,7 +265,7 @@ void loop() {
             // Start walking forward
             if (state_controller->isReadyForOperation()) {
                 Serial.println("Setting forward velocity...");
-                Eigen::Vector2f linear_vel(30.0f, 0.0f); // 30mm/s forward
+                Eigen::Vector2d linear_vel(30.0f, 0.0f); // 30mm/s forward
                 state_controller->setDesiredVelocity(linear_vel, 0.0f);
                 demo_phase = 2;
             }
@@ -274,7 +274,7 @@ void loop() {
         case 2:
             // Enable cruise control
             Serial.println("Enabling cruise control...");
-            Eigen::Vector3f cruise_vel(20.0f, 0.0f, 0.0f);
+            Eigen::Vector3d cruise_vel(20.0f, 0.0f, 0.0f);
             state_controller->setCruiseControlMode(CRUISE_CONTROL_ON, cruise_vel);
             demo_phase = 3;
             break;
@@ -283,7 +283,7 @@ void loop() {
             // Stop and return to ready
             Serial.println("Stopping and returning to READY...");
             state_controller->setCruiseControlMode(CRUISE_CONTROL_OFF);
-            Eigen::Vector2f zero_vel(0.0f, 0.0f);
+            Eigen::Vector2d zero_vel(0.0f, 0.0f);
             state_controller->setDesiredVelocity(zero_vel, 0.0f);
             state_controller->requestRobotState(ROBOT_READY);
             demo_phase = 0;
@@ -343,7 +343,7 @@ void demonstrateManualLegControl() {
         Serial.println("Set leg 0 to manual mode");
 
         // Set manual tip velocity for leg 0
-        Eigen::Vector3f tip_velocity(10.0f, 0.0f, 5.0f); // mm/s
+        Eigen::Vector3d tip_velocity(10.0f, 0.0f, 5.0f); // mm/s
         state_controller->setLegTipVelocity(0, tip_velocity);
 
         delay(2000); // Move for 2 seconds
@@ -366,8 +366,8 @@ void demonstratePoseControl() {
         Serial.println("Enabled X-Y posing mode");
 
         // Set desired body pose
-        Eigen::Vector3f position(10.0f, 5.0f, 0.0f);    // mm
-        Eigen::Vector3f orientation(0.0f, 0.0f, 15.0f); // degrees
+        Eigen::Vector3d position(10.0f, 5.0f, 0.0f);    // mm
+        Eigen::Vector3d orientation(0.0f, 0.0f, 15.0f); // degrees
         state_controller->setDesiredPose(position, orientation);
 
         delay(3000); // Hold pose for 3 seconds

@@ -43,14 +43,14 @@ class MockFSR : public IFSRInterface {
         return data;
     }
     bool calibrateFSR(int leg_index) override { return true; }
-    float getRawReading(int leg_index) override { return 0.5f; }
+    double getRawReading(int leg_index) override { return 0.5f; }
     bool update() override { return true; }
 };
 
 // Example servo interface that can simulate blocked servos
 class FlagsTestServo : public IServoInterface {
   private:
-    float current_angles[NUM_LEGS][DOF_PER_LEG];
+    double current_angles[NUM_LEGS][DOF_PER_LEG];
     uint8_t servo_flags[NUM_LEGS][DOF_PER_LEG];
 
   public:
@@ -83,7 +83,7 @@ class FlagsTestServo : public IServoInterface {
         return (flags != 0);
     }
 
-    bool setJointAngleAndSpeed(int leg_index, int joint_index, float angle, float speed) override {
+    bool setJointAngleAndSpeed(int leg_index, int joint_index, double angle, double speed) override {
         if (leg_index < 0 || leg_index >= NUM_LEGS)
             return false;
         if (joint_index < 0 || joint_index >= DOF_PER_LEG)
@@ -103,7 +103,7 @@ class FlagsTestServo : public IServoInterface {
         return true;
     }
 
-    float getJointAngle(int leg_index, int joint_index) override {
+    double getJointAngle(int leg_index, int joint_index) override {
         if (leg_index < 0 || leg_index >= NUM_LEGS)
             return 0.0f;
         if (joint_index < 0 || joint_index >= DOF_PER_LEG)

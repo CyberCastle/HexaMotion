@@ -31,7 +31,7 @@ class TerrainFSRMock : public IFSRInterface {
 
     bool initialize() override { return true; }
     bool calibrateFSR(int leg_index) override { return true; }
-    float getRawReading(int leg_index) override {
+    double getRawReading(int leg_index) override {
         if (leg_index >= 0 && leg_index < NUM_LEGS) {
             return fsr_data_[leg_index].pressure;
         }
@@ -51,7 +51,7 @@ class TerrainFSRMock : public IFSRInterface {
         return true;
     }
 
-    void setFSRData(int leg_index, float pressure, bool in_contact) {
+    void setFSRData(int leg_index, double pressure, bool in_contact) {
         if (leg_index >= 0 && leg_index < NUM_LEGS) {
             fsr_data_[leg_index] = {pressure, in_contact, 0.0f};
         }
@@ -83,8 +83,8 @@ class TerrainIMUMock : public IIMUInterface {
         return imu_data_;
     }
 
-    void setIMUData(float roll, float pitch, float yaw,
-                    float accel_x, float accel_y, float accel_z) {
+    void setIMUData(double roll, double pitch, double yaw,
+                    double accel_x, double accel_y, double accel_z) {
         imu_data_ = {roll, pitch, yaw, accel_x, accel_y, accel_z, 0.0f, 0.0f, 0.0f, true};
     }
 };
@@ -210,8 +210,8 @@ void testGravityEstimation() {
     imu.setIMUData(0.1f, 0.2f, 0.0f, 1.0f, 2.0f, -8.81f);
     terrain_adaptation.update(&fsr, &imu);
 
-    Eigen::Vector3f gravity = terrain_adaptation.estimateGravity();
-    float magnitude = gravity.norm();
+    Eigen::Vector3d gravity = terrain_adaptation.estimateGravity();
+    double magnitude = gravity.norm();
 
     assert(abs(magnitude - 9.81f) < 0.5f); // Allow some tolerance
 
@@ -276,7 +276,7 @@ void testWalkControllerIntegration() {
     TerrainIMUMock imu;
 
     // Test foot trajectory with terrain adaptation
-    float leg_phase_offsets[NUM_LEGS] = {0.0f, 0.33f, 0.67f, 0.0f, 0.33f, 0.67f};
+    double leg_phase_offsets[NUM_LEGS] = {0.0f, 0.33f, 0.67f, 0.0f, 0.33f, 0.67f};
     LegState leg_states[NUM_LEGS];
 
     Point3D trajectory = walk_controller.footTrajectory(0, 0.5f, 40.0f, 60.0f, 0.5f, 0.5f, 90.0f,
@@ -292,7 +292,7 @@ void testWalkControllerIntegration() {
     const TerrainAdaptation::WalkPlane &walk_plane = walk_controller.getWalkPlane();
     assert(walk_plane.valid);
 
-    Eigen::Vector3f gravity = walk_controller.estimateGravity();
+    Eigen::Vector3d gravity = walk_controller.estimateGravity();
     assert(gravity.norm() > 5.0f); // Should be around 9.81
 
     std::cout << "✓ Walk controller integration working" << std::endl;

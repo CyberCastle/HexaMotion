@@ -19,7 +19,7 @@
  * @return Array of calculated stance positions in meters
  */
 std::array<LegStancePosition, NUM_LEGS> calculateHexagonalStancePositions(
-    float hexagon_radius, float coxa_length);
+    double hexagon_radius, double coxa_length);
 
 /**
  * @brief Get default standing pose joint angles (OpenSHC equivalent)

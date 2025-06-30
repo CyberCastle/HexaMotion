@@ -29,20 +29,20 @@
  * @return Array of calculated stance positions in meters
  */
 std::array<LegStancePosition, NUM_LEGS> calculateHexagonalStancePositions(
-    float hexagon_radius, float coxa_length) {
+    double hexagon_radius, double coxa_length) {
 
     std::array<LegStancePosition, NUM_LEGS> positions;
 
     // Calculate total radius from center to leg tip (OpenSHC equivalent)
-    float total_radius_mm = hexagon_radius + coxa_length;
-    float total_radius_m = total_radius_mm / 1000.0f; // Convert to meters
+    double total_radius_mm = hexagon_radius + coxa_length;
+    double total_radius_m = total_radius_mm / 1000.0f; // Convert to meters
 
     // Calculate positions for each leg using hexagonal spacing (OpenSHC style)
     // OpenSHC leg naming: AR, BR, CR, CL, BL, AL (right-front to left-front)
     // HexaMotion mapping: 0=AR, 1=BR, 2=CR, 3=CL, 4=BL, 5=AL
     for (int i = 0; i < NUM_LEGS; i++) {
-        float angle_deg = i * LEG_ANGLE_SPACING;
-        float angle_rad = math_utils::degreesToRadians(angle_deg);
+        double angle_deg = i * LEG_ANGLE_SPACING;
+        double angle_rad = math_utils::degreesToRadians(angle_deg);
 
         positions[i].x = total_radius_m * cos(angle_rad);
         positions[i].y = total_radius_m * sin(angle_rad);
@@ -59,52 +59,52 @@ std::array<LegStancePosition, NUM_LEGS> calculateHexagonalStancePositions(
  * @return Calculated individual servo angles or default values if no solution found
  */
 struct CalculatedServoAngles {
-    float coxa;  // coxa servo angle (degrees)
-    float femur; // femur servo angle (degrees)
-    float tibia; // tibia servo angle (degrees)
+    double coxa;  // coxa servo angle (degrees)
+    double femur; // femur servo angle (degrees)
+    double tibia; // tibia servo angle (degrees)
     bool valid;  // solution validity flag
 };
 
-CalculatedServoAngles calculateServoAnglesForHeight(float target_height_mm, const Parameters &params) {
+CalculatedServoAngles calculateServoAnglesForHeight(double target_height_mm, const Parameters &params) {
     // Robot dimensions from parameters
-    const float coxa_length = params.coxa_length;
-    const float femur_length = params.femur_length;
-    const float tibia_length = params.tibia_length;
+    const double coxa_length = params.coxa_length;
+    const double femur_length = params.femur_length;
+    const double tibia_length = params.tibia_length;
 
     // Joint limits from parameters (converted to radians)
-    const float alphaMin = params.femur_angle_limits[0] * DEGREES_TO_RADIANS_FACTOR;
-    const float alphaMax = params.femur_angle_limits[1] * DEGREES_TO_RADIANS_FACTOR;
-    const float betaMin = params.tibia_angle_limits[0] * DEGREES_TO_RADIANS_FACTOR;
-    const float betaMax = params.tibia_angle_limits[1] * DEGREES_TO_RADIANS_FACTOR;
+    const double alphaMin = params.femur_angle_limits[0] * DEGREES_TO_RADIANS_FACTOR;
+    const double alphaMax = params.femur_angle_limits[1] * DEGREES_TO_RADIANS_FACTOR;
+    const double betaMin = params.tibia_angle_limits[0] * DEGREES_TO_RADIANS_FACTOR;
+    const double betaMax = params.tibia_angle_limits[1] * DEGREES_TO_RADIANS_FACTOR;
 
-    const float Ytarget = target_height_mm - tibia_length;
+    const double Ytarget = target_height_mm - tibia_length;
 
     CalculatedServoAngles best;
     best.coxa = 0;
     best.femur = 0;
     best.tibia = 0;
     best.valid = false;
-    float bestScore = 1e9f;
+    double bestScore = 1e9f;
 
     // Iterative search for optimal angles (following angle_calculus.cpp algorithm)
-    for (float beta = betaMin; beta <= betaMax; beta += 0.5f * DEGREES_TO_RADIANS_FACTOR) {
-        float yRem = Ytarget - femur_length * sin(beta);
-        float s = yRem / coxa_length; // argument of asin
+    for (double beta = betaMin; beta <= betaMax; beta += 0.5f * DEGREES_TO_RADIANS_FACTOR) {
+        double yRem = Ytarget - femur_length * sin(beta);
+        double s = yRem / coxa_length; // argument of asin
 
         if (s < -1.0f || s > 1.0f)
             continue;
 
-        float alpha = asin(s);
+        double alpha = asin(s);
 
         if (alpha < alphaMin || alpha > alphaMax)
             continue;
 
         // Calculate relative angles
-        float theta1 = (beta - alpha) * RADIANS_TO_DEGREES_FACTOR; // coxa-femur relative angle
+        double theta1 = (beta - alpha) * RADIANS_TO_DEGREES_FACTOR; // coxa-femur relative angle
         if (theta1 < params.femur_angle_limits[0] || theta1 > params.femur_angle_limits[1])
             continue;
 
-        float theta2 = -beta * RADIANS_TO_DEGREES_FACTOR; // femur-tibia relative angle
+        double theta2 = -beta * RADIANS_TO_DEGREES_FACTOR; // femur-tibia relative angle
 
         // Convert to individual servo angles based on geometric relationships:
         // From angle_calculus.cpp geometric relationships:
@@ -113,11 +113,11 @@ CalculatedServoAngles calculateServoAnglesForHeight(float target_height_mm, cons
         // Therefore:
         //   femur_angle = α = β − θ₁
         //   tibia_angle = β = −θ₂
-        float coxa_angle = 0.0f;                               // Coxa remains aligned radially
-        float femur_angle = alpha * RADIANS_TO_DEGREES_FACTOR; // Convert alpha to degrees
-        float tibia_angle = beta * RADIANS_TO_DEGREES_FACTOR;  // Convert beta to degrees
+        double coxa_angle = 0.0f;                               // Coxa remains aligned radially
+        double femur_angle = alpha * RADIANS_TO_DEGREES_FACTOR; // Convert alpha to degrees
+        double tibia_angle = beta * RADIANS_TO_DEGREES_FACTOR;  // Convert beta to degrees
 
-        float score = fabs(alpha) + fabs(beta);
+        double score = fabs(alpha) + fabs(beta);
         if (score < bestScore) {
             best.coxa = coxa_angle;
             best.femur = femur_angle;
@@ -149,7 +149,7 @@ std::array<StandingPoseJoints, NUM_LEGS> getDefaultStandingPoseJoints(const Para
     std::array<StandingPoseJoints, NUM_LEGS> joints;
 
     // Target height for standing pose (use robot_height from parameters)
-    const float target_height_mm = params.robot_height;
+    const double target_height_mm = params.robot_height;
 
     // Calculate optimal servo angles for the target height using inverse kinematics
     CalculatedServoAngles calculated = calculateServoAnglesForHeight(target_height_mm, params);

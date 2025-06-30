@@ -19,42 +19,42 @@
  * @brief Robot configuration parameters.
  */
 struct Parameters {
-    float hexagon_radius;
-    float coxa_length;
-    float femur_length;
-    float tibia_length;
+    double hexagon_radius;
+    double coxa_length;
+    double femur_length;
+    double tibia_length;
 
-    float robot_height;
-    float height_offset = 0.0f; ///< structural body height offset
-    float robot_weight;
-    Eigen::Vector3f center_of_mass;
+    double robot_height;
+    double height_offset = 0.0f; ///< structural body height offset
+    double robot_weight;
+    Eigen::Vector3d center_of_mass;
 
-    float coxa_angle_limits[2];
-    float femur_angle_limits[2];
-    float tibia_angle_limits[2];
+    double coxa_angle_limits[2];
+    double femur_angle_limits[2];
+    double tibia_angle_limits[2];
 
     // Joint angle sign multipliers for hardware adaptation
-    float angle_sign_coxa = 1.0f;  ///< Sign multiplier for coxa joint output (+1.0 or -1.0 to match servo direction)
-    float angle_sign_femur = 1.0f; ///< Sign multiplier for femur joint output (+1.0 or -1.0 to match servo direction)
-    float angle_sign_tibia = 1.0f; ///< Sign multiplier for tibia joint output (+1.0 or -1.0 to match servo direction)
+    double angle_sign_coxa = 1.0f;  ///< Sign multiplier for coxa joint output (+1.0 or -1.0 to match servo direction)
+    double angle_sign_femur = 1.0f; ///< Sign multiplier for femur joint output (+1.0 or -1.0 to match servo direction)
+    double angle_sign_tibia = 1.0f; ///< Sign multiplier for tibia joint output (+1.0 or -1.0 to match servo direction)
 
     bool use_custom_dh_parameters = false; ///< Use custom Denavit-Hartenberg parameters
     /**
      * @brief DH parameter table for each leg.
      * The first entry represents the fixed base transform.
      */
-    float dh_parameters[NUM_LEGS][DOF_PER_LEG + 1][4];
+    double dh_parameters[NUM_LEGS][DOF_PER_LEG + 1][4];
 
-    Eigen::Vector3f imu_calibration_offset;
-    float fsr_touchdown_threshold;
-    float fsr_liftoff_threshold;
-    float fsr_max_pressure;
+    Eigen::Vector3d imu_calibration_offset;
+    double fsr_touchdown_threshold;
+    double fsr_liftoff_threshold;
+    double fsr_max_pressure;
 
-    float max_velocity;
-    float max_angular_velocity;
-    float stability_margin;
-    float control_frequency;
-    float default_servo_speed = SERVO_SPEED_DEFAULT; ///< Default servo movement speed (0.1-3.0, where 1.0 is normal speed)
+    double max_velocity;
+    double max_angular_velocity;
+    double stability_margin;
+    double control_frequency;
+    double default_servo_speed = SERVO_SPEED_DEFAULT; ///< Default servo movement speed (0.1-3.0, where 1.0 is normal speed)
 
     /**
      * @brief Smooth trajectory configuration for pose updates.
@@ -63,8 +63,8 @@ struct Parameters {
     struct SmoothTrajectoryConfig {
         bool use_current_servo_positions = true;          ///< Use current servo positions as starting point for trajectories (OpenSHC-style)
         bool enable_pose_interpolation = true;            ///< Enable smooth pose interpolation between positions
-        float interpolation_speed = MIN_SERVO_VELOCITY;   ///< Interpolation speed factor (0.01-1.0, where 0.1 is smooth)
-        float position_tolerance_mm = POSITION_TOLERANCE; ///< Position tolerance for determining if servo has reached target
+        double interpolation_speed = MIN_SERVO_VELOCITY;   ///< Interpolation speed factor (0.01-1.0, where 0.1 is smooth)
+        double position_tolerance_mm = POSITION_TOLERANCE; ///< Position tolerance for determining if servo has reached target
         uint8_t max_interpolation_steps = 20;             ///< Maximum steps for pose interpolation
         bool use_quaternion_slerp = true;                 ///< Use spherical interpolation for orientations
     } smooth_trajectory;
@@ -74,9 +74,9 @@ struct Parameters {
      */
     struct IKConfig {
         uint8_t max_iterations = IK_DEFAULT_MAX_ITERATIONS; ///< Maximum iterations for RobotModel::inverseKinematics
-        float pos_threshold_mm = 0.5f;
+        double pos_threshold_mm = 0.5f;
         bool use_damping = true;
-        float damping_lambda = 30.0f;
+        double damping_lambda = 30.0f;
         bool clamp_joints = true;
     } ik;
 
@@ -85,9 +85,9 @@ struct Parameters {
      */
     struct BodyCompConfig {
         bool enable = true;
-        float kp = 0.6f;
-        float lp_alpha = 0.10f;
-        float max_tilt_deg = 12.0f;
+        double kp = 0.6f;
+        double lp_alpha = 0.10f;
+        double max_tilt_deg = 12.0f;
     } body_comp;
 
     // Gait step calculation factors
@@ -96,24 +96,24 @@ struct Parameters {
      */
     struct GaitFactors {
         // Step length as percentage of leg reach
-        float tripod_length_factor = 0.35f;      // 35% for speed
-        float wave_length_factor = 0.25f;        // 25% for stability
-        float ripple_length_factor = 0.30f;      // 30% for balance
-        float metachronal_length_factor = 0.28f; // 28% for smooth motion
-        float adaptive_length_factor = 0.30f;    // 30% base for adaptation
+        double tripod_length_factor = 0.35f;      // 35% for speed
+        double wave_length_factor = 0.25f;        // 25% for stability
+        double ripple_length_factor = 0.30f;      // 30% for balance
+        double metachronal_length_factor = 0.28f; // 28% for smooth motion
+        double adaptive_length_factor = 0.30f;    // 30% base for adaptation
 
         // Step height as percentage of robot height
-        float tripod_height_factor = 0.30f;      // 30% for obstacle clearance
-        float wave_height_factor = 0.20f;        // 20% for stability
-        float ripple_height_factor = 0.25f;      // 25% for balance
-        float metachronal_height_factor = 0.25f; // 25% for smooth motion
-        float adaptive_height_factor = 0.25f;    // 25% base for adaptation
+        double tripod_height_factor = 0.30f;      // 30% for obstacle clearance
+        double wave_height_factor = 0.20f;        // 20% for stability
+        double ripple_height_factor = 0.25f;      // 25% for balance
+        double metachronal_height_factor = 0.25f; // 25% for smooth motion
+        double adaptive_height_factor = 0.25f;    // 25% base for adaptation
 
         // Safety limits as percentage of leg reach/height
-        float min_length_factor = 0.12f; // 12% minimum step length
-        float max_length_factor = 0.50f; // 50% maximum step length
-        float min_height_factor = 0.12f; // 12% minimum step height
-        float max_height_factor = 0.40f; // 40% maximum step height
+        double min_length_factor = 0.12f; // 12% minimum step length
+        double max_length_factor = 0.50f; // 50% maximum step length
+        double min_height_factor = 0.12f; // 12% minimum step height
+        double max_height_factor = 0.40f; // 40% maximum step height
     } gait_factors;
 };
 
@@ -136,8 +136,8 @@ enum LegState {
  * @brief 3D coordinate in millimeters.
  */
 struct Point3D {
-    float x, y, z;
-    explicit Point3D(float x = 0, float y = 0, float z = 0) : x(x), y(y), z(z) {}
+    double x, y, z;
+    explicit Point3D(double x = 0, double y = 0, double z = 0) : x(x), y(y), z(z) {}
 
     // Operator overloads
     Point3D operator+(const Point3D &other) const {
@@ -148,11 +148,11 @@ struct Point3D {
         return Point3D(x - other.x, y - other.y, z - other.z);
     }
 
-    Point3D operator*(float scalar) const {
+    Point3D operator*(double scalar) const {
         return Point3D(x * scalar, y * scalar, z * scalar);
     }
 
-    Point3D operator/(float scalar) const {
+    Point3D operator/(double scalar) const {
         return Point3D(x / scalar, y / scalar, z / scalar);
     }
 
@@ -164,12 +164,12 @@ struct Point3D {
         return !(*this == other);
     }
 
-    float norm() const {
+    double norm() const {
         return sqrt(x * x + y * y + z * z);
     }
 
     Point3D normalized() const {
-        float n = norm();
+        double n = norm();
         if (n > 0) {
             return Point3D(x / n, y / n, z / n);
         }
@@ -182,21 +182,21 @@ struct Point3D {
  */
 struct Pose {
     Point3D position;
-    Eigen::Quaternionf rotation;
+    Eigen::Quaterniond rotation;
 
-    explicit Pose(const Point3D &pos = Point3D(), const Eigen::Quaternionf &rot = Eigen::Quaternionf::Identity())
+    explicit Pose(const Point3D &pos = Point3D(), const Eigen::Quaterniond &rot = Eigen::Quaterniond::Identity())
         : position(pos), rotation(rot) {}
 
-    explicit Pose(const Point3D &pos, const Eigen::Vector3f &euler_angles_deg)
+    explicit Pose(const Point3D &pos, const Eigen::Vector3d &euler_angles_deg)
         : position(pos) {
-        Eigen::Vector3f euler_rad = euler_angles_deg * M_PI / 180.0f;
-        rotation = Eigen::AngleAxisf(euler_rad.z(), Eigen::Vector3f::UnitZ()) *
-                   Eigen::AngleAxisf(euler_rad.y(), Eigen::Vector3f::UnitY()) *
-                   Eigen::AngleAxisf(euler_rad.x(), Eigen::Vector3f::UnitX());
+        Eigen::Vector3d euler_rad = euler_angles_deg * M_PI / 180.0f;
+        rotation = Eigen::AngleAxisd(euler_rad.z(), Eigen::Vector3d::UnitZ()) *
+                   Eigen::AngleAxisd(euler_rad.y(), Eigen::Vector3d::UnitY()) *
+                   Eigen::AngleAxisd(euler_rad.x(), Eigen::Vector3d::UnitX());
     }
 
     static Pose Identity() {
-        return Pose(Point3D(), Eigen::Quaternionf::Identity());
+        return Pose(Point3D(), Eigen::Quaterniond::Identity());
     }
 
     bool operator==(const Pose &other) const {
@@ -211,19 +211,17 @@ struct Pose {
      * Transform a pose by this pose (equivalent to OpenSHC's transform method)
      */
     Pose transform(const Eigen::Matrix4d &transform_matrix) const {
-        Eigen::Vector4d pos_homogeneous(static_cast<double>(position.x),
-                                       static_cast<double>(position.y),
-                                       static_cast<double>(position.z), 1.0);
+        Eigen::Vector4d pos_homogeneous(position.x, position.y, position.z, 1.0);
         Eigen::Vector4d transformed_pos = transform_matrix * pos_homogeneous;
 
         Eigen::Matrix3d rot_matrix = transform_matrix.block<3, 3>(0, 0);
         Eigen::Quaterniond transformed_rot(rot_matrix);
         Eigen::Quaterniond result_rot = transformed_rot * rotation.cast<double>();
 
-        return Pose(Point3D(static_cast<float>(transformed_pos.x()),
-                            static_cast<float>(transformed_pos.y()),
-                            static_cast<float>(transformed_pos.z())),
-                    result_rot.cast<float>());
+        return Pose(Point3D(transformed_pos.x(),
+                           transformed_pos.y(),
+                           transformed_pos.z()),
+                    result_rot.cast<double>());
     }
 };
 
@@ -231,8 +229,8 @@ struct Pose {
  * @brief Joint angles for a single leg in degrees.
  */
 struct JointAngles {
-    float coxa, femur, tibia;
-    explicit JointAngles(float c = 0, float f = 0, float t = 0) : coxa(c), femur(f), tibia(t) {}
+    double coxa, femur, tibia;
+    explicit JointAngles(double c = 0, double f = 0, double t = 0) : coxa(c), femur(f), tibia(t) {}
 };
 
 /**
@@ -248,9 +246,9 @@ enum IMUMode {
  * @brief Absolute position data from advanced IMUs
  */
 struct IMUAbsoluteData {
-    float absolute_roll, absolute_pitch, absolute_yaw;            ///< Absolute orientation in degrees
-    float linear_accel_x, linear_accel_y, linear_accel_z;         ///< Linear acceleration (gravity removed)
-    float quaternion_w, quaternion_x, quaternion_y, quaternion_z; ///< Orientation quaternion
+    double absolute_roll, absolute_pitch, absolute_yaw;            ///< Absolute orientation in degrees
+    double linear_accel_x, linear_accel_y, linear_accel_z;         ///< Linear acceleration (gravity removed)
+    double quaternion_w, quaternion_x, quaternion_y, quaternion_z; ///< Orientation quaternion
     bool absolute_orientation_valid;                              ///< Whether absolute orientation is valid
     bool linear_acceleration_valid;                               ///< Whether linear acceleration is valid
     bool quaternion_valid;                                        ///< Whether quaternion data is valid
@@ -264,9 +262,9 @@ struct IMUAbsoluteData {
  */
 struct IMUData {
     // Basic IMU data (always available)
-    float roll, pitch, yaw;          ///< Euler angles in degrees
-    float accel_x, accel_y, accel_z; ///< Raw acceleration in m/s²
-    float gyro_x, gyro_y, gyro_z;    ///< Angular velocity in rad/s
+    double roll, pitch, yaw;          ///< Euler angles in degrees
+    double accel_x, accel_y, accel_z; ///< Raw acceleration in m/s²
+    double gyro_x, gyro_y, gyro_z;    ///< Angular velocity in rad/s
     bool is_valid;                   ///< Basic data validity
 
     // Extended data for advanced IMUs
@@ -279,9 +277,9 @@ struct IMUData {
  * @brief Force sensing resistor data for a foot.
  */
 struct FSRData {
-    float pressure;
+    double pressure;
     bool in_contact;
-    float contact_time;
+    double contact_time;
 };
 
 class IIMUInterface {
@@ -338,7 +336,7 @@ class IFSRInterface {
     /** Calibrate a specific FSR sensor. */
     virtual bool calibrateFSR(int leg_index) = 0;
     /** Get raw ADC reading from a sensor. */
-    virtual float getRawReading(int leg_index) = 0;
+    virtual double getRawReading(int leg_index) = 0;
     /**
      * Update internal registers with ADC readings using AdvancedAnalog DMA.
      * This method should trigger simultaneous reading of all FSR channels
@@ -371,10 +369,10 @@ class IServoInterface {
      * @param speed Movement velocity/speed for reaching the target position
      * @return true if command was successfully sent to servo
      */
-    virtual bool setJointAngleAndSpeed(int leg_index, int joint_index, float angle, float speed) = 0;
+    virtual bool setJointAngleAndSpeed(int leg_index, int joint_index, double angle, double speed) = 0;
 
     /** Retrieve the current joint angle. */
-    virtual float getJointAngle(int leg_index, int joint_index) = 0;
+    virtual double getJointAngle(int leg_index, int joint_index) = 0;
 
     /** Check if a joint is currently moving. */
     virtual bool isJointMoving(int leg_index, int joint_index) = 0;
@@ -408,24 +406,24 @@ class RobotModel {
     /** Compute forward kinematics for a leg. */
     Point3D forwardKinematics(int leg, const JointAngles &q) const;
     /** Analytic Jacobian for a leg. */
-    Eigen::Matrix3f analyticJacobian(int leg, const JointAngles &q) const;
+    Eigen::Matrix3d analyticJacobian(int leg, const JointAngles &q) const;
     /** Numerical Jacobian calculation. */
-    Eigen::Matrix3f calculateJacobian(int leg, const JointAngles &q, const Point3D &target) const;
+    Eigen::Matrix3d calculateJacobian(int leg, const JointAngles &q, const Point3D &target) const;
     /** Homogeneous transform for a full leg chain. */
     Eigen::Matrix4d legTransform(int leg, const JointAngles &q) const;
     /** Verify if joint angles are within defined limits. */
     bool checkJointLimits(int leg, const JointAngles &q) const;
     /** Clamp angle within limits. */
-    float constrainAngle(float angle, float min_angle, float max_angle) const;
+    double constrainAngle(double angle, double min_angle, double max_angle) const;
     /** Normalize angle to [-180,180] degrees. */
-    float normalizeAngle(float angle_deg) const;
+    double normalizeAngle(double angle_deg) const;
     /** Validate parameter consistency. */
     bool validate() const;
     /**
      * \brief Calculate minimal and maximal body height based on joint limits.
      * \return Pair {min_height, max_height} in millimeters.
      */
-    std::pair<float, float> calculateHeightRange() const;
+    std::pair<double, double> calculateHeightRange() const;
     const Parameters &getParams() const { return params; }
 
     /**
@@ -471,7 +469,7 @@ class RobotModel {
     const Parameters &params;
     // DH parameter table: [leg][joint][param] where param = [a, alpha, d, theta_offset]
     // The first entry stores the fixed base transform for the leg
-    float dh_transforms[NUM_LEGS][DOF_PER_LEG + 1][4];
+    double dh_transforms[NUM_LEGS][DOF_PER_LEG + 1][4];
 
     JointAngles solveIK(int leg, const Point3D &local_target, JointAngles current) const;
 };

@@ -28,7 +28,7 @@ class BNO055IMU : public IIMUInterface {
     IMUMode current_mode_;
     uint8_t calibration_status_[4]; // system, gyro, accel, mag
     bool is_initialized_;
-    float simulated_roll_, simulated_pitch_, simulated_yaw_;
+    double simulated_roll_, simulated_pitch_, simulated_yaw_;
 
   public:
     BNO055IMU() : current_mode_(IMU_MODE_RAW_DATA), is_initialized_(false),
@@ -103,16 +103,16 @@ class BNO055IMU : public IIMUInterface {
         data.absolute_data.linear_accel_z = data.accel_z - 9.81f;
 
         // Orientation quaternion
-        float roll_rad = data.absolute_data.absolute_roll * PI / 180.0f;
-        float pitch_rad = data.absolute_data.absolute_pitch * PI / 180.0f;
-        float yaw_rad = data.absolute_data.absolute_yaw * PI / 180.0f;
+        double roll_rad = data.absolute_data.absolute_roll * PI / 180.0f;
+        double pitch_rad = data.absolute_data.absolute_pitch * PI / 180.0f;
+        double yaw_rad = data.absolute_data.absolute_yaw * PI / 180.0f;
 
-        float cr = cos(roll_rad * 0.5f);
-        float sr = sin(roll_rad * 0.5f);
-        float cp = cos(pitch_rad * 0.5f);
-        float sp = sin(pitch_rad * 0.5f);
-        float cy = cos(yaw_rad * 0.5f);
-        float sy = sin(yaw_rad * 0.5f);
+        double cr = cos(roll_rad * 0.5f);
+        double sr = sin(roll_rad * 0.5f);
+        double cp = cos(pitch_rad * 0.5f);
+        double sp = sin(pitch_rad * 0.5f);
+        double cy = cos(yaw_rad * 0.5f);
+        double sy = sin(yaw_rad * 0.5f);
 
         data.absolute_data.quaternion_w = cr * cp * cy + sr * sp * sy;
         data.absolute_data.quaternion_x = sr * cp * cy - cr * sp * sy;
@@ -207,7 +207,7 @@ class ExampleFSR : public IFSRInterface {
         return data;
     }
     bool calibrateFSR(int /*leg_index*/) override { return true; }
-    float getRawReading(int /*leg_index*/) override { return 0.0f; }
+    double getRawReading(int /*leg_index*/) override { return 0.0f; }
     bool update() override { return true; }
 };
 
@@ -222,8 +222,8 @@ class ExampleServo : public IServoInterface {
         return false;
     }
 
-    bool setJointAngleAndSpeed(int /*leg_index*/, int /*joint_index*/, float /*angle*/, float /*speed*/) override { return true; }
-    float getJointAngle(int /*leg_index*/, int /*joint_index*/) override { return 0.0f; }
+    bool setJointAngleAndSpeed(int /*leg_index*/, int /*joint_index*/, double /*angle*/, double /*speed*/) override { return true; }
+    double getJointAngle(int /*leg_index*/, int /*joint_index*/) override { return 0.0f; }
     bool isJointMoving(int /*leg_index*/, int /*joint_index*/) override { return false; }
     bool enableTorque(int /*leg_index*/, int /*joint_index*/, bool /*enable*/) override { return true; }
 };

@@ -21,7 +21,7 @@ class VelocityLimits::Impl {
     LimitMap limit_map_;
     WorkspaceConfig workspace_config_;
     GaitConfig current_gait_config_;
-    float angular_velocity_scaling_;
+    double angular_velocity_scaling_;
 
     explicit Impl(const RobotModel &model)
         : model_(model), angular_velocity_scaling_(DEFAULT_ANGULAR_SCALING) {
@@ -29,7 +29,7 @@ class VelocityLimits::Impl {
         ValidationConfig config;
         config.enable_collision_checking = true;
         config.enable_joint_limit_checking = true;
-        config.safety_margin = 30.0f;
+        config.safety_margin = 30.0;
 
         workspace_validator_ = std::make_unique<WorkspaceValidator>(model, config);
 
@@ -58,13 +58,13 @@ void VelocityLimits::generateLimits(const GaitConfig &gait_config) {
     // Generate limits for all bearings (0-359 degrees) using validation
     for (int bearing = 0; bearing < 360; ++bearing) {
         pimpl_->limit_map_.limits[bearing] = calculateLimitsForBearing(
-            static_cast<float>(bearing), gait_config);
+            static_cast<double>(bearing), gait_config);
     }
 }
 
-VelocityLimits::LimitValues VelocityLimits::getLimit(float bearing_degrees) const {
+VelocityLimits::LimitValues VelocityLimits::getLimit(double bearing_degrees) const {
     // Normalize bearing to 0-359 range
-    float normalized_bearing = normalizeBearing(bearing_degrees);
+    double normalized_bearing = normalizeBearing(bearing_degrees);
 
     // Use interpolation for smooth transitions between discrete bearing values
     return interpolateLimits(normalized_bearing);
@@ -74,15 +74,15 @@ void VelocityLimits::calculateWorkspace(const GaitConfig &gait_config) {
     // Replace complex workspace calculation with WorkspaceValidator
 
     // Get workspace bounds for all legs
-    float min_walkspace_radius = 1000.0f; // Start with large value
-    float min_stance_radius = 1000.0f;
+    double min_walkspace_radius = 1000.0; // Start with large value
+    double min_stance_radius = 1000.0;
 
     for (int leg = 0; leg < NUM_LEGS; ++leg) {
         auto bounds = pimpl_->workspace_validator_->getWorkspaceBounds(leg);
 
         // Use the most restrictive values across all legs
         min_walkspace_radius = std::min(min_walkspace_radius, bounds.max_radius);
-        min_stance_radius = std::min(min_stance_radius, bounds.max_radius * 0.8f);
+        min_stance_radius = std::min(min_stance_radius, bounds.max_radius * 0.8);
     }
 
     // Apply safety scaling
@@ -93,24 +93,26 @@ void VelocityLimits::calculateWorkspace(const GaitConfig &gait_config) {
     pimpl_->workspace_config_.safety_margin = scaling_factors.safety_margin;
 
     // Ensure minimum reasonable values using constants
-    pimpl_->workspace_config_.walkspace_radius = std::max(pimpl_->workspace_config_.walkspace_radius, 0.05f);
-    pimpl_->workspace_config_.stance_radius = std::max(pimpl_->workspace_config_.stance_radius, 0.03f);
+    pimpl_->workspace_config_.walkspace_radius =
+        std::max(pimpl_->workspace_config_.walkspace_radius, 0.05);
+    pimpl_->workspace_config_.stance_radius =
+        std::max(pimpl_->workspace_config_.stance_radius, 0.03);
 }
 
 VelocityLimits::LimitValues VelocityLimits::scaleVelocityLimits(
-    const LimitValues &input_velocities, float angular_velocity_percentage) const {
+    const LimitValues &input_velocities, double angular_velocity_percentage) const {
 
     LimitValues scaled_limits = input_velocities;
 
     // Apply angular velocity scaling using scaling factors
     auto scaling_factors = pimpl_->workspace_validator_->getScalingFactors();
-    float angular_scale = angular_velocity_percentage * scaling_factors.angular_scale;
+    double angular_scale = angular_velocity_percentage * scaling_factors.angular_scale;
     scaled_limits.angular_z *= angular_scale;
 
     // Scale linear velocities based on angular velocity demand
     // High angular velocities reduce available linear velocity
-    float linear_scale = 1.0f - (std::abs(angular_scale) * 0.3f); // 30% coupling factor
-    linear_scale = std::max(0.1f, linear_scale);                  // Minimum 10% linear velocity
+    double linear_scale = 1.0 - (std::abs(angular_scale) * 0.3); // 30% coupling factor
+    linear_scale = std::max(0.1, linear_scale);                  // Minimum 10% linear velocity
 
     scaled_limits.linear_x *= linear_scale;
     scaled_limits.linear_y *= linear_scale;
@@ -118,8 +120,8 @@ VelocityLimits::LimitValues VelocityLimits::scaleVelocityLimits(
     return scaled_limits;
 }
 
-bool VelocityLimits::validateVelocityInputs(float vx, float vy, float omega) const {
-    float bearing = calculateBearing(vx, vy);
+bool VelocityLimits::validateVelocityInputs(double vx, double vy, double omega) const {
+    double bearing = calculateBearing(vx, vy);
     LimitValues limits = getLimit(bearing);
 
     // Check if velocities are within calculated limits
@@ -128,11 +130,11 @@ bool VelocityLimits::validateVelocityInputs(float vx, float vy, float omega) con
             std::abs(omega) <= limits.angular_z);
 }
 
-VelocityLimits::LimitValues VelocityLimits::interpolateLimits(float bearing_degrees) const {
+VelocityLimits::LimitValues VelocityLimits::interpolateLimits(double bearing_degrees) const {
     int index1 = getBearingIndex(bearing_degrees);
     int index2 = (index1 + 1) % 360;
 
-    float t = bearing_degrees - static_cast<float>(index1);
+    double t = bearing_degrees - static_cast<double>(index1);
 
     const LimitValues &limits1 = pimpl_->limit_map_.limits[index1];
     const LimitValues &limits2 = pimpl_->limit_map_.limits[index2];
@@ -149,18 +151,18 @@ VelocityLimits::LimitValues VelocityLimits::interpolateLimits(float bearing_degr
 VelocityLimits::LimitValues VelocityLimits::applyAccelerationLimits(
     const LimitValues &target_velocities,
     const LimitValues &current_velocities,
-    float dt) const {
+    double dt) const {
 
     LimitValues limited_velocities = target_velocities;
 
     // Calculate required accelerations
-    float accel_x = (target_velocities.linear_x - current_velocities.linear_x) / dt;
-    float accel_y = (target_velocities.linear_y - current_velocities.linear_y) / dt;
-    float accel_z = (target_velocities.angular_z - current_velocities.angular_z) / dt;
+    double accel_x = (target_velocities.linear_x - current_velocities.linear_x) / dt;
+    double accel_y = (target_velocities.linear_y - current_velocities.linear_y) / dt;
+    double accel_z = (target_velocities.angular_z - current_velocities.angular_z) / dt;
 
     // Apply acceleration limits using constraints
     auto scaling_factors = pimpl_->workspace_validator_->getScalingFactors();
-    float max_accel = target_velocities.acceleration * scaling_factors.acceleration_scale;
+    double max_accel = target_velocities.acceleration * scaling_factors.acceleration_scale;
 
     if (std::abs(accel_x) > max_accel) {
         limited_velocities.linear_x = current_velocities.linear_x +
@@ -184,13 +186,13 @@ void VelocityLimits::calculateOvershoot(const GaitConfig &gait_config) {
     // Use velocity constraints instead of custom calculation
 
     // Get velocity constraints from validator for forward direction (0 degrees)
-    auto constraints = pimpl_->workspace_validator_->calculateVelocityConstraints(0, 0.0f);
+    auto constraints = pimpl_->workspace_validator_->calculateVelocityConstraints(0, 0.0);
 
-    float max_speed = constraints.max_linear_velocity;
-    float max_acceleration = constraints.max_acceleration;
+    double max_speed = constraints.max_linear_velocity;
+    double max_acceleration = constraints.max_acceleration;
 
     // Overshoot distance during acceleration phase
-    float accel_time = gait_config.time_to_max_stride;
+    double accel_time = gait_config.time_to_max_stride;
     pimpl_->workspace_config_.overshoot_x = WORKSPACE_SCALING_FACTOR * max_acceleration * accel_time * accel_time;
     pimpl_->workspace_config_.overshoot_y = pimpl_->workspace_config_.overshoot_x; // Symmetric for now
 
@@ -245,88 +247,88 @@ std::vector<VelocityLimits::LimitValues> VelocityLimits::getAllLimits() const {
     return all_limits;
 }
 
-float VelocityLimits::normalizeBearing(float bearing_degrees) {
+double VelocityLimits::normalizeBearing(double bearing_degrees) {
     // Normalize bearing to 0-359.999 range
-    bearing_degrees = std::fmod(bearing_degrees, 360.0f);
-    if (bearing_degrees < 0.0f) {
-        bearing_degrees += 360.0f;
+    bearing_degrees = std::fmod(bearing_degrees, 360.0);
+    if (bearing_degrees < 0.0) {
+        bearing_degrees += 360.0;
     }
     return bearing_degrees;
 }
 
-float VelocityLimits::calculateBearing(float vx, float vy) {
+double VelocityLimits::calculateBearing(double vx, double vy) {
     // Calculate bearing from velocity components
     if (std::abs(vx) < 1e-10f && std::abs(vy) < 1e-10f) {
-        return 0.0f; // Default bearing for zero velocity
+        return 0.0; // Default bearing for zero velocity
     }
 
-    float bearing_rad = std::atan2(vy, vx);
-    float bearing_deg = math_utils::radiansToDegrees(bearing_rad);
+    double bearing_rad = std::atan2(vy, vx);
+    double bearing_deg = math_utils::radiansToDegrees(bearing_rad);
     return normalizeBearing(bearing_deg);
 }
 
-float VelocityLimits::calculateMaxLinearSpeed(float walkspace_radius,
-                                              float on_ground_ratio, float frequency) const {
+double VelocityLimits::calculateMaxLinearSpeed(double walkspace_radius,
+                                              double on_ground_ratio, double frequency) const {
     // Use simplified OpenSHC-equivalent calculation with constraints
-    if (on_ground_ratio <= 0.0f || frequency <= 0.0f || walkspace_radius <= 0.0f) {
-        return 0.0f;
+    if (on_ground_ratio <= 0.0 || frequency <= 0.0 || walkspace_radius <= 0.0) {
+        return 0.0;
     }
 
     // Ensure reasonable bounds to prevent numerical issues
-    float cycle_time = on_ground_ratio / frequency;
-    if (cycle_time <= 0.0f) {
-        return 0.0f;
+    double cycle_time = on_ground_ratio / frequency;
+    if (cycle_time <= 0.0) {
+        return 0.0;
     }
 
-    float max_speed = (walkspace_radius * 2.0f) / cycle_time;
+    double max_speed = (walkspace_radius * 2.0) / cycle_time;
 
     // Apply safety limits
     auto scaling_factors = pimpl_->workspace_validator_->getScalingFactors();
     max_speed *= scaling_factors.velocity_scale;
 
     // Apply reasonable limits to prevent extreme values
-    return std::min(max_speed, 5.0f); // Cap at 5 m/s for safety
+    return std::min(max_speed, 5.0); // Cap at 5 m/s for safety
 }
 
-float VelocityLimits::calculateMaxAngularSpeed(float max_linear_speed, float stance_radius) const {
+double VelocityLimits::calculateMaxAngularSpeed(double max_linear_speed, double stance_radius) const {
     // Use WorkspaceValidator angular scaling
-    if (stance_radius <= 0.0f || max_linear_speed <= 0.0f) {
-        return 0.0f;
+    if (stance_radius <= 0.0 || max_linear_speed <= 0.0) {
+        return 0.0;
     }
 
-    float max_angular = max_linear_speed / stance_radius;
+    double max_angular = max_linear_speed / stance_radius;
 
     // Apply angular scaling
     auto scaling_factors = pimpl_->workspace_validator_->getScalingFactors();
     max_angular *= scaling_factors.angular_scale;
 
     // Apply reasonable limits to prevent extreme values
-    return std::min(max_angular, 10.0f); // Cap at 10 rad/s for safety
+    return std::min(max_angular, 10.0); // Cap at 10 rad/s for safety
 }
 
-float VelocityLimits::calculateMaxAcceleration(float max_speed, float time_to_max) const {
+double VelocityLimits::calculateMaxAcceleration(double max_speed, double time_to_max) const {
     // Use WorkspaceValidator acceleration constraints
-    if (time_to_max <= 0.0f || max_speed <= 0.0f) {
-        return 0.0f;
+    if (time_to_max <= 0.0 || max_speed <= 0.0) {
+        return 0.0;
     }
 
-    float max_accel = max_speed / time_to_max;
+    double max_accel = max_speed / time_to_max;
 
     // Apply acceleration scaling
     auto scaling_factors = pimpl_->workspace_validator_->getScalingFactors();
     max_accel *= scaling_factors.acceleration_scale;
 
     // Apply reasonable limits to prevent extreme values
-    return std::min(max_accel, 10.0f); // Cap at 10 m/s² for safety
+    return std::min(max_accel, 10.0); // Cap at 10 m/s² for safety
 }
 
 VelocityLimits::LimitValues VelocityLimits::calculateLimitsForBearing(
-    float bearing_degrees, const GaitConfig &gait_config) const {
+    double bearing_degrees, const GaitConfig &gait_config) const {
 
     // Use WorkspaceValidator instead of complex leg analysis
 
     // Find the most constraining leg using validation
-    float min_effective_radius = pimpl_->workspace_config_.walkspace_radius;
+    double min_effective_radius = pimpl_->workspace_config_.walkspace_radius;
     VelocityConstraints most_restrictive;
 
     for (int leg = 0; leg < NUM_LEGS; ++leg) {
@@ -340,14 +342,14 @@ VelocityLimits::LimitValues VelocityLimits::calculateLimitsForBearing(
     }
 
     // Calculate limits based on the most constraining constraints
-    float max_linear_speed = calculateMaxLinearSpeed(min_effective_radius,
+    double max_linear_speed = calculateMaxLinearSpeed(min_effective_radius,
                                                      gait_config.stance_ratio,
                                                      gait_config.frequency);
 
-    float max_angular_speed = calculateMaxAngularSpeed(max_linear_speed,
+    double max_angular_speed = calculateMaxAngularSpeed(max_linear_speed,
                                                        pimpl_->workspace_config_.stance_radius);
 
-    float max_acceleration = calculateMaxAcceleration(max_linear_speed,
+    double max_acceleration = calculateMaxAcceleration(max_linear_speed,
                                                       gait_config.time_to_max_stride);
 
     // Create limit values using constraints
@@ -360,32 +362,32 @@ VelocityLimits::LimitValues VelocityLimits::calculateLimitsForBearing(
     return limits;
 }
 
-float VelocityLimits::interpolateValue(float value1, float value2, float factor) const {
+double VelocityLimits::interpolateValue(double value1, double value2, double factor) const {
     return value1 + (value2 - value1) * factor;
 }
 
-int VelocityLimits::getBearingIndex(float bearing_degrees) const {
+int VelocityLimits::getBearingIndex(double bearing_degrees) const {
     return static_cast<int>(std::floor(bearing_degrees)) % 360;
 }
 
-void VelocityLimits::setSafetyMargin(float margin) {
+void VelocityLimits::setSafetyMargin(double margin) {
     pimpl_->workspace_config_.safety_margin = margin;
 
     // Update validator safety margin
     pimpl_->workspace_validator_->updateSafetyMargin(margin);
 }
 
-void VelocityLimits::setAngularVelocityScaling(float scaling) {
+void VelocityLimits::setAngularVelocityScaling(double scaling) {
     pimpl_->angular_velocity_scaling_ = scaling;
 
     // Update validator angular scaling
     pimpl_->workspace_validator_->updateAngularScaling(scaling);
 }
 
-float VelocityLimits::getOvershootX() const {
+double VelocityLimits::getOvershootX() const {
     return pimpl_->workspace_config_.overshoot_x;
 }
 
-float VelocityLimits::getOvershootY() const {
+double VelocityLimits::getOvershootY() const {
     return pimpl_->workspace_config_.overshoot_y;
 }

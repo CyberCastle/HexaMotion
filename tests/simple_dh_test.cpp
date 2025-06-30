@@ -23,19 +23,19 @@ int main() {
     std::cout << std::fixed << std::setprecision(3);
     std::cout << "=== DH Parameter Validation ===" << std::endl;
 
-    static const float base_theta_offsets[NUM_LEGS] = {0.0f, -60.0f, -120.0f, 180.0f, 120.0f, 60.0f};
+    static const double base_theta_offsets[NUM_LEGS] = {0.0f, -60.0f, -120.0f, 180.0f, 120.0f, 60.0f};
 
     JointAngles q(0, 0, 0);
 
     bool ok = true;
     for (int leg = 0; leg < NUM_LEGS; ++leg) {
         Point3D pos = model.forwardKinematics(leg, q);
-        float theta_rad = base_theta_offsets[leg] * M_PI / 180.0f;
-        float reach = p.hexagon_radius + p.coxa_length + p.femur_length;
-        float expected_x = reach * cos(theta_rad);
-        float expected_y = reach * sin(theta_rad);
-        float expected_z = -p.tibia_length;
-        float err = std::sqrt(std::pow(pos.x - expected_x, 2) +
+        double theta_rad = base_theta_offsets[leg] * M_PI / 180.0f;
+        double reach = p.hexagon_radius + p.coxa_length + p.femur_length;
+        double expected_x = reach * cos(theta_rad);
+        double expected_y = reach * sin(theta_rad);
+        double expected_z = -p.tibia_length;
+        double err = std::sqrt(std::pow(pos.x - expected_x, 2) +
                               std::pow(pos.y - expected_y, 2) +
                               std::pow(pos.z - expected_z, 2));
         std::cout << "Leg " << leg << ": (" << pos.x << ", " << pos.y << ", " << pos.z

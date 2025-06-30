@@ -56,10 +56,10 @@ void loop() {
 }
 
 void compareConfigurations() {
-    const float OLD_RADIUS = 200.0f;                 // Original problematic value
-    const float NEW_RADIUS = 280.0f;                 // New safe value
-    const float LEG_REACH = 50.0f + 101.0f + 208.0f; // Total reach
-    const float SAFE_REACH = LEG_REACH * 0.65f;
+    const double OLD_RADIUS = 200.0f;                 // Original problematic value
+    const double NEW_RADIUS = 280.0f;                 // New safe value
+    const double LEG_REACH = 50.0f + 101.0f + 208.0f; // Total reach
+    const double SAFE_REACH = LEG_REACH * 0.65f;
 
     Serial.println("OLD CONFIGURATION (PROBLEMATIC):");
     Serial.print("  Hexagon radius: ");
@@ -67,7 +67,7 @@ void compareConfigurations() {
     Serial.println(" mm");
 
     // Check if old config would cause overlaps
-    float min_safe_radius = WorkspaceValidator::calculateSafeHexagonRadius(SAFE_REACH, 30.0f);
+    double min_safe_radius = WorkspaceValidator::calculateSafeHexagonRadius(SAFE_REACH, 30.0f);
     if (OLD_RADIUS < min_safe_radius) {
         Serial.print("  ⚠️  COLLISION RISK: Radius ");
         Serial.print(min_safe_radius - OLD_RADIUS);
@@ -96,7 +96,7 @@ void testCollisionAvoidance(RobotModel &model) {
 
     // Simulate a walking scenario where legs might collide
     LegState leg_states[NUM_LEGS];
-    float leg_phase_offsets[NUM_LEGS] = {0.0f, 0.5f, 0.0f, 0.5f, 0.0f, 0.5f}; // Tripod gait
+    double leg_phase_offsets[NUM_LEGS] = {0.0f, 0.5f, 0.0f, 0.5f, 0.0f, 0.5f}; // Tripod gait
 
     MockFSRInterface fsr;
     MockIMUInterface imu;
@@ -130,14 +130,14 @@ void testCollisionAvoidance(RobotModel &model) {
 
 void checkCollisionInOldSystem(WorkspaceValidator &validator, int leg_index, const Point3D &position) {
     // Simulate what would happen with the old 200mm radius
-    const float OLD_RADIUS = 200.0f;
-    const float LEG_REACH = 359.0f;
+    const double OLD_RADIUS = 200.0f;
+    const double LEG_REACH = 359.0f;
 
     // Calculate adjacent leg positions with old radius
     Point3D adjacent_positions[NUM_LEGS];
     for (int i = 0; i < NUM_LEGS; i++) {
-        float angle = i * 60.0f; // LEG_ANGLE_SPACING
-        float safe_reach = LEG_REACH * 0.65f;
+        double angle = i * 60.0f; // LEG_ANGLE_SPACING
+        double safe_reach = LEG_REACH * 0.65f;
         adjacent_positions[i].x = OLD_RADIUS * cos(angle * M_PI / 180.0f) +
                                   safe_reach * cos(angle * M_PI / 180.0f);
         adjacent_positions[i].y = OLD_RADIUS * sin(angle * M_PI / 180.0f) +

@@ -76,8 +76,8 @@ void testSmoothMovementMethods() {
 
     // Test 3: Test immediate pose setting
     cout << "\nTesting immediate pose setting..." << endl;
-    Eigen::Vector3f test_position(0.0f, 0.0f, -100.0f);
-    Eigen::Vector3f test_orientation(0.0f, 0.0f, 0.0f);
+    Eigen::Vector3d test_position(0.0f, 0.0f, -100.0f);
+    Eigen::Vector3d test_orientation(0.0f, 0.0f, 0.0f);
 
     bool immediate_success = system.setBodyPoseImmediate(test_position, test_orientation);
     if (!immediate_success) {
@@ -89,8 +89,8 @@ void testSmoothMovementMethods() {
 
     // Test 4: Test smooth pose setting
     cout << "\nTesting smooth pose setting..." << endl;
-    Eigen::Vector3f new_position(10.0f, 10.0f, -90.0f);
-    Eigen::Vector3f new_orientation(5.0f, 5.0f, 10.0f);
+    Eigen::Vector3d new_position(10.0f, 10.0f, -90.0f);
+    Eigen::Vector3d new_orientation(5.0f, 5.0f, 10.0f);
 
     bool smooth_success = system.setBodyPoseSmooth(new_position, new_orientation);
     if (!smooth_success) {

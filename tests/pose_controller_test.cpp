@@ -124,8 +124,8 @@ int main() {
     // Test body pose with limits (OpenSHC-style limit checking)
     std::cout << "\n=== Testing OpenSHC-style Pose Limits ===" << std::endl;
 
-    Eigen::Vector3f small_translation(5.0f, 5.0f, 0.0f); // 5mm translation
-    Eigen::Vector3f small_rotation(2.0f, 2.0f, 2.0f);    // 2 degree rotation
+    Eigen::Vector3d small_translation(5.0f, 5.0f, 0.0f); // 5mm translation
+    Eigen::Vector3d small_rotation(2.0f, 2.0f, 2.0f);    // 2 degree rotation
 
     if (pc.setBodyPose(small_translation, small_rotation, legs, joints)) {
         std::cout << "Small body pose change: SUCCESS (within limits)" << std::endl;
@@ -134,8 +134,8 @@ int main() {
     }
 
     // Test pose that should exceed limits
-    Eigen::Vector3f large_translation(100.0f, 100.0f, 100.0f); // 100mm translation (should exceed limits)
-    Eigen::Vector3f large_rotation(30.0f, 30.0f, 30.0f);       // 30 degree rotation (should exceed limits)
+    Eigen::Vector3d large_translation(100.0f, 100.0f, 100.0f); // 100mm translation (should exceed limits)
+    Eigen::Vector3d large_rotation(30.0f, 30.0f, 30.0f);       // 30 degree rotation (should exceed limits)
 
     if (!pc.setBodyPose(large_translation, large_rotation, legs, joints)) {
         std::cout << "Large body pose change: CORRECTLY REJECTED (exceeds limits)" << std::endl;

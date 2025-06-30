@@ -31,10 +31,10 @@ TerrainAdaptation::TerrainAdaptation(RobotModel &model)
     const Parameters &params = model_.getParams();
 
     // Use fsr_touchdown_threshold if configured (> 0), otherwise use default
-    touchdown_threshold_ = (params.fsr_touchdown_threshold > 0.0f) ? params.fsr_touchdown_threshold : DEFAULT_FSR_TOUCHDOWN_THRESHOLD;
+    touchdown_threshold_ = (params.fsr_touchdown_threshold > 0.0) ? params.fsr_touchdown_threshold : DEFAULT_FSR_TOUCHDOWN_THRESHOLD;
 
     // Use fsr_liftoff_threshold if configured (> 0), otherwise use default
-    liftoff_threshold_ = (params.fsr_liftoff_threshold > 0.0f) ? params.fsr_liftoff_threshold : DEFAULT_FSR_LIFTOFF_THRESHOLD;
+    liftoff_threshold_ = (params.fsr_liftoff_threshold > 0.0) ? params.fsr_liftoff_threshold : DEFAULT_FSR_LIFTOFF_THRESHOLD;
 
     // Initialize per-leg data
     for (int i = 0; i < NUM_LEGS; i++) {
@@ -46,8 +46,8 @@ TerrainAdaptation::~TerrainAdaptation() = default;
 
 void TerrainAdaptation::initialize() {
     // Initialize walk plane to horizontal
-    current_walk_plane_.coeffs = Eigen::Vector3f(0, 0, 0);
-    current_walk_plane_.normal = Eigen::Vector3f(0, 0, 1);
+    current_walk_plane_.coeffs = Eigen::Vector3d(0, 0, 0);
+    current_walk_plane_.normal = Eigen::Vector3d(0, 0, 1);
     current_walk_plane_.valid = true;
     current_walk_plane_.confidence = DEFAULT_ANGULAR_SCALING;
 
@@ -118,7 +118,7 @@ bool TerrainAdaptation::hasTouchdownDetection(int leg_index) const {
 }
 
 Point3D TerrainAdaptation::adaptTrajectoryForTerrain(int leg_index, const Point3D &base_trajectory,
-                                                     LegState leg_state, float swing_progress) {
+                                                     LegState leg_state, double swing_progress) {
     if (!rough_terrain_mode_ || leg_index < 0 || leg_index >= NUM_LEGS) {
         return base_trajectory;
     }
@@ -131,14 +131,15 @@ Point3D TerrainAdaptation::adaptTrajectoryForTerrain(int leg_index, const Point3
         const ExternalTarget &target = external_targets_[leg_index];
 
         // Interpolate towards external target
-        float blend_factor = swing_progress;
+        double blend_factor = swing_progress;
         adapted_trajectory.x = base_trajectory.x * (DEFAULT_ANGULAR_SCALING - blend_factor) + target.position.x * blend_factor;
         adapted_trajectory.y = base_trajectory.y * (DEFAULT_ANGULAR_SCALING - blend_factor) + target.position.y * blend_factor;
         adapted_trajectory.z = base_trajectory.z * (DEFAULT_ANGULAR_SCALING - blend_factor) + target.position.z * blend_factor;
 
         // Apply swing clearance
-        if (swing_progress > 0.2f && swing_progress < 0.8f) {
-            adapted_trajectory.z += target.swing_clearance * sin(M_PI * (swing_progress - 0.2f) / 0.6f);
+        if (swing_progress > 0.2 && swing_progress < 0.8) {
+            adapted_trajectory.z +=
+                target.swing_clearance * sin(M_PI * (swing_progress - 0.2) / 0.6);
         }
 
         return adapted_trajectory;
@@ -154,7 +155,7 @@ Point3D TerrainAdaptation::adaptTrajectoryForTerrain(int leg_index, const Point3
     }
 
     // Force normal touchdown if enabled and in late swing phase
-    if (force_normal_touchdown_ && leg_state == SWING_PHASE && swing_progress > 0.7f) {
+    if (force_normal_touchdown_ && leg_state == SWING_PHASE && swing_progress > 0.7) {
         adapted_trajectory = forceNormalTouchdown(leg_index, adapted_trajectory);
     }
 
@@ -178,14 +179,14 @@ bool TerrainAdaptation::isTargetReachableOnTerrain(int leg_index, const Point3D 
     if (current_walk_plane_.valid) {
         // Check if target is reasonable relative to walk plane
         Point3D projected = projectOntoWalkPlane(target);
-        float walk_plane_deviation = abs(target.z - projected.z);
+        double walk_plane_deviation = abs(target.z - projected.z);
 
         // Use workspace bounds for step height validation
         auto bounds = workspace_validator_->getWorkspaceBounds(leg_index);
-        float max_step_height = bounds.max_height - bounds.min_height;
+        double max_step_height = bounds.max_height - bounds.min_height;
 
         // Allow deviation up to 50% of workspace height range
-        if (walk_plane_deviation > max_step_height * 0.5f) {
+        if (walk_plane_deviation > max_step_height * 0.5) {
             return false;
         }
     }
@@ -203,8 +204,8 @@ void TerrainAdaptation::updateWalkPlaneEstimation() {
     size_t n = foot_contact_history_.size();
 
     // Build matrices for least squares: A * x = B
-    Eigen::MatrixXf A(n, 3);
-    Eigen::VectorXf B(n);
+    Eigen::MatrixXd A(n, 3);
+    Eigen::VectorXd B(n);
 
     for (size_t i = 0; i < n; i++) {
         const Point3D &point = foot_contact_history_[i];
@@ -215,14 +216,15 @@ void TerrainAdaptation::updateWalkPlaneEstimation() {
     }
 
     // Solve using pseudo-inverse: x = (A^T * A)^-1 * A^T * B
-    Eigen::Matrix3f AtA = A.transpose() * A;
+    Eigen::Matrix3d AtA = A.transpose() * A;
     if (AtA.determinant() > 1e-6) { // Check for numerical stability
-        Eigen::Vector3f coeffs = AtA.inverse() * A.transpose() * B;
+        Eigen::Vector3d coeffs = AtA.inverse() * A.transpose() * B;
 
         current_walk_plane_.coeffs = coeffs;
-        current_walk_plane_.normal = Eigen::Vector3f(-coeffs[0], -coeffs[1], DEFAULT_ANGULAR_SCALING).normalized();
+        current_walk_plane_.normal = Eigen::Vector3d(-coeffs[0], -coeffs[1], DEFAULT_ANGULAR_SCALING).normalized();
         current_walk_plane_.valid = true;
-        current_walk_plane_.confidence = std::min(DEFAULT_ANGULAR_SCALING, static_cast<float>(n) / 6.0f); // Max confidence with 6+ points
+        current_walk_plane_.confidence =
+            std::min(DEFAULT_ANGULAR_SCALING, n / 6.0); // Max confidence with 6+ points
     }
 }
 
@@ -242,12 +244,12 @@ void TerrainAdaptation::detectTouchdownEvents(int leg_index, const FSRData &fsr_
 
         // Calculate foot position using workspace scaling
         const Parameters &params = model_.getParams();
-        float base_angle = leg_index * LEG_ANGLE_SPACING;
-        float base_x = params.hexagon_radius * cos(math_utils::degreesToRadians(base_angle));
-        float base_y = params.hexagon_radius * sin(math_utils::degreesToRadians(base_angle));
+        double base_angle = leg_index * LEG_ANGLE_SPACING;
+        double base_x = params.hexagon_radius * cos(math_utils::degreesToRadians(base_angle));
+        double base_y = params.hexagon_radius * sin(math_utils::degreesToRadians(base_angle));
 
         // Use scaling instead of hardcoded 65%
-        float safe_reach = bounds.max_radius * scaling_factors.workspace_scale;
+        double safe_reach = bounds.max_radius * scaling_factors.workspace_scale;
 
         Point3D foot_position;
         foot_position.x = base_x + safe_reach * cos(math_utils::degreesToRadians(base_angle));
@@ -272,7 +274,7 @@ void TerrainAdaptation::detectTouchdownEvents(int leg_index, const FSRData &fsr_
     // Liftoff detection
     else if (fsr_data.pressure < liftoff_threshold_ && step_plane.valid) {
         step_plane.valid = false;
-        step_plane.confidence = 0.0f;
+        step_plane.confidence = 0.0;
         touchdown_detection_[leg_index] = false;
     }
 }
@@ -289,7 +291,7 @@ void TerrainAdaptation::updateStepPlaneDetection(int leg_index, const FSRData &f
         step_plane.confidence = std::min(DEFAULT_ANGULAR_SCALING, step_plane.confidence + MIN_SERVO_VELOCITY);
     } else {
         // Decrease confidence without contact
-        step_plane.confidence = std::max(0.0f, step_plane.confidence - 0.05f);
+        step_plane.confidence = std::max(0.0, step_plane.confidence - 0.05);
     }
 }
 
@@ -298,36 +300,37 @@ void TerrainAdaptation::updateGravityEstimation(const IMUData &imu_data) {
         return;
 
     // Enhanced gravity estimation with absolute positioning support
-    Eigen::Vector3f accel_gravity;
-    const float alpha = 0.98f; // Filter coefficient
+    Eigen::Vector3d accel_gravity;
+    const double alpha = 0.98; // Filter coefficient
 
     // Use advanced IMU data if available (e.g., BNO055)
     if (imu_data.has_absolute_capability && imu_data.absolute_data.absolute_orientation_valid) {
         // Calculate gravity vector from absolute orientation (more accurate)
-        float roll_rad = imu_data.absolute_data.absolute_roll * DEGREES_TO_RADIANS_FACTOR;
-        float pitch_rad = imu_data.absolute_data.absolute_pitch * DEGREES_TO_RADIANS_FACTOR;
+        double roll_rad = imu_data.absolute_data.absolute_roll * DEGREES_TO_RADIANS_FACTOR;
+        double pitch_rad = imu_data.absolute_data.absolute_pitch * DEGREES_TO_RADIANS_FACTOR;
 
         // Gravity vector from absolute orientation
-        accel_gravity = Eigen::Vector3f(
-            sin(pitch_rad) * 9.81f,
-            -sin(roll_rad) * cos(pitch_rad) * 9.81f,
-            -cos(roll_rad) * cos(pitch_rad) * 9.81f);
+        accel_gravity = Eigen::Vector3d(
+            sin(pitch_rad) * 9.81,
+            -sin(roll_rad) * cos(pitch_rad) * 9.81,
+            -cos(roll_rad) * cos(pitch_rad) * 9.81);
 
         // Use lighter filtering for processed absolute data
-        gravity_estimate_ = alpha * 1.5f * gravity_estimate_ + (DEFAULT_ANGULAR_SCALING - alpha * 1.5f) * accel_gravity;
+        gravity_estimate_ = alpha * 1.5 * gravity_estimate_ +
+                           (DEFAULT_ANGULAR_SCALING - alpha * 1.5) * accel_gravity;
     } else {
         // Fallback to traditional method with raw acceleration
         // Convert acceleration to gravity estimate (negate because gravity points down)
-        accel_gravity = Eigen::Vector3f(-imu_data.accel_x, -imu_data.accel_y, -imu_data.accel_z);
+        accel_gravity = Eigen::Vector3d(-imu_data.accel_x, -imu_data.accel_y, -imu_data.accel_z);
 
         // Apply standard low-pass filter
         gravity_estimate_ = alpha * gravity_estimate_ + (DEFAULT_ANGULAR_SCALING - alpha) * accel_gravity;
     }
 
     // Normalize to expected gravity magnitude
-    float magnitude = gravity_estimate_.norm();
+    double magnitude = gravity_estimate_.norm();
     if (magnitude > MIN_SERVO_VELOCITY) {
-        gravity_estimate_ = gravity_estimate_ * (9.81f / magnitude);
+        gravity_estimate_ = gravity_estimate_ * (9.81 / magnitude);
     }
 }
 
@@ -342,12 +345,12 @@ Point3D TerrainAdaptation::applyProactiveAdaptation(int leg_index, const Point3D
     Point3D plane_target = step_plane.position;
 
     // Simple projection approach using vector calculations
-    float dx = adapted.x - plane_target.x;
-    float dy = adapted.y - plane_target.y;
-    float dz = adapted.z - plane_target.z;
+    double dx = adapted.x - plane_target.x;
+    double dy = adapted.y - plane_target.y;
+    double dz = adapted.z - plane_target.z;
 
     // Project onto step plane normal (simplified)
-    float dot_product = dx * step_plane.normal.x + dy * step_plane.normal.y + dz * step_plane.normal.z;
+    double dot_product = dx * step_plane.normal.x + dy * step_plane.normal.y + dz * step_plane.normal.z;
 
     adapted.x -= dot_product * step_plane.normal.x * step_plane.confidence;
     adapted.y -= dot_product * step_plane.normal.y * step_plane.confidence;
@@ -390,24 +393,24 @@ Point3D TerrainAdaptation::forceNormalTouchdown(int leg_index, const Point3D &tr
     Point3D adapted = trajectory;
 
     // Get the terrain surface normal (direction of optimal approach)
-    Eigen::Vector3f surface_normal = current_walk_plane_.normal;
+    Eigen::Vector3d surface_normal = current_walk_plane_.normal;
 
     // Calculate optimal touchdown approach vector
     // This emulates the effect of OpenSHC's Bezier node modification
     // by creating a trajectory that approaches perpendicular to the surface
-    float normal_magnitude = surface_normal.norm();
+    double normal_magnitude = surface_normal.norm();
 
-    if (normal_magnitude > 0.001f) { // Avoid division by zero
+    if (normal_magnitude > 0.001) { // Avoid division by zero
         // Normalize the surface normal
-        Eigen::Vector3f unit_normal = surface_normal / normal_magnitude;
+        Eigen::Vector3d unit_normal = surface_normal / normal_magnitude;
 
         // Calculate touchdown adjustment strength based on terrain confidence
         // Higher confidence = stronger normal approach adjustment
-        float approach_strength = current_walk_plane_.confidence;
+        double approach_strength = current_walk_plane_.confidence;
 
         // Apply adjustment scale appropriate for touchdown phase
         // This value is calibrated to match OpenSHC's touchdown behavior
-        float adjustment_scale = 12.0f; // mm adjustment magnitude
+        double adjustment_scale = 12.0; // mm adjustment magnitude
 
         // Apply normal-directed adjustment to optimize touchdown approach
         // This creates the same effect as OpenSHC's Bezier modification:
@@ -425,7 +428,7 @@ Point3D TerrainAdaptation::projectOntoWalkPlane(const Point3D &point) {
         return point;
 
     // Project point onto walk plane: z = ax + by + c
-    const Eigen::Vector3f &coeffs = current_walk_plane_.coeffs;
+    const Eigen::Vector3d &coeffs = current_walk_plane_.coeffs;
 
     Point3D projected = point;
     projected.z = coeffs[0] * point.x + coeffs[1] * point.y + coeffs[2];
@@ -444,18 +447,18 @@ void TerrainAdaptation::updateAdvancedTerrainAnalysis(const IMUData &imu_data) {
 
     // Dynamic motion detection using linear acceleration (gravity-free)
     if (imu_data.absolute_data.linear_acceleration_valid) {
-        Eigen::Vector3f linear_accel(
+        Eigen::Vector3d linear_accel(
             imu_data.absolute_data.linear_accel_x,
             imu_data.absolute_data.linear_accel_y,
             imu_data.absolute_data.linear_accel_z);
 
-        float motion_magnitude = linear_accel.norm();
+        double motion_magnitude = linear_accel.norm();
 
         // Detect significant dynamic motion that affects terrain analysis
         if (motion_magnitude > ANGULAR_ACCELERATION_FACTOR) { // m/s² threshold for significant motion
             // Reduce confidence in terrain detection during high acceleration
             for (int i = 0; i < NUM_LEGS; i++) {
-                step_planes_[i].confidence *= 0.8f;
+                step_planes_[i].confidence *= 0.8;
             }
         }
     }
@@ -463,37 +466,37 @@ void TerrainAdaptation::updateAdvancedTerrainAnalysis(const IMUData &imu_data) {
     // Enhanced slope detection using quaternion data
     if (imu_data.absolute_data.quaternion_valid) {
         // Use quaternion for more accurate terrain orientation
-        Eigen::Vector4f quat(
+        Eigen::Vector4d quat(
             imu_data.absolute_data.quaternion_w,
             imu_data.absolute_data.quaternion_x,
             imu_data.absolute_data.quaternion_y,
             imu_data.absolute_data.quaternion_z);
 
         // Calculate terrain normal from quaternion (more precise than Euler angles)
-        float norm = quat.norm();
+        double norm = quat.norm();
         if (norm > MIN_SERVO_VELOCITY) {
             quat = quat / norm; // Normalize quaternion
 
             // Extract terrain normal from quaternion rotation
-            Eigen::Vector3f terrain_normal(
+            Eigen::Vector3d terrain_normal(
                 ANGULAR_ACCELERATION_FACTOR * (quat[1] * quat[3] - quat[0] * quat[2]),
                 ANGULAR_ACCELERATION_FACTOR * (quat[2] * quat[3] + quat[0] * quat[1]),
                 quat[0] * quat[0] - quat[1] * quat[1] - quat[2] * quat[2] + quat[3] * quat[3]);
 
             // Update terrain slope analysis
-            float slope_angle = acos(abs(terrain_normal[2])) * RADIANS_TO_DEGREES_FACTOR;
+            double slope_angle = acos(abs(terrain_normal[2])) * RADIANS_TO_DEGREES_FACTOR;
 
             // Adjust all step planes based on quaternion-derived terrain analysis
-            if (slope_angle > 15.0f) { // Significant slope detected
+            if (slope_angle > 15.0) { // Significant slope detected
                 for (int i = 0; i < NUM_LEGS; i++) {
                     if (step_planes_[i].valid) {
                         // Enhance normal calculation with quaternion data
-                        step_planes_[i].normal.x = 0.7f * step_planes_[i].normal.x + 0.3f * terrain_normal[0];
-                        step_planes_[i].normal.y = 0.7f * step_planes_[i].normal.y + 0.3f * terrain_normal[1];
-                        step_planes_[i].normal.z = 0.7f * step_planes_[i].normal.z + 0.3f * terrain_normal[2];
+                        step_planes_[i].normal.x = 0.7 * step_planes_[i].normal.x + 0.3 * terrain_normal[0];
+                        step_planes_[i].normal.y = 0.7 * step_planes_[i].normal.y + 0.3 * terrain_normal[1];
+                        step_planes_[i].normal.z = 0.7 * step_planes_[i].normal.z + 0.3 * terrain_normal[2];
 
                         // Increase confidence for quaternion-enhanced data
-                        step_planes_[i].confidence = std::min(1.0f, step_planes_[i].confidence * 1.1f);
+                        step_planes_[i].confidence = std::min(1.0, step_planes_[i].confidence * 1.1);
                     }
                 }
             }
@@ -504,7 +507,7 @@ void TerrainAdaptation::updateAdvancedTerrainAnalysis(const IMUData &imu_data) {
     if (imu_data.absolute_data.calibration_status < 2) {
         // Reduce confidence in advanced features if IMU is not well calibrated
         for (int i = 0; i < NUM_LEGS; i++) {
-            step_planes_[i].confidence *= 0.9f;
+            step_planes_[i].confidence *= 0.9;
         }
     }
 }
@@ -513,12 +516,12 @@ void TerrainAdaptation::updateThresholdsFromModel() {
     const Parameters &params = model_.getParams();
 
     // Update touchdown threshold from fsr_touchdown_threshold if configured
-    if (params.fsr_touchdown_threshold > 0.0f) {
+    if (params.fsr_touchdown_threshold > 0.0) {
         touchdown_threshold_ = params.fsr_touchdown_threshold;
     }
 
     // Update liftoff threshold from fsr_liftoff_threshold if configured
-    if (params.fsr_liftoff_threshold > 0.0f) {
+    if (params.fsr_liftoff_threshold > 0.0) {
         liftoff_threshold_ = params.fsr_liftoff_threshold;
     }
 }

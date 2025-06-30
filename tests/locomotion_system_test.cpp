@@ -27,8 +27,8 @@ int main() {
     assert(sys.calibrateSystem());
     assert(sys.setGaitType(TRIPOD_GAIT));
     assert(sys.update());
-    float len = sys.getStepLength();
-    float h = sys.getStepHeight();
+    double len = sys.getStepLength();
+    double h = sys.getStepHeight();
     assert(len >= 20.0f && len <= 80.0f);
     assert(h >= 15.0f && h <= 50.0f);
 

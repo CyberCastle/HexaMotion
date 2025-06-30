@@ -235,8 +235,8 @@ class StateControllerTest {
         }
 
         // Test velocity setting
-        Eigen::Vector2f linear_vel(30.0f, 15.0f);
-        float angular_vel = 10.0f;
+        Eigen::Vector2d linear_vel(30.0f, 15.0f);
+        double angular_vel = 10.0f;
 
         // This should not fail (basic functionality test)
         state_controller->setDesiredVelocity(linear_vel, angular_vel);
@@ -244,7 +244,7 @@ class StateControllerTest {
 
         // Test leg tip velocity control
         if (state_controller->setLegState(0, LEG_MANUAL)) {
-            Eigen::Vector3f tip_vel(5.0f, 0.0f, 2.0f);
+            Eigen::Vector3d tip_vel(5.0f, 0.0f, 2.0f);
             state_controller->setLegTipVelocity(0, tip_vel);
             assert_test(true, "Set leg tip velocity");
 
@@ -260,8 +260,8 @@ class StateControllerTest {
         assert_test(state_controller->getPosingMode() == POSING_X_Y, "X-Y posing mode active");
 
         // Test pose setting
-        Eigen::Vector3f position(10.0f, 5.0f, -2.0f);
-        Eigen::Vector3f orientation(2.0f, -1.0f, 5.0f);
+        Eigen::Vector3d position(10.0f, 5.0f, -2.0f);
+        Eigen::Vector3d orientation(2.0f, -1.0f, 5.0f);
         state_controller->setDesiredPose(position, orientation);
         assert_test(true, "Set desired pose");
 
@@ -278,7 +278,7 @@ class StateControllerTest {
         std::cout << "\n--- Testing Cruise Control ---" << std::endl;
 
         // Test cruise control activation
-        Eigen::Vector3f cruise_vel(25.0f, 0.0f, 5.0f);
+        Eigen::Vector3d cruise_vel(25.0f, 0.0f, 5.0f);
         assert_test(state_controller->setCruiseControlMode(CRUISE_CONTROL_ON, cruise_vel),
                     "Enable cruise control");
         assert_test(state_controller->getCruiseControlMode() == CRUISE_CONTROL_ON,
@@ -382,7 +382,7 @@ class StateControllerTest {
 
         // Test that velocity commands can be issued when ready
         if (state_controller->isReadyForOperation()) {
-            Eigen::Vector2f vel(20.0f, 0.0f);
+            Eigen::Vector2d vel(20.0f, 0.0f);
             state_controller->setDesiredVelocity(vel, 0.0f);
             assert_test(true, "Velocity command with locomotion integration");
         }
@@ -450,11 +450,11 @@ class StateControllerTest {
         }
 
         // Test cruise control with different velocities
-        Eigen::Vector3f velocity1(15.0f, 10.0f, 0.2f);
+        Eigen::Vector3d velocity1(15.0f, 10.0f, 0.2f);
         assert_test(state_controller->setCruiseControlMode(CRUISE_CONTROL_ON, velocity1), "Enable cruise control variant 1");
         assert_test(state_controller->getCruiseControlMode() == CRUISE_CONTROL_ON, "Cruise control ON state");
 
-        Eigen::Vector3f velocity2(0.0f, 25.0f, -0.3f);
+        Eigen::Vector3d velocity2(0.0f, 25.0f, -0.3f);
         assert_test(state_controller->setCruiseControlMode(CRUISE_CONTROL_ON, velocity2), "Enable cruise control variant 2");
 
         // Test external cruise control
@@ -487,7 +487,7 @@ class StateControllerTest {
         assert_test(state_controller->setLegState(1, LEG_MANUAL), "Set leg 1 to manual");
 
         // Test leg tip velocity setting (setLegTipPosition doesn't exist)
-        Eigen::Vector3f tip_velocity(10.0f, 5.0f, -2.0f);
+        Eigen::Vector3d tip_velocity(10.0f, 5.0f, -2.0f);
         state_controller->setLegTipVelocity(1, tip_velocity);
         assert_test(true, "Set leg tip velocity");
 
@@ -530,12 +530,12 @@ class StateControllerTest {
         assert_test(true, "Large update interval");
 
         // Test zero velocity commands
-        Eigen::Vector2f zero_vel(0.0f, 0.0f);
+        Eigen::Vector2d zero_vel(0.0f, 0.0f);
         state_controller->setDesiredVelocity(zero_vel, 0.0f);
         assert_test(true, "Zero velocity command");
 
         // Test extreme velocity commands
-        Eigen::Vector2f extreme_vel(1000.0f, -1000.0f);
+        Eigen::Vector2d extreme_vel(1000.0f, -1000.0f);
         state_controller->setDesiredVelocity(extreme_vel, 10.0f);
         assert_test(true, "Extreme velocity command");
     }
@@ -565,7 +565,7 @@ class StateControllerTest {
         }
 
         // Walk states should progress when motion is commanded
-        Eigen::Vector2f walk_vel(30.0f, 0.0f);
+        Eigen::Vector2d walk_vel(30.0f, 0.0f);
         state_controller->setDesiredVelocity(walk_vel, 0.0f);
 
         // Update several times to allow walk state progression
@@ -579,7 +579,7 @@ class StateControllerTest {
                     "Walk state progressed with velocity command");
 
         // Stop walking
-        state_controller->setDesiredVelocity(Eigen::Vector2f::Zero(), 0.0f);
+        state_controller->setDesiredVelocity(Eigen::Vector2d::Zero(), 0.0f);
         for (int i = 0; i < 30; i++) {
             state_controller->update(0.02f);
         }

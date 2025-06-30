@@ -61,7 +61,7 @@ int main() {
     std::cout << "\n3. Checking movement patterns:" << std::endl;
 
     // Get initial joint angles directly from servo before any gait configuration
-    float initial_servo_angles[NUM_LEGS][3];
+    double initial_servo_angles[NUM_LEGS][3];
     for (int i = 0; i < NUM_LEGS; ++i) {
         initial_servo_angles[i][0] = servos.getJointAngle(i, 0); // coxa
         initial_servo_angles[i][1] = servos.getJointAngle(i, 1); // femur
@@ -83,9 +83,9 @@ int main() {
 
         // Check if any leg moved compared to initial position (using servo angles)
         for (int i = 0; i < NUM_LEGS; ++i) {
-            float curr_coxa = servos.getJointAngle(i, 0);
-            float curr_femur = servos.getJointAngle(i, 1);
-            float curr_tibia = servos.getJointAngle(i, 2);
+            double curr_coxa = servos.getJointAngle(i, 0);
+            double curr_femur = servos.getJointAngle(i, 1);
+            double curr_tibia = servos.getJointAngle(i, 2);
 
             if (std::abs(curr_coxa - initial_servo_angles[i][0]) > 0.5f ||
                 std::abs(curr_femur - initial_servo_angles[i][1]) > 0.5f ||
@@ -114,9 +114,9 @@ int main() {
 
         // Check if any leg moved compared to initial position (using servo angles)
         for (int i = 0; i < NUM_LEGS; ++i) {
-            float curr_coxa = servos.getJointAngle(i, 0);
-            float curr_femur = servos.getJointAngle(i, 1);
-            float curr_tibia = servos.getJointAngle(i, 2);
+            double curr_coxa = servos.getJointAngle(i, 0);
+            double curr_femur = servos.getJointAngle(i, 1);
+            double curr_tibia = servos.getJointAngle(i, 2);
 
             if (std::abs(curr_coxa - initial_servo_angles[i][0]) > 0.5f ||
                 std::abs(curr_femur - initial_servo_angles[i][1]) > 0.5f ||

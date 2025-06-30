@@ -20,8 +20,8 @@
  * @brief 2D position configuration for leg tip positions (OpenSHC equivalent)
  */
 struct LegStancePosition {
-    float x; ///< X position relative to body center (meters)
-    float y; ///< Y position relative to body center (meters)
+    double x; ///< X position relative to body center (meters)
+    double y; ///< Y position relative to body center (meters)
 };
 
 /**
@@ -29,9 +29,9 @@ struct LegStancePosition {
  * In OpenSHC, standing pose is configured, not calculated from kinematics
  */
 struct StandingPoseJoints {
-    float coxa;  ///< Coxa joint angle in degrees
-    float femur; ///< Femur joint angle in degrees
-    float tibia; ///< Tibia joint angle in degrees
+    double coxa;  ///< Coxa joint angle in degrees
+    double femur; ///< Femur joint angle in degrees
+    double tibia; ///< Tibia joint angle in degrees
 };
 
 /**
@@ -48,28 +48,28 @@ struct PoseConfiguration {
     // OpenSHC equivalent pose controller parameters
     std::string auto_pose_type; ///< String denoting the default auto posing cycle type
     bool start_up_sequence;     ///< Flag allowing execution of start up and shutdown sequences
-    float time_to_start;        ///< The time to complete a direct start up
+    double time_to_start;        ///< The time to complete a direct start up
 
     // OpenSHC equivalent body clearance and swing parameters
-    float body_clearance; ///< The requested height of the robot body above ground (m)
-    float swing_height;   ///< Vertical displacement of swing trajectory above default (m)
+    double body_clearance; ///< The requested height of the robot body above ground (m)
+    double swing_height;   ///< Vertical displacement of swing trajectory above default (m)
 
     // OpenSHC equivalent pose limits
     struct {
-        float x; ///< Maximum X translation (meters)
-        float y; ///< Maximum Y translation (meters)
-        float z; ///< Maximum Z translation (meters)
+        double x; ///< Maximum X translation (meters)
+        double y; ///< Maximum Y translation (meters)
+        double z; ///< Maximum Z translation (meters)
     } max_translation;
 
     struct {
-        float roll;  ///< Maximum roll rotation (radians)
-        float pitch; ///< Maximum pitch rotation (radians)
-        float yaw;   ///< Maximum yaw rotation (radians)
+        double roll;  ///< Maximum roll rotation (radians)
+        double pitch; ///< Maximum pitch rotation (radians)
+        double yaw;   ///< Maximum yaw rotation (radians)
     } max_rotation;
 
     // OpenSHC equivalent velocity limits
-    float max_translation_velocity; ///< Maximum translation velocity (m/s)
-    float max_rotation_velocity;    ///< Maximum rotation velocity (rad/s)
+    double max_translation_velocity; ///< Maximum translation velocity (m/s)
+    double max_rotation_velocity;    ///< Maximum rotation velocity (rad/s)
 
     // OpenSHC equivalent pose control flags
     bool gravity_aligned_tips;         ///< Flag denoting if tip should align with gravity direction

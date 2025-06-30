@@ -6,7 +6,7 @@
 #include <iostream>
 #include <vector>
 
-void printGaitOffsets(const std::string &gait_name, const float offsets[NUM_LEGS]) {
+void printGaitOffsets(const std::string &gait_name, const double offsets[NUM_LEGS]) {
     std::cout << "\n"
               << gait_name << " Gait Phase Offsets:" << std::endl;
     for (int i = 0; i < NUM_LEGS; ++i) {
@@ -21,7 +21,7 @@ bool validateTripodGait(LocomotionSystem &sys) {
     assert(sys.setGaitType(TRIPOD_GAIT));
 
     // Expected: [0.0, 0.5, 0.0, 0.5, 0.0, 0.5]
-    float expected[NUM_LEGS] = {0.0f, 0.5f, 0.0f, 0.5f, 0.0f, 0.5f};
+    double expected[NUM_LEGS] = {0.0f, 0.5f, 0.0f, 0.5f, 0.0f, 0.5f};
 
     // Get actual offsets by accessing the system state
     // Since we can't directly access leg_phase_offsets, we'll verify the grouping
@@ -53,7 +53,7 @@ bool validateTripodGait(LocomotionSystem &sys) {
 }
 
 bool validateGaitImplementation(GaitType gait, const std::string &name,
-                                const float expected[NUM_LEGS]) {
+                                const double expected[NUM_LEGS]) {
     std::cout << "\n=== VALIDATING " << name << " GAIT ===" << std::endl;
 
     Parameters p{};
@@ -114,13 +114,13 @@ int main() {
     }
 
     // Test Wave Gait (corrected implementation)
-    float wave_expected[NUM_LEGS] = {0.333f, 0.500f, 0.667f, 0.167f, 0.000f, 0.833f};
+    double wave_expected[NUM_LEGS] = {0.333f, 0.500f, 0.667f, 0.167f, 0.000f, 0.833f};
     if (validateGaitImplementation(WAVE_GAIT, "WAVE", wave_expected)) {
         passed_tests++;
     }
 
     // Test Ripple Gait (corrected implementation)
-    float ripple_expected[NUM_LEGS] = {0.333f, 0.000f, 0.667f, 0.167f, 0.500f, 0.833f};
+    double ripple_expected[NUM_LEGS] = {0.333f, 0.000f, 0.667f, 0.167f, 0.500f, 0.833f};
     if (validateGaitImplementation(RIPPLE_GAIT, "RIPPLE", ripple_expected)) {
         passed_tests++;
     }

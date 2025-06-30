@@ -117,7 +117,7 @@ class ExampleFSR : public IFSRInterface {
         return data;
     }
     bool calibrateFSR(int /*leg_index*/) override { return true; }
-    float getRawReading(int /*leg_index*/) override { return 0.0f; }
+    double getRawReading(int /*leg_index*/) override { return 0.0f; }
     bool update() override {
         // Example implementation: Update FSR readings using AdvancedAnalog DMA
         // In real implementation, this would trigger simultaneous ADC reads
@@ -148,7 +148,7 @@ class ExampleServo : public IServoInterface {
         return false; // No blocking flags
     }
 
-    bool setJointAngleAndSpeed(int leg_index, int joint_index, float angle, float speed) override {
+    bool setJointAngleAndSpeed(int leg_index, int joint_index, double angle, double speed) override {
         if (leg_index < 0 || leg_index >= NUM_LEGS)
             return false;
         if (joint_index < 0 || joint_index >= DOF_PER_LEG)
@@ -159,7 +159,7 @@ class ExampleServo : public IServoInterface {
         return true;
     }
 
-    float getJointAngle(int leg_index, int joint_index) override {
+    double getJointAngle(int leg_index, int joint_index) override {
         if (leg_index < 0 || leg_index >= NUM_LEGS)
             return 0.0f;
         if (joint_index < 0 || joint_index >= DOF_PER_LEG)
@@ -171,7 +171,7 @@ class ExampleServo : public IServoInterface {
     bool enableTorque(int /*leg_index*/, int /*joint_index*/, bool /*enable*/) override { return true; }
 
   private:
-    float angles[NUM_LEGS][DOF_PER_LEG];
+    double angles[NUM_LEGS][DOF_PER_LEG];
 };
 
 #endif // HEXAMOTION_MOCK_INTERFACES_H

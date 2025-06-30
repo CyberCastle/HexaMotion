@@ -31,11 +31,11 @@ class IMUAutoPose {
      * @brief IMU pose control parameters
      */
     struct IMUPoseParams {
-        float orientation_gain;    ///< Orientation correction gain
-        float inclination_gain;    ///< Inclination compensation gain
-        float response_speed;      ///< Response speed (0-1)
-        float deadzone_degrees;    ///< Deadzone for small tilts
-        float stabilization_gain;  ///< Stabilization gain for rough terrain
+        double orientation_gain;    ///< Orientation correction gain
+        double inclination_gain;    ///< Inclination compensation gain
+        double response_speed;      ///< Response speed (0-1)
+        double deadzone_degrees;    ///< Deadzone for small tilts
+        double stabilization_gain;  ///< Stabilization gain for rough terrain
         bool gravity_compensation; ///< Enable gravity compensation
         bool adaptive_gains;       ///< Use adaptive gain adjustment
         bool use_absolute_data;    ///< Use IMU's absolute positioning if available
@@ -57,7 +57,7 @@ class IMUAutoPose {
         Point3D orientation_error;  ///< Current orientation error
         Point3D correction_pose;    ///< Calculated correction pose
         bool pose_active;           ///< Whether auto-pose is active
-        float confidence;           ///< Pose correction confidence (0-1)
+        double confidence;           ///< Pose correction confidence (0-1)
         bool using_absolute_data;   ///< Whether using IMU's absolute positioning
         uint8_t calibration_status; ///< IMU calibration status (0-3)
         IMUMode active_mode;        ///< Current IMU operation mode
@@ -81,14 +81,14 @@ class IMUAutoPose {
     // IMU filtering and processing
     Point3D gravity_filter_;
     Point3D orientation_filter_;
-    float filter_alpha_;
+    double filter_alpha_;
 
     // Auto-pose timing
     unsigned long last_update_time_;
-    float update_interval_;
+    double update_interval_;
 
     // Adaptive control
-    float terrain_roughness_estimate_;
+    double terrain_roughness_estimate_;
     bool walking_detected_;
     Point3D previous_acceleration_; ///< Previous acceleration for variance calculation
 
@@ -130,7 +130,7 @@ class IMUAutoPose {
      * @brief Update auto-pose control (call regularly)
      * @param dt Delta time since last update
      */
-    void update(float dt);
+    void update(double dt);
 
     /**
      * @brief Get current auto-pose state
@@ -219,8 +219,8 @@ class IMUAutoPose {
     void updateCalibrationStatus(const IMUData &imu_data);
 
     // Filtering and processing
-    Point3D lowPassFilter(const Point3D &input, const Point3D &previous, float alpha);
-    float calculateConfidence(const Point3D &orientation_error) const;
+    Point3D lowPassFilter(const Point3D &input, const Point3D &previous, double alpha);
+    double calculateConfidence(const Point3D &orientation_error) const;
     void updateAdaptiveGains();
 
     // Utility functions
