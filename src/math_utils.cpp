@@ -1,7 +1,7 @@
 #include "math_utils.h"
 #include "HexaModel.h"
 #include "hexamotion_constants.h"
-#include <math.h>
+#include <cmath>
 
 // Utility function implementations
 namespace math_utils {
@@ -79,18 +79,27 @@ Eigen::Vector4f quaternionInverse(const Eigen::Vector4f &q) {
     return q; // Return original if degenerate
 }
 
-Eigen::Matrix4f dhTransform(float a, float alpha, float d, float theta) {
-    float cos_theta = cos(theta);
-    float sin_theta = sin(theta);
-    float cos_alpha = cos(alpha);
-    float sin_alpha = sin(alpha);
+template <typename T>
+Eigen::Matrix<T, 4, 4> dhTransform(T a, T alpha, T d, T theta) {
+    T cos_theta = std::cos(theta);
+    T sin_theta = std::sin(theta);
+    T cos_alpha = std::cos(alpha);
+    T sin_alpha = std::sin(alpha);
 
-    Eigen::Matrix4f transform;
+    Eigen::Matrix<T, 4, 4> transform;
     transform << cos_theta, -sin_theta * cos_alpha, sin_theta * sin_alpha, a * cos_theta,
         sin_theta, cos_theta * cos_alpha, -cos_theta * sin_alpha, a * sin_theta,
-        0, sin_alpha, cos_alpha, d,
-        0, 0, 0, 1;
+        T(0), sin_alpha, cos_alpha, d,
+        T(0), T(0), T(0), T(1);
     return transform;
+}
+
+// Explicit instantiations for common precisions
+template Eigen::Matrix4f dhTransform<float>(float, float, float, float);
+template Eigen::Matrix4d dhTransform<double>(double, double, double, double);
+
+Eigen::Matrix4f dhTransform(float a, float alpha, float d, float theta) {
+    return dhTransform<float>(a, alpha, d, theta);
 }
 
 Eigen::Vector3f quaternionToEuler(const Eigen::Vector4f &quaternion) {
