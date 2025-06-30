@@ -213,9 +213,12 @@ JointAngles RobotModel::inverseKinematicsCurrent(int leg, const JointAngles &cur
 }
 
 Point3D RobotModel::forwardKinematics(int leg_index, const JointAngles &angles) const {
-    // Forward kinematics: full DH transform chain
-    Eigen::Matrix4f transform = legTransform(leg_index, angles);
-    return Point3D{transform(0, 3), transform(1, 3), transform(2, 3)};
+    // Forward kinematics: compute full DH transform chain
+    // Use double precision for improved stability
+    Eigen::Matrix4d transform = legTransform(leg_index, angles);
+    return Point3D{static_cast<float>(transform(0, 3)),
+                   static_cast<float>(transform(1, 3)),
+                   static_cast<float>(transform(2, 3))};
 }
 
 Point3D RobotModel::getLegBasePosition(int leg_index) const {
@@ -229,44 +232,40 @@ Point3D RobotModel::getLegBasePosition(int leg_index) const {
     return Point3D{base_transform(0, 3), base_transform(1, 3), base_transform(2, 3)};
 }
 
-Eigen::Matrix4f RobotModel::legTransform(int leg_index, const JointAngles &q) const {
-    // Base transform from DH parameters
-    Eigen::Matrix4f T = math_utils::dhTransform(
-        dh_transforms[leg_index][0][0],
-        math_utils::degreesToRadians(dh_transforms[leg_index][0][1]),
-        dh_transforms[leg_index][0][2],
-        math_utils::degreesToRadians(dh_transforms[leg_index][0][3]));
+Eigen::Matrix4d RobotModel::legTransform(int leg_index, const JointAngles &q) const {
+    // Base transform from DH parameters (body center to leg mount)
+    Eigen::Matrix4d T = math_utils::dhTransform<double>(
+        static_cast<double>(dh_transforms[leg_index][0][0]),
+        math_utils::degreesToRadians(static_cast<double>(dh_transforms[leg_index][0][1])),
+        static_cast<double>(dh_transforms[leg_index][0][2]),
+        math_utils::degreesToRadians(static_cast<double>(dh_transforms[leg_index][0][3])));
 
     const float joint_deg[DOF_PER_LEG] = {q.coxa, q.femur, q.tibia};
 
     for (int j = 1; j <= DOF_PER_LEG; ++j) {
         // Extract DH parameters for this joint
-        float a = dh_transforms[leg_index][j][0];      // link length
-        float alpha = dh_transforms[leg_index][j][1];  // twist angle
-        float d = dh_transforms[leg_index][j][2];      // link offset
-        float theta0 = dh_transforms[leg_index][j][3]; // joint angle offset
-        float theta = theta0 + joint_deg[j - 1];       // total joint angle
-        float alpha_rad = math_utils::degreesToRadians(alpha);
-        float theta_rad = math_utils::degreesToRadians(theta);
-        T *= math_utils::dhTransform(a, alpha_rad, d, theta_rad);
+        double a = static_cast<double>(dh_transforms[leg_index][j][0]);      // link length
+        double alpha = math_utils::degreesToRadians(static_cast<double>(dh_transforms[leg_index][j][1])); // twist angle
+        double d = static_cast<double>(dh_transforms[leg_index][j][2]);       // link offset
+        double theta0 = static_cast<double>(dh_transforms[leg_index][j][3]);   // joint offset
+        double theta = theta0 + static_cast<double>(joint_deg[j - 1]);        // total joint angle
+        T *= math_utils::dhTransform<double>(a, alpha, d, math_utils::degreesToRadians(theta));
     }
 
     return T;
 }
 
-Eigen::Matrix3f RobotModel::calculateJacobian(int leg, const JointAngles &q, const Point3D &target) const {
-    // Calculate Jacobian from DH matrices along kinematic chain
+Eigen::Matrix3f RobotModel::calculateJacobian(int leg, const JointAngles &q, const Point3D &) const {
+    // Calculate Jacobian from DH matrices along the kinematic chain
     // Based on syropod_highlevel_controller implementation
+    // Base transform for this leg
+    Eigen::Matrix4d T_base = math_utils::dhTransform<double>(
+        static_cast<double>(dh_transforms[leg][0][0]),
+        math_utils::degreesToRadians(static_cast<double>(dh_transforms[leg][0][1])),
+        static_cast<double>(dh_transforms[leg][0][2]),
+        math_utils::degreesToRadians(static_cast<double>(dh_transforms[leg][0][3])));
 
-    // Get base transform for this leg
-    Eigen::Matrix4f T_base = math_utils::dhTransform(
-        dh_transforms[leg][0][0],
-        math_utils::degreesToRadians(dh_transforms[leg][0][1]),
-        dh_transforms[leg][0][2],
-        math_utils::degreesToRadians(dh_transforms[leg][0][3]));
-
-    // Calculate transforms and positions for each joint
-    std::vector<Eigen::Matrix4f> transforms(DOF_PER_LEG + 1);
+    std::vector<Eigen::Matrix4d> transforms(DOF_PER_LEG + 1);
     transforms[0] = T_base;
 
     const float joint_deg[DOF_PER_LEG] = {q.coxa, q.femur, q.tibia};
@@ -274,37 +273,34 @@ Eigen::Matrix3f RobotModel::calculateJacobian(int leg, const JointAngles &q, con
     // Build transforms step by step using DH parameters
     for (int j = 1; j <= DOF_PER_LEG; ++j) {
         // Extract DH parameters for this joint
-        float a = dh_transforms[leg][j][0];      // link length
-        float alpha = dh_transforms[leg][j][1];  // twist angle
-        float d = dh_transforms[leg][j][2];      // link offset
-        float theta0 = dh_transforms[leg][j][3]; // joint angle offset
-        float theta = theta0 + joint_deg[j - 1]; // total joint angle
-
-        float alpha_rad = math_utils::degreesToRadians(alpha);
-        float theta_rad = math_utils::degreesToRadians(theta);
-
-        transforms[j] = transforms[j - 1] * math_utils::dhTransform(a, alpha_rad, d, theta_rad);
+        double a = static_cast<double>(dh_transforms[leg][j][0]);      // link length
+        double alpha = math_utils::degreesToRadians(static_cast<double>(dh_transforms[leg][j][1])); // twist angle
+        double d = static_cast<double>(dh_transforms[leg][j][2]);       // link offset
+        double theta0 = static_cast<double>(dh_transforms[leg][j][3]);  // joint offset
+        double theta = theta0 + static_cast<double>(joint_deg[j - 1]);  // total joint angle
+        transforms[j] = transforms[j - 1] *
+                        math_utils::dhTransform<double>(a, alpha, d, math_utils::degreesToRadians(theta));
     }
 
     // End-effector transform
-    Eigen::Matrix4f T_final = transforms[DOF_PER_LEG];
+    Eigen::Matrix4d T_final = transforms[DOF_PER_LEG];
 
     // End-effector position
-    Eigen::Vector3f pe = T_final.block<3, 1>(0, 3);
+    Eigen::Vector3d pe = T_final.block<3, 1>(0, 3);
 
     // Initialize Jacobian matrix (3x3 for position only)
     Eigen::Matrix3f jacobian;
 
     // First joint (base joint) - use standard z-axis
-    Eigen::Vector3f z0(0, 0, 1);
-    Eigen::Vector3f p0 = transforms[0].block<3, 1>(0, 3);
-    jacobian.col(0) = z0.cross(pe - p0);
+    Eigen::Vector3d z0(0.0, 0.0, 1.0);
+    Eigen::Vector3d p0 = transforms[0].block<3, 1>(0, 3);
+    jacobian.col(0) = (z0.cross(pe - p0)).cast<float>();
 
     // Remaining joints
     for (int j = 1; j < DOF_PER_LEG; ++j) {
-        Eigen::Vector3f zj = transforms[j].block<3, 1>(0, 2); // z-axis of joint j
-        Eigen::Vector3f pj = transforms[j].block<3, 1>(0, 3); // position of joint j
-        jacobian.col(j) = zj.cross(pe - pj);
+        Eigen::Vector3d zj = transforms[j].block<3, 1>(0, 2); // z-axis of joint j
+        Eigen::Vector3d pj = transforms[j].block<3, 1>(0, 3); // position of joint j
+        jacobian.col(j) = (zj.cross(pe - pj)).cast<float>();
     }
 
     return jacobian;
@@ -394,7 +390,7 @@ std::pair<float, float> RobotModel::calculateHeightRange() const {
 
 Pose RobotModel::getPoseRobotFrame(int leg_index, const JointAngles &joint_angles, const Pose &leg_frame_pose) const {
     // Get the full transform from robot frame to leg frame
-    Eigen::Matrix4f transform = legTransform(leg_index, joint_angles);
+    Eigen::Matrix4d transform = legTransform(leg_index, joint_angles);
 
     // Transform the leg frame pose to robot frame
     return leg_frame_pose.transform(transform);
@@ -402,7 +398,7 @@ Pose RobotModel::getPoseRobotFrame(int leg_index, const JointAngles &joint_angle
 
 Pose RobotModel::getPoseLegFrame(int leg_index, const JointAngles &joint_angles, const Pose &robot_frame_pose) const {
     // Get the full transform from robot frame to leg frame
-    Eigen::Matrix4f transform = legTransform(leg_index, joint_angles);
+    Eigen::Matrix4d transform = legTransform(leg_index, joint_angles);
 
     // Transform the robot frame pose to leg frame (inverse transform)
     return robot_frame_pose.transform(transform.inverse());
@@ -410,7 +406,7 @@ Pose RobotModel::getPoseLegFrame(int leg_index, const JointAngles &joint_angles,
 
 Pose RobotModel::getTipPoseRobotFrame(int leg_index, const JointAngles &joint_angles, const Pose &tip_frame_pose) const {
     // Get the full transform from robot frame to tip frame
-    Eigen::Matrix4f transform = legTransform(leg_index, joint_angles);
+    Eigen::Matrix4d transform = legTransform(leg_index, joint_angles);
 
     // Transform the tip frame pose to robot frame
     return tip_frame_pose.transform(transform);
@@ -418,7 +414,7 @@ Pose RobotModel::getTipPoseRobotFrame(int leg_index, const JointAngles &joint_an
 
 Pose RobotModel::getTipPoseLegFrame(int leg_index, const JointAngles &joint_angles, const Pose &robot_frame_pose) const {
     // Get the full transform from robot frame to tip frame
-    Eigen::Matrix4f transform = legTransform(leg_index, joint_angles);
+    Eigen::Matrix4d transform = legTransform(leg_index, joint_angles);
 
     // Transform the robot frame pose to tip frame (inverse transform)
     return robot_frame_pose.transform(transform.inverse());
