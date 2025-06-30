@@ -12,6 +12,54 @@
 // Per-leg base orientation offsets (degrees)
 static const float BASE_THETA_OFFSETS[NUM_LEGS] = {0.0f, -60.0f, -120.0f, 180.0f, 120.0f, 60.0f};
 
+// ---------------------------------------------------------------------------
+// Utility: analytic estimate for femur/tibia angles based on target height
+// ---------------------------------------------------------------------------
+static bool analyticInitialGuess(float height_mm,
+                                 const Parameters &params,
+                                 float &femur_deg,
+                                 float &tibia_deg) {
+    const float step = 0.5f * M_PI / 180.0f; // 0.5 degree in radians
+
+    float alpha_min = math_utils::degreesToRadians(params.femur_angle_limits[0]);
+    float alpha_max = math_utils::degreesToRadians(params.femur_angle_limits[1]);
+    float beta_min = math_utils::degreesToRadians(params.tibia_angle_limits[0]);
+    float beta_max = math_utils::degreesToRadians(params.tibia_angle_limits[1]);
+
+    float y_target = height_mm - params.tibia_length;
+
+    bool found = false;
+    float best_score = std::numeric_limits<float>::max();
+    float best_alpha = 0.0f;
+    float best_beta = 0.0f;
+
+    for (float beta = beta_min; beta <= beta_max + 1e-6f; beta += step) {
+        float y_rem = y_target - params.femur_length * sin(beta);
+        float s = y_rem / params.coxa_length;
+        if (s < -1.0f || s > 1.0f)
+            continue;
+
+        float alpha = asinf(s);
+        if (alpha < alpha_min || alpha > alpha_max)
+            continue;
+
+        float score = std::fabs(alpha) + std::fabs(beta);
+        if (score < best_score) {
+            best_score = score;
+            best_alpha = alpha;
+            best_beta = beta;
+            found = true;
+        }
+    }
+
+    if (!found)
+        return false;
+
+    femur_deg = best_alpha * RADIANS_TO_DEGREES_FACTOR;
+    tibia_deg = best_beta * RADIANS_TO_DEGREES_FACTOR;
+    return true;
+}
+
 RobotModel::RobotModel(const Parameters &p) : params(p) {
     initializeDH();
 }
@@ -83,9 +131,10 @@ JointAngles RobotModel::inverseKinematics(int leg, const Point3D &p_target) cons
     float coxa_start = atan2(local_target.y, local_target.x) * RADIANS_TO_DEGREES_FACTOR;
     coxa_start = constrainAngle(coxa_start, params.coxa_angle_limits[0], params.coxa_angle_limits[1]);
 
-    // Initial estimates for femur and tibia based only on DH model
+    // Initial estimates using analytic geometry for vertical reach
     float femur_estimate = 0.0f;
     float tibia_estimate = 0.0f;
+    analyticInitialGuess(-local_target.z, params, femur_estimate, tibia_estimate);
 
     // Clamp initial estimates to joint limits
     femur_estimate = constrainAngle(femur_estimate, params.femur_angle_limits[0], params.femur_angle_limits[1]);
