@@ -254,7 +254,7 @@ Eigen::Matrix4d RobotModel::legTransform(int leg_index, const JointAngles &q) co
 }
 
 Eigen::Matrix3f RobotModel::calculateJacobian(int leg, const JointAngles &q, const Point3D &) const {
-    const float delta = 0.001f;
+    const float delta = JACOBIAN_DELTA;
     const float delta_deg = math_utils::radiansToDegrees(delta);
 
     Eigen::Matrix3f jacobian;

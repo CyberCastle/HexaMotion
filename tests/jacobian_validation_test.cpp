@@ -7,7 +7,7 @@
 // Numerical differentiation to validate Jacobian
 Eigen::Matrix3f numericalJacobian(const RobotModel& model, int leg,
                                   const JointAngles& angles,
-                                  float delta = 0.001f) {
+                                  float delta = JACOBIAN_DELTA) {
     Eigen::Matrix3f jacobian;
 
     // Get base position
@@ -164,7 +164,7 @@ int main() {
                   << ", " << std::setw(8) << base_pos.z << ") mm" << std::endl;
 
         // Test coxa joint only
-        float perturbation = 0.001f; // 0.001 radians ≈ 0.057 degrees
+        float perturbation = JACOBIAN_DELTA; // 0.001 radians ≈ 0.057 degrees
         float perturbation_deg = math_utils::radiansToDegrees(perturbation);
 
         JointAngles plus = test_angles;

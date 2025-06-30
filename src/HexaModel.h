@@ -12,6 +12,9 @@
 #define DOF_PER_LEG 3
 #define TOTAL_DOF (NUM_LEGS * DOF_PER_LEG)
 
+// Numerical differentiation step for Jacobians
+#define JACOBIAN_DELTA 0.001f
+
 /**
  * @brief Robot configuration parameters.
  */
