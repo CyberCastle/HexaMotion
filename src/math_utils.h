@@ -56,7 +56,11 @@ Eigen::Vector4f eulerPoint3DToQuaternion(const Point3D &euler);
 /** Convert quaternion to Point3D Euler angles (radians). */
 Point3D quaternionToEulerPoint3D(const Eigen::Vector4f &quaternion);
 
-/** Denavit-Hartenberg transform matrix helper (angles in radians). */
+/** Generic Denavit-Hartenberg transform (angles in radians). */
+template <typename T>
+Eigen::Matrix<T, 4, 4> dhTransform(T a, T alpha, T d, T theta);
+
+/** Float-specialized DH transform for backwards compatibility. */
 Eigen::Matrix4f dhTransform(float a, float alpha, float d, float theta);
 
 /**

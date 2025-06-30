@@ -403,7 +403,7 @@ class RobotModel {
     /** Numerical Jacobian calculation. */
     Eigen::Matrix3f calculateJacobian(int leg, const JointAngles &q, const Point3D &target) const;
     /** Homogeneous transform for a full leg chain. */
-    Eigen::Matrix4f legTransform(int leg, const JointAngles &q) const;
+    Eigen::Matrix4d legTransform(int leg, const JointAngles &q) const;
     /** Verify if joint angles are within defined limits. */
     bool checkJointLimits(int leg, const JointAngles &q) const;
     /** Clamp angle within limits. */

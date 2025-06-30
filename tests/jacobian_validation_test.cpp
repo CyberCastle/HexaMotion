@@ -1,32 +1,47 @@
 #include "HexaModel.h"
+#include "math_utils.h"
 #include <iomanip>
 #include <iostream>
 #include <cmath>
 
 // Numerical differentiation to validate Jacobian
-Eigen::Matrix3f numericalJacobian(const RobotModel& model, int leg, const JointAngles& angles, float delta = 0.001f) {
+Eigen::Matrix3f numericalJacobian(const RobotModel& model, int leg,
+                                  const JointAngles& angles,
+                                  float delta = 0.001f) {
     Eigen::Matrix3f jacobian;
 
     // Get base position
     Point3D base_pos = model.forwardKinematics(leg, angles);
 
-    // Test each joint
+    // Test each joint using central differences for better accuracy
     for (int joint = 0; joint < 3; ++joint) {
-        JointAngles perturbed = angles;
+        float delta_deg = math_utils::radiansToDegrees(delta);
 
-        // Perturb the joint angle
+        JointAngles plus = angles;
+        JointAngles minus = angles;
+
         switch (joint) {
-            case 0: perturbed.coxa += delta; break;
-            case 1: perturbed.femur += delta; break;
-            case 2: perturbed.tibia += delta; break;
+            case 0:
+                plus.coxa += delta_deg * 0.5f;
+                minus.coxa -= delta_deg * 0.5f;
+                break;
+            case 1:
+                plus.femur += delta_deg * 0.5f;
+                minus.femur -= delta_deg * 0.5f;
+                break;
+            case 2:
+                plus.tibia += delta_deg * 0.5f;
+                minus.tibia -= delta_deg * 0.5f;
+                break;
         }
 
-        Point3D perturbed_pos = model.forwardKinematics(leg, perturbed);
+        Point3D pos_plus = model.forwardKinematics(leg, plus);
+        Point3D pos_minus = model.forwardKinematics(leg, minus);
 
         // Calculate partial derivative
-        jacobian(0, joint) = (perturbed_pos.x - base_pos.x) / delta;
-        jacobian(1, joint) = (perturbed_pos.y - base_pos.y) / delta;
-        jacobian(2, joint) = (perturbed_pos.z - base_pos.z) / delta;
+        jacobian(0, joint) = (pos_plus.x - pos_minus.x) / delta;
+        jacobian(1, joint) = (pos_plus.y - pos_minus.y) / delta;
+        jacobian(2, joint) = (pos_plus.z - pos_minus.z) / delta;
     }
 
     return jacobian;
@@ -149,18 +164,23 @@ int main() {
                   << ", " << std::setw(8) << base_pos.z << ") mm" << std::endl;
 
         // Test coxa joint only
-        JointAngles perturbed = test_angles;
         float perturbation = 0.001f; // 0.001 radians ≈ 0.057 degrees
-        perturbed.coxa += perturbation;
-        Point3D perturbed_pos = model.forwardKinematics(leg, perturbed);
-        std::cout << "📍 Perturbed position (coxa +" << perturbation << " rad): ("
-                  << std::setw(8) << perturbed_pos.x
-                  << ", " << std::setw(8) << perturbed_pos.y
-                  << ", " << std::setw(8) << perturbed_pos.z << ") mm" << std::endl;
+        float perturbation_deg = math_utils::radiansToDegrees(perturbation);
 
-        float dx = (perturbed_pos.x - base_pos.x) / perturbation;
-        float dy = (perturbed_pos.y - base_pos.y) / perturbation;
-        float dz = (perturbed_pos.z - base_pos.z) / perturbation;
+        JointAngles plus = test_angles;
+        JointAngles minus = test_angles;
+        plus.coxa += perturbation_deg * 0.5f;
+        minus.coxa -= perturbation_deg * 0.5f;
+        Point3D pos_plus = model.forwardKinematics(leg, plus);
+        Point3D pos_minus = model.forwardKinematics(leg, minus);
+        std::cout << "📍 Perturbed position (coxa +" << perturbation << " rad): ("
+                  << std::setw(8) << pos_plus.x
+                  << ", " << std::setw(8) << pos_plus.y
+                  << ", " << std::setw(8) << pos_plus.z << ") mm" << std::endl;
+
+        float dx = (pos_plus.x - pos_minus.x) / perturbation;
+        float dy = (pos_plus.y - pos_minus.y) / perturbation;
+        float dz = (pos_plus.z - pos_minus.z) / perturbation;
 
         std::cout << "📊 Numerical derivatives (∂x/∂θ_coxa):" << std::endl;
         std::cout << "   • ∂x/∂θ_coxa = " << std::setw(12) << dx << " mm/rad" << std::endl;
