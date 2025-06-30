@@ -79,7 +79,7 @@ void testWalkspaceAnalysisConfigurable() {
         // Test walkspace analysis
         Point3D leg_positions[NUM_LEGS];
         for (int j = 0; j < NUM_LEGS; j++) {
-            float angle = j * M_PI / 3.0f;
+            double angle = j * M_PI / 3.0f;
             leg_positions[j] = Point3D(250.0f * cos(angle), 250.0f * sin(angle), -90.0f);
         }
 
@@ -212,7 +212,7 @@ void testAdmittanceControlWithODE() {
         }
 
         // Should produce some response to applied force
-        float magnitude = std::abs(total_delta.x) + std::abs(total_delta.y) + std::abs(total_delta.z);
+        double magnitude = std::abs(total_delta.x) + std::abs(total_delta.y) + std::abs(total_delta.z);
         assert(magnitude > 0.001f);
 
         // Test all legs update
@@ -292,7 +292,7 @@ void testIMUIntegrationAutoPosing() {
         if (mode != IMUAutoPose::AUTO_POSE_OFF) {
             assert(state.pose_active);
             // Should detect some orientation error
-            float error_magnitude = std::abs(state.orientation_error.x) + std::abs(state.orientation_error.y);
+            double error_magnitude = std::abs(state.orientation_error.x) + std::abs(state.orientation_error.y);
             std::cout << "Error magnitude: " << error_magnitude << std::endl;
             assert(error_magnitude > 0.01f);
         }
@@ -328,7 +328,7 @@ void testRoughTerrainMode() {
     DummyIMU imu;
 
     // Test terrain-adapted foot trajectory
-    float leg_phase_offsets[NUM_LEGS] = {0.0f, 0.33f, 0.67f, 0.0f, 0.33f, 0.67f};
+    double leg_phase_offsets[NUM_LEGS] = {0.0f, 0.33f, 0.67f, 0.0f, 0.33f, 0.67f};
     LegState leg_states[NUM_LEGS];
 
     for (int i = 0; i < NUM_LEGS; i++) {
@@ -346,7 +346,7 @@ void testRoughTerrainMode() {
     assert(walk_plane.valid || !walk_plane.valid); // Either state is valid for this test
 
     // Test gravity estimation
-    Eigen::Vector3f gravity = walk_controller.estimateGravity();
+    Eigen::Vector3d gravity = walk_controller.estimateGravity();
     assert(gravity.norm() > 5.0f); // Should have reasonable magnitude
 
     std::cout << "✓ Rough Terrain Mode PASSED" << std::endl;

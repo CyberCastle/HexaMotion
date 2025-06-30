@@ -40,8 +40,8 @@ static void printRobotDimensions(const Parameters &p) {
     std::cout << std::endl;
 
     // Calculate and display total leg reach
-    float max_reach = p.coxa_length + p.femur_length + p.tibia_length;
-    float body_diagonal = p.hexagon_radius * 2;
+    double max_reach = p.coxa_length + p.femur_length + p.tibia_length;
+    double body_diagonal = p.hexagon_radius * 2;
 
     std::cout << "CALCULATED DIMENSIONS:" << std::endl;
     std::cout << "Max Leg Reach:     " << std::setw(6) << std::setprecision(1) << std::fixed << max_reach << " mm" << std::endl;
@@ -72,7 +72,7 @@ static void printHeader() {
     std::cout << "-------|--------|-------" << std::endl;
 }
 
-static void printAngles(int step, LocomotionSystem &sys, float phase, const std::string &current_gait) {
+static void printAngles(int step, LocomotionSystem &sys, double phase, const std::string &current_gait) {
     std::cout << std::setw(3) << step << " |";
 
     // Print joint angles for all legs
@@ -167,7 +167,7 @@ static void printStateControllerStatus(StateController &stateController, int ste
     std::cout << "═══════════════════════════════════════" << std::endl;
 }
 
-static void printGaitChangeInfo(const std::string &gait_name, int step, float distance_covered) {
+static void printGaitChangeInfo(const std::string &gait_name, int step, double distance_covered) {
     std::cout << std::endl
               << "🔄 GAIT CHANGE - Step " << step << std::endl;
     std::cout << "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━" << std::endl;
@@ -190,7 +190,7 @@ static void printGaitChangeInfo(const std::string &gait_name, int step, float di
     std::cout << "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━" << std::endl;
 }
 
-static void printDetailedRobotStatus(LocomotionSystem &sys, float distance_covered, int step,
+static void printDetailedRobotStatus(LocomotionSystem &sys, double distance_covered, int step,
                                      const std::string &current_gait) {
     std::cout << std::endl
               << "═══════════════════════════════════════" << std::endl;
@@ -215,7 +215,7 @@ static void printDetailedRobotStatus(LocomotionSystem &sys, float distance_cover
     std::cout << "═══════════════════════════════════════" << std::endl;
 }
 
-static void printGaitPattern(LocomotionSystem &sys, const std::string &current_gait, float phase) {
+static void printGaitPattern(LocomotionSystem &sys, const std::string &current_gait, double phase) {
     std::cout << std::endl
               << current_gait << " Gait Pattern (Phase: " << std::setprecision(2) << phase << "):" << std::endl;
 
@@ -261,7 +261,7 @@ static void printGaitPattern(LocomotionSystem &sys, const std::string &current_g
               << "▓=Ground Support, ░=Air Movement" << std::endl;
 }
 
-static void printProgressVisualization(float distance_covered, const std::string &current_gait) {
+static void printProgressVisualization(double distance_covered, const std::string &current_gait) {
     std::cout << std::endl
               << "Progress Visualization:" << std::endl;
     std::cout << "Distance: " << std::setw(6) << std::setprecision(1) << std::fixed
@@ -287,7 +287,7 @@ static void printProgressVisualization(float distance_covered, const std::string
     std::cout << "Current: " << current_gait << std::endl;
 }
 
-static void printAngleBar(float angle, float min_angle, float max_angle) {
+static void printAngleBar(double angle, double min_angle, double max_angle) {
     const int bar_length = 20;
     int center = bar_length / 2;
     int position = static_cast<int>(((angle - min_angle) / (max_angle - min_angle)) * bar_length);
@@ -326,7 +326,7 @@ static void printDetailedAngleVisualization(LocomotionSystem &sys, int step, con
         printAngleBar(q.coxa, -75, 75);
         std::cout << " " << std::setw(6) << std::setprecision(1) << std::fixed << q.coxa << "°";
         if (step > 0) {
-            float diff = q.coxa - prev[leg].coxa;
+            double diff = q.coxa - prev[leg].coxa;
             if (std::abs(diff) > 0.1f) {
                 std::cout << " (Δ" << std::setw(5) << std::setprecision(1) << diff << "°)";
             } else {
@@ -340,7 +340,7 @@ static void printDetailedAngleVisualization(LocomotionSystem &sys, int step, con
         printAngleBar(q.femur, -75, 75);
         std::cout << " " << std::setw(6) << std::setprecision(1) << std::fixed << q.femur << "°";
         if (step > 0) {
-            float diff = q.femur - prev[leg].femur;
+            double diff = q.femur - prev[leg].femur;
             if (std::abs(diff) > 0.1f) {
                 std::cout << " (Δ" << std::setw(5) << std::setprecision(1) << diff << "°)";
             } else {
@@ -354,7 +354,7 @@ static void printDetailedAngleVisualization(LocomotionSystem &sys, int step, con
         printAngleBar(q.tibia, -75, 75);
         std::cout << " " << std::setw(6) << std::setprecision(1) << std::fixed << q.tibia << "°";
         if (step > 0) {
-            float diff = q.tibia - prev[leg].tibia;
+            double diff = q.tibia - prev[leg].tibia;
             if (std::abs(diff) > 0.1f) {
                 std::cout << " (Δ" << std::setw(5) << std::setprecision(1) << diff << "°)";
             } else {
@@ -373,15 +373,15 @@ static void printAngleChangesSummary(LocomotionSystem &sys, const JointAngles pr
     std::cout << "----|--------|---------|---------|-------" << std::endl;
 
     int legs_with_changes = 0;
-    float total_movement = 0.0f;
+    double total_movement = 0.0f;
 
     for (int leg = 0; leg < NUM_LEGS; ++leg) {
         JointAngles q = sys.getJointAngles(leg);
         LegState state = sys.getLegState(leg);
 
-        float coxa_diff = q.coxa - prev[leg].coxa;
-        float femur_diff = q.femur - prev[leg].femur;
-        float tibia_diff = q.tibia - prev[leg].tibia;
+        double coxa_diff = q.coxa - prev[leg].coxa;
+        double femur_diff = q.femur - prev[leg].femur;
+        double tibia_diff = q.tibia - prev[leg].tibia;
 
         bool has_change = (std::abs(coxa_diff) > 0.1f ||
                            std::abs(femur_diff) > 0.1f ||
@@ -436,11 +436,11 @@ static void forceGaitMovement(LocomotionSystem &sys, GaitType gait) {
 
 static void printMovementStatus(LocomotionSystem &sys, const JointAngles prev[NUM_LEGS], int step) {
     int moving_legs = 0;
-    float max_change = 0.0f;
+    double max_change = 0.0f;
 
     for (int leg = 0; leg < NUM_LEGS; ++leg) {
         JointAngles q = sys.getJointAngles(leg);
-        float total_change = std::abs(q.coxa - prev[leg].coxa) +
+        double total_change = std::abs(q.coxa - prev[leg].coxa) +
                              std::abs(q.femur - prev[leg].femur) +
                              std::abs(q.tibia - prev[leg].tibia);
 
@@ -512,7 +512,7 @@ int main() {
     assert(controller.initialize());
     controller.requestSystemState(SYSTEM_OPERATIONAL);
     controller.requestRobotState(ROBOT_RUNNING);
-    controller.setDesiredVelocity(Eigen::Vector2f(400.0f, 0.0f), 0.0f);
+    controller.setDesiredVelocity(Eigen::Vector2d(400.0f, 0.0f), 0.0f);
 
     // Independent modules for additional features
     RobotModel model(p);
@@ -537,8 +537,8 @@ int main() {
     adm_ctrl.updateAllLegs(forces, deltas);
 
     // Simulate 5 meters of walking (1000mm per gait)
-    float distance = 5000.0f;
-    float dt = 1.0f / p.control_frequency;
+    double distance = 5000.0f;
+    double dt = 1.0f / p.control_frequency;
     int steps = static_cast<int>((distance / 400.0f) / dt);
 
     std::cout << "\n--- Starting Full Feature Simulation ---" << std::endl;
@@ -561,8 +561,8 @@ int main() {
     printHeader();
 
     for (int s = 0; s < steps; ++s) {
-        float phase = static_cast<float>(s) / static_cast<float>(steps);
-        float distance_covered = phase * distance;
+        double phase = static_cast<double>(s) / static_cast<double>(steps);
+        double distance_covered = phase * distance;
 
         // Gait changes at 20%, 40%, 60%, and 80% of the journey (each gait covers 1000mm)
         if (s == steps / 5) {
@@ -687,14 +687,14 @@ int main() {
     // Test pose control
     std::cout << "Testing pose control..." << std::endl;
     controller.setPosingMode(POSING_X_Y);
-    Eigen::Vector3f position(10.0f, 5.0f, 0.0f);
-    Eigen::Vector3f orientation(0.0f, 0.0f, 0.1f);
+    Eigen::Vector3d position(10.0f, 5.0f, 0.0f);
+    Eigen::Vector3d orientation(0.0f, 0.0f, 0.1f);
     controller.setDesiredPose(position, orientation);
     std::cout << "✓ X-Y posing mode set with desired pose" << std::endl;
 
     // Test cruise control
     std::cout << "Testing cruise control..." << std::endl;
-    Eigen::Vector3f cruise_velocity(200.0f, 0.0f, 0.0f);
+    Eigen::Vector3d cruise_velocity(200.0f, 0.0f, 0.0f);
     controller.setCruiseControlMode(CRUISE_CONTROL_ON, cruise_velocity);
     std::cout << "✓ Cruise control enabled" << std::endl;
 

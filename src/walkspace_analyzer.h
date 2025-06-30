@@ -7,8 +7,8 @@
 #include <vector>
 
 // OpenSHC-compatible type definitions (must be before class declaration)
-typedef std::map<int, float> Workplane;       // bearing -> radius
-typedef std::map<float, Workplane> Workspace; // height -> Workplane
+typedef std::map<int, double> Workplane;       // bearing -> radius
+typedef std::map<double, Workplane> Workspace; // height -> Workplane
 
 /**
  * @brief Walkspace analysis system equivalent to OpenSHC implementation
@@ -26,23 +26,23 @@ class WalkspaceAnalyzer {
      */
     struct WalkspaceResult {
         Point3D center_of_mass;               ///< Calculated center of mass
-        float stability_margin;               ///< Stability margin (mm)
+        double stability_margin;               ///< Stability margin (mm)
         std::vector<Point3D> support_polygon; ///< Support polygon vertices
-        std::map<int, float> walkspace_radii; ///< Walkspace radii by bearing
+        std::map<int, double> walkspace_radii; ///< Walkspace radii by bearing
         bool is_stable;                       ///< Overall stability flag
-        float reachable_area;                 ///< Total reachable area (mm²)
+        double reachable_area;                 ///< Total reachable area (mm²)
     };
 
     /**
      * @brief Individual leg workspace bounds
      */
     struct WorkspaceBounds {
-        float min_radius; ///< Minimum reachable radius (mm)
-        float max_radius; ///< Maximum reachable radius (mm)
-        float min_height; ///< Minimum reachable height (mm)
-        float max_height; ///< Maximum reachable height (mm)
-        float min_angle;  ///< Minimum angular range (degrees)
-        float max_angle;  ///< Maximum angular range (degrees)
+        double min_radius; ///< Minimum reachable radius (mm)
+        double max_radius; ///< Maximum reachable radius (mm)
+        double min_height; ///< Minimum reachable height (mm)
+        double max_height; ///< Maximum reachable height (mm)
+        double min_angle;  ///< Minimum angular range (degrees)
+        double max_angle;  ///< Maximum angular range (degrees)
     };
 
   private:
@@ -51,15 +51,15 @@ class WalkspaceAnalyzer {
 
     // Workspace geometry
     WorkspaceBounds leg_workspace_[NUM_LEGS];
-    std::map<int, float> walkspace_map_; // Bearing -> radius mapping (legacy)
+    std::map<int, double> walkspace_map_; // Bearing -> radius mapping (legacy)
 
     // Enhanced workspace storage with height layers (OpenSHC-compatible)
     Workspace leg_workspaces_[NUM_LEGS]; // 3D workspace per leg
 
     // Analysis parameters
     static constexpr int BEARING_STEP = 5;                // Degrees
-    static constexpr float MAX_WORKSPACE_RADIUS = 500.0f; // mm
-    static constexpr float STABILITY_THRESHOLD = 10.0f;   // mm
+    static constexpr double MAX_WORKSPACE_RADIUS = 500.0f; // mm
+    static constexpr double STABILITY_THRESHOLD = 10.0f;   // mm
 
   public:
     explicit WalkspaceAnalyzer(RobotModel &model, ComputeConfig config = ComputeConfig::medium());
@@ -95,7 +95,7 @@ class WalkspaceAnalyzer {
      * @param bearing_degrees Bearing in degrees (0-360)
      * @return Maximum walkspace radius at bearing
      */
-    float getWalkspaceRadius(float bearing_degrees) const;
+    double getWalkspaceRadius(double bearing_degrees) const;
 
     /**
      * @brief Get optimal step positions for body movement
@@ -118,7 +118,7 @@ class WalkspaceAnalyzer {
      * @brief Get current walkspace map
      * @return Map of bearing to radius values
      */
-    const std::map<int, float> &getWalkspaceMap() const { return walkspace_map_; }
+    const std::map<int, double> &getWalkspaceMap() const { return walkspace_map_; }
 
     /**
      * @brief Get workplane at specific height with interpolation
@@ -126,7 +126,7 @@ class WalkspaceAnalyzer {
      * @param height Height above workspace origin (mm)
      * @return Interpolated workplane at specified height
      */
-    Workplane getWorkplane(int leg_index, float height) const;
+    Workplane getWorkplane(int leg_index, double height) const;
 
     /**
      * @brief Get full 3D workspace for specific leg
@@ -148,7 +148,7 @@ class WalkspaceAnalyzer {
     void generateWalkspaceForLeg(int leg_index);
     bool detailedReachabilityCheck(int leg_index, const Point3D &position);
     Point3D calculateCenterOfMass(const Point3D leg_positions[NUM_LEGS]);
-    float calculateStabilityMargin(const Point3D leg_positions[NUM_LEGS]);
+    double calculateStabilityMargin(const Point3D leg_positions[NUM_LEGS]);
     void calculateSupportPolygon(const Point3D leg_positions[NUM_LEGS],
                                  std::vector<Point3D> &polygon);
 

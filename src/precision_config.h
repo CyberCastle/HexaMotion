@@ -19,7 +19,7 @@ enum PrecisionLevel {
 struct ComputeConfig {
     PrecisionLevel precision; ///< Computation precision level
     uint8_t max_iterations;   ///< Maximum iterations for iterative algorithms
-    float tolerance;          ///< Convergence tolerance
+    double tolerance;          ///< Convergence tolerance
     uint16_t update_freq_hz;  ///< Update frequency in Hz
     bool use_approximations;  ///< Enable fast approximations
 
@@ -35,8 +35,8 @@ struct ComputeConfig {
         return {PRECISION_HIGH, 20, 0.001f, 200, false};
     }
 
-    float getDeltaTime() const {
-        return 1.0f / static_cast<float>(update_freq_hz);
+    double getDeltaTime() const {
+        return 1.0 / static_cast<double>(update_freq_hz);
     }
 };
 

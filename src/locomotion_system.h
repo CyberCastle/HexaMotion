@@ -79,28 +79,28 @@ class LocomotionSystem {
     IServoInterface *servo_interface;
 
     // System states
-    Eigen::Vector3f body_position;      // Body position [x,y,z]
-    Eigen::Vector3f body_orientation;   // Body orientation [roll,pitch,yaw]
+    Eigen::Vector3d body_position;      // Body position [x,y,z]
+    Eigen::Vector3d body_orientation;   // Body orientation [roll,pitch,yaw]
     Point3D leg_positions[NUM_LEGS];    // Leg positions
     JointAngles joint_angles[NUM_LEGS]; // Joint angles
     LegState leg_states[NUM_LEGS];      // Leg states
 
     // Gait control
     GaitType current_gait;
-    float gait_phase;
-    float step_height;
-    float step_length;
+    double gait_phase;
+    double step_height;
+    double step_length;
 
     // Gait-specific parameters
-    float stance_duration;             // Stance phase duration (0-1)
-    float swing_duration;              // Swing phase duration (0-1)
-    float cycle_frequency;             // Gait cycle frequency (Hz)
-    float leg_phase_offsets[NUM_LEGS]; // Phase offset per leg
+    double stance_duration;             // Stance phase duration (0-1)
+    double swing_duration;              // Swing phase duration (0-1)
+    double cycle_frequency;             // Gait cycle frequency (Hz)
+    double leg_phase_offsets[NUM_LEGS]; // Phase offset per leg
 
     // Control variables
     bool system_enabled;
     unsigned long last_update_time;
-    float dt; // Delta time since last update (seconds)
+    double dt; // Delta time since last update (seconds)
 
     // Velocity control
     CartesianVelocityController *velocity_controller;
@@ -113,7 +113,7 @@ class LocomotionSystem {
     WalkController *walk_ctrl;
     AdmittanceController *admittance_ctrl;
     // FSR contact history for updateLegStates filtering
-    float fsr_contact_history[NUM_LEGS][3];
+    double fsr_contact_history[NUM_LEGS][3];
     // Circular buffer index for FSR history
     int fsr_history_index;
     // Last log time for sensor update profiling
@@ -159,7 +159,7 @@ class LocomotionSystem {
 
     // Pose control
     /** Set the full body pose. */
-    bool setBodyPose(const Eigen::Vector3f &position, const Eigen::Vector3f &orientation);
+    bool setBodyPose(const Eigen::Vector3d &position, const Eigen::Vector3d &orientation);
     /** Move one leg to a position in world coordinates. */
     bool setLegPosition(int leg_index, const Point3D &position);
     /** Command the default standing pose. */
@@ -176,61 +176,61 @@ class LocomotionSystem {
     /** Project target to workspace boundary if outside. */
     Point3D constrainToWorkspace(int leg_index, const Point3D &target);
     /** Get joint limit proximity (1.0 = far from limits, 0.0 = at limits). */
-    float getJointLimitProximity(int leg_index, const JointAngles &angles);
+    double getJointLimitProximity(int leg_index, const JointAngles &angles);
 
     // Denavit-Hartenberg transforms
     /** Compute a DH transform matrix. */
-    Eigen::Matrix4f calculateDHTransform(float a, float alpha, float d, float theta);
+    Eigen::Matrix4d calculateDHTransform(double a, double alpha, double d, double theta);
     /** Compute the transform from body to leg tip. */
-    Eigen::Matrix4f calculateLegTransform(int leg_index, const JointAngles &angles);
+    Eigen::Matrix4d calculateLegTransform(int leg_index, const JointAngles &angles);
 
     // Gait planner
     /** Select the active gait type. */
     bool setGaitType(GaitType gait);
     /** Plan the next gait step from desired velocities. */
-    bool planGaitSequence(float velocity_x, float velocity_y, float angular_velocity);
+    bool planGaitSequence(double velocity_x, double velocity_y, double angular_velocity);
     /** Update internal gait phase counters. */
     void updateGaitPhase();
     /** Compute foot trajectory for a leg at given phase. */
-    Point3D calculateFootTrajectory(int leg_index, float phase);
+    Point3D calculateFootTrajectory(int leg_index, double phase);
 
     // Locomotion control
     /** Start walking forward indefinitely. */
-    bool walkForward(float velocity);
+    bool walkForward(double velocity);
     /** Start walking backward indefinitely. */
-    bool walkBackward(float velocity);
+    bool walkBackward(double velocity);
     /** Rotate the robot in place indefinitely. */
-    bool turnInPlace(float angular_velocity);
+    bool turnInPlace(double angular_velocity);
     /** Walk laterally to one side indefinitely. */
-    bool walkSideways(float velocity, bool right_direction = true);
+    bool walkSideways(double velocity, bool right_direction = true);
     /** Walk forward for a fixed duration. */
-    bool walkForward(float velocity, float duration);
+    bool walkForward(double velocity, double duration);
     /** Walk backward for a fixed duration. */
-    bool walkBackward(float velocity, float duration);
+    bool walkBackward(double velocity, double duration);
     /** Rotate in place for a fixed duration. */
-    bool turnInPlace(float angular_velocity, float duration);
+    bool turnInPlace(double angular_velocity, double duration);
     /** Walk sideways for a fixed duration. */
-    bool walkSideways(float velocity, float duration, bool right_direction = true);
+    bool walkSideways(double velocity, double duration, bool right_direction = true);
     /** Immediately stop all leg motion. */
     bool stopMovement();
 
     // Orientation control
     /** Maintain a desired body orientation. */
-    bool maintainOrientation(const Eigen::Vector3f &target_orientation);
+    bool maintainOrientation(const Eigen::Vector3d &target_orientation);
     /** Level the body if tilt is detected. */
     bool correctBodyTilt();
     /** Compute orientation error between desired and current pose. */
-    Eigen::Vector3f calculateOrientationError();
+    Eigen::Vector3d calculateOrientationError();
 
     // Stability analysis
     /** Verify that current pose maintains stability margin. */
     bool checkStabilityMargin();
     /** Calculate center of pressure under the robot. */
-    Eigen::Vector2f calculateCenterOfPressure();
+    Eigen::Vector2d calculateCenterOfPressure();
     /** Compute a numeric stability index. */
-    float calculateStabilityIndex();
+    double calculateStabilityIndex();
     /** Enhanced stability calculation using absolute positioning data. */
-    float calculateDynamicStabilityIndex();
+    double calculateDynamicStabilityIndex();
     /** Check if the robot is statically stable. */
     bool isStaticallyStable();
 
@@ -256,32 +256,32 @@ class LocomotionSystem {
     RobotModel &getRobotModel() { return model; }
     const RobotModel &getRobotModel() const { return model; }
     IServoInterface *getServoInterface() { return servo_interface; }
-    Eigen::Vector3f getBodyPosition() const { return body_position; }
-    Eigen::Vector3f getBodyOrientation() const { return body_orientation; }
+    Eigen::Vector3d getBodyPosition() const { return body_position; }
+    Eigen::Vector3d getBodyOrientation() const { return body_orientation; }
     LegState getLegState(int leg_index) const { return leg_states[leg_index]; }
     JointAngles getJointAngles(int leg_index) const { return joint_angles[leg_index]; }
     JointAngles getCurrentAngles(int leg_index) const { return joint_angles[leg_index]; }
     Point3D getLegPosition(int leg_index) const { return leg_positions[leg_index]; }
-    float getStepHeight() const { return step_height; }
-    float getStepLength() const;
+    double getStepHeight() const { return step_height; }
+    double getStepLength() const;
 
     // Setters
     /** Replace the current parameter set. */
     bool setParameters(const Parameters &new_params);
     /** Set the control loop frequency. */
-    bool setControlFrequency(float frequency);
+    bool setControlFrequency(double frequency);
     /** Configure step height and length. */
-    bool setStepParameters(float height, float length);
+    bool setStepParameters(double height, double length);
 
     // Smooth trajectory configuration (OpenSHC-style movement)
     /** Configure smooth trajectory interpolation from current servo positions. */
-    bool configureSmoothMovement(bool enable = true, float interpolation_speed = 0.1f, uint8_t max_steps = 20);
+    bool configureSmoothMovement(bool enable = true, double interpolation_speed = 0.1f, uint8_t max_steps = 20);
 
     /** Set body pose using smooth trajectory interpolation. */
-    bool setBodyPoseSmooth(const Eigen::Vector3f &position, const Eigen::Vector3f &orientation);
+    bool setBodyPoseSmooth(const Eigen::Vector3d &position, const Eigen::Vector3d &orientation);
 
     /** Set body pose immediately without trajectory interpolation. */
-    bool setBodyPoseImmediate(const Eigen::Vector3f &position, const Eigen::Vector3f &orientation);
+    bool setBodyPoseImmediate(const Eigen::Vector3d &position, const Eigen::Vector3d &orientation);
 
     /** Check if a smooth movement trajectory is currently in progress. */
     bool isSmoothMovementInProgress() const;
@@ -303,7 +303,7 @@ class LocomotionSystem {
     bool setGaitSpeedModifiers(const CartesianVelocityController::GaitSpeedModifiers &modifiers);
 
     /** Get current servo speed for a specific joint (affected by velocity control). */
-    float getCurrentServoSpeed(int leg_index, int joint_index) const;
+    double getCurrentServoSpeed(int leg_index, int joint_index) const;
 
     // Diagnostics
     /** Execute a basic hardware self-test. */
@@ -311,12 +311,12 @@ class LocomotionSystem {
 
   private:
     // Helper methods
-    float constrainAngle(float angle, float min_angle, float max_angle);
+    double constrainAngle(double angle, double min_angle, double max_angle);
     bool validateParameters();
     void initializeDefaultPose();
     void updateStepParameters();
     bool checkJointLimits(int leg_index, const JointAngles &angles);
-    float calculateLegReach() const;
+    double calculateLegReach() const;
 
     // Adaptive control
     void adaptGaitToTerrain();

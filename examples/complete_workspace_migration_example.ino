@@ -154,7 +154,7 @@ void demonstrateMigrationBenefits() {
     Serial.println("  • Consistent velocity scaling across all joints");
 
     velocity_controller->updateServoSpeeds(0.5f, 0.0f, 0.0f, TRIPOD_GAIT);
-    float servo_speed = velocity_controller->getServoSpeed(0, 1); // Leg 0, Femur joint
+    double servo_speed = velocity_controller->getServoSpeed(0, 1); // Leg 0, Femur joint
     Serial.print("  • Unified servo speed calculation: ");
     Serial.print(servo_speed, 3);
     Serial.println(" (speed multiplier)");
@@ -215,15 +215,15 @@ void demonstrateRuntimeIntegration() {
     Serial.println("\n=== Runtime Integration Example ===");
 
     // Simulate a walking cycle using all unified modules
-    static float phase = 0.0f;
+    static double phase = 0.0f;
     phase += 0.1f;
     if (phase > 2 * PI)
         phase = 0.0f;
 
     // 1. Velocity limits determine safe speeds
-    float desired_vx = 0.3f * sin(phase);
-    float desired_vy = 0.2f * cos(phase);
-    float desired_omega = 0.5f * sin(phase * 0.5f);
+    double desired_vx = 0.3f * sin(phase);
+    double desired_vy = 0.2f * cos(phase);
+    double desired_omega = 0.5f * sin(phase * 0.5f);
 
     bool velocities_valid = velocity_limiter->validateVelocityInputs(desired_vx, desired_vy, desired_omega);
 

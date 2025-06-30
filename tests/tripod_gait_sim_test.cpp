@@ -23,7 +23,7 @@ static void printWelcome() {
 }
 
 // Forward declaration
-static void printAngleBar(float angle, float min_angle, float max_angle);
+static void printAngleBar(double angle, double min_angle, double max_angle);
 
 // Add function to display robot dimensions
 static void printRobotDimensions(const Parameters &p) {
@@ -40,8 +40,8 @@ static void printRobotDimensions(const Parameters &p) {
     std::cout << std::endl;
 
     // Calculate and display total leg reach
-    float max_reach = p.coxa_length + p.femur_length + p.tibia_length;
-    float body_diagonal = p.hexagon_radius * 2;
+    double max_reach = p.coxa_length + p.femur_length + p.tibia_length;
+    double body_diagonal = p.hexagon_radius * 2;
 
     std::cout << "CALCULATED DIMENSIONS:" << std::endl;
     std::cout << "Max Leg Reach:     " << std::setw(6) << std::setprecision(1) << std::fixed << max_reach << " mm" << std::endl;
@@ -72,7 +72,7 @@ static void printHeader() {
     std::cout << "-------|-------" << std::endl;
 }
 
-static void printAngles(int step, LocomotionSystem &sys, float phase) {
+static void printAngles(int step, LocomotionSystem &sys, double phase) {
     std::cout << std::setw(3) << step << " |";
 
     // Print joint angles for all legs
@@ -114,7 +114,7 @@ static void printLegStateVisualization(LocomotionSystem &sys) {
     std::cout << "S=Stance(Ground), W=Swing(Air)" << std::endl;
 }
 
-static void printRobotDiagram(LocomotionSystem &sys, float distance_covered) {
+static void printRobotDiagram(LocomotionSystem &sys, double distance_covered) {
     std::cout << std::endl
               << "Robot Position Diagram:" << std::endl;
     std::cout << "Progress: " << std::setw(5) << std::setprecision(1) << std::fixed
@@ -169,7 +169,7 @@ static void printServoAngleGraph(LocomotionSystem &sys, int step) {
     }
 }
 
-static void printAngleBar(float angle, float min_angle, float max_angle) {
+static void printAngleBar(double angle, double min_angle, double max_angle) {
     const int bar_length = 30;
     int position = static_cast<int>(((angle - min_angle) / (max_angle - min_angle)) * bar_length);
     position = std::max(0, std::min(bar_length - 1, position));
@@ -185,7 +185,7 @@ static void printAngleBar(float angle, float min_angle, float max_angle) {
     }
 }
 
-static void printTripodGaitPattern(LocomotionSystem &sys, float phase) {
+static void printTripodGaitPattern(LocomotionSystem &sys, double phase) {
     std::cout << std::endl
               << "Tripod Gait Pattern (Phase: " << std::setprecision(2) << phase << "):" << std::endl;
     std::cout << "Group A (L1,L3,L5): ";
@@ -217,7 +217,7 @@ static void printTripodGaitPattern(LocomotionSystem &sys, float phase) {
     std::cout << "▓=Ground Support, ░=Air Movement" << std::endl;
 }
 
-static void printDetailedRobotStatus(LocomotionSystem &sys, float distance_covered, int step) {
+static void printDetailedRobotStatus(LocomotionSystem &sys, double distance_covered, int step) {
     std::cout << std::endl
               << "═══════════════════════════════════════" << std::endl;
     std::cout << "HEXAPOD STATUS - Step " << step << std::endl;
@@ -240,8 +240,8 @@ static void printDetailedRobotStatus(LocomotionSystem &sys, float distance_cover
     std::cout << "T" << std::setw(3) << p.tibia_length << "mm" << std::endl;
 
     // Calculate total robot footprint
-    float max_reach = p.coxa_length + p.femur_length + p.tibia_length;
-    float footprint_radius = p.hexagon_radius + max_reach;
+    double max_reach = p.coxa_length + p.femur_length + p.tibia_length;
+    double footprint_radius = p.hexagon_radius + max_reach;
     std::cout << "Max Reach: " << std::setw(4) << std::setprecision(1) << max_reach << "mm | ";
     std::cout << "Footprint: " << std::setw(4) << std::setprecision(1) << (footprint_radius * 2) << "mm diameter" << std::endl;
 
@@ -431,7 +431,7 @@ int main() {
         // Verify forward kinematics result
         Point3D fk_pos = sys1.calculateForwardKinematics(leg, q);
         std::cout << "  FK verification: x=" << std::fixed << std::setprecision(1) << fk_pos.x << ", y=" << fk_pos.y << ", z=" << fk_pos.z << std::endl;
-        float error = sqrt(pow(pos.x - fk_pos.x, 2) + pow(pos.y - fk_pos.y, 2) + pow(pos.z - fk_pos.z, 2));
+        double error = sqrt(pow(pos.x - fk_pos.x, 2) + pow(pos.y - fk_pos.y, 2) + pow(pos.z - fk_pos.z, 2));
         std::cout << "  IK error: " << std::fixed << std::setprecision(1) << error << "mm" << std::endl;
     }
 
@@ -480,7 +480,7 @@ int main() {
         // Verify forward kinematics result
         Point3D fk_pos = sys2.calculateForwardKinematics(leg, q);
         std::cout << "  FK verification: x=" << std::fixed << std::setprecision(1) << fk_pos.x << ", y=" << fk_pos.y << ", z=" << fk_pos.z << std::endl;
-        float error = sqrt(pow(pos.x - fk_pos.x, 2) + pow(pos.y - fk_pos.y, 2) + pow(pos.z - fk_pos.z, 2));
+        double error = sqrt(pow(pos.x - fk_pos.x, 2) + pow(pos.y - fk_pos.y, 2) + pow(pos.z - fk_pos.z, 2));
         std::cout << "  IK error: " << std::fixed << std::setprecision(1) << error << "mm" << std::endl;
     }
 
@@ -510,9 +510,9 @@ int main() {
     printRobotDimensions(p);
 
     // Simulation parameters - moved here to be available for state controller setup
-    float velocity = 400.0f;              // mm/s
-    float distance = 800.0f;              // mm
-    float duration = distance / velocity; // 2 seconds
+    double velocity = 400.0f;              // mm/s
+    double distance = 800.0f;              // mm
+    double duration = distance / velocity; // 2 seconds
     unsigned steps = static_cast<unsigned>(duration * p.control_frequency);
 
     // Initialize locomotion system
@@ -581,7 +581,7 @@ int main() {
 
     // 3. Set velocity for walking
     std::cout << "\n--- Phase 3: Velocity Control Setup ---" << std::endl;
-    Eigen::Vector2f linear_velocity(velocity, 0.0f);
+    Eigen::Vector2d linear_velocity(velocity, 0.0f);
     stateController.setDesiredVelocity(linear_velocity, 0.0f);
     std::cout << "✓ Desired velocity set: " << velocity << " mm/s forward" << std::endl;
 
@@ -607,9 +607,9 @@ int main() {
     printHeader();
 
     for (unsigned s = 0; s < steps; ++s) {
-        float phase = static_cast<float>(s) / static_cast<float>(steps);
-        float distance_covered = phase * distance;
-        float deltaTime = 1.0f / p.control_frequency;
+        double phase = static_cast<double>(s) / static_cast<double>(steps);
+        double distance_covered = phase * distance;
+        double deltaTime = 1.0f / p.control_frequency;
 
         // Update State Controller first
         stateController.update(deltaTime);
@@ -725,14 +725,14 @@ int main() {
     // Test pose control
     std::cout << "Testing pose control..." << std::endl;
     stateController.setPosingMode(POSING_X_Y);
-    Eigen::Vector3f position(10.0f, 5.0f, 0.0f);
-    Eigen::Vector3f orientation(0.0f, 0.0f, 0.1f);
+    Eigen::Vector3d position(10.0f, 5.0f, 0.0f);
+    Eigen::Vector3d orientation(0.0f, 0.0f, 0.1f);
     stateController.setDesiredPose(position, orientation);
     std::cout << "✓ X-Y posing mode set with desired pose" << std::endl;
 
     // Test cruise control
     std::cout << "Testing cruise control..." << std::endl;
-    Eigen::Vector3f cruise_velocity(200.0f, 0.0f, 0.0f);
+    Eigen::Vector3d cruise_velocity(200.0f, 0.0f, 0.0f);
     stateController.setCruiseControlMode(CRUISE_CONTROL_ON, cruise_velocity);
     std::cout << "✓ Cruise control enabled" << std::endl;
 

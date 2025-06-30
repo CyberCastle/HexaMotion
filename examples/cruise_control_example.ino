@@ -31,7 +31,7 @@ void setup() {
 void loop() {
     // Example 1: Set cruise control with specific velocity
     Serial.println("\n1. Setting cruise control with specific velocity");
-    Eigen::Vector3f cruise_vel(100.0f, 50.0f, 15.0f); // x, y, angular_z
+    Eigen::Vector3d cruise_vel(100.0f, 50.0f, 15.0f); // x, y, angular_z
 
     if (state_controller.setCruiseControlMode(CruiseControlMode::CRUISE_CONTROL_ON, cruise_vel)) {
         Serial.println("Cruise control enabled with velocity: [100, 50, 15]");
@@ -44,11 +44,11 @@ void loop() {
 
     // Example 2: Set cruise control using current velocity
     Serial.println("\n2. Setting cruise control with current velocity");
-    state_controller.setDesiredVelocity(Eigen::Vector2f(80.0f, -30.0f), 10.0f);
+    state_controller.setDesiredVelocity(Eigen::Vector2d(80.0f, -30.0f), 10.0f);
 
     if (state_controller.setCruiseControlMode(CruiseControlMode::CRUISE_CONTROL_ON)) {
         Serial.println("Cruise control enabled with current velocity");
-        Eigen::Vector3f current_cruise = state_controller.getCruiseVelocity();
+        Eigen::Vector3d current_cruise = state_controller.getCruiseVelocity();
         Serial.print("Cruise velocity: [");
         Serial.print(current_cruise.x());
         Serial.print(", ");
@@ -97,7 +97,7 @@ void advancedCruiseControlExample() {
     StateController unlimited_controller(locomotion_system, unlimited_config);
 
     // This will run indefinitely until manually stopped
-    Eigen::Vector3f forward_velocity(150.0f, 0.0f, 0.0f);
+    Eigen::Vector3d forward_velocity(150.0f, 0.0f, 0.0f);
     unlimited_controller.setCruiseControlMode(CruiseControlMode::CRUISE_CONTROL_ON, forward_velocity);
 
     Serial.println("Unlimited cruise control enabled");

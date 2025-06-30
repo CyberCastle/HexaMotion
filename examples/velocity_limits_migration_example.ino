@@ -88,7 +88,7 @@ void setup() {
     Serial.println("\n=== Unified Velocity Scaling ===");
     VelocityLimits::LimitValues base_limits = velocity_limiter->getLimit(0); // Forward direction
 
-    for (float angular_percentage = 0.0f; angular_percentage <= 1.0f; angular_percentage += 0.25f) {
+    for (double angular_percentage = 0.0f; angular_percentage <= 1.0f; angular_percentage += 0.25f) {
         VelocityLimits::LimitValues scaled = velocity_limiter->scaleVelocityLimits(base_limits, angular_percentage);
 
         Serial.print("Angular demand ");
@@ -117,7 +117,7 @@ void loop() {
     delay(1000);
 }
 
-void testVelocityValidation(float vx, float vy, float omega, const char *description) {
+void testVelocityValidation(double vx, double vy, double omega, const char *description) {
     bool is_valid = velocity_limiter->validateVelocityInputs(vx, vy, omega);
 
     Serial.print(description);

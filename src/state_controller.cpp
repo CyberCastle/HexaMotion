@@ -113,7 +113,7 @@ std::string toString(AdvancedLegState state) {
     }
 }
 
-std::string toString(float value) {
+std::string toString(double value) {
     std::ostringstream oss;
     oss << value;
     return oss.str();
@@ -136,12 +136,12 @@ String toArduinoString(const std::string &str) {
 // ==============================
 
 StateController::StateController(LocomotionSystem &locomotion, const StateMachineConfig &config)
-    : locomotion_system_(locomotion), config_(config), current_system_state_(SystemState::SYSTEM_SUSPENDED), current_robot_state_(RobotState::ROBOT_UNKNOWN), current_walk_state_(WalkState::WALK_STOPPED), current_posing_mode_(PosingMode::POSING_NONE), current_cruise_control_mode_(CruiseControlMode::CRUISE_CONTROL_OFF), current_pose_reset_mode_(PoseResetMode::POSE_RESET_NONE), desired_system_state_(SystemState::SYSTEM_SUSPENDED), desired_robot_state_(RobotState::ROBOT_UNKNOWN), manual_leg_count_(0), is_transitioning_(false), desired_linear_velocity_(Eigen::Vector2f::Zero()), desired_angular_velocity_(0.0f), desired_body_position_(Eigen::Vector3f::Zero()), desired_body_orientation_(Eigen::Vector3f::Zero()), cruise_velocity_(Eigen::Vector3f::Zero()), cruise_start_time_(0), cruise_end_time_(0), last_update_time_(0), dt_(0.02f), has_error_(false), is_initialized_(false), startup_step_(0), startup_transition_initialized_(false), startup_transition_step_count_(4), shutdown_step_(0), shutdown_transition_initialized_(false), shutdown_transition_step_count_(3), pack_step_(0), unpack_step_(0) {
+    : locomotion_system_(locomotion), config_(config), current_system_state_(SystemState::SYSTEM_SUSPENDED), current_robot_state_(RobotState::ROBOT_UNKNOWN), current_walk_state_(WalkState::WALK_STOPPED), current_posing_mode_(PosingMode::POSING_NONE), current_cruise_control_mode_(CruiseControlMode::CRUISE_CONTROL_OFF), current_pose_reset_mode_(PoseResetMode::POSE_RESET_NONE), desired_system_state_(SystemState::SYSTEM_SUSPENDED), desired_robot_state_(RobotState::ROBOT_UNKNOWN), manual_leg_count_(0), is_transitioning_(false), desired_linear_velocity_(Eigen::Vector2d::Zero()), desired_angular_velocity_(0.0f), desired_body_position_(Eigen::Vector3d::Zero()), desired_body_orientation_(Eigen::Vector3d::Zero()), cruise_velocity_(Eigen::Vector3d::Zero()), cruise_start_time_(0), cruise_end_time_(0), last_update_time_(0), dt_(0.02f), has_error_(false), is_initialized_(false), startup_step_(0), startup_transition_initialized_(false), startup_transition_step_count_(4), shutdown_step_(0), shutdown_transition_initialized_(false), shutdown_transition_step_count_(3), pack_step_(0), unpack_step_(0) {
 
     // Initialize leg states
     for (int i = 0; i < NUM_LEGS; i++) {
         leg_states_[i] = AdvancedLegState::LEG_WALKING;
-        leg_tip_velocities_[i] = Eigen::Vector3f::Zero();
+        leg_tip_velocities_[i] = Eigen::Vector3d::Zero();
     }
 
     // Initialize transition progress
@@ -230,7 +230,7 @@ bool StateController::initialize(const PoseConfiguration &pose_config) {
 // MAIN UPDATE LOOP
 // ==============================
 
-void StateController::update(float dt) {
+void StateController::update(double dt) {
     if (!is_initialized_) {
         return;
     }
@@ -316,7 +316,7 @@ bool StateController::setPosingMode(PosingMode mode) {
     return true;
 }
 
-bool StateController::setCruiseControlMode(CruiseControlMode mode, const Eigen::Vector3f &velocity) {
+bool StateController::setCruiseControlMode(CruiseControlMode mode, const Eigen::Vector3d &velocity) {
     if (!config_.enable_cruise_control && mode != CruiseControlMode::CRUISE_CONTROL_OFF) {
         setError("Cruise control is disabled in configuration");
         return false;
@@ -352,7 +352,7 @@ bool StateController::setCruiseControlMode(CruiseControlMode mode, const Eigen::
             cruise_end_time_ = 0; // No time limit
         }
     } else {
-        cruise_velocity_ = Eigen::Vector3f::Zero();
+        cruise_velocity_ = Eigen::Vector3d::Zero();
         cruise_start_time_ = 0;
         cruise_end_time_ = 0;
         logDebug("Cruise control disabled");
@@ -417,25 +417,25 @@ int StateController::getManualLegCount() const {
 // VELOCITY AND POSE CONTROL
 // ==============================
 
-void StateController::setDesiredVelocity(const Eigen::Vector2f &linear_velocity, float angular_velocity) {
+void StateController::setDesiredVelocity(const Eigen::Vector2d &linear_velocity, double angular_velocity) {
     desired_linear_velocity_ = linear_velocity;
     desired_angular_velocity_ = angular_velocity;
 }
 
-void StateController::setDesiredPose(const Eigen::Vector3f &position, const Eigen::Vector3f &orientation) {
+void StateController::setDesiredPose(const Eigen::Vector3d &position, const Eigen::Vector3d &orientation) {
     desired_body_position_ = position;
     desired_body_orientation_ = orientation;
 }
 
-void StateController::setLegTipVelocity(int leg_index, const Eigen::Vector3f &velocity) {
+void StateController::setLegTipVelocity(int leg_index, const Eigen::Vector3d &velocity) {
     if (leg_index >= 0 && leg_index < NUM_LEGS) {
         leg_tip_velocities_[leg_index] = velocity;
     }
 }
 
-bool StateController::setDesiredBodyPosition(const Eigen::Vector3f &position) {
+bool StateController::setDesiredBodyPosition(const Eigen::Vector3d &position) {
     // Validate position limits (basic safety check)
-    const float MAX_POSITION_OFFSET = 200.0f; // mm
+    const double MAX_POSITION_OFFSET = 200.0f; // mm
     if (abs(position.x()) > MAX_POSITION_OFFSET ||
         abs(position.y()) > MAX_POSITION_OFFSET ||
         abs(position.z()) > MAX_POSITION_OFFSET) {
@@ -451,9 +451,9 @@ bool StateController::setDesiredBodyPosition(const Eigen::Vector3f &position) {
     return true;
 }
 
-bool StateController::setDesiredBodyOrientation(const Eigen::Vector3f &orientation) {
+bool StateController::setDesiredBodyOrientation(const Eigen::Vector3d &orientation) {
     // Validate orientation limits (basic safety check)
-    const float MAX_ANGLE = TIBIA_ANGLE_MAX; // degrees
+    const double MAX_ANGLE = TIBIA_ANGLE_MAX; // degrees
     if (abs(orientation.x()) > MAX_ANGLE ||
         abs(orientation.y()) > MAX_ANGLE ||
         abs(orientation.z()) > MAX_ANGLE) {
@@ -481,7 +481,7 @@ bool StateController::changeGait(GaitType gait) {
 
     // Force robot to stop before changing gait
     if (current_walk_state_ != WalkState::WALK_STOPPED) {
-        desired_linear_velocity_ = Eigen::Vector2f::Zero();
+        desired_linear_velocity_ = Eigen::Vector2d::Zero();
         desired_angular_velocity_ = 0.0f;
         logDebug("Stopping robot to change gait...");
         return false; // Will retry when stopped
@@ -535,7 +535,7 @@ void StateController::emergencyStop() {
     logDebug("EMERGENCY STOP activated");
 
     // Stop all motion immediately
-    desired_linear_velocity_ = Eigen::Vector2f::Zero();
+    desired_linear_velocity_ = Eigen::Vector2d::Zero();
     desired_angular_velocity_ = 0.0f;
 
     // Disable cruise control
@@ -543,7 +543,7 @@ void StateController::emergencyStop() {
 
     // Reset all leg tip velocities
     for (int i = 0; i < NUM_LEGS; i++) {
-        leg_tip_velocities_[i] = Eigen::Vector3f::Zero();
+        leg_tip_velocities_[i] = Eigen::Vector3d::Zero();
     }
 
     // Cancel any ongoing transitions
@@ -574,15 +574,15 @@ void StateController::reset() {
     // Reset leg states
     for (int i = 0; i < NUM_LEGS; i++) {
         leg_states_[i] = AdvancedLegState::LEG_WALKING;
-        leg_tip_velocities_[i] = Eigen::Vector3f::Zero();
+        leg_tip_velocities_[i] = Eigen::Vector3d::Zero();
     }
     manual_leg_count_ = 0;
 
     // Reset control inputs
-    desired_linear_velocity_ = Eigen::Vector2f::Zero();
+    desired_linear_velocity_ = Eigen::Vector2d::Zero();
     desired_angular_velocity_ = 0.0f;
-    desired_body_position_ = Eigen::Vector3f::Zero();
-    desired_body_orientation_ = Eigen::Vector3f::Zero();
+    desired_body_position_ = Eigen::Vector3d::Zero();
+    desired_body_orientation_ = Eigen::Vector3d::Zero();
 
     // Reset transition state
     is_transitioning_ = false;
@@ -708,7 +708,7 @@ void StateController::handleRobotStateTransition() {
         if (desired_robot_state_ == RobotState::ROBOT_READY) {
             // Must stop walking first
             if (current_walk_state_ != WalkState::WALK_STOPPED) {
-                desired_linear_velocity_ = Eigen::Vector2f::Zero();
+                desired_linear_velocity_ = Eigen::Vector2d::Zero();
                 desired_angular_velocity_ = 0.0f;
                 return; // Wait for walking to stop
             }
@@ -742,8 +742,8 @@ void StateController::updateWalkState() {
     }
 
     // Determine walk state based on velocity inputs
-    float linear_magnitude = desired_linear_velocity_.norm();
-    float angular_magnitude = abs(desired_angular_velocity_);
+    double linear_magnitude = desired_linear_velocity_.norm();
+    double angular_magnitude = abs(desired_angular_velocity_);
 
     bool has_velocity_input = (linear_magnitude > 0.01f) || (angular_magnitude > 0.01f);
 
@@ -806,7 +806,7 @@ void StateController::handleLegStateTransitions() {
 }
 
 void StateController::updateVelocityControl() {
-    float linear_x, linear_y, angular_z;
+    double linear_x, linear_y, angular_z;
 
     // Check if cruise control should be used (equivalent to OpenSHC cruise control logic)
     bool use_cruise_control = (current_cruise_control_mode_ == CruiseControlMode::CRUISE_CONTROL_ON);
@@ -818,7 +818,7 @@ void StateController::updateVelocityControl() {
             // Time limit exceeded, disable cruise control
             logDebug("Cruise control time limit exceeded, disabling");
             current_cruise_control_mode_ = CruiseControlMode::CRUISE_CONTROL_OFF;
-            cruise_velocity_ = Eigen::Vector3f::Zero();
+            cruise_velocity_ = Eigen::Vector3d::Zero();
             use_cruise_control = false;
         }
     }
@@ -911,10 +911,10 @@ void StateController::applyBodyPositionControl(bool enable_x, bool enable_y, boo
     }
 
     // Get current desired position
-    Eigen::Vector3f current_position = desired_body_position_;
+    Eigen::Vector3d current_position = desired_body_position_;
 
     // Apply control for enabled axes (equivalent to OpenSHC axis-specific control)
-    Eigen::Vector3f controlled_position = current_position;
+    Eigen::Vector3d controlled_position = current_position;
 
     if (!enable_x) {
         controlled_position.x() = 0.0f; // Reset to default if not enabled
@@ -945,10 +945,10 @@ void StateController::applyBodyOrientationControl(bool enable_roll, bool enable_
     }
 
     // Get current desired orientation
-    Eigen::Vector3f current_orientation = desired_body_orientation_;
+    Eigen::Vector3d current_orientation = desired_body_orientation_;
 
     // Apply control for enabled axes (equivalent to OpenSHC axis-specific control)
-    Eigen::Vector3f controlled_orientation = current_orientation;
+    Eigen::Vector3d controlled_orientation = current_orientation;
 
     if (!enable_roll) {
         controlled_orientation.x() = 0.0f; // Reset to default if not enabled
@@ -979,8 +979,8 @@ void StateController::applyPoseReset() {
     }
 
     // Apply pose reset based on current mode (equivalent to OpenSHC pose reset logic)
-    Eigen::Vector3f reset_position = desired_body_position_;
-    Eigen::Vector3f reset_orientation = desired_body_orientation_;
+    Eigen::Vector3d reset_position = desired_body_position_;
+    Eigen::Vector3d reset_orientation = desired_body_orientation_;
 
     switch (current_pose_reset_mode_) {
     case PoseResetMode::POSE_RESET_Z_AND_YAW: {
@@ -1009,16 +1009,16 @@ void StateController::applyPoseReset() {
 
     case PoseResetMode::POSE_RESET_ALL: {
         // Reset all pose parameters gradually
-        reset_position = Eigen::Vector3f::Zero();
-        reset_orientation = Eigen::Vector3f::Zero();
+        reset_position = Eigen::Vector3d::Zero();
+        reset_orientation = Eigen::Vector3d::Zero();
         logDebug("Applying full pose reset");
         break;
     }
 
     case PoseResetMode::POSE_RESET_IMMEDIATE_ALL: {
         // Reset all pose parameters immediately
-        reset_position = Eigen::Vector3f::Zero();
-        reset_orientation = Eigen::Vector3f::Zero();
+        reset_position = Eigen::Vector3d::Zero();
+        reset_orientation = Eigen::Vector3d::Zero();
         logDebug("Applying immediate full pose reset");
         break;
     }
@@ -1210,7 +1210,7 @@ int StateController::executeUnpackSequence() {
 
 bool StateController::isRobotPacked() const {
     // Check if robot is in packed state based on body position and orientation
-    Eigen::Vector3f current_position = locomotion_system_.getBodyPosition();
+    Eigen::Vector3d current_position = locomotion_system_.getBodyPosition();
 
     // Check for invalid/uninitialized position data
     if (current_position.norm() < 0.01f) {
@@ -1219,7 +1219,7 @@ bool StateController::isRobotPacked() const {
         // 2. Robot actually at origin (rare but possible)
 
         // Fallback: check if we have valid orientation data
-        Eigen::Vector3f current_orientation = locomotion_system_.getBodyOrientation();
+        Eigen::Vector3d current_orientation = locomotion_system_.getBodyOrientation();
         if (current_orientation.norm() < 0.01f) {
             // Both position and orientation are zero - assume not packed for safety
             return false;
@@ -1248,8 +1248,8 @@ bool StateController::isRobotPacked() const {
 
 bool StateController::isRobotReady() const {
     // Check if robot is in ready state based on body position and orientation
-    Eigen::Vector3f current_position = locomotion_system_.getBodyPosition();
-    Eigen::Vector3f current_orientation = locomotion_system_.getBodyOrientation();
+    Eigen::Vector3d current_position = locomotion_system_.getBodyPosition();
+    Eigen::Vector3d current_orientation = locomotion_system_.getBodyOrientation();
 
     // Check for invalid/uninitialized position data
     if (current_position.norm() < 0.01f) {

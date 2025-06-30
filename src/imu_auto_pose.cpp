@@ -55,7 +55,7 @@ void IMUAutoPose::setIMUPoseParams(const IMUPoseParams &params) {
     params_ = params;
 }
 
-void IMUAutoPose::update(float dt) {
+void IMUAutoPose::update(double dt) {
     if (!imu_ || current_mode_ == AUTO_POSE_OFF) {
         current_state_.pose_active = false;
         return;
@@ -159,7 +159,7 @@ void IMUAutoPose::updateGravityEstimate(const IMUData &imu_data) {
     Point3D accel(imu_data.accel_x, imu_data.accel_y, imu_data.accel_z);
 
     // Normalize acceleration vector
-    float magnitude = math_utils::magnitude(accel);
+    double magnitude = math_utils::magnitude(accel);
     if (magnitude > 0.5f) { // Valid acceleration reading
         // CRITICAL HARDWARE CONSIDERATION:
         // Different IMU manufacturers use different acceleration conventions:
@@ -186,12 +186,12 @@ void IMUAutoPose::updateGravityEstimate(const IMUData &imu_data) {
 void IMUAutoPose::updateInclinationEstimate() {
     // Calculate inclination from gravity vector
     Point3D gravity = current_state_.gravity_vector;
-    float magnitude = math_utils::magnitude(gravity);
+    double magnitude = math_utils::magnitude(gravity);
 
     if (magnitude > 0.1f) {
         // Calculate roll and pitch from gravity vector
-        float roll = atan2(gravity.y, gravity.z);
-        float pitch = atan2(-gravity.x, sqrt(gravity.y * gravity.y + gravity.z * gravity.z));
+        double roll = atan2(gravity.y, gravity.z);
+        double pitch = atan2(-gravity.x, sqrt(gravity.y * gravity.y + gravity.z * gravity.z));
 
         current_state_.inclination_angle.x = roll;
         current_state_.inclination_angle.y = pitch;
@@ -305,15 +305,15 @@ void IMUAutoPose::updateWithAbsoluteData(const IMUData &imu_data) {
         imu_data.absolute_data.absolute_yaw);
 
     // Apply filtering - less aggressive since sensor data is already processed
-    float abs_filter_alpha = filter_alpha_ * 0.5f; // Use lighter filtering
+    double abs_filter_alpha = filter_alpha_ * 0.5f; // Use lighter filtering
     orientation_filter_ = lowPassFilter(absolute_orientation, orientation_filter_, abs_filter_alpha);
 
     // Use linear acceleration for gravity estimate if available
     if (imu_data.absolute_data.linear_acceleration_valid) {
         // For BNO055 and similar sensors, gravity is already removed from linear acceleration
         // We need to reconstruct gravity vector from absolute orientation
-        float roll_rad = math_utils::degreesToRadians(imu_data.absolute_data.absolute_roll);
-        float pitch_rad = math_utils::degreesToRadians(imu_data.absolute_data.absolute_pitch);
+        double roll_rad = math_utils::degreesToRadians(imu_data.absolute_data.absolute_roll);
+        double pitch_rad = math_utils::degreesToRadians(imu_data.absolute_data.absolute_pitch);
 
         // Calculate gravity vector from orientation
         Point3D gravity_from_orientation(
@@ -371,19 +371,19 @@ IMUMode IMUAutoPose::getIMUMode() const {
     return current_state_.active_mode;
 }
 
-Point3D IMUAutoPose::lowPassFilter(const Point3D &input, const Point3D &previous, float alpha) {
+Point3D IMUAutoPose::lowPassFilter(const Point3D &input, const Point3D &previous, double alpha) {
     return Point3D(
         previous.x + alpha * (input.x - previous.x),
         previous.y + alpha * (input.y - previous.y),
         previous.z + alpha * (input.z - previous.z));
 }
 
-float IMUAutoPose::calculateConfidence(const Point3D &orientation_error) const {
+double IMUAutoPose::calculateConfidence(const Point3D &orientation_error) const {
     // Calculate confidence based on error magnitude and IMU data quality
-    float error_magnitude = math_utils::magnitude(orientation_error);
-    float max_error = math_utils::degreesToRadians(45.0f); // Maximum reasonable error
+    double error_magnitude = math_utils::magnitude(orientation_error);
+    double max_error = math_utils::degreesToRadians(45.0f); // Maximum reasonable error
 
-    float confidence = 1.0f - std::min(1.0f, error_magnitude / max_error);
+    double confidence = 1.0f - std::min(1.0f, error_magnitude / max_error);
 
     // Reduce confidence during walking
     if (walking_detected_) {
@@ -395,19 +395,19 @@ float IMUAutoPose::calculateConfidence(const Point3D &orientation_error) const {
 
 void IMUAutoPose::updateAdaptiveGains() {
     // Enhanced terrain roughness estimation from IMU variance
-    float orientation_variance = abs(current_state_.orientation_error.x) +
+    double orientation_variance = abs(current_state_.orientation_error.x) +
                                  abs(current_state_.orientation_error.y) +
                                  abs(current_state_.orientation_error.z);
 
     // Update terrain roughness estimate with exponential smoothing
-    float alpha = 0.1f; // Smoothing factor
+    double alpha = 0.1f; // Smoothing factor
     terrain_roughness_estimate_ = terrain_roughness_estimate_ * (1.0f - alpha) + orientation_variance * alpha;
 
     // Get current IMU data for acceleration variance calculation
     IMUData current_imu_data = imu_->readIMU();
 
     // Calculate acceleration variance for additional terrain assessment
-    float accel_variance = abs(current_imu_data.accel_x - previous_acceleration_.x) +
+    double accel_variance = abs(current_imu_data.accel_x - previous_acceleration_.x) +
                            abs(current_imu_data.accel_y - previous_acceleration_.y) +
                            abs(current_imu_data.accel_z - previous_acceleration_.z);
 
@@ -417,7 +417,7 @@ void IMUAutoPose::updateAdaptiveGains() {
     previous_acceleration_.z = current_imu_data.accel_z;
 
     // Combine orientation and acceleration variance for terrain assessment
-    float combined_roughness = terrain_roughness_estimate_ * 0.7f + accel_variance * 0.3f;
+    double combined_roughness = terrain_roughness_estimate_ * 0.7f + accel_variance * 0.3f;
 
     // Adaptive gain adjustment based on terrain conditions
     if (combined_roughness > 0.15f) {
@@ -454,7 +454,7 @@ Point3D IMUAutoPose::normalizeAngles(const Point3D &angles) {
 }
 
 bool IMUAutoPose::withinDeadzone(const Point3D &error) const {
-    float deadzone_rad = math_utils::degreesToRadians(params_.deadzone_degrees);
+    double deadzone_rad = math_utils::degreesToRadians(params_.deadzone_degrees);
 
     return (abs(error.x) < deadzone_rad &&
             abs(error.y) < deadzone_rad &&

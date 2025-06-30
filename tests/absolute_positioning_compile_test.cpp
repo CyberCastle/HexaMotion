@@ -152,7 +152,7 @@ void test_additional_absolute_positioning_applications() {
     std::cout << "2. Probando selección de patrones de marcha..." << std::endl;
 
     // Calcular magnitud de inclinación (similar a locomotion_system.cpp)
-    float tilt_magnitude = sqrt(terrain_data.absolute_data.absolute_roll * terrain_data.absolute_data.absolute_roll +
+    double tilt_magnitude = sqrt(terrain_data.absolute_data.absolute_roll * terrain_data.absolute_data.absolute_roll +
                                 terrain_data.absolute_data.absolute_pitch * terrain_data.absolute_data.absolute_pitch);
 
     std::cout << "   ✓ Magnitud de inclinación calculada: " << std::fixed << std::setprecision(1)
@@ -172,7 +172,7 @@ void test_additional_absolute_positioning_applications() {
     std::cout << "3. Probando evaluación de estabilidad..." << std::endl;
 
     // Simular varianza de aceleración para detectar terreno irregular
-    float accel_variance = abs(terrain_data.absolute_data.linear_accel_x) +
+    double accel_variance = abs(terrain_data.absolute_data.linear_accel_x) +
                            abs(terrain_data.absolute_data.linear_accel_y) +
                            abs(terrain_data.absolute_data.linear_accel_z);
 

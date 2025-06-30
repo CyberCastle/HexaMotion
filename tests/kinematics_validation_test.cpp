@@ -198,12 +198,12 @@ class KinematicsValidator {
 
             // 6. Calcular la altura relativa a la base de la pierna
             // La altura es la diferencia en Z (negativa hacia abajo)
-            float hexa_height = -(tip_global.z - base_global.z);
-            float height_error = std::abs(hexa_height - height);
+            double hexa_height = -(tip_global.z - base_global.z);
+            double height_error = std::abs(hexa_height - height);
 
             // 7. Verificar que la fórmula de angle_calculus coincida
             double expected_height = A_COXA * sin(alpha) + B_FEMUR * sin(beta) + C_TIBIA;
-            float formula_error = std::abs(expected_height - height);
+            double formula_error = std::abs(expected_height - height);
 
             // El test pasa si las alturas coinciden
             bool height_match = height_error < 2.0f;   // ±2mm tolerancia
@@ -304,10 +304,10 @@ class KinematicsValidator {
             Point3D hexa_tip_global = model->forwardKinematics(0, hexa_angles);
 
             // Calcular altura relativa a la base de la pierna
-            float hexa_height = -(hexa_tip_global.z - base_global.z);
+            double hexa_height = -(hexa_tip_global.z - base_global.z);
 
             // Error en altura (principal métrica para comparación con angle_calculus)
-            float height_error = std::abs(hexa_height - ref_height);
+            double height_error = std::abs(hexa_height - ref_height);
 
             bool test_passed = height_error < 10.0f; // Tolerancia de 10mm
             if (test_passed)
@@ -351,8 +351,8 @@ class KinematicsValidator {
 
         // Calcular estadísticas de HexaMotion
         int hexa_valid = 0;
-        float hexa_min_error = 1000.0f, hexa_max_error = 0.0f;
-        float total_error = 0.0f;
+        double hexa_min_error = 1000.0f, hexa_max_error = 0.0f;
+        double total_error = 0.0f;
 
         // Obtener posición de la base de la pierna
         JointAngles zero_angles(0, 0, 0);
@@ -369,9 +369,9 @@ class KinematicsValidator {
             Point3D hexa_tip_global = model->forwardKinematics(0, hexa_sol);
 
             // Calcular altura relativa a la base de la pierna
-            float hexa_height = -(hexa_tip_global.z - base_global.z);
+            double hexa_height = -(hexa_tip_global.z - base_global.z);
 
-            float error = std::abs(hexa_height - h); // Error en altura relativa
+            double error = std::abs(hexa_height - h); // Error en altura relativa
             if (error < 20.0f) {                              // Tolerancia razonable
                 hexa_valid++;
                 hexa_min_error = std::min(hexa_min_error, error);
@@ -387,7 +387,7 @@ class KinematicsValidator {
         std::cout << "  Error máximo: " << hexa_max_error << " mm" << std::endl;
         std::cout << "  Error promedio: " << (hexa_valid > 0 ? total_error / hexa_valid : 0.0f) << " mm" << std::endl;
 
-        float coverage = 100.0f * hexa_valid / hexa_total;
+        double coverage = 100.0f * hexa_valid / hexa_total;
         std::cout << "  Cobertura de workspace: " << std::fixed << std::setprecision(1) << coverage << "%" << std::endl;
     }
 

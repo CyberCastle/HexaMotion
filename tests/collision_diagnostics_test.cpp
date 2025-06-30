@@ -13,7 +13,7 @@ class CollisionDiagnostics {
   public:
     static bool analyzeCurrentConfiguration(const RobotModel &model);
     static void analyzeWorkspaceOverlap(const RobotModel &model);
-    static float recommendOptimalRadius(const RobotModel &model);
+    static double recommendOptimalRadius(const RobotModel &model);
 };
 
 /**
@@ -30,12 +30,12 @@ class MockRobotModel : public RobotModel {
     Parameters test_params_;
 
   public:
-    MockRobotModel(float hexagon_radius, float coxa, float femur, float tibia) : RobotModel(createTestParams(hexagon_radius, coxa, femur, tibia)) {
+    MockRobotModel(double hexagon_radius, double coxa, double femur, double tibia) : RobotModel(createTestParams(hexagon_radius, coxa, femur, tibia)) {
         test_params_ = createTestParams(hexagon_radius, coxa, femur, tibia);
     }
 
   private:
-    static Parameters createTestParams(float hexagon_radius, float coxa, float femur, float tibia) {
+    static Parameters createTestParams(double hexagon_radius, double coxa, double femur, double tibia) {
         Parameters params;
         params.hexagon_radius = hexagon_radius;
         params.coxa_length = coxa;
@@ -49,7 +49,7 @@ class MockRobotModel : public RobotModel {
         return test_params_;
     }
 
-    void setHexagonRadius(float radius) {
+    void setHexagonRadius(double radius) {
         test_params_.hexagon_radius = radius;
     }
 };
@@ -152,7 +152,7 @@ class CollisionDiagnosticsTest {
         MockRobotModel model(200.0f, 50.0f, 101.0f, 208.0f);
 
         OutputCapture capture;
-        float recommended = CollisionDiagnostics::recommendOptimalRadius(model);
+        double recommended = CollisionDiagnostics::recommendOptimalRadius(model);
 
         std::cout << "Recommendations output: " << capture.getOutput() << std::endl;
         std::cout << "Recommended radius: " << recommended << std::endl;
@@ -181,10 +181,10 @@ class CollisionDiagnosticsTest {
 
         MockRobotModel model(300.0f, 50.0f, 101.0f, 208.0f);
 
-        float leg_reach = 50.0f + 101.0f + 208.0f;
-        float safe_reach = leg_reach * 0.65f;
+        double leg_reach = 50.0f + 101.0f + 208.0f;
+        double safe_reach = leg_reach * 0.65f;
 
-        float calculated_radius = WorkspaceValidator::calculateSafeHexagonRadius(safe_reach, 30.0f);
+        double calculated_radius = WorkspaceValidator::calculateSafeHexagonRadius(safe_reach, 30.0f);
         assert(calculated_radius > 0.0f);
 
         Point3D base1(300.0f, 0.0f, 0.0f);
@@ -192,7 +192,7 @@ class CollisionDiagnosticsTest {
 
         bool overlap = WorkspaceValidator::checkWorkspaceOverlap(base1, safe_reach, base2, safe_reach, 20.0f);
 
-        float distance = WorkspaceValidator::getDistance2D(base1, base2);
+        double distance = WorkspaceValidator::getDistance2D(base1, base2);
         assert(std::abs(distance - 300.0f) < 1.0f);
 
         int left, right;

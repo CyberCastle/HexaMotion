@@ -26,9 +26,9 @@ class AdmittanceController {
      * @brief Admittance parameters for virtual leg model
      */
     struct AdmittanceParams {
-        float virtual_mass;      ///< Virtual mass (kg)
-        float virtual_damping;   ///< Damping coefficient
-        float virtual_stiffness; ///< Spring stiffness
+        double virtual_mass;      ///< Virtual mass (kg)
+        double virtual_damping;   ///< Damping coefficient
+        double virtual_stiffness; ///< Spring stiffness
         Point3D velocity;        ///< Current velocity
         Point3D acceleration;    ///< Current acceleration
         Point3D applied_force;   ///< Applied force
@@ -43,9 +43,9 @@ class AdmittanceController {
      * @brief Parameters for derivative function in admittance equation
      */
     struct AdmittanceDerivativeParams {
-        float mass;             ///< Virtual mass
-        float damping;          ///< Damping coefficient
-        float stiffness;        ///< Spring stiffness
+        double mass;             ///< Virtual mass
+        double damping;          ///< Damping coefficient
+        double stiffness;        ///< Spring stiffness
         Point3D external_force; ///< External force applied
         Point3D equilibrium;    ///< Equilibrium position
 
@@ -69,7 +69,7 @@ class AdmittanceController {
         AdmittanceParams params;
         Point3D equilibrium_position;
         bool active;
-        float stiffness_scale; ///< Dynamic stiffness scaling
+        double stiffness_scale; ///< Dynamic stiffness scaling
 
         LegAdmittanceState() : equilibrium_position(0, 0, 0), active(true), stiffness_scale(1.0f) {}
     };
@@ -84,13 +84,13 @@ class AdmittanceController {
 
     // Per-leg admittance state
     LegAdmittanceState leg_states_[NUM_LEGS];
-    float delta_time_;
+    double delta_time_;
 
     // Dynamic stiffness parameters
     bool dynamic_stiffness_enabled_;
-    float swing_stiffness_scaler_;
-    float load_stiffness_scaler_;
-    float step_clearance_;
+    double swing_stiffness_scaler_;
+    double load_stiffness_scaler_;
+    double step_clearance_;
 
   public:
     /**
@@ -116,7 +116,7 @@ class AdmittanceController {
      * @param damping Damping coefficient
      * @param stiffness Spring stiffness
      */
-    void setLegAdmittance(int leg_index, float mass, float damping, float stiffness);
+    void setLegAdmittance(int leg_index, double mass, double damping, double stiffness);
 
     /**
      * @brief Apply force to leg and integrate dynamics
@@ -139,7 +139,7 @@ class AdmittanceController {
      * @param swing_scaler Stiffness scaling for swing legs
      * @param load_scaler Stiffness scaling for loaded legs
      */
-    void setDynamicStiffness(bool enabled, float swing_scaler = 0.5f, float load_scaler = 1.5f);
+    void setDynamicStiffness(bool enabled, double swing_scaler = 0.5f, double load_scaler = 1.5f);
 
     /**
      * @brief Update dynamic stiffness based on gait phase
@@ -149,7 +149,7 @@ class AdmittanceController {
      */
     void updateStiffness(const LegState leg_states[NUM_LEGS],
                          const Point3D leg_positions[NUM_LEGS],
-                         float step_clearance);
+                         double step_clearance);
 
     /**
      * @brief Get current leg admittance state
@@ -190,7 +190,7 @@ class AdmittanceController {
      * @param dt      Time step in seconds.
      * @return True if the operation succeeded.
      */
-    bool maintainOrientation(const Point3D &target, Point3D &current, float dt);
+    bool maintainOrientation(const Point3D &target, Point3D &current, double dt);
 
     /**
      * @brief Check static stability from FSR readings.
@@ -222,9 +222,9 @@ class AdmittanceController {
     double current_time_;
 
     // Dynamic stiffness calculation
-    float calculateStiffnessScale(int leg_index, LegState leg_state,
+    double calculateStiffnessScale(int leg_index, LegState leg_state,
                                   const Point3D &leg_position);
-    void updateAdjacentLegStiffness(int swing_leg_index, float load_scaling);
+    void updateAdjacentLegStiffness(int swing_leg_index, double load_scaling);
 };
 
 #endif // ADMITTANCE_CONTROLLER_H

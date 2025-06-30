@@ -5,17 +5,17 @@
 #include <cmath>
 
 // Numerical differentiation to validate Jacobian
-Eigen::Matrix3f numericalJacobian(const RobotModel& model, int leg,
+Eigen::Matrix3d numericalJacobian(const RobotModel& model, int leg,
                                   const JointAngles& angles,
-                                  float delta = JACOBIAN_DELTA) {
-    Eigen::Matrix3f jacobian;
+                                  double delta = JACOBIAN_DELTA) {
+    Eigen::Matrix3d jacobian;
 
     // Get base position
     Point3D base_pos = model.forwardKinematics(leg, angles);
 
     // Test each joint using central differences for better accuracy
     for (int joint = 0; joint < 3; ++joint) {
-        float delta_deg = math_utils::radiansToDegrees(delta);
+        double delta_deg = math_utils::radiansToDegrees(delta);
 
         JointAngles plus = angles;
         JointAngles minus = angles;
@@ -47,7 +47,7 @@ Eigen::Matrix3f numericalJacobian(const RobotModel& model, int leg,
     return jacobian;
 }
 
-void printMatrix(const Eigen::Matrix3f& matrix, const std::string& name) {
+void printMatrix(const Eigen::Matrix3d& matrix, const std::string& name) {
     std::cout << name << ":" << std::endl;
     std::cout << "┌─────────────────────────────────────┐" << std::endl;
     for (int i = 0; i < 3; ++i) {
@@ -60,11 +60,11 @@ void printMatrix(const Eigen::Matrix3f& matrix, const std::string& name) {
     std::cout << "└─────────────────────────────────────┘" << std::endl;
 }
 
-void printErrorAnalysis(const Eigen::Matrix3f& analytical, const Eigen::Matrix3f& numerical) {
-    Eigen::Matrix3f error = analytical - numerical;
-    float max_error = error.cwiseAbs().maxCoeff();
-    float avg_error = error.cwiseAbs().mean();
-    float max_relative_error = (numerical.cwiseAbs().array() > 1e-6f).select(
+void printErrorAnalysis(const Eigen::Matrix3d& analytical, const Eigen::Matrix3d& numerical) {
+    Eigen::Matrix3d error = analytical - numerical;
+    double max_error = error.cwiseAbs().maxCoeff();
+    double avg_error = error.cwiseAbs().mean();
+    double max_relative_error = (numerical.cwiseAbs().array() > 1e-6f).select(
         (error.cwiseAbs().array() / numerical.cwiseAbs().array()), 0.0f).maxCoeff();
 
     std::cout << "📊 ERROR ANALYSIS:" << std::endl;
@@ -137,11 +137,11 @@ int main() {
         std::cout << std::endl;
 
         std::cout << "📐 Calculating Analytical Jacobian..." << std::endl;
-        Eigen::Matrix3f analytical_jacobian = model.calculateJacobian(leg, zero_angles, Point3D(0,0,0));
+        Eigen::Matrix3d analytical_jacobian = model.calculateJacobian(leg, zero_angles, Point3D(0,0,0));
         printMatrix(analytical_jacobian, "Analytical Jacobian (∂x/∂θ)");
 
         std::cout << "🔢 Calculating Numerical Jacobian (finite differences)..." << std::endl;
-        Eigen::Matrix3f numerical_jacobian = numericalJacobian(model, leg, zero_angles);
+        Eigen::Matrix3d numerical_jacobian = numericalJacobian(model, leg, zero_angles);
         printMatrix(numerical_jacobian, "Numerical Jacobian (finite differences)");
 
         printErrorAnalysis(analytical_jacobian, numerical_jacobian);
@@ -164,8 +164,8 @@ int main() {
                   << ", " << std::setw(8) << base_pos.z << ") mm" << std::endl;
 
         // Test coxa joint only
-        float perturbation = JACOBIAN_DELTA; // 0.001 radians ≈ 0.057 degree
-        float perturbation_deg = math_utils::radiansToDegrees(perturbation);
+        double perturbation = JACOBIAN_DELTA; // 0.001 radians ≈ 0.057 degree
+        double perturbation_deg = math_utils::radiansToDegrees(perturbation);
 
         JointAngles plus = test_angles;
         JointAngles minus = test_angles;
@@ -178,16 +178,16 @@ int main() {
                   << ", " << std::setw(8) << pos_plus.y
                   << ", " << std::setw(8) << pos_plus.z << ") mm" << std::endl;
 
-        float dx = (pos_plus.x - pos_minus.x) / perturbation;
-        float dy = (pos_plus.y - pos_minus.y) / perturbation;
-        float dz = (pos_plus.z - pos_minus.z) / perturbation;
+        double dx = (pos_plus.x - pos_minus.x) / perturbation;
+        double dy = (pos_plus.y - pos_minus.y) / perturbation;
+        double dz = (pos_plus.z - pos_minus.z) / perturbation;
 
         std::cout << "📊 Numerical derivatives (∂x/∂θ_coxa):" << std::endl;
         std::cout << "   • ∂x/∂θ_coxa = " << std::setw(12) << dx << " mm/rad" << std::endl;
         std::cout << "   • ∂y/∂θ_coxa = " << std::setw(12) << dy << " mm/rad" << std::endl;
         std::cout << "   • ∂z/∂θ_coxa = " << std::setw(12) << dz << " mm/rad" << std::endl;
 
-        Eigen::Matrix3f analytical_jacobian = model.calculateJacobian(leg, test_angles, Point3D(0,0,0));
+        Eigen::Matrix3d analytical_jacobian = model.calculateJacobian(leg, test_angles, Point3D(0,0,0));
         std::cout << "📐 Analytical derivatives (∂x/∂θ_coxa):" << std::endl;
         std::cout << "   • ∂x/∂θ_coxa = " << std::setw(12) << analytical_jacobian(0,0) << " mm/rad" << std::endl;
         std::cout << "   • ∂y/∂θ_coxa = " << std::setw(12) << analytical_jacobian(1,0) << " mm/rad" << std::endl;
@@ -196,16 +196,16 @@ int main() {
         std::cout << std::endl;
 
         // Calculate individual errors
-        float error_x = std::abs(dx - analytical_jacobian(0,0));
-        float error_y = std::abs(dy - analytical_jacobian(1,0));
-        float error_z = std::abs(dz - analytical_jacobian(2,0));
+        double error_x = std::abs(dx - analytical_jacobian(0,0));
+        double error_y = std::abs(dy - analytical_jacobian(1,0));
+        double error_z = std::abs(dz - analytical_jacobian(2,0));
 
         std::cout << "📊 Individual Errors:" << std::endl;
         std::cout << "   • Error in ∂x/∂θ_coxa: " << std::setw(12) << error_x << " mm/rad" << std::endl;
         std::cout << "   • Error in ∂y/∂θ_coxa: " << std::setw(12) << error_y << " mm/rad" << std::endl;
         std::cout << "   • Error in ∂z/∂θ_coxa: " << std::setw(12) << error_z << " mm/rad" << std::endl;
 
-        float max_error = std::max({error_x, error_y, error_z});
+        double max_error = std::max({error_x, error_y, error_z});
         if (max_error < 1e-4f) {
             std::cout << "✅ Single joint test PASSED (max error < 1e-4)" << std::endl;
         } else {

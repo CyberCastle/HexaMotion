@@ -29,10 +29,10 @@ int main() {
     std::cout << "Target: (" << problem_target.x << ", " << problem_target.y << ", " << problem_target.z << ")" << std::endl;
 
     // Check if this target is reachable using centralized function
-    float max_reach = p.coxa_length + p.femur_length + p.tibia_length;
-    float min_reach = std::abs(p.femur_length - p.tibia_length);
+    double max_reach = p.coxa_length + p.femur_length + p.tibia_length;
+    double min_reach = std::abs(p.femur_length - p.tibia_length);
 
-    float target_distance = math_utils::magnitude(problem_target);
+    double target_distance = math_utils::magnitude(problem_target);
     bool reachable = math_utils::isPointReachable(problem_target, min_reach, max_reach);
 
     std::cout << "Target distance: " << target_distance << "mm" << std::endl;
@@ -48,7 +48,7 @@ int main() {
     std::cout << "FK verify: (" << fk_verify.x << ", "
               << fk_verify.y << ", " << fk_verify.z << ")" << std::endl;
 
-    float error = sqrt(pow(problem_target.x - fk_verify.x, 2) +
+    double error = sqrt(pow(problem_target.x - fk_verify.x, 2) +
                        pow(problem_target.y - fk_verify.y, 2) +
                        pow(problem_target.z - fk_verify.z, 2));
     std::cout << "Error: " << error << "mm" << std::endl;
@@ -85,7 +85,7 @@ int main() {
                   << angles.femur << "°, " << angles.tibia << "°)" << std::endl;
 
         Point3D fk_check = model.forwardKinematics(0, angles);
-        float err = sqrt(pow(target.x - fk_check.x, 2) +
+        double err = sqrt(pow(target.x - fk_check.x, 2) +
                          pow(target.y - fk_check.y, 2) +
                          pow(target.z - fk_check.z, 2));
         std::cout << "Error: " << err << "mm" << std::endl;

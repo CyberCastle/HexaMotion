@@ -7,7 +7,7 @@
 #include <random>
 
 struct DummyIMU : IIMUInterface {
-    float test_roll = 0.0f, test_pitch = 0.0f, test_yaw = 0.0f;
+    double test_roll = 0.0f, test_pitch = 0.0f, test_yaw = 0.0f;
     IMUMode current_mode_ = IMU_MODE_RAW_DATA;
     bool has_absolute_ = false;
 
@@ -95,13 +95,13 @@ struct DummyIMU : IIMUInterface {
     void enableAbsolutePositioning(bool enable) { has_absolute_ = enable; }
 
     // Test helper method
-    void setRPY(float roll, float pitch, float yaw) {
+    void setRPY(double roll, double pitch, double yaw) {
         test_roll = roll;
         test_pitch = pitch;
         test_yaw = yaw;
     }
 
-    void setTestOrientation(float roll, float pitch, float yaw) {
+    void setTestOrientation(double roll, double pitch, double yaw) {
         test_roll = roll;
         test_pitch = pitch;
         test_yaw = yaw;
@@ -139,7 +139,7 @@ struct DummyFSR : IFSRInterface {
         return FSRData{0.0f, false, 0.0f};
     }
     bool calibrateFSR(int) override { return true; }
-    float getRawReading(int leg) override {
+    double getRawReading(int leg) override {
         if (leg >= 0 && leg < NUM_LEGS) {
             // Returns processed pressure value
             // Real implementation returns raw ADC reading requiring conversion
@@ -159,7 +159,7 @@ struct DummyFSR : IFSRInterface {
     }
 
     // Test helper method
-    void setFSRData(int leg, float pressure, bool contact) {
+    void setFSRData(int leg, double pressure, bool contact) {
         if (leg >= 0 && leg < NUM_LEGS) {
             test_data[leg].pressure = pressure;
             test_data[leg].in_contact = contact;
@@ -182,19 +182,19 @@ struct DummyServo : IServoInterface {
     bool hasBlockingStatusFlags(int, int) override {
         return false;
     }
-    bool setJointAngleAndSpeed(int, int, float, float) override { return true; }
-    float getJointAngle(int, int) override { return 0.0f; }
+    bool setJointAngleAndSpeed(int, int, double, double) override { return true; }
+    double getJointAngle(int, int) override { return 0.0f; }
     bool isJointMoving(int, int) override { return false; }
     bool enableTorque(int, int, bool) override { return true; }
 };
 
 // Progressive servo simulator that starts with random positions and gradually moves
 struct ProgressiveServo : IServoInterface {
-    float current_angles[NUM_LEGS][3];
-    float target_angles[NUM_LEGS][3];
+    double current_angles[NUM_LEGS][3];
+    double target_angles[NUM_LEGS][3];
     std::mt19937 rng;
-    std::uniform_real_distribution<float> noise_dist;
-    std::uniform_real_distribution<float> init_dist;
+    std::uniform_real_distribution<double> noise_dist;
+    std::uniform_real_distribution<double> init_dist;
     bool initialized = false;
     int update_count = 0;
 
@@ -225,15 +225,15 @@ struct ProgressiveServo : IServoInterface {
         return false; // No blocking flags
     }
 
-    bool setJointAngleAndSpeed(int leg, int joint, float angle, float speed) override {
+    bool setJointAngleAndSpeed(int leg, int joint, double angle, double speed) override {
         if (leg >= 0 && leg < NUM_LEGS && joint >= 0 && joint < 3) {
             // Set new target angle
             target_angles[leg][joint] = angle;
 
             // Use speed to adjust movement rate (simulate servo speed control)
-            float diff = target_angles[leg][joint] - current_angles[leg][joint];
-            float movement_rate = 0.2f * speed;                             // Base rate scaled by speed parameter
-            movement_rate = std::max(0.05f, std::min(1.0f, movement_rate)); // Clamp to reasonable range
+            double diff = target_angles[leg][joint] - current_angles[leg][joint];
+            double movement_rate = 0.2 * speed;                             // Base rate scaled by speed parameter
+            movement_rate = std::max(0.05, std::min(1.0, movement_rate)); // Clamp to reasonable range
 
             // Move toward target with speed-adjusted rate, plus some noise
             current_angles[leg][joint] += diff * movement_rate + noise_dist(rng);
@@ -243,7 +243,7 @@ struct ProgressiveServo : IServoInterface {
         return false;
     }
 
-    float getJointAngle(int leg, int joint) override {
+    double getJointAngle(int leg, int joint) override {
         if (leg >= 0 && leg < NUM_LEGS && joint >= 0 && joint < 3) {
             // Add small noise to simulate real servo feedback
             return current_angles[leg][joint] + noise_dist(rng) * 0.05f;
@@ -257,7 +257,7 @@ struct ProgressiveServo : IServoInterface {
         for (int leg = 0; leg < NUM_LEGS; leg++) {
             for (int joint = 0; joint < 3; joint++) {
                 // Continue moving toward targets
-                float diff = target_angles[leg][joint] - current_angles[leg][joint];
+                double diff = target_angles[leg][joint] - current_angles[leg][joint];
                 if (std::abs(diff) > 0.1f) {
                     current_angles[leg][joint] += diff * 0.15f + noise_dist(rng) * 0.1f;
                 }
@@ -287,7 +287,7 @@ inline Parameters createDefaultParameters() {
     params.tibia_length = 208.0f;
     params.robot_height = 120.0f;
     params.robot_weight = 2.0f;
-    params.center_of_mass = Eigen::Vector3f(0, 0, 0);
+    params.center_of_mass = Eigen::Vector3d(0, 0, 0);
     params.coxa_angle_limits[0] = -65.0f;
     params.coxa_angle_limits[1] = 65.0f;
     params.femur_angle_limits[0] = -75.0f;

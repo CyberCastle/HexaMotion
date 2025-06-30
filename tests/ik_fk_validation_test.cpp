@@ -24,25 +24,25 @@
 class IKFKValidator {
   private:
     RobotModel model;
-    float position_tolerance_mm;
-    float angle_tolerance_degrees;
+    double position_tolerance_mm;
+    double angle_tolerance_degrees;
     int total_tests;
     int passed_tests;
     int failed_tests;
 
     struct TestResults {
-        float max_position_error;
-        float max_angle_error;
-        float avg_position_error;
-        float avg_angle_error;
+        double max_position_error;
+        double max_angle_error;
+        double avg_position_error;
+        double avg_angle_error;
         long total_computation_time_us;
         int test_count;
     };
 
   public:
     IKFKValidator(const Parameters &params,
-                  float pos_tol = 1.0f,
-                  float angle_tol = 1.0f)
+                  double pos_tol = 1.0f,
+                  double angle_tol = 1.0f)
         : model(params),
           position_tolerance_mm(pos_tol),
           angle_tolerance_degrees(angle_tol),
@@ -75,7 +75,7 @@ class IKFKValidator {
         auto duration = std::chrono::duration_cast<std::chrono::microseconds>(end_time - start_time);
 
         // Step 3: Calculate position error
-        float position_error = sqrt(pow(target_pos.x - computed_pos.x, 2) +
+        double position_error = sqrt(pow(target_pos.x - computed_pos.x, 2) +
                                     pow(target_pos.y - computed_pos.y, 2) +
                                     pow(target_pos.z - computed_pos.z, 2));
 
@@ -122,10 +122,10 @@ class IKFKValidator {
         auto duration = std::chrono::duration_cast<std::chrono::microseconds>(end_time - start_time);
 
         // Step 3: Calculate angle errors (considering angle wrapping)
-        float coxa_error = fabs(math_utils::normalizeAngle(target_angles.coxa - computed_angles.coxa));
-        float femur_error = fabs(math_utils::normalizeAngle(target_angles.femur - computed_angles.femur));
-        float tibia_error = fabs(math_utils::normalizeAngle(target_angles.tibia - computed_angles.tibia));
-        float max_angle_error = std::max({coxa_error, femur_error, tibia_error});
+        double coxa_error = fabs(math_utils::normalizeAngle(target_angles.coxa - computed_angles.coxa));
+        double femur_error = fabs(math_utils::normalizeAngle(target_angles.femur - computed_angles.femur));
+        double tibia_error = fabs(math_utils::normalizeAngle(target_angles.tibia - computed_angles.tibia));
+        double max_angle_error = std::max({coxa_error, femur_error, tibia_error});
 
         // Step 4: Check if original angles were within limits
         bool original_within_limits = model.checkJointLimits(leg, target_angles);
@@ -228,8 +228,8 @@ class IKFKValidator {
 
         // Test 5: High precision testing (smaller tolerance)
         std::cout << "\n5. TESTING HIGH PRECISION (0.1mm, 0.1° tolerance):" << std::endl;
-        float original_pos_tol = position_tolerance_mm;
-        float original_angle_tol = angle_tolerance_degrees;
+        double original_pos_tol = position_tolerance_mm;
+        double original_angle_tol = angle_tolerance_degrees;
         position_tolerance_mm = 0.1f;
         angle_tolerance_degrees = 0.1f;
 
@@ -260,7 +260,7 @@ class IKFKValidator {
         std::cout << "Completed " << benchmark_iterations << " IK+FK cycles in "
                   << benchmark_duration.count() << "μs" << std::endl;
         std::cout << "Average time per IK+FK cycle: "
-                  << (float)benchmark_duration.count() / benchmark_iterations << "μs" << std::endl;
+                  << (double)benchmark_duration.count() / benchmark_iterations << "μs" << std::endl;
     }
 
     void printSummary() {
@@ -305,8 +305,8 @@ int main() {
 
     // Initialize other parameters
     params.robot_weight = 6.5f;
-    params.center_of_mass = Eigen::Vector3f(0, 0, 0);
-    params.imu_calibration_offset = Eigen::Vector3f(0, 0, 0);
+    params.center_of_mass = Eigen::Vector3d(0, 0, 0);
+    params.imu_calibration_offset = Eigen::Vector3d(0, 0, 0);
     params.fsr_touchdown_threshold = 50.0f;
     params.fsr_liftoff_threshold = 20.0f;
     params.fsr_max_pressure = 1000.0f;

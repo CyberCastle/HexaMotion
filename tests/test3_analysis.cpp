@@ -44,15 +44,15 @@ int main() {
     std::cout << "Target position: (" << target.x << ", " << target.y << ", " << target.z << ")" << std::endl;
 
     // Check workspace bounds
-    float base_x = 200.0f; // Leg 0 base
-    float base_y = 0.0f;
-    float local_x = target.x - base_x;
-    float local_y = target.y - base_y;
-    float local_z = target.z;
-    float distance = sqrt(local_x * local_x + local_y * local_y + local_z * local_z);
+    double base_x = 200.0f; // Leg 0 base
+    double base_y = 0.0f;
+    double local_x = target.x - base_x;
+    double local_y = target.y - base_y;
+    double local_z = target.z;
+    double distance = sqrt(local_x * local_x + local_y * local_y + local_z * local_z);
 
-    float max_reach = params.coxa_length + params.femur_length + params.tibia_length;
-    float min_reach = abs(params.femur_length - params.tibia_length);
+    double max_reach = params.coxa_length + params.femur_length + params.tibia_length;
+    double min_reach = abs(params.femur_length - params.tibia_length);
 
     std::cout << "Local position relative to leg base: (" << local_x << ", " << local_y << ", " << local_z << ")" << std::endl;
     std::cout << "Distance from leg base: " << distance << "mm" << std::endl;
@@ -76,7 +76,7 @@ int main() {
     Point3D fk_verify = model.forwardKinematics(0, ik_result);
     std::cout << "FK verify: (" << fk_verify.x << ", " << fk_verify.y << ", " << fk_verify.z << ")" << std::endl;
 
-    float error = sqrt(pow(target.x - fk_verify.x, 2) +
+    double error = sqrt(pow(target.x - fk_verify.x, 2) +
                        pow(target.y - fk_verify.y, 2) +
                        pow(target.z - fk_verify.z, 2));
     std::cout << "Error: " << error << "mm" << std::endl;
@@ -88,7 +88,7 @@ int main() {
     Point3D original_fk = model.forwardKinematics(0, config);
     Point3D ik_fk = model.forwardKinematics(0, ik_result);
 
-    float position_diff = sqrt(pow(original_fk.x - ik_fk.x, 2) +
+    double position_diff = sqrt(pow(original_fk.x - ik_fk.x, 2) +
                                pow(original_fk.y - ik_fk.y, 2) +
                                pow(original_fk.z - ik_fk.z, 2));
 

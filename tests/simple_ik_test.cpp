@@ -21,7 +21,7 @@ int main() {
 
     std::cout << std::fixed << std::setprecision(3);
 
-    static const float base_theta_offsets[NUM_LEGS] = {0.0f, -60.0f, -120.0f, 180.0f, 120.0f, 60.0f};
+    static const double base_theta_offsets[NUM_LEGS] = {0.0f, -60.0f, -120.0f, 180.0f, 120.0f, 60.0f};
 
     std::cout << "=== Simple Horizontal Test ===" << std::endl;
 
@@ -33,7 +33,7 @@ int main() {
 
         JointAngles ik = model.inverseKinematics(leg, target);
         Point3D fk = model.forwardKinematics(leg, ik);
-        float err = sqrt(pow(target.x - fk.x, 2) +
+        double err = sqrt(pow(target.x - fk.x, 2) +
                          pow(target.y - fk.y, 2) +
                          pow(target.z - fk.z, 2));
         std::cout << "Leg " << leg << ": target(" << target.x << ", " << target.y
@@ -67,7 +67,7 @@ int main() {
         JointAngles start_angles(0, 0, 0); // Test symmetric configuration
         JointAngles ik = model.inverseKinematicsCurrent(leg, start_angles, target);
         Point3D fk = model.forwardKinematics(leg, ik);
-        float z_err = std::abs(fk.z - target.z);
+        double z_err = std::abs(fk.z - target.z);
         std::cout << "Leg " << leg << ": target altura -120mm -> IK(" << ik.coxa << ", "
                   << ik.femur << ", " << ik.tibia << ") FK altura=" << fk.z << " error_z=" << z_err << std::endl;
         if (z_err > 2.0f) {

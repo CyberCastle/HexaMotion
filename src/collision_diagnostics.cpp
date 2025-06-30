@@ -20,8 +20,8 @@ class CollisionDiagnostics {
      */
     static bool analyzeCurrentConfiguration(const RobotModel &model) {
         const Parameters &p = model.getParams();
-        float leg_reach = p.coxa_length + p.femur_length + p.tibia_length;
-        float safe_reach = leg_reach * 0.65f; // Same as in walk_controller.cpp
+        double leg_reach = p.coxa_length + p.femur_length + p.tibia_length;
+        double safe_reach = leg_reach * 0.65f; // Same as in walk_controller.cpp
 
         std::cout << "=== HexaMotion Collision Analysis ===" << std::endl;
         std::cout << "Current hexagon_radius: " << p.hexagon_radius << " mm" << std::endl;
@@ -29,7 +29,7 @@ class CollisionDiagnostics {
         std::cout << "Safe reach (65%): " << safe_reach << " mm" << std::endl;
 
         // Calculate minimum safe radius
-        float min_safe_radius = WorkspaceValidator::calculateSafeHexagonRadius(safe_reach, 30.0f);
+        double min_safe_radius = WorkspaceValidator::calculateSafeHexagonRadius(safe_reach, 30.0f);
         std::cout << "Minimum safe radius: " << min_safe_radius << " mm" << std::endl;
 
         if (p.hexagon_radius < min_safe_radius) {
@@ -51,8 +51,8 @@ class CollisionDiagnostics {
      */
     static void analyzeWorkspaceOverlap(const RobotModel &model) {
         const Parameters &p = model.getParams();
-        float leg_reach = p.coxa_length + p.femur_length + p.tibia_length;
-        float safe_reach = leg_reach * 0.65f;
+        double leg_reach = p.coxa_length + p.femur_length + p.tibia_length;
+        double safe_reach = leg_reach * 0.65f;
 
         std::cout << "\n=== Workspace Overlap Analysis ===" << std::endl;
 
@@ -60,8 +60,8 @@ class CollisionDiagnostics {
             int next_leg = (leg + 1) % 6;
 
             // Calculate base positions
-            float angle1 = leg * 60.0f;
-            float angle2 = next_leg * 60.0f;
+            double angle1 = leg * 60.0f;
+            double angle2 = next_leg * 60.0f;
 
             Point3D base1(p.hexagon_radius * cos(angle1 * M_PI / 180.0f),
                           p.hexagon_radius * sin(angle1 * M_PI / 180.0f), 0);
@@ -71,8 +71,8 @@ class CollisionDiagnostics {
             bool overlap = WorkspaceValidator::checkWorkspaceOverlap(
                 base1, safe_reach, base2, safe_reach, 20.0f);
 
-            float distance = WorkspaceValidator::getDistance2D(base1, base2);
-            float workspace_separation = distance - (2 * safe_reach);
+            double distance = WorkspaceValidator::getDistance2D(base1, base2);
+            double workspace_separation = distance - (2 * safe_reach);
 
             std::cout << "Legs " << leg << "-" << next_leg << ": ";
             if (overlap) {
@@ -88,15 +88,15 @@ class CollisionDiagnostics {
      * @param model Reference to the robot model
      * @return Recommended hexagon_radius value
      */
-    static float recommendOptimalRadius(const RobotModel &model) {
+    static double recommendOptimalRadius(const RobotModel &model) {
         const Parameters &p = model.getParams();
-        float leg_reach = p.coxa_length + p.femur_length + p.tibia_length;
-        float safe_reach = leg_reach * 0.65f;
+        double leg_reach = p.coxa_length + p.femur_length + p.tibia_length;
+        double safe_reach = leg_reach * 0.65f;
 
         // Calculate minimum safe radius with different safety margins
-        float conservative_radius = WorkspaceValidator::calculateSafeHexagonRadius(safe_reach, 50.0f);
-        float standard_radius = WorkspaceValidator::calculateSafeHexagonRadius(safe_reach, 30.0f);
-        float minimum_radius = WorkspaceValidator::calculateSafeHexagonRadius(safe_reach, 20.0f);
+        double conservative_radius = WorkspaceValidator::calculateSafeHexagonRadius(safe_reach, 50.0f);
+        double standard_radius = WorkspaceValidator::calculateSafeHexagonRadius(safe_reach, 30.0f);
+        double minimum_radius = WorkspaceValidator::calculateSafeHexagonRadius(safe_reach, 20.0f);
 
         std::cout << "\n=== Radius Recommendations ===" << std::endl;
         std::cout << "Conservative (50mm margin): " << conservative_radius << " mm" << std::endl;
@@ -109,7 +109,7 @@ class CollisionDiagnostics {
 
   private:
     static constexpr int NUM_LEGS_COUNT = 6;
-    static constexpr float LEG_ANGLE_SPACING_DEG = 60.0f;
+    static constexpr double LEG_ANGLE_SPACING_DEG = 60.0f;
 };
 
 // Example usage function
@@ -122,7 +122,7 @@ void diagnoseHexaMotionCollisions(const RobotModel &model) {
 
     bool is_safe = CollisionDiagnostics::analyzeCurrentConfiguration(model);
     CollisionDiagnostics::analyzeWorkspaceOverlap(model);
-    float recommended_radius = CollisionDiagnostics::recommendOptimalRadius(model);
+    double recommended_radius = CollisionDiagnostics::recommendOptimalRadius(model);
 
     if (!is_safe) {
         std::cout << "\n🔧 RECOMMENDED FIXES:" << std::endl;
