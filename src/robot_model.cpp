@@ -372,35 +372,31 @@ std::pair<float, float> RobotModel::calculateHeightRange() const {
 Pose RobotModel::getPoseRobotFrame(int leg_index, const JointAngles &joint_angles, const Pose &leg_frame_pose) const {
     // Get the full transform from robot frame to leg frame
     Eigen::Matrix4d transform = legTransform(leg_index, joint_angles);
-    Eigen::Matrix4f tf = transform.cast<float>();
 
     // Transform the leg frame pose to robot frame
-    return leg_frame_pose.transform(tf);
+    return leg_frame_pose.transform(transform);
 }
 
 Pose RobotModel::getPoseLegFrame(int leg_index, const JointAngles &joint_angles, const Pose &robot_frame_pose) const {
     // Get the full transform from robot frame to leg frame
     Eigen::Matrix4d transform = legTransform(leg_index, joint_angles);
-    Eigen::Matrix4f tf = transform.cast<float>();
 
     // Transform the robot frame pose to leg frame (inverse transform)
-    return robot_frame_pose.transform(tf.inverse());
+    return robot_frame_pose.transform(transform.inverse());
 }
 
 Pose RobotModel::getTipPoseRobotFrame(int leg_index, const JointAngles &joint_angles, const Pose &tip_frame_pose) const {
     // Get the full transform from robot frame to tip frame
     Eigen::Matrix4d transform = legTransform(leg_index, joint_angles);
-    Eigen::Matrix4f tf = transform.cast<float>();
 
     // Transform the tip frame pose to robot frame
-    return tip_frame_pose.transform(tf);
+    return tip_frame_pose.transform(transform);
 }
 
 Pose RobotModel::getTipPoseLegFrame(int leg_index, const JointAngles &joint_angles, const Pose &robot_frame_pose) const {
     // Get the full transform from robot frame to tip frame
     Eigen::Matrix4d transform = legTransform(leg_index, joint_angles);
-    Eigen::Matrix4f tf = transform.cast<float>();
 
     // Transform the robot frame pose to tip frame (inverse transform)
-    return robot_frame_pose.transform(tf.inverse());
+    return robot_frame_pose.transform(transform.inverse());
 }

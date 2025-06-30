@@ -210,14 +210,20 @@ struct Pose {
     /**
      * Transform a pose by this pose (equivalent to OpenSHC's transform method)
      */
-    Pose transform(const Eigen::Matrix4f &transform_matrix) const {
-        Eigen::Vector4f pos_homogeneous(position.x, position.y, position.z, 1.0f);
-        Eigen::Vector4f transformed_pos = transform_matrix * pos_homogeneous;
+    Pose transform(const Eigen::Matrix4d &transform_matrix) const {
+        Eigen::Vector4d pos_homogeneous(static_cast<double>(position.x),
+                                       static_cast<double>(position.y),
+                                       static_cast<double>(position.z), 1.0);
+        Eigen::Vector4d transformed_pos = transform_matrix * pos_homogeneous;
 
-        Eigen::Matrix3f rot_matrix = transform_matrix.block<3, 3>(0, 0);
-        Eigen::Quaternionf transformed_rot = Eigen::Quaternionf(rot_matrix) * rotation;
+        Eigen::Matrix3d rot_matrix = transform_matrix.block<3, 3>(0, 0);
+        Eigen::Quaterniond transformed_rot(rot_matrix);
+        Eigen::Quaterniond result_rot = transformed_rot * rotation.cast<double>();
 
-        return Pose(Point3D(transformed_pos.x(), transformed_pos.y(), transformed_pos.z()), transformed_rot);
+        return Pose(Point3D(static_cast<float>(transformed_pos.x()),
+                            static_cast<float>(transformed_pos.y()),
+                            static_cast<float>(transformed_pos.z())),
+                    result_rot.cast<float>());
     }
 };
 
