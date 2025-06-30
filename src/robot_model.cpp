@@ -27,23 +27,23 @@ void RobotModel::initializeDH() {
             dh_transforms[l][0][2] = 0.0f;                  // d
             dh_transforms[l][0][3] = BASE_THETA_OFFSETS[l]; // theta
 
-            // Coxa link
+            // Coxa link (horizontal rotation)
             dh_transforms[l][1][0] = params.coxa_length; // a
-            dh_transforms[l][1][1] = 0.0f;              // alpha
+            dh_transforms[l][1][1] = 0.0f;              // alpha (no twist)
             dh_transforms[l][1][2] = 0.0f;               // d
             dh_transforms[l][1][3] = 0.0f;               // theta offset
 
-            // Femur link
+            // Femur link (vertical rotation)
             dh_transforms[l][2][0] = params.femur_length; // a
-            dh_transforms[l][2][1] = 0.0f;                // alpha
+            dh_transforms[l][2][1] = 90.0f;               // alpha (90° twist to vertical)
             dh_transforms[l][2][2] = 0.0f;                // d
             dh_transforms[l][2][3] = 0.0f;                // theta offset
 
-            // Tibia link
+            // Tibia link (vertical rotation)
             dh_transforms[l][3][0] = params.tibia_length; // a
-            dh_transforms[l][3][1] = 0.0f;                // alpha
+            dh_transforms[l][3][1] = 0.0f;                // alpha (no twist)
             dh_transforms[l][3][2] = 0.0f;                // d
-            dh_transforms[l][3][3] = -90.0f;              // theta offset
+            dh_transforms[l][3][3] = -90.0f;              // theta offset (vertical tibia)
         }
     }
 }
@@ -216,6 +216,17 @@ Point3D RobotModel::forwardKinematics(int leg_index, const JointAngles &angles) 
     // Forward kinematics: full DH transform chain
     Eigen::Matrix4f transform = legTransform(leg_index, angles);
     return Point3D{transform(0, 3), transform(1, 3), transform(2, 3)};
+}
+
+Point3D RobotModel::getLegBasePosition(int leg_index) const {
+    // Get only the base transform (without joint angles)
+    Eigen::Matrix4f base_transform = math_utils::dhTransform(
+        dh_transforms[leg_index][0][0],
+        math_utils::degreesToRadians(dh_transforms[leg_index][0][1]),
+        dh_transforms[leg_index][0][2],
+        math_utils::degreesToRadians(dh_transforms[leg_index][0][3]));
+
+    return Point3D{base_transform(0, 3), base_transform(1, 3), base_transform(2, 3)};
 }
 
 Eigen::Matrix4f RobotModel::legTransform(int leg_index, const JointAngles &q) const {

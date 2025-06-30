@@ -32,9 +32,9 @@ int main() {
         Point3D pos = model.forwardKinematics(leg, q);
         float theta_rad = base_theta_offsets[leg] * M_PI / 180.0f;
         float reach = p.hexagon_radius + p.coxa_length + p.femur_length;
-        float expected_x = reach * cos(theta_rad) + p.tibia_length * sin(theta_rad);
-        float expected_y = reach * sin(theta_rad) - p.tibia_length * cos(theta_rad);
-        float expected_z = 0.0f;
+        float expected_x = reach * cos(theta_rad);
+        float expected_y = reach * sin(theta_rad);
+        float expected_z = -p.tibia_length;
         float err = std::sqrt(std::pow(pos.x - expected_x, 2) +
                               std::pow(pos.y - expected_y, 2) +
                               std::pow(pos.z - expected_z, 2));

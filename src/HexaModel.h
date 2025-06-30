@@ -447,6 +447,9 @@ class RobotModel {
      */
     Pose getTipPoseLegFrame(int leg_index, const JointAngles &joint_angles, const Pose &robot_frame_pose = Pose::Identity()) const;
 
+    /** Get the position of the leg base (without joint transformations) */
+    Point3D getLegBasePosition(int leg_index) const;
+
   private:
     const Parameters &params;
     // DH parameter table: [leg][joint][param] where param = [a, alpha, d, theta_offset]

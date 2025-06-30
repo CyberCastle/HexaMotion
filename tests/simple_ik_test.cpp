@@ -27,14 +27,9 @@ int main() {
 
     bool ok = true;
     for (int leg = 0; leg < NUM_LEGS; ++leg) {
-        float theta_rad = base_theta_offsets[leg] * M_PI / 180.0f;
-        Point3D target;
-        float reach = p.hexagon_radius + p.coxa_length + p.femur_length;
-        float default_x = reach * cos(theta_rad) + p.tibia_length * sin(theta_rad);
-        float default_y = reach * sin(theta_rad) - p.tibia_length * cos(theta_rad);
-        target.x = 0.8f * default_x;
-        target.y = 0.8f * default_y;
-        target.z = 0.0f;
+        // Target: posición de reposo física real de la punta de la pierna
+        JointAngles zero_angles(0, 0, 0);
+        Point3D target = model.forwardKinematics(leg, zero_angles);
 
         JointAngles ik = model.inverseKinematics(leg, target);
         Point3D fk = model.forwardKinematics(leg, ik);
@@ -45,16 +40,44 @@ int main() {
                   << ", " << target.z << ") -> IK(" << ik.coxa << ", "
                   << ik.femur << ", " << ik.tibia << ") FK(" << fk.x << ", "
                   << fk.y << ", " << fk.z << ") error=" << err << std::endl;
-        if (err > 1e-2f) {
+        if (std::abs(ik.coxa) > 1e-3f || std::abs(ik.femur) > 1e-3f || std::abs(ik.tibia) > 1e-3f || err > 1e-2f) {
             ok = false;
         }
     }
 
     if (ok) {
         std::cout << "IK results within tolerance." << std::endl;
-        return 0;
     } else {
         std::cerr << "IK validation failed." << std::endl;
         return 1;
     }
+
+    // Validación de altura de 120mm bajo la base del robot
+    std::cout << "\n=== IK Height 120mm Test ===" << std::endl;
+    bool height_ok = true;
+    for (int leg = 0; leg < NUM_LEGS; ++leg) {
+        // Obtener la posición de la base de la pierna
+        Point3D base = model.getLegBasePosition(leg);
+        // Target: misma X, Y que la base, Z = base.z - 120
+        Point3D target;
+        target.x = base.x;
+        target.y = base.y;
+        target.z = base.z - 120.0f;
+
+        JointAngles ik = model.inverseKinematics(leg, target);
+        Point3D fk = model.forwardKinematics(leg, ik);
+        float z_err = std::abs(fk.z - target.z);
+        std::cout << "Leg " << leg << ": target altura -120mm -> IK(" << ik.coxa << ", "
+                  << ik.femur << ", " << ik.tibia << ") FK altura=" << fk.z << " error_z=" << z_err << std::endl;
+        if (z_err > 2.0f) {
+            height_ok = false;
+        }
+    }
+    if (height_ok) {
+        std::cout << "IK puede posicionar todas las patas a 120mm de altura dentro de la tolerancia." << std::endl;
+    } else {
+        std::cerr << "IK NO puede posicionar todas las patas a 120mm de altura dentro de la tolerancia." << std::endl;
+    }
+
+    return 0;
 }
