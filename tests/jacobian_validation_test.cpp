@@ -164,7 +164,7 @@ int main() {
                   << ", " << std::setw(8) << base_pos.z << ") mm" << std::endl;
 
         // Test coxa joint only
-        float perturbation = JACOBIAN_DELTA; // 0.001 radians ≈ 0.057 degrees
+        float perturbation = JACOBIAN_DELTA; // 0.001 radians ≈ 0.057 degree
         float perturbation_deg = math_utils::radiansToDegrees(perturbation);
 
         JointAngles plus = test_angles;

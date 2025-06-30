@@ -64,7 +64,8 @@ int main() {
         target.y = base.y;
         target.z = base.z - 120.0f;
 
-        JointAngles ik = model.inverseKinematics(leg, target);
+        JointAngles start_angles(0, 0, 0); // Test symmetric configuration
+        JointAngles ik = model.inverseKinematicsCurrent(leg, start_angles, target);
         Point3D fk = model.forwardKinematics(leg, ik);
         float z_err = std::abs(fk.z - target.z);
         std::cout << "Leg " << leg << ": target altura -120mm -> IK(" << ik.coxa << ", "
