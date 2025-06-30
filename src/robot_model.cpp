@@ -49,6 +49,90 @@ void RobotModel::initializeDH() {
 }
 
 // OpenSHC-style Damped Least Squares (DLS) iterative inverse kinematics
+JointAngles RobotModel::solveIK(int leg, const Point3D &local_target, JointAngles current_angles) const {
+    const float tolerance = 0.001f;
+    const float dls_coefficient = 0.05f;
+
+    for (int iter = 0; iter < params.ik.max_iterations; ++iter) {
+        const float joint_deg[DOF_PER_LEG] = {current_angles.coxa, current_angles.femur, current_angles.tibia};
+        Eigen::Matrix4f current_tf = Eigen::Matrix4f::Identity();
+        for (int j = 1; j <= DOF_PER_LEG; ++j) {
+            float a = dh_transforms[leg][j][0];
+            float alpha = dh_transforms[leg][j][1];
+            float d = dh_transforms[leg][j][2];
+            float theta_off = dh_transforms[leg][j][3];
+            float theta = theta_off + joint_deg[j - 1];
+            float alpha_rad = math_utils::degreesToRadians(alpha);
+            float theta_rad = math_utils::degreesToRadians(theta);
+            current_tf *= math_utils::dhTransform(a, alpha_rad, d, theta_rad);
+        }
+        Point3D current_pos{current_tf(0, 3), current_tf(1, 3), current_tf(2, 3)};
+
+        Eigen::Vector3f position_error3;
+        position_error3 << (local_target.x - current_pos.x),
+            (local_target.y - current_pos.y),
+            (local_target.z - current_pos.z);
+
+        if (position_error3.norm() < tolerance)
+            break;
+
+        std::vector<Eigen::Matrix4f> transforms(DOF_PER_LEG + 1);
+        transforms[0] = Eigen::Matrix4f::Identity();
+        for (int j = 1; j <= DOF_PER_LEG; ++j) {
+            float a = dh_transforms[leg][j][0];
+            float alpha = dh_transforms[leg][j][1];
+            float d = dh_transforms[leg][j][2];
+            float theta_off = dh_transforms[leg][j][3];
+            float theta = theta_off + joint_deg[j - 1];
+            float alpha_rad = math_utils::degreesToRadians(alpha);
+            float theta_rad = math_utils::degreesToRadians(theta);
+            transforms[j] = transforms[j - 1] * math_utils::dhTransform(a, alpha_rad, d, theta_rad);
+        }
+
+        Eigen::Matrix3f jacobian_pos;
+        Eigen::Vector3f pe = transforms[DOF_PER_LEG].block<3, 1>(0, 3);
+        Eigen::Vector3f z0(0, 0, 1);
+        Eigen::Vector3f p0 = transforms[0].block<3, 1>(0, 3);
+        jacobian_pos.col(0) = z0.cross(pe - p0);
+        for (int j = 1; j < DOF_PER_LEG; ++j) {
+            Eigen::Vector3f zj = transforms[j].block<3, 1>(0, 2);
+            Eigen::Vector3f pj = transforms[j].block<3, 1>(0, 3);
+            jacobian_pos.col(j) = zj.cross(pe - pj);
+        }
+
+        Eigen::Matrix3f JJT3 = jacobian_pos * jacobian_pos.transpose();
+        Eigen::Matrix3f identity3 = Eigen::Matrix3f::Identity();
+        Eigen::Matrix3f damped_inv3 = (JJT3 + dls_coefficient * dls_coefficient * identity3).inverse();
+        Eigen::Matrix3f jacobian_inverse3 = jacobian_pos.transpose() * damped_inv3;
+
+        Eigen::Vector3f angle_delta = jacobian_inverse3 * position_error3;
+
+        float step_scale = 1.0f;
+        float max_angle_change = 5.0f;
+        float max_delta = std::max({std::abs(angle_delta(0)), std::abs(angle_delta(1)), std::abs(angle_delta(2))});
+        if (max_delta > math_utils::degreesToRadians(max_angle_change)) {
+            step_scale = math_utils::degreesToRadians(max_angle_change) / max_delta;
+        }
+
+        current_angles.coxa += angle_delta(0) * RADIANS_TO_DEGREES_FACTOR * step_scale;
+        current_angles.femur += angle_delta(1) * RADIANS_TO_DEGREES_FACTOR * step_scale;
+        current_angles.tibia += angle_delta(2) * RADIANS_TO_DEGREES_FACTOR * step_scale;
+
+        current_angles.coxa = normalizeAngle(current_angles.coxa);
+        current_angles.femur = normalizeAngle(current_angles.femur);
+        current_angles.tibia = normalizeAngle(current_angles.tibia);
+
+        if (params.ik.clamp_joints) {
+            current_angles.coxa = constrainAngle(current_angles.coxa, params.coxa_angle_limits[0], params.coxa_angle_limits[1]);
+            current_angles.femur = constrainAngle(current_angles.femur, params.femur_angle_limits[0], params.femur_angle_limits[1]);
+            current_angles.tibia = constrainAngle(current_angles.tibia, params.tibia_angle_limits[0], params.tibia_angle_limits[1]);
+        }
+    }
+
+    return current_angles;
+}
+
+// OpenSHC-style Damped Least Squares (DLS) iterative inverse kinematics
 JointAngles RobotModel::inverseKinematics(int leg, const Point3D &p_target) const {
     // Inverse kinematics: Damped Least Squares solver using DH parameters
 
@@ -101,115 +185,31 @@ JointAngles RobotModel::inverseKinematics(int leg, const Point3D &p_target) cons
         current_angles.tibia = constrainAngle(current_angles.tibia, params.tibia_angle_limits[0], params.tibia_angle_limits[1]);
     }
 
-    // DLS iterative solution - 6x6 solver including orientation
-    const float tolerance = 0.001f;
-    const float dls_coefficient = 0.05f;
+    return solveIK(leg, local_target, current_angles);
+}
 
-    for (int iter = 0; iter < params.ik.max_iterations; ++iter) {
-        // Calculate transform relative to the leg base
-        const float joint_deg[DOF_PER_LEG] = {current_angles.coxa, current_angles.femur, current_angles.tibia};
-        Eigen::Matrix4f current_tf = Eigen::Matrix4f::Identity();
-        for (int j = 1; j <= DOF_PER_LEG; ++j) {
-            float a = dh_transforms[leg][j][0];
-            float alpha = dh_transforms[leg][j][1];
-            float d = dh_transforms[leg][j][2];
-            float theta_off = dh_transforms[leg][j][3];
-            float theta = theta_off + joint_deg[j - 1];
-            float alpha_rad = math_utils::degreesToRadians(alpha);
-            float theta_rad = math_utils::degreesToRadians(theta);
-            current_tf *= math_utils::dhTransform(a, alpha_rad, d, theta_rad);
-        }
-        Point3D current_pos{current_tf(0, 3), current_tf(1, 3), current_tf(2, 3)};
+JointAngles RobotModel::inverseKinematicsCurrent(int leg, const JointAngles &current_angles,
+                                                 const Point3D &p_target) const {
+    const float base_angle_deg = BASE_THETA_OFFSETS[leg];
+    float base_x = params.hexagon_radius * cos(math_utils::degreesToRadians(base_angle_deg));
+    float base_y = params.hexagon_radius * sin(math_utils::degreesToRadians(base_angle_deg));
 
-        // Orientation error relative to identity (no rotation target)
-        Eigen::Vector3f orientation_error = Eigen::Vector3f::Zero();
+    Point3D local_target;
+    float dx = p_target.x - base_x;
+    float dy = p_target.y - base_y;
+    float angle_rad = math_utils::degreesToRadians(-base_angle_deg);
+    local_target.x = cos(angle_rad) * dx - sin(angle_rad) * dy;
+    local_target.y = sin(angle_rad) * dx + cos(angle_rad) * dy;
+    local_target.z = p_target.z;
 
-        // Position error (3D)
-        Eigen::Vector3f position_error3;
-        position_error3 << (local_target.x - current_pos.x),
-            (local_target.y - current_pos.y),
-            (local_target.z - current_pos.z);
-
-        // Combined error vector (orientation + position)
-        Eigen::Matrix<float, 6, 1> error6;
-        error6.segment<3>(0) = orientation_error;
-        error6.segment<3>(3) = position_error3;
-
-        // Check for convergence
-        if (position_error3.norm() < tolerance)
-            break;
-
-        // Calculate both position and orientation Jacobians in leg frame
-        // Build transforms for Jacobian computation
-        std::vector<Eigen::Matrix4f> transforms(DOF_PER_LEG + 1);
-        transforms[0] = Eigen::Matrix4f::Identity();
-        for (int j = 1; j <= DOF_PER_LEG; ++j) {
-            float a = dh_transforms[leg][j][0];
-            float alpha = dh_transforms[leg][j][1];
-            float d = dh_transforms[leg][j][2];
-            float theta_off = dh_transforms[leg][j][3];
-            float theta = theta_off + joint_deg[j - 1];
-            float alpha_rad = math_utils::degreesToRadians(alpha);
-            float theta_rad = math_utils::degreesToRadians(theta);
-            transforms[j] = transforms[j - 1] * math_utils::dhTransform(a, alpha_rad, d, theta_rad);
-        }
-
-        Eigen::Matrix3f jacobian_pos;
-        Eigen::Matrix3f jacobian_ori;
-
-        Eigen::Vector3f pe = transforms[DOF_PER_LEG].block<3, 1>(0, 3);
-        Eigen::Vector3f z0(0, 0, 1);
-        Eigen::Vector3f p0 = transforms[0].block<3, 1>(0, 3);
-        jacobian_pos.col(0) = z0.cross(pe - p0);
-        jacobian_ori.col(0) = z0;
-
-        for (int j = 1; j < DOF_PER_LEG; ++j) {
-            Eigen::Vector3f zj = transforms[j].block<3, 1>(0, 2);
-            Eigen::Vector3f pj = transforms[j].block<3, 1>(0, 3);
-            jacobian_pos.col(j) = zj.cross(pe - pj);
-            jacobian_ori.col(j) = zj;
-        }
-
-        Eigen::Matrix<float, 6, 3> jacobian6;
-        jacobian6.block<3, 3>(0, 0) = jacobian_ori;
-        jacobian6.block<3, 3>(3, 0) = jacobian_pos;
-
-        // Damped least squares inverse: J_inv = J^T * (J*J^T + λ^2 I)^(-1)
-        Eigen::Matrix<float, 6, 6> JJT6 = jacobian6 * jacobian6.transpose();
-        Eigen::Matrix<float, 6, 6> identity6 = Eigen::Matrix<float, 6, 6>::Identity();
-        Eigen::Matrix<float, 6, 6> damped_inv6 = (JJT6 + dls_coefficient * dls_coefficient * identity6).inverse();
-        Eigen::Matrix<float, 3, 6> jacobian_inverse6 = jacobian6.transpose() * damped_inv6;
-
-        // Calculate joint angle changes
-        Eigen::Vector3f angle_delta = jacobian_inverse6 * error6;
-
-        // Apply adaptive step scaling to prevent large jumps
-        float step_scale = 1.0f;
-        float max_angle_change = 5.0f; // Max 5 degrees per iteration (more conservative)
-        float max_delta = std::max({std::abs(angle_delta(0)), std::abs(angle_delta(1)), std::abs(angle_delta(2))});
-        if (max_delta > math_utils::degreesToRadians(max_angle_change)) {
-            step_scale = math_utils::degreesToRadians(max_angle_change) / max_delta;
-        }
-
-        // Update joint angles (convert from radians to degrees)
-        current_angles.coxa += angle_delta(0) * RADIANS_TO_DEGREES_FACTOR * step_scale;
-        current_angles.femur += angle_delta(1) * RADIANS_TO_DEGREES_FACTOR * step_scale;
-        current_angles.tibia += angle_delta(2) * RADIANS_TO_DEGREES_FACTOR * step_scale;
-
-        // Normalize angles
-        current_angles.coxa = normalizeAngle(current_angles.coxa);
-        current_angles.femur = normalizeAngle(current_angles.femur);
-        current_angles.tibia = normalizeAngle(current_angles.tibia);
-
-        // Apply joint limits
-        if (params.ik.clamp_joints) {
-            current_angles.coxa = constrainAngle(current_angles.coxa, params.coxa_angle_limits[0], params.coxa_angle_limits[1]);
-            current_angles.femur = constrainAngle(current_angles.femur, params.femur_angle_limits[0], params.femur_angle_limits[1]);
-            current_angles.tibia = constrainAngle(current_angles.tibia, params.tibia_angle_limits[0], params.tibia_angle_limits[1]);
-        }
+    JointAngles start = current_angles;
+    if (params.ik.clamp_joints) {
+        start.coxa = constrainAngle(start.coxa, params.coxa_angle_limits[0], params.coxa_angle_limits[1]);
+        start.femur = constrainAngle(start.femur, params.femur_angle_limits[0], params.femur_angle_limits[1]);
+        start.tibia = constrainAngle(start.tibia, params.tibia_angle_limits[0], params.tibia_angle_limits[1]);
     }
 
-    return current_angles;
+    return solveIK(leg, local_target, start);
 }
 
 Point3D RobotModel::forwardKinematics(int leg_index, const JointAngles &angles) const {

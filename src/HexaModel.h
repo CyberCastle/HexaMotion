@@ -386,8 +386,16 @@ class RobotModel {
      */
     void initializeDH();
 
-    /** Compute inverse kinematics for a leg. */
+    /** Compute inverse kinematics for a leg using a heuristic start guess. */
     JointAngles inverseKinematics(int leg, const Point3D &p) const;
+    /**
+     * @brief Compute inverse kinematics starting from current joint angles.
+     * @param leg Leg index.
+     * @param current_angles Current joint angles used as initial guess.
+     * @param target Desired tip position in robot frame.
+     */
+    JointAngles inverseKinematicsCurrent(int leg, const JointAngles &current_angles,
+                                         const Point3D &target) const;
     /** Compute forward kinematics for a leg. */
     Point3D forwardKinematics(int leg, const JointAngles &q) const;
     /** Analytic Jacobian for a leg. */
@@ -455,6 +463,8 @@ class RobotModel {
     // DH parameter table: [leg][joint][param] where param = [a, alpha, d, theta_offset]
     // The first entry stores the fixed base transform for the leg
     float dh_transforms[NUM_LEGS][DOF_PER_LEG + 1][4];
+
+    JointAngles solveIK(int leg, const Point3D &local_target, JointAngles current) const;
 };
 
 #endif // MODEL_H
