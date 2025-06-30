@@ -12,8 +12,8 @@
 // Example implementation of the new servo interface
 class TestServo : public IServoInterface {
   private:
-    float current_angles[NUM_LEGS][DOF_PER_LEG];
-    float current_speeds[NUM_LEGS][DOF_PER_LEG];
+    double current_angles[NUM_LEGS][DOF_PER_LEG];
+    double current_speeds[NUM_LEGS][DOF_PER_LEG];
 
   public:
     TestServo() {
@@ -40,7 +40,7 @@ class TestServo : public IServoInterface {
     }
 
     // NEW: Combined angle and speed control
-    bool setJointAngleAndSpeed(int leg_index, int joint_index, float angle, float speed) override {
+    bool setJointAngleAndSpeed(int leg_index, int joint_index, double angle, double speed) override {
         if (leg_index < 0 || leg_index >= NUM_LEGS)
             return false;
         if (joint_index < 0 || joint_index >= DOF_PER_LEG)
@@ -63,7 +63,7 @@ class TestServo : public IServoInterface {
         return true;
     }
 
-    float getJointAngle(int leg_index, int joint_index) override {
+    double getJointAngle(int leg_index, int joint_index) override {
         if (leg_index < 0 || leg_index >= NUM_LEGS)
             return 0.0f;
         if (joint_index < 0 || joint_index >= DOF_PER_LEG)
@@ -88,7 +88,7 @@ class TestServo : public IServoInterface {
     }
 
     // Method to get current speed (for testing)
-    float getCurrentSpeed(int leg_index, int joint_index) {
+    double getCurrentSpeed(int leg_index, int joint_index) {
         if (leg_index < 0 || leg_index >= NUM_LEGS)
             return 0.0f;
         if (joint_index < 0 || joint_index >= DOF_PER_LEG)
@@ -130,7 +130,7 @@ class MockFSR : public IFSRInterface {
         return data;
     }
     bool calibrateFSR(int leg_index) override { return true; }
-    float getRawReading(int leg_index) override { return 0.0f; }
+    double getRawReading(int leg_index) override { return 0.0f; }
     bool update() override { return true; }
 };
 
@@ -155,7 +155,7 @@ void setup() {
     params.coxa_length = 30.0f;
     params.femur_length = 50.0f;
     params.tibia_length = 80.0f;
-    params.robot_height = 100.0f;
+    params.robot_height = 120.0f;
 
     // Set joint limits
     params.coxa_angle_limits[0] = -90.0f;

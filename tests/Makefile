@@ -9,7 +9,7 @@ CXXFLAGS=-I../src -I. -I$(EIGEN_PATH) -std=c++17
 
 SOURCES = ../src/math_utils.cpp ../src/robot_model.cpp ../src/pose_controller.cpp ../src/walk_controller.cpp ../src/terrain_adaptation.cpp ../src/admittance_controller.cpp ../src/velocity_limits.cpp ../src/manual_pose_controller.cpp ../src/state_controller.cpp ../src/locomotion_system.cpp ../src/cartesian_velocity_controller.cpp
 
-all: math_utils_test model_test pose_controller_test walk_controller_test admittance_controller_test locomotion_system_test state_controller_test cruise_control_comprehensive_test tripod_gait_sim_test ik_debug_test height_range_test geometry_test ik_analytical_fix ik_coordinate_test coord_test joint_test ik_debug_detailed dls_validation_test ik_debug_analysis workspace_analysis actual_workspace_test comprehensive_ik_test angle_range_test edge_case_analysis angle_normalization_test terrain_adaptation_test fsr_threshold_test velocity_limits_test state_controller_runtime_test openshc_equivalent_features_test full_feature_sim_test test_metachronal_adaptive_gaits final_validation_test quaternion_pose_system_test quaternion_functions_test pose_control_comprehensive_test pose_control_equivalence_test absolute_positioning_compile_test admittance_derivatives_test test_velocity_control test_smooth_movement
+all: math_utils_test model_test pose_controller_test walk_controller_test admittance_controller_test locomotion_system_test state_controller_test cruise_control_comprehensive_test tripod_gait_sim_test height_range_test geometry_test dls_validation_test workspace_analysis actual_workspace_test angle_range_test edge_case_analysis angle_normalization_test terrain_adaptation_test fsr_threshold_test velocity_limits_test state_controller_runtime_test openshc_equivalent_features_test full_feature_sim_test test_metachronal_adaptive_gaits final_validation_test quaternion_pose_system_test quaternion_functions_test pose_control_comprehensive_test pose_control_equivalence_test absolute_positioning_compile_test admittance_derivatives_test test_velocity_control test_smooth_movement ik_fk_validation_test simple_kinematics_test kinematics_validation_test collision_diagnostics_test simple_dh_test simple_ik_test jacobian_validation_test
 
 math_utils_test: math_utils_test.cpp ../src/math_utils.cpp
 	$(CXX) $(CXXFLAGS) $^ -o $@
@@ -17,7 +17,7 @@ math_utils_test: math_utils_test.cpp ../src/math_utils.cpp
 model_test: model_test.cpp ../src/math_utils.cpp ../src/robot_model.cpp
 	$(CXX) $(CXXFLAGS) $^ -o $@
 
-pose_controller_test: pose_controller_test.cpp ../src/pose_controller.cpp ../src/robot_model.cpp ../src/math_utils.cpp
+pose_controller_test: pose_controller_test.cpp ../src/pose_controller.cpp ../src/robot_model.cpp ../src/math_utils.cpp ../src/pose_config_factory.cpp
 	$(CXX) $(CXXFLAGS) $^ -o $@
 
 walk_controller_test: walk_controller_test.cpp ../src/walk_controller.cpp ../src/terrain_adaptation.cpp ../src/robot_model.cpp ../src/velocity_limits.cpp ../src/math_utils.cpp
@@ -32,10 +32,7 @@ locomotion_system_test: locomotion_system_test.cpp ../src/locomotion_system.cpp 
 state_controller_test: state_controller_test.cpp ../src/state_controller.cpp ../src/locomotion_system.cpp ../src/robot_model.cpp ../src/pose_controller.cpp ../src/walk_controller.cpp ../src/terrain_adaptation.cpp ../src/admittance_controller.cpp ../src/velocity_limits.cpp ../src/cartesian_velocity_controller.cpp ../src/math_utils.cpp
 	$(CXX) $(CXXFLAGS) $^ -o $@
 
-tripod_gait_sim_test: tripod_gait_sim_test.cpp ../src/state_controller.cpp ../src/locomotion_system.cpp ../src/robot_model.cpp ../src/pose_controller.cpp ../src/walk_controller.cpp ../src/terrain_adaptation.cpp ../src/admittance_controller.cpp ../src/velocity_limits.cpp ../src/cartesian_velocity_controller.cpp ../src/math_utils.cpp
-	$(CXX) $(CXXFLAGS) $^ -o $@
-
-ik_debug_test: ik_debug_test.cpp ../src/locomotion_system.cpp ../src/robot_model.cpp ../src/pose_controller.cpp ../src/walk_controller.cpp ../src/terrain_adaptation.cpp ../src/admittance_controller.cpp ../src/velocity_limits.cpp ../src/cartesian_velocity_controller.cpp ../src/math_utils.cpp
+tripod_gait_sim_test: tripod_gait_sim_test.cpp ../src/state_controller.cpp ../src/locomotion_system.cpp ../src/robot_model.cpp ../src/pose_controller.cpp ../src/walk_controller.cpp ../src/terrain_adaptation.cpp ../src/admittance_controller.cpp ../src/velocity_limits.cpp ../src/cartesian_velocity_controller.cpp ../src/math_utils.cpp ../src/pose_config_factory.cpp ../src/workspace_validator.cpp
 	$(CXX) $(CXXFLAGS) $^ -o $@
 
 height_range_test: height_range_test.cpp ../src/robot_model.cpp ../src/math_utils.cpp
@@ -44,34 +41,16 @@ height_range_test: height_range_test.cpp ../src/robot_model.cpp ../src/math_util
 geometry_test: geometry_test.cpp ../src/locomotion_system.cpp ../src/robot_model.cpp ../src/pose_controller.cpp ../src/walk_controller.cpp ../src/terrain_adaptation.cpp ../src/admittance_controller.cpp ../src/velocity_limits.cpp ../src/cartesian_velocity_controller.cpp ../src/math_utils.cpp
 	$(CXX) $(CXXFLAGS) $^ -o $@
 
-ik_analytical_fix: ik_analytical_fix.cpp ../src/locomotion_system.cpp ../src/robot_model.cpp ../src/pose_controller.cpp ../src/walk_controller.cpp ../src/terrain_adaptation.cpp ../src/admittance_controller.cpp ../src/velocity_limits.cpp ../src/cartesian_velocity_controller.cpp ../src/math_utils.cpp
-	$(CXX) $(CXXFLAGS) $^ -o $@
-
-ik_coordinate_test: ik_coordinate_test.cpp ../src/locomotion_system.cpp ../src/robot_model.cpp ../src/pose_controller.cpp ../src/walk_controller.cpp ../src/terrain_adaptation.cpp ../src/admittance_controller.cpp ../src/velocity_limits.cpp ../src/cartesian_velocity_controller.cpp ../src/math_utils.cpp
-	$(CXX) $(CXXFLAGS) $^ -o $@
-
-coord_test: coord_test.cpp ../src/locomotion_system.cpp ../src/robot_model.cpp ../src/pose_controller.cpp ../src/walk_controller.cpp ../src/terrain_adaptation.cpp ../src/admittance_controller.cpp ../src/velocity_limits.cpp ../src/cartesian_velocity_controller.cpp ../src/math_utils.cpp
-	$(CXX) $(CXXFLAGS) $^ -o $@
-
-joint_test: joint_test.cpp ../src/robot_model.cpp ../src/math_utils.cpp
-	$(CXX) $(CXXFLAGS) $^ -o $@
-
-ik_debug_detailed: ik_debug_detailed.cpp ../src/robot_model.cpp ../src/math_utils.cpp
+ik_fk_validation_test: ik_fk_validation_test.cpp ../src/robot_model.cpp ../src/math_utils.cpp
 	$(CXX) $(CXXFLAGS) $^ -o $@
 
 dls_validation_test: dls_validation_test.cpp ../src/robot_model.cpp ../src/math_utils.cpp
-	$(CXX) $(CXXFLAGS) $^ -o $@
-
-ik_debug_analysis: ik_debug_analysis.cpp ../src/robot_model.cpp ../src/math_utils.cpp
 	$(CXX) $(CXXFLAGS) $^ -o $@
 
 workspace_analysis: workspace_analysis.cpp ../src/robot_model.cpp ../src/math_utils.cpp
 	$(CXX) $(CXXFLAGS) $^ -o $@
 
 actual_workspace_test: actual_workspace_test.cpp ../src/robot_model.cpp ../src/math_utils.cpp
-	$(CXX) $(CXXFLAGS) $^ -o $@
-
-comprehensive_ik_test: comprehensive_ik_test.cpp ../src/robot_model.cpp ../src/math_utils.cpp
 	$(CXX) $(CXXFLAGS) $^ -o $@
 
 test3_analysis: test3_analysis.cpp ../src/robot_model.cpp ../src/math_utils.cpp
@@ -140,7 +119,28 @@ test_velocity_control: test_velocity_control.cpp ../src/cartesian_velocity_contr
 test_smooth_movement: test_smooth_movement.cpp ../src/locomotion_system.cpp ../src/robot_model.cpp ../src/pose_controller.cpp ../src/walk_controller.cpp ../src/terrain_adaptation.cpp ../src/admittance_controller.cpp ../src/velocity_limits.cpp ../src/cartesian_velocity_controller.cpp ../src/math_utils.cpp
 	$(CXX) $(CXXFLAGS) $^ -o $@
 
+enhanced_kinematics_test: enhanced_kinematics_test.cpp ../src/robot_model.cpp ../src/math_utils.cpp
+	$(CXX) $(CXXFLAGS) $^ -o $@
+
+simple_kinematics_test: simple_kinematics_test.cpp ../src/robot_model.cpp ../src/math_utils.cpp
+	$(CXX) $(CXXFLAGS) $^ -o $@
+
+kinematics_validation_test: kinematics_validation_test.cpp ../src/robot_model.cpp ../src/math_utils.cpp
+	$(CXX) $(CXXFLAGS) $^ -o $@
+
+collision_diagnostics_test: collision_diagnostics_test.cpp ../src/workspace_validator.cpp ../src/math_utils.cpp ../src/robot_model.cpp ../src/collision_diagnostics.cpp
+	$(CXX) $(CXXFLAGS) $^ -o $@
+
+simple_dh_test: simple_dh_test.cpp ../src/robot_model.cpp ../src/math_utils.cpp
+	$(CXX) $(CXXFLAGS) $^ -o $@
+
+simple_ik_test: simple_ik_test.cpp ../src/robot_model.cpp ../src/math_utils.cpp
+	$(CXX) $(CXXFLAGS) $^ -o $@
+
+jacobian_validation_test: jacobian_validation_test.cpp ../src/robot_model.cpp ../src/math_utils.cpp
+	$(CXX) $(CXXFLAGS) $^ -o $@
+
 clean:
-	rm -f math_utils_test model_test pose_controller_test walk_controller_test admittance_controller_test locomotion_system_test state_controller_test tripod_gait_sim_test ik_debug_test height_range_test geometry_test ik_analytical_fix ik_coordinate_test coord_test joint_test ik_debug_detailed dls_validation_test ik_debug_analysis workspace_analysis actual_workspace_test comprehensive_ik_test test3_analysis angle_range_test edge_case_analysis angle_normalization_test terrain_adaptation_test fsr_threshold_test velocity_limits_test state_controller_runtime_test openshc_equivalent_features_test full_feature_sim_test test_metachronal_adaptive_gaits final_validation_test quaternion_pose_system_test quaternion_functions_test pose_control_comprehensive_test pose_control_equivalence_test cruise_control_comprehensive_test absolute_positioning_compile_test enhanced_imu_integration_test admittance_derivatives_test test_velocity_control test_smooth_movement
+	rm -f math_utils_test model_test pose_controller_test walk_controller_test admittance_controller_test locomotion_system_test state_controller_test tripod_gait_sim_test height_range_test geometry_test dls_validation_test workspace_analysis actual_workspace_test test3_analysis angle_range_test edge_case_analysis angle_normalization_test terrain_adaptation_test fsr_threshold_test velocity_limits_test state_controller_runtime_test openshc_equivalent_features_test full_feature_sim_test test_metachronal_adaptive_gaits final_validation_test quaternion_pose_system_test quaternion_functions_test pose_control_comprehensive_test pose_control_equivalence_test cruise_control_comprehensive_test absolute_positioning_compile_test enhanced_imu_integration_test admittance_derivatives_test test_velocity_control test_smooth_movement ik_fk_validation_test enhanced_kinematics_test simple_kinematics_test kinematics_validation_test collision_diagnostics_test simple_dh_test simple_ik_test jacobian_validation_test
 
 

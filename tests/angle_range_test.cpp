@@ -9,7 +9,7 @@ int main() {
     p.coxa_length = 50;
     p.femur_length = 101;
     p.tibia_length = 208;
-    p.robot_height = 100;
+    p.robot_height = 120;
     p.coxa_angle_limits[0] = -90;
     p.coxa_angle_limits[1] = 90;
     p.femur_angle_limits[0] = -90;
@@ -68,7 +68,7 @@ int main() {
 
         // Verify FK accuracy
         Point3D fk_result = model.forwardKinematics(0, angles);
-        float error = sqrt(pow(target.x - fk_result.x, 2) +
+        double error = sqrt(pow(target.x - fk_result.x, 2) +
                            pow(target.y - fk_result.y, 2) +
                            pow(target.z - fk_result.z, 2));
         std::cout << "  FK verify: (" << fk_result.x << ", " << fk_result.y << ", " << fk_result.z << ")" << std::endl;

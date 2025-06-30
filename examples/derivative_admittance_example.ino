@@ -39,7 +39,7 @@ class MockFSR : public IFSRInterface {
   public:
     bool initialize() override { return true; }
     bool calibrateFSR(int leg_index) override { return true; }
-    float getRawReading(int leg_index) override { return 5.0f; }
+    double getRawReading(int leg_index) override { return 5.0f; }
     bool update() override { return true; } // AdvancedAnalog DMA support
 
     FSRData readFSR(int leg_index) override {
@@ -57,14 +57,14 @@ class MockServo : public IServoInterface {
         return false;
     }
 
-    bool setJointAngleAndSpeed(int leg_index, int joint_index, float angle, float speed) override {
+    bool setJointAngleAndSpeed(int leg_index, int joint_index, double angle, double speed) override {
         (void)leg_index;
         (void)joint_index;
         (void)angle;
         (void)speed;
         return true;
     }
-    float getJointAngle(int leg_index, int joint_index) override { return 0.0f; }
+    double getJointAngle(int leg_index, int joint_index) override { return 0.0f; }
     bool isJointMoving(int leg_index, int joint_index) override { return false; }
     bool enableTorque(int leg_index, int joint_index, bool enable) override { return true; }
 };
@@ -82,7 +82,7 @@ void setup() {
     params.coxa_length = 50;       // 50mm coxa
     params.femur_length = 101;     // 101mm femur
     params.tibia_length = 208;     // 208mm tibia
-    params.robot_height = 100;     // 90mm height
+    params.robot_height = 120;     // 120mm height
     params.control_frequency = 50; // 50Hz control
 
     // Set joint angle limits
@@ -112,9 +112,9 @@ void setup() {
     Serial.println("✓ Derivative-based integration using math_utils functions");
 
     // Configure virtual leg dynamics
-    float virtual_mass = 0.5f;        // 500g virtual mass per leg
-    float virtual_damping = 2.0f;     // Light damping for responsiveness
-    float virtual_stiffness = 100.0f; // Moderate stiffness
+    double virtual_mass = 0.5f;        // 500g virtual mass per leg
+    double virtual_damping = 2.0f;     // Light damping for responsiveness
+    double virtual_stiffness = 100.0f; // Moderate stiffness
 
     for (int leg = 0; leg < NUM_LEGS; leg++) {
         controller.setLegAdmittance(leg, virtual_mass, virtual_damping, virtual_stiffness);

@@ -22,8 +22,8 @@ struct SensorPerformanceMonitor {
     unsigned long sequential_update_time;
     unsigned long last_measurement_time;
     uint32_t update_count;
-    float avg_parallel_time;
-    float avg_sequential_time;
+    double avg_parallel_time;
+    double avg_sequential_time;
     bool parallel_mode_enabled;
 
     SensorPerformanceMonitor() : parallel_update_time(0), sequential_update_time(0),
@@ -43,7 +43,7 @@ class ParallelDemoIMU : public IIMUInterface {
   private:
     IMUMode current_mode_;
     bool supports_absolute_;
-    float simulated_roll_, simulated_pitch_, simulated_yaw_;
+    double simulated_roll_, simulated_pitch_, simulated_yaw_;
     unsigned long last_update_time_;
     bool data_ready_;
 
@@ -145,7 +145,7 @@ class ParallelDemoFSR : public IFSRInterface {
 
     bool calibrateFSR(int leg_index) override { return true; }
 
-    float getRawReading(int leg_index) override {
+    double getRawReading(int leg_index) override {
         if (leg_index >= 0 && leg_index < NUM_LEGS) {
             return sensor_data_[leg_index].pressure;
         }
@@ -159,7 +159,7 @@ class ParallelDemoFSR : public IFSRInterface {
         // Simulate simultaneous ADC reading of all 6 FSR channels
         for (int i = 0; i < NUM_LEGS; i++) {
             // Simulate contact patterns
-            float time_offset = (millis() + i * 1000) * 0.001f;
+            double time_offset = (millis() + i * 1000) * 0.001f;
             sensor_data_[i].pressure = 5.0f + 2.0f * sin(time_offset);
             sensor_data_[i].in_contact = sensor_data_[i].pressure > 4.0f;
             sensor_data_[i].contact_time = sensor_data_[i].in_contact ? 0.1f : 0.0f;
@@ -194,14 +194,14 @@ class ParallelDemoServo : public IServoInterface {
         return false;
     }
 
-    bool setJointAngleAndSpeed(int leg_index, int joint_index, float angle, float speed) override {
+    bool setJointAngleAndSpeed(int leg_index, int joint_index, double angle, double speed) override {
         (void)leg_index;
         (void)joint_index;
         (void)angle;
         (void)speed;
         return true;
     }
-    float getJointAngle(int leg_index, int joint_index) override { return 0.0f; }
+    double getJointAngle(int leg_index, int joint_index) override { return 0.0f; }
     bool isJointMoving(int leg_index, int joint_index) override { return false; }
     bool enableTorque(int leg_index, int joint_index, bool enable) override { return true; }
 };
@@ -227,7 +227,7 @@ void setup() {
     params.coxa_length = 50.0f;
     params.femur_length = 80.0f;
     params.tibia_length = 120.0f;
-    params.robot_height = 100.0f;
+    params.robot_height = 120.0f;
 
     locomotion_system = LocomotionSystem(params);
 
@@ -269,14 +269,14 @@ void printPerformanceReport() {
     last_report_time = millis();
 
     // Update averages
-    float parallel_time = perf_monitor.parallel_update_time;
-    float sequential_time = perf_monitor.sequential_update_time;
+    double parallel_time = perf_monitor.parallel_update_time;
+    double sequential_time = perf_monitor.sequential_update_time;
 
     if (perf_monitor.update_count == 0) {
         perf_monitor.avg_parallel_time = parallel_time;
         perf_monitor.avg_sequential_time = sequential_time;
     } else {
-        float alpha = 0.1f; // Low-pass filter
+        double alpha = 0.1f; // Low-pass filter
         perf_monitor.avg_parallel_time =
             (1.0f - alpha) * perf_monitor.avg_parallel_time + alpha * parallel_time;
         perf_monitor.avg_sequential_time =
@@ -286,7 +286,7 @@ void printPerformanceReport() {
     perf_monitor.update_count++;
 
     // Calculate improvement percentage
-    float improvement = 0.0f;
+    double improvement = 0.0f;
     if (perf_monitor.avg_sequential_time > 0) {
         improvement = ((perf_monitor.avg_sequential_time - perf_monitor.avg_parallel_time) /
                        perf_monitor.avg_sequential_time) *

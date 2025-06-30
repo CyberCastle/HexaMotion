@@ -19,7 +19,7 @@
 using namespace std;
 
 // Test parameters
-const float TEST_TOLERANCE = 1e-6f;
+const double TEST_TOLERANCE = 1e-6f;
 const int NUM_TEST_POINTS = 100;
 
 /**
@@ -46,12 +46,12 @@ bool testBezierEquivalence() {
     cout << "Testing Bezier Implementation Equivalence..." << endl;
 
     // Test control points (typical swing trajectory)
-    Eigen::Vector3f control_points[5] = {
-        Eigen::Vector3f(80.0f, 0.0f, -80.0f), // Start position
-        Eigen::Vector3f(85.0f, 0.0f, -70.0f), // First control
-        Eigen::Vector3f(90.0f, 0.0f, -60.0f), // Peak control
-        Eigen::Vector3f(95.0f, 0.0f, -70.0f), // Third control
-        Eigen::Vector3f(100.0f, 0.0f, -80.0f) // End position
+    Eigen::Vector3d control_points[5] = {
+        Eigen::Vector3d(80.0f, 0.0f, -80.0f), // Start position
+        Eigen::Vector3d(85.0f, 0.0f, -70.0f), // First control
+        Eigen::Vector3d(90.0f, 0.0f, -60.0f), // Peak control
+        Eigen::Vector3d(95.0f, 0.0f, -70.0f), // Third control
+        Eigen::Vector3d(100.0f, 0.0f, -80.0f) // End position
     };
 
     cout << "Control Points:" << endl;
@@ -64,18 +64,18 @@ bool testBezierEquivalence() {
     cout << endl;
 
     bool all_tests_passed = true;
-    float max_position_error = 0.0f;
-    float max_velocity_error = 0.0f;
+    double max_position_error = 0.0f;
+    double max_velocity_error = 0.0f;
 
     // Test at multiple time points
     for (int i = 0; i <= NUM_TEST_POINTS; i++) {
         double t = static_cast<double>(i) / NUM_TEST_POINTS;
 
         // Test position
-        Eigen::Vector3f hexamotion_pos = math_utils::quarticBezier(control_points, t);
-        Eigen::Vector3f openshc_pos = openSHC_quarticBezier(control_points, t);
+        Eigen::Vector3d hexamotion_pos = math_utils::quarticBezier(control_points, t);
+        Eigen::Vector3d openshc_pos = openSHC_quarticBezier(control_points, t);
 
-        float pos_error = (hexamotion_pos - openshc_pos).norm();
+        double pos_error = (hexamotion_pos - openshc_pos).norm();
         max_position_error = max(max_position_error, pos_error);
 
         if (pos_error > TEST_TOLERANCE) {
@@ -87,10 +87,10 @@ bool testBezierEquivalence() {
         }
 
         // Test velocity (derivative)
-        Eigen::Vector3f hexamotion_vel = math_utils::quarticBezierDot(control_points, t);
-        Eigen::Vector3f openshc_vel = openSHC_quarticBezierDot(control_points, t);
+        Eigen::Vector3d hexamotion_vel = math_utils::quarticBezierDot(control_points, t);
+        Eigen::Vector3d openshc_vel = openSHC_quarticBezierDot(control_points, t);
 
-        float vel_error = (hexamotion_vel - openshc_vel).norm();
+        double vel_error = (hexamotion_vel - openshc_vel).norm();
         max_velocity_error = max(max_velocity_error, vel_error);
 
         if (vel_error > TEST_TOLERANCE) {
@@ -121,13 +121,13 @@ bool testSwingTrajectoryEquivalence() {
 
     // Test parameters matching OpenSHC usage
     int leg_index = 0;
-    float step_height = 20.0f;
-    float step_length = 40.0f;
-    float stance_duration = 0.6f;
-    float swing_duration = 0.4f;
-    float robot_height = 80.0f;
+    double step_height = 20.0f;
+    double step_length = 40.0f;
+    double stance_duration = 0.6f;
+    double swing_duration = 0.4f;
+    double robot_height = 80.0f;
 
-    float leg_phase_offsets[NUM_LEGS] = {0.0f, 0.33f, 0.67f, 0.0f, 0.33f, 0.67f};
+    double leg_phase_offsets[NUM_LEGS] = {0.0f, 0.33f, 0.67f, 0.0f, 0.33f, 0.67f};
     LegState leg_states[NUM_LEGS];
 
     cout << "Test Parameters:" << endl;
@@ -144,13 +144,13 @@ bool testSwingTrajectoryEquivalence() {
     cout << "-----\t--------\t--------\t--------\t--------" << endl;
 
     for (int i = 0; i <= 20; i++) {
-        float phase = stance_duration + (swing_duration * i / 20.0f);
+        double phase = stance_duration + (swing_duration * i / 20.0f);
 
         Point3D pos = walker.footTrajectory(leg_index, phase, step_height, step_length,
                                             stance_duration, swing_duration, robot_height,
                                             leg_phase_offsets, leg_states, nullptr, nullptr);
 
-        float height_above_ground = pos.z + robot_height;
+        double height_above_ground = pos.z + robot_height;
 
         cout << fixed << setprecision(2)
              << phase << "\t"
@@ -179,19 +179,19 @@ bool testSwingTrajectoryEquivalence() {
 bool testContinuityAndSmoothness() {
     cout << "\nTesting Trajectory Continuity and Smoothness..." << endl;
 
-    Eigen::Vector3f control_points[5] = {
-        Eigen::Vector3f(80.0f, 0.0f, -80.0f),
-        Eigen::Vector3f(85.0f, 0.0f, -70.0f),
-        Eigen::Vector3f(90.0f, 0.0f, -60.0f),
-        Eigen::Vector3f(95.0f, 0.0f, -70.0f),
-        Eigen::Vector3f(100.0f, 0.0f, -80.0f)};
+    Eigen::Vector3d control_points[5] = {
+        Eigen::Vector3d(80.0f, 0.0f, -80.0f),
+        Eigen::Vector3d(85.0f, 0.0f, -70.0f),
+        Eigen::Vector3d(90.0f, 0.0f, -60.0f),
+        Eigen::Vector3d(95.0f, 0.0f, -70.0f),
+        Eigen::Vector3d(100.0f, 0.0f, -80.0f)};
 
     // Test C0 continuity (position continuity)
-    Eigen::Vector3f start_pos = math_utils::quarticBezier(control_points, 0.0);
-    Eigen::Vector3f end_pos = math_utils::quarticBezier(control_points, 1.0);
+    Eigen::Vector3d start_pos = math_utils::quarticBezier(control_points, 0.0);
+    Eigen::Vector3d end_pos = math_utils::quarticBezier(control_points, 1.0);
 
-    float start_error = (start_pos - control_points[0]).norm();
-    float end_error = (end_pos - control_points[4]).norm();
+    double start_error = (start_pos - control_points[0]).norm();
+    double end_error = (end_pos - control_points[4]).norm();
 
     cout << "C0 Continuity Test:" << endl;
     cout << "  Start position error: " << start_error << endl;
@@ -201,21 +201,21 @@ bool testContinuityAndSmoothness() {
     assert(end_error < TEST_TOLERANCE);
 
     // Test C1 continuity (velocity continuity at endpoints)
-    Eigen::Vector3f start_vel = math_utils::quarticBezierDot(control_points, 0.0);
-    Eigen::Vector3f end_vel = math_utils::quarticBezierDot(control_points, 1.0);
+    Eigen::Vector3d start_vel = math_utils::quarticBezierDot(control_points, 0.0);
+    Eigen::Vector3d end_vel = math_utils::quarticBezierDot(control_points, 1.0);
 
     cout << "C1 Continuity Test:" << endl;
     cout << "  Start velocity: (" << start_vel[0] << ", " << start_vel[1] << ", " << start_vel[2] << ")" << endl;
     cout << "  End velocity: (" << end_vel[0] << ", " << end_vel[1] << ", " << end_vel[2] << ")" << endl;
 
     // Test smoothness by checking velocity magnitude changes
-    float max_velocity_change = 0.0f;
-    Eigen::Vector3f prev_vel = start_vel;
+    double max_velocity_change = 0.0f;
+    Eigen::Vector3d prev_vel = start_vel;
 
     for (int i = 1; i <= 100; i++) {
         double t = static_cast<double>(i) / 100.0;
-        Eigen::Vector3f curr_vel = math_utils::quarticBezierDot(control_points, t);
-        float velocity_change = (curr_vel - prev_vel).norm();
+        Eigen::Vector3d curr_vel = math_utils::quarticBezierDot(control_points, t);
+        double velocity_change = (curr_vel - prev_vel).norm();
         max_velocity_change = max(max_velocity_change, velocity_change);
         prev_vel = curr_vel;
     }
@@ -237,9 +237,9 @@ bool testOpenSHCCompatibility() {
     // for stance, primary swing, and secondary swing curves
 
     // Stance trajectory (linear ground movement)
-    Eigen::Vector3f stance_nodes[5];
-    Eigen::Vector3f stride_vector(40.0f, 0.0f, 0.0f);
-    Eigen::Vector3f start_pos(80.0f, 0.0f, -80.0f);
+    Eigen::Vector3d stance_nodes[5];
+    Eigen::Vector3d stride_vector(40.0f, 0.0f, 0.0f);
+    Eigen::Vector3d start_pos(80.0f, 0.0f, -80.0f);
 
     // Generate stance control nodes (equivalent to OpenSHC generateStanceControlNodes)
     for (int i = 0; i < 5; i++) {
@@ -250,13 +250,13 @@ bool testOpenSHCCompatibility() {
     for (int i = 0; i < 5; i++) {
         cout << "  Node " << i << ": (" << stance_nodes[i][0] << ", " << stance_nodes[i][1] << ", " << stance_nodes[i][2] << ")" << endl;
     } // Test that stance trajectory is linear
-    float max_stance_error = 0.0f;
+    double max_stance_error = 0.0f;
     for (int i = 0; i <= 20; i++) {
         double t = static_cast<double>(i) / 20.0;
-        Eigen::Vector3f pos = math_utils::quarticBezier(stance_nodes, t);
-        Eigen::Vector3f expected = start_pos + stride_vector * t;
+        Eigen::Vector3d pos = math_utils::quarticBezier(stance_nodes, t);
+        Eigen::Vector3d expected = start_pos + stride_vector * t;
 
-        float error = (pos - expected).norm();
+        double error = (pos - expected).norm();
         max_stance_error = max(max_stance_error, error);
 
         if (i <= 5) { // Debug first few points
@@ -284,15 +284,15 @@ bool testOpenSHCCompatibility() {
     WalkController walker(model);
 
     // Test that swing trajectory has proper bell curve shape
-    float max_height = -1000.0f;
-    float min_height = 1000.0f;
+    double max_height = -1000.0f;
+    double min_height = 1000.0f;
 
     for (int i = 0; i <= 100; i++) {
-        float swing_progress = i / 100.0f;
-        float total_phase = 0.6f + 0.4f * swing_progress; // Swing phase
+        double swing_progress = i / 100.0f;
+        double total_phase = 0.6f + 0.4f * swing_progress; // Swing phase
 
         LegState leg_states[NUM_LEGS];
-        float leg_phase_offsets[NUM_LEGS] = {0};
+        double leg_phase_offsets[NUM_LEGS] = {0};
 
         Point3D pos = walker.footTrajectory(0, total_phase, 20.0f, 40.0f, 0.6f, 0.4f, 80.0f,
                                             leg_phase_offsets, leg_states, nullptr, nullptr);

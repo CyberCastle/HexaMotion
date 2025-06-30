@@ -69,7 +69,7 @@ void loop() {
 
     // Update state controller at 50Hz
     if (currentTime - lastUpdate >= 20) {
-        float deltaTime = (currentTime - lastUpdate) / 1000.0f;
+        double deltaTime = (currentTime - lastUpdate) / 1000.0f;
         stateController->update(deltaTime);
         lastUpdate = currentTime;
     }
@@ -122,8 +122,8 @@ void runDemoPhase(unsigned long elapsedTime) {
             Serial.println("✓ Legs 0 and 2 set to manual control");
 
             // Set specific leg positions
-            Eigen::Vector3f leg0_pos(100.0f, 50.0f, -80.0f);
-            Eigen::Vector3f leg2_pos(100.0f, -50.0f, -80.0f);
+            Eigen::Vector3d leg0_pos(100.0f, 50.0f, -80.0f);
+            Eigen::Vector3d leg2_pos(100.0f, -50.0f, -80.0f);
             stateController->setLegTipPosition(0, leg0_pos);
             stateController->setLegTipPosition(2, leg2_pos);
             Serial.println("✓ Manual leg positions set");
@@ -137,8 +137,8 @@ void runDemoPhase(unsigned long elapsedTime) {
     case 3: // Velocity Control (12-16s)
         if (elapsedTime > 13000 && elapsedTime < 13100) {
             Serial.println("\n--- Phase 4: Velocity Control ---");
-            Eigen::Vector2f linear_vel(50.0f, 25.0f);
-            float angular_vel = 0.5f;
+            Eigen::Vector2d linear_vel(50.0f, 25.0f);
+            double angular_vel = 0.5f;
             stateController->setDesiredVelocity(linear_vel, angular_vel);
             Serial.println("✓ Desired velocity set: [50, 25] linear, 0.5 angular");
         }
@@ -154,8 +154,8 @@ void runDemoPhase(unsigned long elapsedTime) {
             stateController->setPosingMode(POSING_X_Y);
             Serial.println("✓ X-Y posing mode enabled");
 
-            Eigen::Vector3f position(20.0f, 10.0f, 0.0f);
-            Eigen::Vector3f orientation(0.0f, 0.0f, 0.2f);
+            Eigen::Vector3d position(20.0f, 10.0f, 0.0f);
+            Eigen::Vector3d orientation(0.0f, 0.0f, 0.2f);
             stateController->setDesiredPose(position, orientation);
             Serial.println("✓ Desired pose set: pos[20,10,0], orient[0,0,0.2]");
         }
@@ -168,7 +168,7 @@ void runDemoPhase(unsigned long elapsedTime) {
     case 5: // Cruise Control (20-25s)
         if (elapsedTime > 21000 && elapsedTime < 21100) {
             Serial.println("\n--- Phase 6: Cruise Control ---");
-            Eigen::Vector3f cruise_velocity(30.0f, 0.0f, 0.3f);
+            Eigen::Vector3d cruise_velocity(30.0f, 0.0f, 0.3f);
             if (stateController->setCruiseControlMode(CRUISE_CONTROL_ON, cruise_velocity)) {
                 Serial.println("✓ Cruise control enabled: [30, 0, 0.3]");
             }

@@ -28,7 +28,7 @@ class AdmittanceDerivativesTest {
         params_.coxa_length = 50;
         params_.femur_length = 101;
         params_.tibia_length = 208;
-        params_.robot_height = 100;
+        params_.robot_height = 120;
         params_.control_frequency = 50;
         params_.coxa_angle_limits[0] = -65;
         params_.coxa_angle_limits[1] = 65;
@@ -59,9 +59,9 @@ class AdmittanceDerivativesTest {
         controller.initialize();
 
         // Set up realistic admittance parameters
-        float mass = 0.5f;        // 500g virtual mass
-        float damping = 2.0f;     // Light damping
-        float stiffness = 100.0f; // Moderate stiffness
+        double mass = 0.5f;        // 500g virtual mass
+        double damping = 2.0f;     // Light damping
+        double stiffness = 100.0f; // Moderate stiffness
 
         controller.setLegAdmittance(0, mass, damping, stiffness);
 

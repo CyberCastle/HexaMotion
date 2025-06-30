@@ -16,6 +16,8 @@
 #include "locomotion_system.h"
 #include "hexamotion_constants.h"
 #include "math_utils.h"
+#include "pose_config_factory.h"
+#include "workspace_validator.h" // Add unified validator
 #include <algorithm>
 #include <cmath>
 #include <vector>
@@ -34,7 +36,7 @@ LocomotionSystem::LocomotionSystem(const Parameters &params)
       model(params), pose_ctrl(nullptr), walk_ctrl(nullptr), admittance_ctrl(nullptr) {
 
     // Initialize leg states and phase offsets for tripod gait
-    static const float tripod_phase_offsets[NUM_LEGS] = {0.0f, 0.5f, 0.5f, 0.0f, 0.0f, 0.5f};
+    static const double tripod_phase_offsets[NUM_LEGS] = {0.0f, 0.5f, 0.5f, 0.0f, 0.0f, 0.5f};
     for (int i = 0; i < NUM_LEGS; i++) {
         leg_states[i] = STANCE_PHASE;
         leg_phase_offsets[i] = tripod_phase_offsets[i];
@@ -60,7 +62,7 @@ LocomotionSystem::~LocomotionSystem() {
 }
 
 // System initialization
-bool LocomotionSystem::initialize(IIMUInterface *imu, IFSRInterface *fsr, IServoInterface *servo) {
+bool LocomotionSystem::initialize(IIMUInterface *imu, IFSRInterface *fsr, IServoInterface *servo, const PoseConfiguration &pose_config) {
     if (!imu || !fsr || !servo) {
         last_error = PARAMETER_ERROR;
         return false;
@@ -86,7 +88,7 @@ bool LocomotionSystem::initialize(IIMUInterface *imu, IFSRInterface *fsr, IServo
         return false;
     }
 
-    pose_ctrl = new PoseController(model, servo_interface);
+    pose_ctrl = new PoseController(model, servo_interface, pose_config);
     walk_ctrl = new WalkController(model);
     admittance_ctrl = new AdmittanceController(model, imu_interface, fsr_interface);
     velocity_controller = new CartesianVelocityController(model);
@@ -145,23 +147,61 @@ Point3D LocomotionSystem::calculateForwardKinematics(int leg_index, const JointA
 }
 
 // DH transformation calculation
-Eigen::Matrix4f LocomotionSystem::calculateDHTransform(float a, float alpha, float d, float theta) {
-    return math_utils::dhTransform(a, alpha, d, theta);
+Eigen::Matrix4d LocomotionSystem::calculateDHTransform(double a, double alpha, double d, double theta) {
+    double alpha_rad = math_utils::degreesToRadians(alpha);
+    double theta_rad = math_utils::degreesToRadians(theta);
+    return math_utils::dhTransform(a, alpha_rad, d, theta_rad);
 }
 
 // Complete leg transform
-Eigen::Matrix4f LocomotionSystem::calculateLegTransform(int leg_index,
+Eigen::Matrix4d LocomotionSystem::calculateLegTransform(int leg_index,
                                                         const JointAngles &q) {
     return model.legTransform(leg_index, q);
 }
 
-// Jacobian calculation
-Eigen::Matrix3f LocomotionSystem::calculateAnalyticJacobian(int leg, const JointAngles &q) {
-    return model.analyticJacobian(leg, q);
+bool LocomotionSystem::isTargetReachable(int leg_index, const Point3D &target) {
+    // Delegate to WorkspaceValidator for consistency
+    // Note: This creates a temporary validator. For better performance,
+    // consider using a shared validator instance in production code.
+    WorkspaceValidator temp_validator(model);
+    return temp_validator.isReachable(leg_index, target);
 }
 
-Eigen::MatrixXf LocomotionSystem::calculateJacobian(int leg, const JointAngles &q) {
-    return model.analyticJacobian(leg, q);
+Point3D LocomotionSystem::constrainToWorkspace(int leg_index, const Point3D &target) {
+    // Delegate to WorkspaceValidator for consistency
+    // Note: This creates a temporary validator. For better performance,
+    // consider using a shared validator instance in production code.
+    WorkspaceValidator temp_validator(model);
+    Point3D dummy_positions[6]; // Empty positions for basic geometric constraint
+    for (int i = 0; i < 6; i++) {
+        dummy_positions[i] = Point3D(0, 0, 0);
+    }
+    return temp_validator.constrainToValidWorkspace(leg_index, target, dummy_positions);
+}
+
+double LocomotionSystem::getJointLimitProximity(int leg_index, const JointAngles &angles) {
+    // OpenSHC-style joint limit proximity calculation
+    double min_proximity = 1.0f;
+
+    // Check each joint proximity to limits
+    double joints[3] = {angles.coxa, angles.femur, angles.tibia};
+    double limits[3][2] = {
+        {params.coxa_angle_limits[0], params.coxa_angle_limits[1]},
+        {params.femur_angle_limits[0], params.femur_angle_limits[1]},
+        {params.tibia_angle_limits[0], params.tibia_angle_limits[1]}};
+
+    for (int j = 0; j < 3; ++j) {
+        double range = limits[j][1] - limits[j][0];
+        if (range > 0.0f) {
+            double half_range = range * 0.5f;
+            double center = (limits[j][1] + limits[j][0]) * 0.5f;
+            double distance_from_center = std::abs(joints[j] - center);
+            double proximity = std::max(0.0f, (half_range - distance_from_center) / half_range);
+            min_proximity = std::min(min_proximity, proximity);
+        }
+    }
+
+    return min_proximity;
 }
 
 /* Transform world point to body frame = Rᵀ·(p - p0) */
@@ -172,9 +212,9 @@ Point3D LocomotionSystem::transformWorldToBody(const Point3D &p_world) const {
                 p_world.z - body_position[2]);
 
     // Rotate with negative angles (inverse)
-    Eigen::Vector3f neg_rpy(-body_orientation[0],
-                            -body_orientation[1],
-                            -body_orientation[2]);
+    Eigen::Vector3d neg_rpy(math_utils::degreesToRadians(-body_orientation[0]),
+                            math_utils::degreesToRadians(-body_orientation[1]),
+                            math_utils::degreesToRadians(-body_orientation[2]));
     return math_utils::rotatePoint(rel, neg_rpy);
 }
 
@@ -214,20 +254,20 @@ bool LocomotionSystem::setLegJointAngles(int leg, const JointAngles &q) {
     clamped.tibia = constrainAngle(q.tibia, params.tibia_angle_limits[0],
                                    params.tibia_angle_limits[1]);
 
-    if (!params.ik.clamp_joints && !within_limits)
+    if (!within_limits)
         return false;
 
     joint_angles[leg] = clamped; // internal state
 
     // Use velocity controller to get appropriate servo speeds
-    float coxa_speed = velocity_controller ? velocity_controller->getServoSpeed(leg, 0) : params.default_servo_speed;
-    float femur_speed = velocity_controller ? velocity_controller->getServoSpeed(leg, 1) : params.default_servo_speed;
-    float tibia_speed = velocity_controller ? velocity_controller->getServoSpeed(leg, 2) : params.default_servo_speed;
+    double coxa_speed = velocity_controller ? velocity_controller->getServoSpeed(leg, 0) : params.default_servo_speed;
+    double femur_speed = velocity_controller ? velocity_controller->getServoSpeed(leg, 1) : params.default_servo_speed;
+    double tibia_speed = velocity_controller ? velocity_controller->getServoSpeed(leg, 2) : params.default_servo_speed;
 
     // Apply sign inversion/preservation per servo using params.angle_sign_* (adjust left/right or above/below servo orientation)
-    float servo_coxa = clamped.coxa * params.angle_sign_coxa;
-    float servo_femur = clamped.femur * params.angle_sign_femur;
-    float servo_tibia = clamped.tibia * params.angle_sign_tibia;
+    double servo_coxa = clamped.coxa * params.angle_sign_coxa;
+    double servo_femur = clamped.femur * params.angle_sign_femur;
+    double servo_tibia = clamped.tibia * params.angle_sign_tibia;
     servo_interface->setJointAngleAndSpeed(leg, 0, servo_coxa, coxa_speed);
     servo_interface->setJointAngleAndSpeed(leg, 1, servo_femur, femur_speed);
     servo_interface->setJointAngleAndSpeed(leg, 2, servo_tibia, tibia_speed);
@@ -318,7 +358,7 @@ void LocomotionSystem::updateMetachronalPattern() {
         // Check if we're moving backward based on velocity commands
         // Consider backward movement if X velocity is negative (robot coordinate frame)
         // Also account for purely lateral or rotational movements
-        float threshold = 0.001f; // Small threshold to avoid noise
+        double threshold = 0.001f; // Small threshold to avoid noise
 
         if (abs(velocities.linear_x) > threshold) {
             // Primary movement is in X direction
@@ -374,7 +414,7 @@ bool LocomotionSystem::shouldAdaptGaitPattern() {
     }
 
     // Compute average pressure for legs in contact
-    float avg_pressure = 0.0f;
+    double avg_pressure = 0.0f;
     int contact_count = 0;
     for (auto &d : fsr_readings) {
         if (d.in_contact) {
@@ -387,10 +427,10 @@ bool LocomotionSystem::shouldAdaptGaitPattern() {
     avg_pressure /= contact_count;
 
     // Compute variance
-    float pressure_variance = 0.0f;
+    double pressure_variance = 0.0f;
     for (auto &d : fsr_readings) {
         if (d.in_contact) {
-            float diff = d.pressure - avg_pressure;
+            double diff = d.pressure - avg_pressure;
             pressure_variance += diff * diff;
         }
     }
@@ -402,14 +442,14 @@ bool LocomotionSystem::shouldAdaptGaitPattern() {
         return false;
 
     // Calculate tilt magnitude
-    float tilt_magnitude = 0.0f;
+    double tilt_magnitude = 0.0f;
     if (imu_data.has_absolute_capability && imu_data.absolute_data.absolute_orientation_valid) {
         tilt_magnitude = std::hypot(
             imu_data.absolute_data.absolute_roll,
             imu_data.absolute_data.absolute_pitch);
         // Dynamic motion triggers adaptation
         if (imu_data.absolute_data.linear_acceleration_valid) {
-            float dyn = std::sqrt(
+            double dyn = std::sqrt(
                 imu_data.absolute_data.linear_accel_x * imu_data.absolute_data.linear_accel_x +
                 imu_data.absolute_data.linear_accel_y * imu_data.absolute_data.linear_accel_y +
                 imu_data.absolute_data.linear_accel_z * imu_data.absolute_data.linear_accel_z);
@@ -434,10 +474,10 @@ void LocomotionSystem::calculateAdaptivePhaseOffsets() {
 
     // Get sensor data
     IMUData imu_data = imu_interface->readIMU();
-    float stability_index = calculateStabilityIndex();
+    double stability_index = calculateStabilityIndex();
 
     // Base pattern (similar to ripple but more conservative)
-    float base_offsets[NUM_LEGS] = {
+    double base_offsets[NUM_LEGS] = {
         1.0f / 8.0f, // AR: 0.125
         0.0f / 8.0f, // BR: 0.000 (anchor)
         3.0f / 8.0f, // CR: 0.375
@@ -447,21 +487,21 @@ void LocomotionSystem::calculateAdaptivePhaseOffsets() {
     };
 
     // Adaptation factors based on conditions
-    float tilt_magnitude = sqrt(imu_data.roll * imu_data.roll + imu_data.pitch * imu_data.pitch);
+    double tilt_magnitude = sqrt(imu_data.roll * imu_data.roll + imu_data.pitch * imu_data.pitch);
 
     if (tilt_magnitude > 10.0f) {
         // On steep slopes, use more conservative tripod-like pattern
-        float tripod_factor = (tilt_magnitude - 10.0f) / 20.0f; // 0-1 over 10-30 degrees
+        double tripod_factor = (tilt_magnitude - 10.0f) / 20.0f; // 0-1 over 10-30 degrees
         tripod_factor = std::min(tripod_factor, 1.0f);
 
         for (int i = 0; i < NUM_LEGS; i++) {
-            float tripod_offset = (i % 2) * 0.5f;
+            double tripod_offset = (i % 2) * 0.5f;
             leg_phase_offsets[i] = base_offsets[i] * (1.0f - tripod_factor) +
                                    tripod_offset * tripod_factor;
         }
     } else if (stability_index < 0.3f) {
         // Low stability - move toward wave gait pattern
-        float wave_offsets[NUM_LEGS] = {
+        double wave_offsets[NUM_LEGS] = {
             2.0f / 6.0f, // AR: 0.333
             3.0f / 6.0f, // BR: 0.500
             4.0f / 6.0f, // CR: 0.667
@@ -470,7 +510,7 @@ void LocomotionSystem::calculateAdaptivePhaseOffsets() {
             5.0f / 6.0f  // AL: mult=5 -> 0.833
         };
 
-        float wave_factor = (0.3f - stability_index) / 0.3f; // 0-1 as stability decreases
+        double wave_factor = (0.3f - stability_index) / 0.3f; // 0-1 as stability decreases
 
         for (int i = 0; i < NUM_LEGS; i++) {
             leg_phase_offsets[i] = base_offsets[i] * (1.0f - wave_factor) +
@@ -485,7 +525,7 @@ void LocomotionSystem::calculateAdaptivePhaseOffsets() {
 }
 
 // Gait sequence planning
-bool LocomotionSystem::planGaitSequence(float vx, float vy, float omega) {
+bool LocomotionSystem::planGaitSequence(double vx, double vy, double omega) {
     if (!walk_ctrl)
         return false;
 
@@ -509,7 +549,7 @@ void LocomotionSystem::updateGaitPhase() {
 }
 
 // Foot trajectory calculation
-Point3D LocomotionSystem::calculateFootTrajectory(int leg_index, float phase) {
+Point3D LocomotionSystem::calculateFootTrajectory(int leg_index, double phase) {
     if (!walk_ctrl)
         return Point3D();
     return walk_ctrl->footTrajectory(leg_index, phase, step_height, step_length,
@@ -518,7 +558,7 @@ Point3D LocomotionSystem::calculateFootTrajectory(int leg_index, float phase) {
 }
 
 // Forward locomotion control
-bool LocomotionSystem::walkForward(float velocity) {
+bool LocomotionSystem::walkForward(double velocity) {
     if (!system_enabled)
         return false;
 
@@ -526,7 +566,7 @@ bool LocomotionSystem::walkForward(float velocity) {
 }
 
 // Backward locomotion control
-bool LocomotionSystem::walkBackward(float velocity) {
+bool LocomotionSystem::walkBackward(double velocity) {
     if (!system_enabled)
         return false;
 
@@ -534,7 +574,7 @@ bool LocomotionSystem::walkBackward(float velocity) {
 }
 
 // In-place turning control
-bool LocomotionSystem::turnInPlace(float angular_velocity) {
+bool LocomotionSystem::turnInPlace(double angular_velocity) {
     if (!system_enabled)
         return false;
 
@@ -542,16 +582,16 @@ bool LocomotionSystem::turnInPlace(float angular_velocity) {
 }
 
 // Sideways locomotion control
-bool LocomotionSystem::walkSideways(float velocity, bool right_direction) {
+bool LocomotionSystem::walkSideways(double velocity, bool right_direction) {
     if (!system_enabled)
         return false;
 
-    float lateral_velocity = right_direction ? velocity : -velocity;
+    double lateral_velocity = right_direction ? velocity : -velocity;
     return planGaitSequence(0.0f, lateral_velocity, 0.0f);
 }
 
 // Advance for “duration” seconds
-bool LocomotionSystem::walkForward(float velocity, float duration) {
+bool LocomotionSystem::walkForward(double velocity, double duration) {
     if (!system_enabled)
         return false;
 
@@ -573,7 +613,7 @@ bool LocomotionSystem::walkForward(float velocity, float duration) {
 }
 
 // Move backward for “duration” seconds
-bool LocomotionSystem::walkBackward(float velocity, float duration) {
+bool LocomotionSystem::walkBackward(double velocity, double duration) {
     if (!system_enabled)
         return false;
 
@@ -594,7 +634,7 @@ bool LocomotionSystem::walkBackward(float velocity, float duration) {
 }
 
 // Turn in place for “duration” seconds
-bool LocomotionSystem::turnInPlace(float angular_velocity, float duration) {
+bool LocomotionSystem::turnInPlace(double angular_velocity, double duration) {
     if (!system_enabled)
         return false;
 
@@ -615,11 +655,11 @@ bool LocomotionSystem::turnInPlace(float angular_velocity, float duration) {
 }
 
 // Walk sideways (right/left) for “duration” seconds
-bool LocomotionSystem::walkSideways(float velocity, float duration, bool right_direction) {
+bool LocomotionSystem::walkSideways(double velocity, double duration, bool right_direction) {
     if (!system_enabled)
         return false;
 
-    float lateral_velocity = right_direction ? velocity : -velocity;
+    double lateral_velocity = right_direction ? velocity : -velocity;
     planGaitSequence(0.0f, lateral_velocity, 0.0f);
 
     unsigned long startTime = millis();
@@ -648,13 +688,13 @@ bool LocomotionSystem::stopMovement() {
 }
 
 // Orientation control
-bool LocomotionSystem::maintainOrientation(const Eigen::Vector3f &target_rpy) {
+bool LocomotionSystem::maintainOrientation(const Eigen::Vector3d &target_rpy) {
     if (!system_enabled || !admittance_ctrl)
         return false;
     Point3D target(target_rpy.x(), target_rpy.y(), target_rpy.z());
     Point3D current(body_orientation.x(), body_orientation.y(), body_orientation.z());
     bool result = admittance_ctrl->maintainOrientation(target, current, dt);
-    body_orientation = Eigen::Vector3f(current.x, current.y, current.z);
+    body_orientation = Eigen::Vector3d(current.x, current.y, current.z);
 
     // Reproject standing feet to maintain contact during orientation changes
     reprojectStandingFeet();
@@ -683,17 +723,17 @@ void LocomotionSystem::reprojectStandingFeet() {
 
 // Automatic tilt correction
 bool LocomotionSystem::correctBodyTilt() {
-    Eigen::Vector3f target_orientation(0.0f, 0.0f, body_orientation[2]);
+    Eigen::Vector3d target_orientation(0.0f, 0.0f, body_orientation[2]);
     return maintainOrientation(target_orientation);
 }
 
 // Calculate orientation error
-Eigen::Vector3f LocomotionSystem::calculateOrientationError() {
+Eigen::Vector3d LocomotionSystem::calculateOrientationError() {
     if (!admittance_ctrl)
-        return Eigen::Vector3f::Zero();
+        return Eigen::Vector3d::Zero();
     Point3D current(body_orientation.x(), body_orientation.y(), body_orientation.z());
     Point3D error = admittance_ctrl->orientationError(current);
-    return Eigen::Vector3f(error.x, error.y, error.z);
+    return Eigen::Vector3d(error.x, error.y, error.z);
 }
 
 // Check stability margin
@@ -704,9 +744,9 @@ bool LocomotionSystem::checkStabilityMargin() {
 }
 
 // Compute center of pressure
-Eigen::Vector2f LocomotionSystem::calculateCenterOfPressure() {
-    Eigen::Vector2f cop(0.0f, 0.0f);
-    float total_force = 0.0f;
+Eigen::Vector2d LocomotionSystem::calculateCenterOfPressure() {
+    Eigen::Vector2d cop(0.0f, 0.0f);
+    double total_force = 0.0f;
 
     for (int i = 0; i < NUM_LEGS; i++) {
         if (leg_states[i] == STANCE_PHASE) {
@@ -727,12 +767,12 @@ Eigen::Vector2f LocomotionSystem::calculateCenterOfPressure() {
 }
 
 // Compute stability index
-float LocomotionSystem::calculateStabilityIndex() {
+double LocomotionSystem::calculateStabilityIndex() {
     if (!checkStabilityMargin())
         return 0.0f;
 
-    Eigen::Vector2f cop = calculateCenterOfPressure();
-    float stability_index = 1.0f;
+    Eigen::Vector2d cop = calculateCenterOfPressure();
+    double stability_index = 1.0f;
 
     // Enhanced implementation: Calculate stability margin properly
     // Get support polygon from current stance legs
@@ -754,11 +794,11 @@ float LocomotionSystem::calculateStabilityIndex() {
     }
 
     // Calculate minimum distance from COP to support polygon edges
-    float min_edge_distance = 1000.0f;
+    double min_edge_distance = 1000.0f;
 
     // For each stance leg, calculate distance from COP
     for (int i = 0; i < stance_count; i++) {
-        float distance = sqrt((stance_positions[i].x - cop[0]) * (stance_positions[i].x - cop[0]) +
+        double distance = sqrt((stance_positions[i].x - cop[0]) * (stance_positions[i].x - cop[0]) +
                               (stance_positions[i].y - cop[1]) * (stance_positions[i].y - cop[1]));
         if (distance < min_edge_distance) {
             min_edge_distance = distance;
@@ -766,7 +806,7 @@ float LocomotionSystem::calculateStabilityIndex() {
     }
 
     // Normalize stability index based on minimum required margin
-    float required_margin = params.stability_margin;
+    double required_margin = params.stability_margin;
     stability_index = min_edge_distance / (required_margin * 2.0f); // Factor of 2 for good margin
 
     return std::min(1.0f, std::max(0.0f, stability_index));
@@ -778,7 +818,7 @@ bool LocomotionSystem::isStaticallyStable() {
 }
 
 // Body pose control
-bool LocomotionSystem::setBodyPose(const Eigen::Vector3f &position, const Eigen::Vector3f &orientation) {
+bool LocomotionSystem::setBodyPose(const Eigen::Vector3d &position, const Eigen::Vector3d &orientation) {
     if (!system_enabled || !pose_ctrl)
         return false;
     if (!pose_ctrl->setBodyPose(position, orientation, leg_positions, joint_angles)) {
@@ -798,18 +838,11 @@ bool LocomotionSystem::setBodyPose(const Eigen::Vector3f &position, const Eigen:
 bool LocomotionSystem::setStandingPose() {
     if (!pose_ctrl)
         return false;
-    return pose_ctrl->setStandingPose(leg_positions, joint_angles, params.robot_height);
-}
-
-// Set crouch pose
-bool LocomotionSystem::setCrouchPose() {
-    if (!pose_ctrl)
-        return false;
-    return pose_ctrl->setCrouchPose(leg_positions, joint_angles, params.robot_height);
+    return pose_ctrl->setStandingPose(leg_positions, joint_angles);
 }
 
 // Smooth trajectory configuration methods (OpenSHC-style movement)
-bool LocomotionSystem::configureSmoothMovement(bool enable, float interpolation_speed, uint8_t max_steps) {
+bool LocomotionSystem::configureSmoothMovement(bool enable, double interpolation_speed, uint8_t max_steps) {
     if (!pose_ctrl)
         return false;
 
@@ -819,7 +852,7 @@ bool LocomotionSystem::configureSmoothMovement(bool enable, float interpolation_
 }
 
 // Smooth movement methods for OpenSHC-style pose control
-bool LocomotionSystem::setBodyPoseSmooth(const Eigen::Vector3f &position, const Eigen::Vector3f &orientation) {
+bool LocomotionSystem::setBodyPoseSmooth(const Eigen::Vector3d &position, const Eigen::Vector3d &orientation) {
     if (!system_enabled || !pose_ctrl)
         return false;
 
@@ -838,7 +871,7 @@ bool LocomotionSystem::setBodyPoseSmooth(const Eigen::Vector3f &position, const 
     return true;
 }
 
-bool LocomotionSystem::setBodyPoseImmediate(const Eigen::Vector3f &position, const Eigen::Vector3f &orientation) {
+bool LocomotionSystem::setBodyPoseImmediate(const Eigen::Vector3d &position, const Eigen::Vector3d &orientation) {
     if (!system_enabled || !pose_ctrl)
         return false;
 
@@ -995,7 +1028,7 @@ bool LocomotionSystem::handleError(ErrorCode error) {
 
     case STABILITY_ERROR:
         // Adopt a more stable pose
-        return setCrouchPose();
+        return setStandingPose();
 
     case KINEMATICS_ERROR:
         // Return to a safe pose
@@ -1046,7 +1079,7 @@ bool LocomotionSystem::performSelfTest() {
     // Servo test
     for (int i = 0; i < NUM_LEGS; i++) {
         for (int j = 0; j < DOF_PER_LEG; j++) {
-            float current_angle = servo_interface->getJointAngle(i, j);
+            double current_angle = servo_interface->getJointAngle(i, j);
             if (current_angle < -180 || current_angle > 180) {
                 Serial.print("X Error: Servo leg ");
                 Serial.print(i);
@@ -1064,7 +1097,7 @@ bool LocomotionSystem::performSelfTest() {
         JointAngles angles = calculateInverseKinematics(i, test_point);
         Point3D calculated_point = calculateForwardKinematics(i, angles);
 
-        float error = math_utils::distance3D(test_point, calculated_point);
+        double error = math_utils::distance3D(test_point, calculated_point);
         if (error > 5.0f) { // Error greater than 5mm
             Serial.print("X Error: leg kinematics ");
             Serial.print(i);
@@ -1088,7 +1121,7 @@ bool LocomotionSystem::performSelfTest() {
 void LocomotionSystem::initializeDefaultPose() {
     // Compute default leg positions and use IK for safe stance angles
     for (int i = 0; i < NUM_LEGS; i++) {
-        float angle = i * LEG_ANGLE_SPACING;
+        double angle = i * LEG_ANGLE_SPACING;
         // Default foot target at body level offset by coxa length
         leg_positions[i].x = params.hexagon_radius * cos(math_utils::degreesToRadians(angle)) + params.coxa_length;
         leg_positions[i].y = params.hexagon_radius * sin(math_utils::degreesToRadians(angle));
@@ -1114,11 +1147,11 @@ void LocomotionSystem::updateLegStates() {
         fsr_contact_history[i][fsr_history_index] = fsr.in_contact ? 1.0f : 0.0f;
 
         // Calculate filtered contact using 3-sample average
-        float contact_average = (fsr_contact_history[i][0] + fsr_contact_history[i][1] + fsr_contact_history[i][2]) / 3.0f;
+        double contact_average = (fsr_contact_history[i][0] + fsr_contact_history[i][1] + fsr_contact_history[i][2]) / 3.0f;
 
         // Hysteresis thresholds to prevent chattering
-        const float CONTACT_THRESHOLD = 0.7f; // Need 70% confidence for contact
-        const float RELEASE_THRESHOLD = 0.3f; // Need 30% confidence for release
+        const double CONTACT_THRESHOLD = 0.7f; // Need 70% confidence for contact
+        const double RELEASE_THRESHOLD = 0.3f; // Need 30% confidence for release
 
         LegState current_state = leg_states[i];
 
@@ -1134,7 +1167,7 @@ void LocomotionSystem::updateLegStates() {
         // Only validate during active movement (non-zero gait phase progression)
         if (cycle_frequency > 0.0f) {
             // Check if leg should be in swing based on gait phase
-            float leg_phase = fmod(gait_phase + leg_phase_offsets[i], 1.0f);
+            double leg_phase = fmod(gait_phase + leg_phase_offsets[i], 1.0f);
             bool should_be_swinging = (leg_phase > stance_duration);
 
             if (should_be_swinging && leg_states[i] == STANCE_PHASE) {
@@ -1149,8 +1182,8 @@ void LocomotionSystem::updateLegStates() {
 
 void LocomotionSystem::updateStepParameters() {
     // Calculate leg reach and robot dimensions
-    float leg_reach = calculateLegReach(); // Use standardized function
-    float robot_height = params.robot_height;
+    double leg_reach = calculateLegReach(); // Use standardized function
+    double robot_height = params.robot_height;
 
     // Adjust step parameters depending on gait type using parametrizable factors
     switch (current_gait) {
@@ -1186,10 +1219,10 @@ void LocomotionSystem::updateStepParameters() {
     }
 
     // Calculate dynamic limits based on robot dimensions
-    float min_step_length = leg_reach * params.gait_factors.min_length_factor;
-    float max_step_length = leg_reach * params.gait_factors.max_length_factor;
-    float min_step_height = robot_height * params.gait_factors.min_height_factor;
-    float max_step_height = robot_height * params.gait_factors.max_height_factor;
+    double min_step_length = leg_reach * params.gait_factors.min_length_factor;
+    double max_step_length = leg_reach * params.gait_factors.max_length_factor;
+    double min_step_height = robot_height * params.gait_factors.min_height_factor;
+    double max_step_height = robot_height * params.gait_factors.max_height_factor;
 
     // Verify that parameters are within dynamic limits
     step_length = constrainAngle(step_length, min_step_length, max_step_length);
@@ -1200,7 +1233,7 @@ bool LocomotionSystem::checkJointLimits(int leg_index, const JointAngles &angles
     return model.checkJointLimits(leg_index, angles);
 }
 
-float LocomotionSystem::constrainAngle(float angle, float min_angle, float max_angle) {
+double LocomotionSystem::constrainAngle(double angle, double min_angle, double max_angle) {
     return model.constrainAngle(angle, min_angle, max_angle);
 }
 
@@ -1210,7 +1243,7 @@ bool LocomotionSystem::validateParameters() {
 
 void LocomotionSystem::adaptGaitToTerrain() {
     // Analyze FSR data to adapt gait
-    float avg_pressure = 0;
+    double avg_pressure = 0;
     int contact_count = 0;
 
     for (int i = 0; i < NUM_LEGS; i++) {
@@ -1245,7 +1278,7 @@ bool LocomotionSystem::setLegPosition(int leg_index, const Point3D &position) {
     return true;
 }
 
-bool LocomotionSystem::setStepParameters(float height, float length) {
+bool LocomotionSystem::setStepParameters(double height, double length) {
     if (height < 15.0f || height > 50.0f || length < 20.0f || length > 80.0f) {
         last_error = PARAMETER_ERROR;
         return false;
@@ -1268,7 +1301,7 @@ bool LocomotionSystem::setParameters(const Parameters &new_params) {
     return validateParameters();
 }
 
-bool LocomotionSystem::setControlFrequency(float frequency) {
+bool LocomotionSystem::setControlFrequency(double frequency) {
     if (frequency < 10.0f || frequency > 200.0f) {
         last_error = PARAMETER_ERROR;
         return false;
@@ -1278,7 +1311,7 @@ bool LocomotionSystem::setControlFrequency(float frequency) {
     return true;
 }
 
-float LocomotionSystem::calculateLegReach() const {
+double LocomotionSystem::calculateLegReach() const {
     return params.coxa_length + params.femur_length + params.tibia_length;
 }
 
@@ -1288,8 +1321,8 @@ void LocomotionSystem::adjustStepParameters() {
     if (!imu_data.is_valid)
         return;
 
-    float total_tilt;
-    float stability_factor = 1.0f;
+    double total_tilt;
+    double stability_factor = 1.0f;
 
     // Use enhanced data for more precise adjustment
     if (imu_data.has_absolute_capability && imu_data.absolute_data.absolute_orientation_valid) {
@@ -1300,7 +1333,7 @@ void LocomotionSystem::adjustStepParameters() {
 
         // Consider dynamic stability using linear acceleration
         if (imu_data.absolute_data.linear_acceleration_valid) {
-            float dynamic_instability = sqrt(
+            double dynamic_instability = sqrt(
                 imu_data.absolute_data.linear_accel_x * imu_data.absolute_data.linear_accel_x +
                 imu_data.absolute_data.linear_accel_y * imu_data.absolute_data.linear_accel_y);
 
@@ -1312,7 +1345,7 @@ void LocomotionSystem::adjustStepParameters() {
 
         // Enhanced slope-based adjustment
         if (total_tilt > 10.0f) {
-            float slope_factor = std::max(0.5f, 1.0f - (total_tilt - 10.0f) / 30.0f);
+            double slope_factor = std::max(0.5f, 1.0f - (total_tilt - 10.0f) / 30.0f);
             step_height *= slope_factor * stability_factor;
             step_length *= slope_factor * stability_factor;
         }
@@ -1340,7 +1373,7 @@ void LocomotionSystem::compensateForSlope() {
     if (!imu_data.is_valid)
         return;
 
-    float roll_compensation, pitch_compensation;
+    double roll_compensation, pitch_compensation;
 
     // Enhanced slope compensation using absolute positioning data
     if (imu_data.has_absolute_capability && imu_data.absolute_data.absolute_orientation_valid) {
@@ -1351,14 +1384,14 @@ void LocomotionSystem::compensateForSlope() {
         // Additional quaternion-based compensation for complex terrain
         if (imu_data.absolute_data.quaternion_valid) {
             // Extract more sophisticated orientation information from quaternion
-            float qw = imu_data.absolute_data.quaternion_w;
-            float qx = imu_data.absolute_data.quaternion_x;
-            float qy = imu_data.absolute_data.quaternion_y;
-            float qz = imu_data.absolute_data.quaternion_z;
+            double qw = imu_data.absolute_data.quaternion_w;
+            double qx = imu_data.absolute_data.quaternion_x;
+            double qy = imu_data.absolute_data.quaternion_y;
+            double qz = imu_data.absolute_data.quaternion_z;
 
             // Calculate terrain-aligned compensation using quaternion
-            float quat_roll = atan2(2.0f * (qw * qx + qy * qz), 1.0f - 2.0f * (qx * qx + qy * qy)) * RADIANS_TO_DEGREES_FACTOR;
-            float quat_pitch = asin(2.0f * (qw * qy - qz * qx)) * RADIANS_TO_DEGREES_FACTOR;
+            double quat_roll = atan2(2.0f * (qw * qx + qy * qz), 1.0f - 2.0f * (qx * qx + qy * qy)) * RADIANS_TO_DEGREES_FACTOR;
+            double quat_pitch = asin(2.0f * (qw * qy - qz * qx)) * RADIANS_TO_DEGREES_FACTOR;
 
             // Blend quaternion and Euler compensations for robustness
             roll_compensation = 0.7f * roll_compensation + 0.3f * (-quat_roll * 0.6f);
@@ -1367,13 +1400,13 @@ void LocomotionSystem::compensateForSlope() {
 
         // Dynamic adjustment based on linear acceleration
         if (imu_data.absolute_data.linear_acceleration_valid) {
-            float lateral_accel = sqrt(
+            double lateral_accel = sqrt(
                 imu_data.absolute_data.linear_accel_x * imu_data.absolute_data.linear_accel_x +
                 imu_data.absolute_data.linear_accel_y * imu_data.absolute_data.linear_accel_y);
 
             // Reduce compensation during high lateral acceleration
             if (lateral_accel > 1.5f) {
-                float dynamic_factor = std::max(0.4f, 1.0f - (lateral_accel - 1.5f) / 3.0f);
+                double dynamic_factor = std::max(0.4f, 1.0f - (lateral_accel - 1.5f) / 3.0f);
                 roll_compensation *= dynamic_factor;
                 pitch_compensation *= dynamic_factor;
             }
@@ -1396,29 +1429,29 @@ void LocomotionSystem::compensateForSlope() {
     reprojectStandingFeet();
 }
 
-float LocomotionSystem::getStepLength() const {
+double LocomotionSystem::getStepLength() const {
     // Base step length according to the current gait
-    float base_step_length = step_length;
+    double base_step_length = step_length;
 
     // Adjustment factors based on robot parameters
-    float leg_reach = calculateLegReach(); // Use standardized function
-    float max_safe_step = leg_reach * params.gait_factors.max_length_factor;
+    double leg_reach = calculateLegReach(); // Use standardized function
+    double max_safe_step = leg_reach * params.gait_factors.max_length_factor;
 
     // Stability adjustment - reduce step if stability is low
-    float stability_factor = 1.0f;
+    double stability_factor = 1.0f;
     if (system_enabled) {
-        float stability_index = const_cast<LocomotionSystem *>(this)->calculateStabilityIndex();
+        double stability_index = const_cast<LocomotionSystem *>(this)->calculateStabilityIndex();
         if (stability_index < 0.5f) {
             stability_factor = 0.7f + 0.3f * stability_index; // Reduce up to 70%
         }
     }
 
     // Enhanced slope adjustment using absolute positioning data
-    float terrain_factor = 1.0f;
+    double terrain_factor = 1.0f;
     if (imu_interface && imu_interface->isConnected()) {
         IMUData imu_data = imu_interface->readIMU();
         if (imu_data.is_valid) {
-            float total_tilt;
+            double total_tilt;
 
             // Use enhanced orientation data for more precise terrain assessment
             if (imu_data.has_absolute_capability && imu_data.absolute_data.absolute_orientation_valid) {
@@ -1429,12 +1462,12 @@ float LocomotionSystem::getStepLength() const {
                 // Additional terrain complexity assessment using quaternion
                 if (imu_data.absolute_data.quaternion_valid) {
                     // Calculate terrain complexity using quaternion derivatives
-                    float qx = imu_data.absolute_data.quaternion_x;
-                    float qy = imu_data.absolute_data.quaternion_y;
-                    float qz = imu_data.absolute_data.quaternion_z;
+                    double qx = imu_data.absolute_data.quaternion_x;
+                    double qy = imu_data.absolute_data.quaternion_y;
+                    double qz = imu_data.absolute_data.quaternion_z;
 
                     // Assess terrain complexity based on quaternion non-uniformity
-                    float complexity = abs(qx) + abs(qy) + abs(qz);
+                    double complexity = abs(qx) + abs(qy) + abs(qz);
                     if (complexity > 0.4f) { // Complex terrain indicator
                         terrain_factor *= std::max(0.6f, 1.0f - (complexity - 0.4f) / 0.6f);
                     }
@@ -1442,7 +1475,7 @@ float LocomotionSystem::getStepLength() const {
 
                 // Dynamic motion consideration
                 if (imu_data.absolute_data.linear_acceleration_valid) {
-                    float motion_magnitude = sqrt(
+                    double motion_magnitude = sqrt(
                         imu_data.absolute_data.linear_accel_x * imu_data.absolute_data.linear_accel_x +
                         imu_data.absolute_data.linear_accel_y * imu_data.absolute_data.linear_accel_y +
                         imu_data.absolute_data.linear_accel_z * imu_data.absolute_data.linear_accel_z);
@@ -1469,16 +1502,16 @@ float LocomotionSystem::getStepLength() const {
     }
 
     // Calculate final step length
-    float calculated_step_length = base_step_length * stability_factor * terrain_factor;
+    double calculated_step_length = base_step_length * stability_factor * terrain_factor;
 
     // Limit within safe ranges based on parameters
-    float min_safe_step = leg_reach * params.gait_factors.min_length_factor;
+    double min_safe_step = leg_reach * params.gait_factors.min_length_factor;
     calculated_step_length = std::max(min_safe_step, std::min(max_safe_step, calculated_step_length));
 
     return calculated_step_length;
 }
 
-float LocomotionSystem::calculateDynamicStabilityIndex() {
+double LocomotionSystem::calculateDynamicStabilityIndex() {
     // Enhanced stability analysis using absolute positioning data
     if (!imu_interface || !imu_interface->isConnected())
         return calculateStabilityIndex(); // Fallback to basic stability
@@ -1487,13 +1520,13 @@ float LocomotionSystem::calculateDynamicStabilityIndex() {
     if (!imu_data.is_valid)
         return 0.5f; // Neutral stability
 
-    float stability_index = 1.0f;
+    double stability_index = 1.0f;
 
     // Enhanced stability calculation using absolute positioning
     if (imu_data.has_absolute_capability && imu_data.absolute_data.absolute_orientation_valid) {
         // Orientation stability from absolute data
-        float orientation_stability = 1.0f;
-        float total_tilt = sqrt(
+        double orientation_stability = 1.0f;
+        double total_tilt = sqrt(
             imu_data.absolute_data.absolute_roll * imu_data.absolute_data.absolute_roll +
             imu_data.absolute_data.absolute_pitch * imu_data.absolute_data.absolute_pitch);
 
@@ -1502,9 +1535,9 @@ float LocomotionSystem::calculateDynamicStabilityIndex() {
         }
 
         // Dynamic motion stability from linear acceleration
-        float motion_stability = 1.0f;
+        double motion_stability = 1.0f;
         if (imu_data.absolute_data.linear_acceleration_valid) {
-            float acceleration_magnitude = sqrt(
+            double acceleration_magnitude = sqrt(
                 imu_data.absolute_data.linear_accel_x * imu_data.absolute_data.linear_accel_x +
                 imu_data.absolute_data.linear_accel_y * imu_data.absolute_data.linear_accel_y +
                 imu_data.absolute_data.linear_accel_z * imu_data.absolute_data.linear_accel_z);
@@ -1516,14 +1549,14 @@ float LocomotionSystem::calculateDynamicStabilityIndex() {
         }
 
         // Quaternion-based rotational stability
-        float rotational_stability = 1.0f;
+        double rotational_stability = 1.0f;
         if (imu_data.absolute_data.quaternion_valid) {
-            float qx = imu_data.absolute_data.quaternion_x;
-            float qy = imu_data.absolute_data.quaternion_y;
-            float qz = imu_data.absolute_data.quaternion_z;
+            double qx = imu_data.absolute_data.quaternion_x;
+            double qy = imu_data.absolute_data.quaternion_y;
+            double qz = imu_data.absolute_data.quaternion_z;
 
             // Calculate rotational deviation from level position
-            float rotational_deviation = sqrt(qx * qx + qy * qy + qz * qz);
+            double rotational_deviation = sqrt(qx * qx + qy * qy + qz * qz);
             if (rotational_deviation > 0.2f) {
                 rotational_stability = std::max(0.4f, 1.0f - (rotational_deviation - 0.2f) / 0.6f);
             }
@@ -1543,7 +1576,7 @@ float LocomotionSystem::calculateDynamicStabilityIndex() {
 
     // Include FSR-based stability if available
     if (fsr_interface) {
-        float fsr_stability = calculateStabilityIndex();                 // Basic FSR stability
+        double fsr_stability = calculateStabilityIndex();                 // Basic FSR stability
         stability_index = 0.7f * stability_index + 0.3f * fsr_stability; // Blend IMU and FSR
     }
 
@@ -1638,7 +1671,7 @@ bool LocomotionSystem::setGaitSpeedModifiers(const CartesianVelocityController::
     return false;
 }
 
-float LocomotionSystem::getCurrentServoSpeed(int leg_index, int joint_index) const {
+double LocomotionSystem::getCurrentServoSpeed(int leg_index, int joint_index) const {
     if (velocity_controller) {
         return velocity_controller->getServoSpeed(leg_index, joint_index);
     }

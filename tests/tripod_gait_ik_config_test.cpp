@@ -3,10 +3,7 @@
 #include <iomanip>
 #include <iostream>
 
-void testTripodGaitWithIKConfig(bool use_multiple_starts) {
-    std::cout << "\n=========================================" << std::endl;
-    std::cout << "TRIPOD GAIT TEST - IK Multiple Starts: " << (use_multiple_starts ? "ENABLED" : "DISABLED") << std::endl;
-    std::cout << "=========================================" << std::endl;
+void testTripodGaitWithIKConfig() {
 
     // Initialize robot parameters for main simulation (use 150mm height)
     Parameters p{};
@@ -23,9 +20,6 @@ void testTripodGaitWithIKConfig(bool use_multiple_starts) {
     p.femur_angle_limits[1] = 75;
     p.tibia_angle_limits[0] = -45;
     p.tibia_angle_limits[1] = 45;
-
-    // Configure IK behavior
-    p.ik.use_multiple_starts = use_multiple_starts;
 
     // Initialize locomotion system
     LocomotionSystem sys(p);
@@ -75,18 +69,13 @@ void testTripodGaitWithIKConfig(bool use_multiple_starts) {
     }
 
     std::cout << "\nResult: " << (all_legs_moved ? "✅ ALL LEGS MOVING" : "❌ SOME LEGS STATIC") << std::endl;
-    std::cout << "IK Configuration: " << (use_multiple_starts ? "Multiple starts" : "Single start (CSIRO)") << std::endl;
 }
 
 int main() {
     std::cout << "=== TRIPOD GAIT VALIDATION WITH IK CONFIGURATION TEST ===" << std::endl;
     std::cout << "Verifying that tripod gait corrections work with both IK approaches" << std::endl;
 
-    // Test with multiple starts enabled
-    testTripodGaitWithIKConfig(true);
-
-    // Test with multiple starts disabled (original CSIRO)
-    testTripodGaitWithIKConfig(false);
+    testTripodGaitWithIKConfig();
 
     std::cout << "\n=========================================" << std::endl;
     std::cout << "VALIDATION COMPLETE" << std::endl;

@@ -7,53 +7,61 @@ struct Point3D; // forward declaration
 
 namespace math_utils {
 /** Convert degrees to radians. */
-float degreesToRadians(float degrees);
+double degreesToRadians(double degrees);
 /** Convert radians to degrees. */
-float radiansToDegrees(float radians);
+double radiansToDegrees(double radians);
 /** Normalize an angle to the [-180,180] range. */
-float normalizeAngle(float angle);
-/** Rotate a 3D point by roll/pitch/yaw angles. */
-Point3D rotatePoint(const Point3D &point, const Eigen::Vector3f &rotation);
+double normalizeAngle(double angle);
+/**
+ * Rotate a 3D point by roll/pitch/yaw angles (radians).
+ */
+Point3D rotatePoint(const Point3D &point, const Eigen::Vector3d &rotation);
 /** Euclidean distance between two points. */
-float distance3D(const Point3D &p1, const Point3D &p2);
+double distance3D(const Point3D &p1, const Point3D &p2);
+/** 2D distance between two points (ignoring Z coordinate). */
+double distance2D(const Point3D &p1, const Point3D &p2);
 /** Check if a point is within a spherical reach (simple max reach check). */
-bool isPointReachable(const Point3D &point, float max_reach);
+bool isPointReachable(const Point3D &point, double max_reach);
 /** Check if a point is within spherical reach bounds (min and max reach). */
-bool isPointReachable(const Point3D &point, float min_reach, float max_reach);
+bool isPointReachable(const Point3D &point, double min_reach, double max_reach);
 /** Magnitude of a 3D vector. */
-float magnitude(const Point3D &point);
+double magnitude(const Point3D &point);
 /** Distance between two 3D points (alias for distance3D). */
-float distance(const Point3D &p1, const Point3D &p2);
+double distance(const Point3D &p1, const Point3D &p2);
 /** Calculate perpendicular distance from point to line segment. */
-float pointToLineDistance(const Point3D &point, const Point3D &line_start, const Point3D &line_end);
+double pointToLineDistance(const Point3D &point, const Point3D &line_start, const Point3D &line_end);
 
-/** Rotation matrix about X axis. */
-Eigen::Matrix3f rotationMatrixX(float angle);
-/** Rotation matrix about Y axis. */
-Eigen::Matrix3f rotationMatrixY(float angle);
-/** Rotation matrix about Z axis. */
-Eigen::Matrix3f rotationMatrixZ(float angle);
+/** Rotation matrix about X axis (angle in radians). */
+Eigen::Matrix3d rotationMatrixX(double angle);
+/** Rotation matrix about Y axis (angle in radians). */
+Eigen::Matrix3d rotationMatrixY(double angle);
+/** Rotation matrix about Z axis (angle in radians). */
+Eigen::Matrix3d rotationMatrixZ(double angle);
 
-/** Convert quaternion to Euler angles (degrees). */
-Eigen::Vector3f quaternionToEuler(const Eigen::Vector4f &quaternion);
-/** Convert Euler angles (degrees) to quaternion. */
-Eigen::Vector4f eulerToQuaternion(const Eigen::Vector3f &euler);
+/** Convert quaternion to Euler angles (radians). */
+Eigen::Vector3d quaternionToEuler(const Eigen::Vector4d &quaternion);
+/** Convert Euler angles (radians) to quaternion. */
+Eigen::Vector4d eulerToQuaternion(const Eigen::Vector3d &euler);
 /** Multiply two quaternions. */
-Eigen::Vector4f quaternionMultiply(const Eigen::Vector4f &q1, const Eigen::Vector4f &q2);
+Eigen::Vector4d quaternionMultiply(const Eigen::Vector4d &q1, const Eigen::Vector4d &q2);
 /** Invert a quaternion. */
-Eigen::Vector4f quaternionInverse(const Eigen::Vector4f &q);
+Eigen::Vector4d quaternionInverse(const Eigen::Vector4d &q);
 
-/** Convert Point3D to Eigen::Vector3f for quaternion operations. */
-Eigen::Vector3f point3DToVector3f(const Point3D &point);
-/** Convert Eigen::Vector3f to Point3D for pose operations. */
-Point3D vector3fToPoint3D(const Eigen::Vector3f &vec);
-/** Convert Point3D Euler angles to quaternion using centralized functions. */
-Eigen::Vector4f eulerPoint3DToQuaternion(const Point3D &euler_degrees);
-/** Convert quaternion to Point3D Euler angles using centralized functions. */
-Point3D quaternionToEulerPoint3D(const Eigen::Vector4f &quaternion);
+/** Convert Point3D to Eigen::Vector3d for quaternion operations. */
+Eigen::Vector3d point3DToVector3d(const Point3D &point);
+/** Convert Eigen::Vector3d to Point3D for pose operations. */
+Point3D vector3fToPoint3D(const Eigen::Vector3d &vec);
+/** Convert Point3D Euler angles (radians) to quaternion. */
+Eigen::Vector4d eulerPoint3DToQuaternion(const Point3D &euler);
+/** Convert quaternion to Point3D Euler angles (radians). */
+Point3D quaternionToEulerPoint3D(const Eigen::Vector4d &quaternion);
 
-/** Denavit-Hartenberg transform matrix helper. */
-Eigen::Matrix4f dhTransform(float a, float alpha, float d, float theta);
+/** Generic Denavit-Hartenberg transform (angles in radians). */
+template <typename T>
+Eigen::Matrix<T, 4, 4> dhTransform(T a, T alpha, T d, T theta);
+
+/** Float-specialized DH transform for backwards compatibility. */
+Eigen::Matrix4d dhTransform(double a, double alpha, double d, double theta);
 
 /**
  * @brief Evaluate a quadratic Bezier curve.
@@ -140,7 +148,7 @@ struct StateVector {
 
 /**
  * @brief Function type for differential equation derivatives
- * @tparam T Vector type (Point3D, Eigen::Vector3f, etc.)
+ * @tparam T Vector type (Point3D, Eigen::Vector3d, etc.)
  * @param state Current state vector [position, velocity]
  * @param t Current time
  * @param params User-defined parameters

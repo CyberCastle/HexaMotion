@@ -46,7 +46,7 @@ class CruiseControlComprehensiveTest {
         params.coxa_length = 50;
         params.femur_length = 101;
         params.tibia_length = 208;
-        params.robot_height = 100;
+        params.robot_height = 120;
         params.control_frequency = 50;
         params.coxa_angle_limits[0] = -65;
         params.coxa_angle_limits[1] = 65;
@@ -66,7 +66,7 @@ class CruiseControlComprehensiveTest {
         }
     }
 
-    void assert_near(float actual, float expected, float tolerance, const std::string &test_name) {
+    void assert_near(double actual, double expected, double tolerance, const std::string &test_name) {
         test_count++;
         if (abs(actual - expected) <= tolerance) {
             passed_tests++;
@@ -124,7 +124,7 @@ class CruiseControlComprehensiveTest {
                     "Initial cruise control is not active");
 
         // Test enabling cruise control with specific velocity
-        Eigen::Vector3f cruise_velocity(100.0f, 50.0f, 15.0f);
+        Eigen::Vector3d cruise_velocity(100.0f, 50.0f, 15.0f);
         assert_test(state_controller->setCruiseControlMode(CRUISE_CONTROL_ON, cruise_velocity),
                     "Enable cruise control with specific velocity");
         assert_test(state_controller->getCruiseControlMode() == CRUISE_CONTROL_ON,
@@ -152,10 +152,10 @@ class CruiseControlComprehensiveTest {
         state_controller->initialize();
 
         // Test getCruiseVelocity() method
-        Eigen::Vector3f test_velocity(120.0f, -30.0f, 25.0f);
+        Eigen::Vector3d test_velocity(120.0f, -30.0f, 25.0f);
         state_controller->setCruiseControlMode(CRUISE_CONTROL_ON, test_velocity);
 
-        Eigen::Vector3f retrieved_velocity = state_controller->getCruiseVelocity();
+        Eigen::Vector3d retrieved_velocity = state_controller->getCruiseVelocity();
         assert_near(retrieved_velocity.x(), test_velocity.x(), 0.01f, "getCruiseVelocity X component");
         assert_near(retrieved_velocity.y(), test_velocity.y(), 0.01f, "getCruiseVelocity Y component");
         assert_near(retrieved_velocity.z(), test_velocity.z(), 0.01f, "getCruiseVelocity Z component");
@@ -166,7 +166,7 @@ class CruiseControlComprehensiveTest {
 
         // Test when cruise control is disabled
         state_controller->setCruiseControlMode(CRUISE_CONTROL_OFF);
-        Eigen::Vector3f zero_velocity = state_controller->getCruiseVelocity();
+        Eigen::Vector3d zero_velocity = state_controller->getCruiseVelocity();
         assert_near(zero_velocity.norm(), 0.0f, 0.01f, "getCruiseVelocity returns zero when disabled");
 
         cleanupStateController();
@@ -182,11 +182,11 @@ class CruiseControlComprehensiveTest {
         state_controller->initialize();
 
         // Enable cruise control
-        Eigen::Vector3f velocity(80.0f, 0.0f, 10.0f);
+        Eigen::Vector3d velocity(80.0f, 0.0f, 10.0f);
         state_controller->setCruiseControlMode(CRUISE_CONTROL_ON, velocity);
 
         // Test remaining time immediately after activation
-        float remaining_time = state_controller->getCruiseRemainingTime();
+        double remaining_time = state_controller->getCruiseRemainingTime();
         assert_test(remaining_time > 1.9f && remaining_time <= 2.0f,
                     "getCruiseRemainingTime shows correct initial time");
         assert_test(state_controller->isCruiseControlActive(),
@@ -223,8 +223,8 @@ class CruiseControlComprehensiveTest {
         state_controller->initialize();
 
         // Set desired velocities
-        Eigen::Vector2f linear_vel(75.0f, -25.0f);
-        float angular_vel = 20.0f;
+        Eigen::Vector2d linear_vel(75.0f, -25.0f);
+        double angular_vel = 20.0f;
         state_controller->setDesiredVelocity(linear_vel, angular_vel);
 
         // Enable cruise control without specifying velocity (should capture current)
@@ -232,13 +232,13 @@ class CruiseControlComprehensiveTest {
                     "Enable cruise control with velocity capture");
 
         // Verify captured velocities
-        Eigen::Vector3f captured_velocity = state_controller->getCruiseVelocity();
+        Eigen::Vector3d captured_velocity = state_controller->getCruiseVelocity();
         assert_near(captured_velocity.x(), linear_vel.x(), 0.01f, "Captured velocity X matches desired");
         assert_near(captured_velocity.y(), linear_vel.y(), 0.01f, "Captured velocity Y matches desired");
         assert_near(captured_velocity.z(), angular_vel, 0.01f, "Captured velocity Z matches desired angular");
 
         // Test with zero velocity (should still work)
-        state_controller->setDesiredVelocity(Eigen::Vector2f::Zero(), 0.0f);
+        state_controller->setDesiredVelocity(Eigen::Vector2d::Zero(), 0.0f);
         state_controller->setCruiseControlMode(CRUISE_CONTROL_ON);
         captured_velocity = state_controller->getCruiseVelocity();
         assert_near(captured_velocity.norm(), 0.0f, 0.01f, "Captured zero velocity correctly");
@@ -261,7 +261,7 @@ class CruiseControlComprehensiveTest {
         }
 
         // Test combined movement (X, Y, and angular simultaneously)
-        Eigen::Vector3f combined_velocity(60.0f, 40.0f, 12.0f);
+        Eigen::Vector3d combined_velocity(60.0f, 40.0f, 12.0f);
         assert_test(state_controller->setCruiseControlMode(CRUISE_CONTROL_ON, combined_velocity),
                     "Set combined velocity cruise control");
 
@@ -270,17 +270,17 @@ class CruiseControlComprehensiveTest {
         assert_test(!state_controller->hasErrors(), "Combined movement control executes without errors");
 
         // Test pure X movement
-        state_controller->setCruiseControlMode(CRUISE_CONTROL_ON, Eigen::Vector3f(100.0f, 0.0f, 0.0f));
+        state_controller->setCruiseControlMode(CRUISE_CONTROL_ON, Eigen::Vector3d(100.0f, 0.0f, 0.0f));
         state_controller->updateVelocityControl();
         assert_test(!state_controller->hasErrors(), "Pure X movement executes without errors");
 
         // Test pure Y movement
-        state_controller->setCruiseControlMode(CRUISE_CONTROL_ON, Eigen::Vector3f(0.0f, 80.0f, 0.0f));
+        state_controller->setCruiseControlMode(CRUISE_CONTROL_ON, Eigen::Vector3d(0.0f, 80.0f, 0.0f));
         state_controller->updateVelocityControl();
         assert_test(!state_controller->hasErrors(), "Pure Y movement executes without errors");
 
         // Test pure angular movement
-        state_controller->setCruiseControlMode(CRUISE_CONTROL_ON, Eigen::Vector3f(0.0f, 0.0f, 30.0f));
+        state_controller->setCruiseControlMode(CRUISE_CONTROL_ON, Eigen::Vector3d(0.0f, 0.0f, 30.0f));
         state_controller->updateVelocityControl();
         assert_test(!state_controller->hasErrors(), "Pure angular movement executes without errors");
 
@@ -296,7 +296,7 @@ class CruiseControlComprehensiveTest {
         state_controller = new StateController(*locomotion, disabled_config);
         state_controller->initialize();
 
-        Eigen::Vector3f velocity(50.0f, 25.0f, 10.0f);
+        Eigen::Vector3d velocity(50.0f, 25.0f, 10.0f);
         assert_test(!state_controller->setCruiseControlMode(CRUISE_CONTROL_ON, velocity),
                     "Cruise control fails when disabled in config");
         assert_test(state_controller->getCruiseControlMode() == CRUISE_CONTROL_OFF,
@@ -311,7 +311,7 @@ class CruiseControlComprehensiveTest {
         state_controller->initialize();
 
         state_controller->setCruiseControlMode(CRUISE_CONTROL_ON, velocity);
-        float remaining = state_controller->getCruiseRemainingTime();
+        double remaining = state_controller->getCruiseRemainingTime();
         assert_test(remaining > 0.4f && remaining <= 0.5f, "Short time limit configured correctly");
 
         delete state_controller;
@@ -325,20 +325,20 @@ class CruiseControlComprehensiveTest {
         state_controller->initialize();
 
         // Test very small velocity (should be treated as zero)
-        Eigen::Vector3f tiny_velocity(0.0001f, 0.0001f, 0.0001f);
+        Eigen::Vector3d tiny_velocity(0.0001f, 0.0001f, 0.0001f);
         state_controller->setCruiseControlMode(CRUISE_CONTROL_ON, tiny_velocity);
         state_controller->updateVelocityControl();
         assert_test(!state_controller->hasErrors(), "Tiny velocity handled without errors");
 
         // Test very large velocity (should be limited by locomotion system)
-        Eigen::Vector3f large_velocity(1000.0f, 1000.0f, 1000.0f);
+        Eigen::Vector3d large_velocity(1000.0f, 1000.0f, 1000.0f);
         state_controller->setCruiseControlMode(CRUISE_CONTROL_ON, large_velocity);
         state_controller->updateVelocityControl();
         // Note: Locomotion system should handle velocity limits internally
 
         // Test rapid mode switching
         for (int i = 0; i < 5; i++) {
-            state_controller->setCruiseControlMode(CRUISE_CONTROL_ON, Eigen::Vector3f(10.0f * i, 5.0f * i, 2.0f * i));
+            state_controller->setCruiseControlMode(CRUISE_CONTROL_ON, Eigen::Vector3d(10.0f * i, 5.0f * i, 2.0f * i));
             state_controller->setCruiseControlMode(CRUISE_CONTROL_OFF);
         }
         assert_test(!state_controller->hasErrors(), "Rapid mode switching handled without errors");
@@ -357,25 +357,25 @@ class CruiseControlComprehensiveTest {
         // Test equivalent behavior: force specific velocity vs capture current velocity
 
         // 1. Force specific velocity (equivalent to params_.force_cruise_velocity.data = true)
-        Eigen::Vector3f forced_velocity(90.0f, 45.0f, 18.0f);
+        Eigen::Vector3d forced_velocity(90.0f, 45.0f, 18.0f);
         state_controller->setCruiseControlMode(CRUISE_CONTROL_ON, forced_velocity);
-        Eigen::Vector3f result1 = state_controller->getCruiseVelocity();
+        Eigen::Vector3d result1 = state_controller->getCruiseVelocity();
         assert_near(result1.x(), forced_velocity.x(), 0.01f, "OpenSHC equivalent: forced velocity X");
         assert_near(result1.y(), forced_velocity.y(), 0.01f, "OpenSHC equivalent: forced velocity Y");
         assert_near(result1.z(), forced_velocity.z(), 0.01f, "OpenSHC equivalent: forced velocity Z");
 
         // 2. Capture current velocity (equivalent to params_.force_cruise_velocity.data = false)
         state_controller->setCruiseControlMode(CRUISE_CONTROL_OFF);
-        state_controller->setDesiredVelocity(Eigen::Vector2f(65.0f, -35.0f), 22.0f);
+        state_controller->setDesiredVelocity(Eigen::Vector2d(65.0f, -35.0f), 22.0f);
         state_controller->setCruiseControlMode(CRUISE_CONTROL_ON); // No velocity specified
-        Eigen::Vector3f result2 = state_controller->getCruiseVelocity();
+        Eigen::Vector3d result2 = state_controller->getCruiseVelocity();
         assert_near(result2.x(), 65.0f, 0.01f, "OpenSHC equivalent: captured velocity X");
         assert_near(result2.y(), -35.0f, 0.01f, "OpenSHC equivalent: captured velocity Y");
         assert_near(result2.z(), 22.0f, 0.01f, "OpenSHC equivalent: captured velocity Z");
 
         // 3. Test time limit behavior (equivalent to OpenSHC time limit check)
         assert_test(state_controller->isCruiseControlActive(), "OpenSHC equivalent: cruise control active within time limit");
-        float remaining = state_controller->getCruiseRemainingTime();
+        double remaining = state_controller->getCruiseRemainingTime();
         assert_test(remaining > 0.0f, "OpenSHC equivalent: time limit tracking");
 
         // 4. Test external mode support
@@ -392,7 +392,7 @@ class CruiseControlComprehensiveTest {
         std::cout << "Total tests: " << test_count << std::endl;
         std::cout << "Passed: " << passed_tests << std::endl;
         std::cout << "Failed: " << (test_count - passed_tests) << std::endl;
-        std::cout << "Success rate: " << (float(passed_tests) / test_count * 100.0f) << "%" << std::endl;
+        std::cout << "Success rate: " << (double(passed_tests) / test_count * 100.0f) << "%" << std::endl;
 
         if (passed_tests == test_count) {
             std::cout << "\n🎉 ALL TESTS PASSED! Cruise control OpenSHC equivalence validated!" << std::endl;

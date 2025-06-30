@@ -9,7 +9,7 @@ int main() {
     Point3D close_point(100, 100, 100);
     Point3D far_point(1000, 1000, 1000);
     
-    float max_reach = 300.0f;
+    double max_reach = 300.0f;
     
     bool close_reachable = math_utils::isPointReachable(close_point, max_reach);
     bool far_reachable = math_utils::isPointReachable(far_point, max_reach);
@@ -18,8 +18,8 @@ int main() {
     std::cout << "Point (1000,1000,1000) with max_reach=300mm: " << (far_reachable ? "REACHABLE" : "NOT REACHABLE") << std::endl;
     
     // Calculate actual distances
-    float close_dist = math_utils::magnitude(close_point);
-    float far_dist = math_utils::magnitude(far_point);
+    double close_dist = math_utils::magnitude(close_point);
+    double far_dist = math_utils::magnitude(far_point);
     
     std::cout << "\nActual distances:" << std::endl;
     std::cout << "Close point distance: " << close_dist << "mm" << std::endl;

@@ -4,6 +4,8 @@
 #include "HexaModel.h"
 #include "terrain_adaptation.h"
 #include "velocity_limits.h"
+#include "workspace_validator.h"
+#include <memory>
 
 /**
  * @brief High level walking controller handling gaits and terrain adaptation.
@@ -30,13 +32,13 @@ class WalkController {
      * @param omega Angular velocity around Z (rad/s).
      * @return True if planning succeeded.
      */
-    bool planGaitSequence(float vx, float vy, float omega);
+    bool planGaitSequence(double vx, double vy, double omega);
 
     /**
      * @brief Update internal gait phase progression.
      * @param dt Time step in seconds.
      */
-    void updateGaitPhase(float dt);
+    void updateGaitPhase(double dt);
 
     // Velocity limiting methods
     /**
@@ -44,7 +46,7 @@ class WalkController {
      * @param bearing_degrees Direction of travel in degrees.
      * @return Calculated limit values.
      */
-    VelocityLimits::LimitValues getVelocityLimits(float bearing_degrees = 0.0f) const;
+    VelocityLimits::LimitValues getVelocityLimits(double bearing_degrees = 0.0f) const;
 
     /**
      * @brief Apply velocity limits to a commanded velocity vector.
@@ -53,7 +55,7 @@ class WalkController {
      * @param omega Desired angular velocity.
      * @return Limited velocity values.
      */
-    VelocityLimits::LimitValues applyVelocityLimits(float vx, float vy, float omega) const;
+    VelocityLimits::LimitValues applyVelocityLimits(double vx, double vy, double omega) const;
 
     /**
      * @brief Validate a velocity command against computed limits.
@@ -62,7 +64,7 @@ class WalkController {
      * @param omega Commanded angular velocity.
      * @return True if the command is within limits.
      */
-    bool validateVelocityCommand(float vx, float vy, float omega) const;
+    bool validateVelocityCommand(double vx, double vy, double omega) const;
 
     /**
      * @brief Update velocity limit tables for new gait parameters.
@@ -70,13 +72,13 @@ class WalkController {
      * @param stance_ratio Ratio of stance phase (0-1).
      * @param time_to_max_stride Time to reach maximum stride length.
      */
-    void updateVelocityLimits(float frequency, float stance_ratio, float time_to_max_stride = 2.0f);
+    void updateVelocityLimits(double frequency, double stance_ratio, double time_to_max_stride = 2.0f);
 
     // Velocity limiting configuration
     /** Set workspace safety margin used for velocity limiting. */
-    void setVelocitySafetyMargin(float margin);
+    void setVelocitySafetyMargin(double margin);
     /** Set scaling factor for angular velocity commands. */
-    void setAngularVelocityScaling(float scaling);
+    void setAngularVelocityScaling(double scaling);
     /** Retrieve the current workspace configuration. */
     VelocityLimits::WorkspaceConfig getWorkspaceConfig() const;
 
@@ -95,9 +97,9 @@ class WalkController {
      * @param imu Interface to IMU.
      * @return Calculated foot position in world frame.
      */
-    Point3D footTrajectory(int leg, float phase, float step_height, float step_length,
-                           float stance_duration, float swing_duration, float robot_height,
-                           const float leg_phase_offsets[NUM_LEGS], LegState leg_states[NUM_LEGS],
+    Point3D footTrajectory(int leg, double phase, double step_height, double step_length,
+                           double stance_duration, double swing_duration, double robot_height,
+                           const double leg_phase_offsets[NUM_LEGS], LegState leg_states[NUM_LEGS],
                            IFSRInterface *fsr, IIMUInterface *imu);
 
     // Terrain adaptation methods
@@ -145,7 +147,7 @@ class WalkController {
      * @brief Estimate gravity vector from IMU
      * @return Estimated gravity vector
      */
-    Eigen::Vector3f estimateGravity() const;
+    Eigen::Vector3d estimateGravity() const;
 
     /**
      * @brief Get current velocity commands for gait pattern decisions
@@ -156,7 +158,7 @@ class WalkController {
   private:
     RobotModel &model;
     GaitType current_gait;
-    float gait_phase;
+    double gait_phase;
 
     // Terrain adaptation system
     TerrainAdaptation terrain_adaptation_;
@@ -165,6 +167,12 @@ class WalkController {
     VelocityLimits velocity_limits_;
     VelocityLimits::LimitValues current_velocity_limits_;
     VelocityLimits::LimitValues current_velocities_;
+
+    // Workspace validation
+    std::unique_ptr<WorkspaceValidator> workspace_validator_;
+
+    // Collision avoidance: track current leg positions
+    Point3D current_leg_positions_[NUM_LEGS];
 };
 
 #endif // WALK_CONTROLLER_H

@@ -24,7 +24,7 @@ void WalkspaceAnalyzer::generateWalkspace() {
 
     // Generate walkspace for each bearing
     for (int bearing = 0; bearing <= 360; bearing += BEARING_STEP) {
-        float min_radius = MAX_WORKSPACE_RADIUS;
+        double min_radius = MAX_WORKSPACE_RADIUS;
 
         // Find minimum radius across all legs for this bearing
         for (int leg = 0; leg < NUM_LEGS; leg++) {
@@ -34,19 +34,25 @@ void WalkspaceAnalyzer::generateWalkspace() {
             int adjacent1 = (leg + 1) % NUM_LEGS;
             int adjacent2 = (leg + NUM_LEGS - 1) % NUM_LEGS;
 
-            Point3D leg_origin = model_.getLegOrigin(leg);
-            Point3D adj1_origin = model_.getLegOrigin(adjacent1);
-            Point3D adj2_origin = model_.getLegOrigin(adjacent2);
+            // Get leg origins using frame transformation with zero joint angles
+            JointAngles zero_angles(0, 0, 0);
+            Pose leg_origin_pose = model_.getPoseRobotFrame(leg, zero_angles, Pose::Identity());
+            Pose adj1_origin_pose = model_.getPoseRobotFrame(adjacent1, zero_angles, Pose::Identity());
+            Pose adj2_origin_pose = model_.getPoseRobotFrame(adjacent2, zero_angles, Pose::Identity());
 
-            float dist_to_adj1 = math_utils::distance(leg_origin, adj1_origin) / 2.0f;
-            float dist_to_adj2 = math_utils::distance(leg_origin, adj2_origin) / 2.0f;
+            Point3D leg_origin = leg_origin_pose.position;
+            Point3D adj1_origin = adj1_origin_pose.position;
+            Point3D adj2_origin = adj2_origin_pose.position;
 
-            float bearing_rad = math_utils::degreesToRadians(bearing);
-            float max_reach = std::min(dist_to_adj1, dist_to_adj2);
+            double dist_to_adj1 = math_utils::distance(leg_origin, adj1_origin) / 2.0f;
+            double dist_to_adj2 = math_utils::distance(leg_origin, adj2_origin) / 2.0f;
+
+            double bearing_rad = math_utils::degreesToRadians(bearing);
+            double max_reach = std::min(dist_to_adj1, dist_to_adj2);
 
             // Adjust for bearing direction
             Point3D direction(cos(bearing_rad), sin(bearing_rad), 0);
-            float projected_reach = max_reach / cos(bearing_rad);
+            double projected_reach = max_reach / cos(bearing_rad);
 
             min_radius = std::min(min_radius, projected_reach);
         }
@@ -62,9 +68,13 @@ bool WalkspaceAnalyzer::isPositionReachable(int leg_index, const Point3D &positi
     if (leg_index >= NUM_LEGS)
         return false;
 
-    Point3D leg_origin = model_.getLegOrigin(leg_index);
+    // Get leg origin using frame transformation with zero joint angles
+    JointAngles zero_angles(0, 0, 0);
+    Pose leg_origin_pose = model_.getPoseRobotFrame(leg_index, zero_angles, Pose::Identity());
+    Point3D leg_origin = leg_origin_pose.position;
+
     Point3D relative_pos = position - leg_origin;
-    float distance = math_utils::magnitude(relative_pos);
+    double distance = math_utils::magnitude(relative_pos);
 
     const WorkspaceBounds &bounds = leg_workspace_[leg_index];
 
@@ -96,14 +106,14 @@ WalkspaceAnalyzer::WalkspaceResult WalkspaceAnalyzer::analyzeWalkspace(const Poi
     // Calculate reachable area (simplified)
     result.reachable_area = 0.0f;
     for (const auto &entry : walkspace_map_) {
-        float radius = entry.second;
+        double radius = entry.second;
         result.reachable_area += M_PI * radius * radius / walkspace_map_.size();
     }
 
     return result;
 }
 
-float WalkspaceAnalyzer::getWalkspaceRadius(float bearing_degrees) const {
+double WalkspaceAnalyzer::getWalkspaceRadius(double bearing_degrees) const {
     // Normalize bearing to 0-360 range
     while (bearing_degrees < 0)
         bearing_degrees += 360;
@@ -122,7 +132,7 @@ float WalkspaceAnalyzer::getWalkspaceRadius(float bearing_degrees) const {
     }
 
     // Linear interpolation
-    float t = (bearing_degrees - lower_bearing) / BEARING_STEP;
+    double t = (bearing_degrees - lower_bearing) / BEARING_STEP;
     return lower_it->second * (1.0f - t) + upper_it->second * t;
 }
 
@@ -143,8 +153,8 @@ bool WalkspaceAnalyzer::getOptimalStepPositions(const Point3D &body_movement,
 void WalkspaceAnalyzer::calculateLegWorkspaceBounds(int leg_index) {
     const Parameters &params = model_.getParams();
 
-    float total_reach = params.femur_length + params.tibia_length;
-    float min_reach = 30.0f; // Minimum practical reach when leg is folded
+    double total_reach = params.femur_length + params.tibia_length;
+    double min_reach = 30.0f; // Minimum practical reach when leg is folded
 
     WorkspaceBounds &bounds = leg_workspace_[leg_index];
     bounds.min_radius = min_reach;
@@ -162,8 +172,8 @@ void WalkspaceAnalyzer::generateWalkspaceForLeg(int leg_index) {
         // OpenSHC algorithm parameters
         const int WORKSPACE_LAYERS = 10;         // Height layers (from OpenSHC)
         const int BEARING_STEP = 45;             // 45° steps = 8 directions (from OpenSHC)
-        const float MAX_POSITION_DELTA = 0.005f; // 5mm increments (optimized for speed)
-        const float MAX_WORKSPACE_RADIUS = 0.3f; // 300mm max radius
+        const double MAX_POSITION_DELTA = 0.005f; // 5mm increments (optimized for speed)
+        const double MAX_WORKSPACE_RADIUS = 0.3f; // 300mm max radius
 
         if (leg_index == 0) {
             std::cout << "    Generating " << WORKSPACE_LAYERS
@@ -174,29 +184,29 @@ void WalkspaceAnalyzer::generateWalkspaceForLeg(int leg_index) {
         leg_workspaces_[leg_index].clear();
 
         // Calculate layer heights
-        const float min_height = -MAX_WORKSPACE_RADIUS;
-        const float max_height = MAX_WORKSPACE_RADIUS;
-        const float height_step = (max_height - min_height) / (WORKSPACE_LAYERS - 1);
+        const double min_height = -MAX_WORKSPACE_RADIUS;
+        const double max_height = MAX_WORKSPACE_RADIUS;
+        const double height_step = (max_height - min_height) / (WORKSPACE_LAYERS - 1);
 
         int total_checks = 0;
 
         // Generate each workplane (height layer)
         for (int layer = 0; layer < WORKSPACE_LAYERS; layer++) {
-            float search_height = min_height + (layer * height_step);
+            double search_height = min_height + (layer * height_step);
 
             // Create new workplane for this height
             Workplane workplane;
 
             // Generate workplane for each bearing direction
             for (int bearing = 0; bearing < 360; bearing += BEARING_STEP) {
-                float bearing_rad = bearing * M_PI / 180.0f;
-                float max_reachable_radius = 0.0f;
+                double bearing_rad = bearing * M_PI / 180.0f;
+                double max_reachable_radius = 0.0f;
 
                 // Radial search from center outward until kinematic limit
                 int max_iterations = static_cast<int>(MAX_WORKSPACE_RADIUS / MAX_POSITION_DELTA);
 
                 for (int step = 1; step <= max_iterations; step++) {
-                    float radius = step * MAX_POSITION_DELTA;
+                    double radius = step * MAX_POSITION_DELTA;
 
                     Point3D test_point;
                     test_point.x = radius * cos(bearing_rad);
@@ -234,12 +244,12 @@ void WalkspaceAnalyzer::generateWalkspaceForLeg(int leg_index) {
         calculateLegWorkspaceBounds(leg_index); // Use existing method instead of calculateSimpleWorkspace
 
         // Sample at lower resolution for PRECISION_FAST
-        const float radius_step = RADIUS_STEP_DEFAULT;   // mm
-        const float bearing_step = BEARING_STEP_DEGREES; // degrees
+        const double radius_step = RADIUS_STEP_DEFAULT;   // mm
+        const double bearing_step = BEARING_STEP_DEGREES; // degrees
 
-        for (float radius = 0; radius < bounds.max_radius; radius += radius_step) {
-            for (float bearing = 0; bearing < FULL_ROTATION_DEGREES; bearing += bearing_step) {
-                float bearing_rad = bearing * DEGREES_TO_RADIANS_FACTOR;
+        for (double radius = 0; radius < bounds.max_radius; radius += radius_step) {
+            for (double bearing = 0; bearing < FULL_ROTATION_DEGREES; bearing += bearing_step) {
+                double bearing_rad = bearing * DEGREES_TO_RADIANS_FACTOR;
 
                 Point3D test_point;
                 test_point.x = radius * cos(bearing_rad);
@@ -274,7 +284,7 @@ Point3D WalkspaceAnalyzer::calculateCenterOfMass(const Point3D leg_positions[NUM
     return com;
 }
 
-float WalkspaceAnalyzer::calculateStabilityMargin(const Point3D leg_positions[NUM_LEGS]) {
+double WalkspaceAnalyzer::calculateStabilityMargin(const Point3D leg_positions[NUM_LEGS]) {
     // Enhanced stability margin calculation
     // Calculate the distance from center of mass to support polygon edges
     Point3D com = calculateCenterOfMass(leg_positions);
@@ -292,7 +302,7 @@ float WalkspaceAnalyzer::calculateStabilityMargin(const Point3D leg_positions[NU
     }
 
     // Calculate minimum distance from COM to polygon edges
-    float min_distance = 1000.0f;
+    double min_distance = 1000.0f;
 
     // Calculate distance to polygon edges (proper implementation)
     // For each edge of the support polygon, find perpendicular distance from COM
@@ -302,12 +312,12 @@ float WalkspaceAnalyzer::calculateStabilityMargin(const Point3D leg_positions[NU
         Point3D edge_end = support_polygon[next_idx];
 
         // Calculate perpendicular distance from COM to line segment
-        float edge_distance = math_utils::pointToLineDistance(com, edge_start, edge_end);
+        double edge_distance = math_utils::pointToLineDistance(com, edge_start, edge_end);
         min_distance = std::min(min_distance, edge_distance);
     }
 
     // Apply safety factor for stability margin
-    float safety_factor = 0.8f; // 80% of theoretical minimum
+    double safety_factor = 0.8f; // 80% of theoretical minimum
     return min_distance * safety_factor;
 }
 
@@ -343,15 +353,15 @@ void WalkspaceAnalyzer::calculateSupportPolygon(const Point3D leg_positions[NUM_
     centroid.z /= stance_points.size();
 
     // Sort points by angle around centroid (simplified 2D projection)
-    std::vector<std::pair<float, Point3D>> angle_points;
+    std::vector<std::pair<double, Point3D>> angle_points;
     for (const auto &point : stance_points) {
-        float angle = atan2(point.y - centroid.y, point.x - centroid.x);
+        double angle = atan2(point.y - centroid.y, point.x - centroid.x);
         angle_points.push_back({angle, point});
     }
 
     // Sort by angle using custom comparator
     std::sort(angle_points.begin(), angle_points.end(),
-              [](const std::pair<float, Point3D> &a, const std::pair<float, Point3D> &b) {
+              [](const std::pair<double, Point3D> &a, const std::pair<double, Point3D> &b) {
                   return a.first < b.first;
               });
 
@@ -390,14 +400,18 @@ bool WalkspaceAnalyzer::balancedStepOptimization(const Point3D &movement,
             optimal[i] = desired;
         } else {
             // Find closest reachable position
-            Point3D leg_origin = model_.getLegOrigin(i);
+            // Get leg origin using frame transformation with zero joint angles
+            JointAngles zero_angles(0, 0, 0);
+            Pose leg_origin_pose = model_.getPoseRobotFrame(i, zero_angles, Pose::Identity());
+            Point3D leg_origin = leg_origin_pose.position;
+
             Point3D relative = desired - leg_origin;
-            float distance = math_utils::magnitude(relative);
+            double distance = math_utils::magnitude(relative);
 
             const WorkspaceBounds &bounds = leg_workspace_[i];
             if (distance > bounds.max_radius) {
                 // Scale down to maximum reach
-                float scale = bounds.max_radius / distance;
+                double scale = bounds.max_radius / distance;
                 relative.x *= scale;
                 relative.y *= scale;
                 relative.z *= scale;
@@ -432,7 +446,7 @@ bool WalkspaceAnalyzer::advancedStepOptimization(const Point3D &movement,
             Point3D com = result.center_of_mass;
             for (int i = 0; i < NUM_LEGS; i++) {
                 Point3D direction = optimal[i] - com;
-                float distance = math_utils::magnitude(direction);
+                double distance = math_utils::magnitude(direction);
                 if (distance > 0) {
                     direction.x /= distance;
                     direction.y /= distance;
@@ -455,7 +469,7 @@ bool WalkspaceAnalyzer::advancedStepOptimization(const Point3D &movement,
 
 // OpenSHC-compatible Workplane functions
 
-Workplane WalkspaceAnalyzer::getWorkplane(int leg_index, float height) const {
+Workplane WalkspaceAnalyzer::getWorkplane(int leg_index, double height) const {
     if (leg_index >= NUM_LEGS) {
         return Workplane(); // Return empty workplane for invalid leg
     }
@@ -467,8 +481,8 @@ Workplane WalkspaceAnalyzer::getWorkplane(int leg_index, float height) const {
         return Workplane(); // Return empty if no workspace generated
     }
 
-    float min_height = workspace.begin()->first;
-    float max_height = workspace.rbegin()->first;
+    double min_height = workspace.begin()->first;
+    double max_height = workspace.rbegin()->first;
 
     if (height < min_height || height > max_height) {
         // Return empty workplane for heights outside workspace
@@ -490,24 +504,24 @@ Workplane WalkspaceAnalyzer::getWorkplane(int leg_index, float height) const {
     auto upper_it = workspace.upper_bound(height);
     auto lower_it = std::prev(upper_it);
 
-    float upper_height = upper_it->first;
-    float lower_height = lower_it->first;
+    double upper_height = upper_it->first;
+    double lower_height = lower_it->first;
     const Workplane &upper_workplane = upper_it->second;
     const Workplane &lower_workplane = lower_it->second;
 
     // Calculate interpolation factor
-    float t = (height - lower_height) / (upper_height - lower_height);
+    double t = (height - lower_height) / (upper_height - lower_height);
 
     // Interpolate between workplanes
     Workplane interpolated_workplane;
     for (const auto &bearing_radius : upper_workplane) {
         int bearing = bearing_radius.first;
-        float upper_radius = bearing_radius.second;
+        double upper_radius = bearing_radius.second;
 
         auto lower_bearing_it = lower_workplane.find(bearing);
         if (lower_bearing_it != lower_workplane.end()) {
-            float lower_radius = lower_bearing_it->second;
-            float interpolated_radius = lower_radius * (1.0f - t) + upper_radius * t;
+            double lower_radius = lower_bearing_it->second;
+            double interpolated_radius = lower_radius * (1.0f - t) + upper_radius * t;
             interpolated_workplane[bearing] = interpolated_radius;
         }
     }
@@ -535,8 +549,8 @@ bool WalkspaceAnalyzer::isPositionReachableWithWorkplane(int leg_index, const Po
     }
 
     // Calculate bearing to position
-    float bearing_rad = atan2(position.y, position.x);
-    float bearing_deg = bearing_rad * RADIANS_TO_DEGREES_FACTOR;
+    double bearing_rad = atan2(position.y, position.x);
+    double bearing_deg = bearing_rad * RADIANS_TO_DEGREES_FACTOR;
 
     // Normalize bearing to 0-360 range
     while (bearing_deg < 0)
@@ -558,10 +572,10 @@ bool WalkspaceAnalyzer::isPositionReachableWithWorkplane(int leg_index, const Po
     }
 
     // Interpolate maximum radius at this bearing
-    float t = (bearing_deg - lower_bearing) / TIBIA_ANGLE_MAX;
-    float max_radius = lower_it->second * (1.0f - t) + upper_it->second * t;
+    double t = (bearing_deg - lower_bearing) / TIBIA_ANGLE_MAX;
+    double max_radius = lower_it->second * (1.0f - t) + upper_it->second * t;
 
     // Check if position is within reachable radius
-    float position_radius = sqrt(position.x * position.x + position.y * position.y);
+    double position_radius = sqrt(position.x * position.x + position.y * position.y);
     return position_radius <= max_radius;
 }

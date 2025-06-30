@@ -13,11 +13,11 @@ class VelocityLimitsTest {
     std::unique_ptr<VelocityLimits> velocity_limits;
     std::unique_ptr<WalkController> walk_controller;
 
-    const float FLOAT_TOLERANCE_TEST = 1e-5f;
+    const double FLOAT_TOLERANCE_TEST = 1e-5f;
     int tests_passed = 0;
     int tests_failed = 0;
 
-    void assert_near(float actual, float expected, float tolerance, const std::string &message) {
+    void assert_near(double actual, double expected, double tolerance, const std::string &message) {
         if (std::abs(actual - expected) <= tolerance) {
             tests_passed++;
             std::cout << "✓ " << message << std::endl;
@@ -42,7 +42,7 @@ class VelocityLimitsTest {
         assert_true(!condition, message);
     }
 
-    void assert_greater(float actual, float expected, const std::string &message) {
+    void assert_greater(double actual, double expected, const std::string &message) {
         if (actual > expected) {
             tests_passed++;
             std::cout << "✓ " << message << std::endl;
@@ -53,7 +53,7 @@ class VelocityLimitsTest {
         }
     }
 
-    void assert_less_equal(float actual, float expected, const std::string &message) {
+    void assert_less_equal(double actual, double expected, const std::string &message) {
         if (actual <= expected) {
             tests_passed++;
             std::cout << "✓ " << message << std::endl;
@@ -72,7 +72,7 @@ class VelocityLimitsTest {
         params.coxa_length = 50;
         params.femur_length = 101;
         params.tibia_length = 208;
-        params.robot_height = 100;
+        params.robot_height = 120;
         params.control_frequency = 50;
         params.coxa_angle_limits[0] = -65;
         params.coxa_angle_limits[1] = 65;
@@ -178,7 +178,7 @@ class VelocityLimitsTest {
         std::cout << "Testing acceleration limiting..." << std::endl;
         VelocityLimits::LimitValues target(1.0f, 1.0f, 1.0f, 0.5f);
         VelocityLimits::LimitValues current(0.0f, 0.0f, 0.0f, 0.5f);
-        float dt = 0.1f;
+        double dt = 0.1f;
 
         auto limited = velocity_limits->applyAccelerationLimits(target, current, dt);
 
@@ -201,7 +201,7 @@ class VelocityLimitsTest {
         assert_greater(limits.angular_z, 0.0f, "WalkController should provide positive angular Z limits");
 
         // Test velocity limiting
-        float test_vx = 2.0f, test_vy = 1.0f, test_omega = 3.0f;
+        double test_vx = 2.0f, test_vy = 1.0f, test_omega = 3.0f;
         auto limited = walk_controller->applyVelocityLimits(test_vx, test_vy, test_omega);
 
         assert_less_equal(std::abs(limited.linear_x), limits.linear_x, "Limited linear X should be within bounds");
@@ -226,8 +226,8 @@ class VelocityLimitsTest {
 
         // Test OpenSHC-equivalent speed calculation:
         // max_speed = (walkspace_radius * 2.0) / (on_ground_ratio / frequency)
-        float cycle_time = test_gait.stance_ratio / test_gait.frequency;
-        float expected_max_speed = (workspace.walkspace_radius * 2.0f) / cycle_time;
+        double cycle_time = test_gait.stance_ratio / test_gait.frequency;
+        double expected_max_speed = (workspace.walkspace_radius * 2.0f) / cycle_time;
 
         auto limits = velocity_limits->getLimit(0.0f);
 
@@ -241,7 +241,7 @@ class VelocityLimitsTest {
 
         // Test OpenSHC-equivalent angular speed calculation:
         // max_angular_speed = max_linear_speed / stance_radius
-        float expected_max_angular = expected_max_speed / workspace.stance_radius;
+        double expected_max_angular = expected_max_speed / workspace.stance_radius;
         if (expected_max_angular > 10.0f) {
             expected_max_angular = 10.0f; // Our safety cap
         }
@@ -251,7 +251,7 @@ class VelocityLimitsTest {
 
         // Test OpenSHC-equivalent acceleration calculation:
         // max_acceleration = max_speed / time_to_max_stride
-        float expected_max_accel = expected_max_speed / test_gait.time_to_max_stride;
+        double expected_max_accel = expected_max_speed / test_gait.time_to_max_stride;
         if (expected_max_accel > 10.0f) {
             expected_max_accel = 10.0f; // Our safety cap
         }
@@ -264,7 +264,7 @@ class VelocityLimitsTest {
         std::cout << "Testing bearing range coverage..." << std::endl;
         // Test that all bearings from 0-359 degrees provide valid limits
         for (int bearing = 0; bearing < 360; bearing += 30) {
-            auto limits = velocity_limits->getLimit(static_cast<float>(bearing));
+            auto limits = velocity_limits->getLimit(static_cast<double>(bearing));
             assert_greater(limits.linear_x, 0.0f, "Bearing " + std::to_string(bearing) + "° linear X should be positive");
             assert_greater(limits.linear_y, 0.0f, "Bearing " + std::to_string(bearing) + "° linear Y should be positive");
             assert_greater(limits.angular_z, 0.0f, "Bearing " + std::to_string(bearing) + "° angular Z should be positive");

@@ -47,12 +47,12 @@ int main() {
     basic_imu.setTestOrientation(15.0f, -10.0f, 5.0f);
 
     terrain_adaptation.update(&fsr_interface, &basic_imu);
-    Eigen::Vector3f basic_gravity = terrain_adaptation.getGravityVector();
+    Eigen::Vector3d basic_gravity = terrain_adaptation.getGravityVector();
     std::cout << "  Basic IMU gravity: ("
               << basic_gravity[0] << ", " << basic_gravity[1] << ", " << basic_gravity[2] << ")" << std::endl;
 
     terrain_adaptation.update(&fsr_interface, &advanced_imu);
-    Eigen::Vector3f enhanced_gravity = terrain_adaptation.getGravityVector();
+    Eigen::Vector3d enhanced_gravity = terrain_adaptation.getGravityVector();
     std::cout << "  Enhanced IMU gravity: ("
               << enhanced_gravity[0] << ", " << enhanced_gravity[1] << ", " << enhanced_gravity[2] << ")" << std::endl;
 
@@ -75,8 +75,8 @@ int main() {
     // Test enhanced stability calculation
     std::cout << "3. Testing Dynamic Stability Analysis:" << std::endl;
 
-    float basic_stability = locomotion.calculateStabilityIndex();
-    float dynamic_stability = locomotion.calculateDynamicStabilityIndex();
+    double basic_stability = locomotion.calculateStabilityIndex();
+    double dynamic_stability = locomotion.calculateDynamicStabilityIndex();
 
     std::cout << "  Basic stability index: " << basic_stability << std::endl;
     std::cout << "  Dynamic stability index: " << dynamic_stability << std::endl;
@@ -85,7 +85,7 @@ int main() {
     // Test enhanced step parameter adjustment
     std::cout << "\n4. Testing Enhanced Step Parameter Adjustment:" << std::endl;
 
-    float original_step_length = 50.0f; // Use a reasonable default since calculateStepLength is private
+    double original_step_length = 50.0f; // Use a reasonable default since calculateStepLength is private
     std::cout << "  Default step length: " << original_step_length << " mm" << std::endl;
 
     // The system should now consider:
@@ -118,7 +118,7 @@ int main() {
     test_data.absolute_data.quaternion_z = 0.3f;
     test_data.absolute_data.quaternion_valid = true;
 
-    float complex_terrain_step = 35.0f; // Expected reduced step length for complex terrain
+    double complex_terrain_step = 35.0f; // Expected reduced step length for complex terrain
     std::cout << "  Complex terrain step length: " << complex_terrain_step << " mm" << std::endl;
     std::cout << "  Reduction factor: " << (complex_terrain_step / original_step_length) << "x" << std::endl;
 

@@ -6,7 +6,7 @@ Parameters setupTestParameters() {
     p.coxa_length = 50;
     p.femur_length = 101;
     p.tibia_length = 208;
-    p.robot_height = 100;
+    p.robot_height = 120;
     p.control_frequency = 50;
     p.coxa_angle_limits[0] = -65;
     p.coxa_angle_limits[1] = 65;
@@ -39,7 +39,7 @@ Parameters setupTestParameters() {
     p.coxa_length = 50;
     p.femur_length = 101;
     p.tibia_length = 208;
-    p.robot_height = 100;
+    p.robot_height = 120;
     p.control_frequency = 50;
     p.coxa_angle_limits[0] = -65;
     p.coxa_angle_limits[1] = 65;
@@ -70,15 +70,15 @@ void testBasicVelocityScaling() {
 
     // Test 1: Zero velocity should give baseline speeds
     locomotion.planGaitSequence(0.0f, 0.0f, 0.0f);
-    float baseline_speed = locomotion.getCurrentServoSpeed(0, 0);
+    double baseline_speed = locomotion.getCurrentServoSpeed(0, 0);
     std::cout << "  Baseline speed (zero velocity): " << baseline_speed << std::endl;
 
     // Test 2: Low velocity should give lower speeds than high velocity
     locomotion.planGaitSequence(0.05f, 0.0f, 0.0f); // Low velocity
-    float low_speed = locomotion.getCurrentServoSpeed(0, 0);
+    double low_speed = locomotion.getCurrentServoSpeed(0, 0);
 
     locomotion.planGaitSequence(0.15f, 0.0f, 0.0f); // High velocity
-    float high_speed = locomotion.getCurrentServoSpeed(0, 0);
+    double high_speed = locomotion.getCurrentServoSpeed(0, 0);
 
     std::cout << "  Low velocity speed: " << low_speed << std::endl;
     std::cout << "  High velocity speed: " << high_speed << std::endl;
@@ -101,15 +101,15 @@ void testAngularVelocityCompensation() {
 
     // Test pure linear motion
     locomotion.planGaitSequence(0.1f, 0.0f, 0.0f);
-    float linear_speed = locomotion.getCurrentServoSpeed(0, 0);
+    double linear_speed = locomotion.getCurrentServoSpeed(0, 0);
 
     // Test pure angular motion
     locomotion.planGaitSequence(0.0f, 0.0f, 0.5f); // 0.5 rad/s
-    float angular_speed = locomotion.getCurrentServoSpeed(0, 0);
+    double angular_speed = locomotion.getCurrentServoSpeed(0, 0);
 
     // Test combined motion
     locomotion.planGaitSequence(0.1f, 0.0f, 0.5f);
-    float combined_speed = locomotion.getCurrentServoSpeed(0, 0);
+    double combined_speed = locomotion.getCurrentServoSpeed(0, 0);
 
     std::cout << "  Pure linear speed: " << linear_speed << std::endl;
     std::cout << "  Pure angular speed: " << angular_speed << std::endl;
@@ -131,20 +131,20 @@ void testGaitSpecificAdjustments() {
 
     assert(locomotion.initialize(&mock_imu, &mock_fsr, &mock_servo));
 
-    float test_velocity = 0.1f;
+    double test_velocity = 0.1f;
 
     // Test different gaits with same velocity
     locomotion.setGaitType(TRIPOD_GAIT);
     locomotion.planGaitSequence(test_velocity, 0.0f, 0.0f);
-    float tripod_speed = locomotion.getCurrentServoSpeed(0, 0);
+    double tripod_speed = locomotion.getCurrentServoSpeed(0, 0);
 
     locomotion.setGaitType(WAVE_GAIT);
     locomotion.planGaitSequence(test_velocity, 0.0f, 0.0f);
-    float wave_speed = locomotion.getCurrentServoSpeed(0, 0);
+    double wave_speed = locomotion.getCurrentServoSpeed(0, 0);
 
     locomotion.setGaitType(RIPPLE_GAIT);
     locomotion.planGaitSequence(test_velocity, 0.0f, 0.0f);
-    float ripple_speed = locomotion.getCurrentServoSpeed(0, 0);
+    double ripple_speed = locomotion.getCurrentServoSpeed(0, 0);
 
     std::cout << "  Tripod gait speed: " << tripod_speed << std::endl;
     std::cout << "  Wave gait speed: " << wave_speed << std::endl;
@@ -171,7 +171,7 @@ void testPerLegCompensation() {
     // Test pure rotation - outer legs should get higher speeds
     locomotion.planGaitSequence(0.0f, 0.0f, 1.0f); // 1.0 rad/s rotation
 
-    float speeds[NUM_LEGS];
+    double speeds[NUM_LEGS];
     for (int leg = 0; leg < NUM_LEGS; leg++) {
         speeds[leg] = locomotion.getCurrentServoSpeed(leg, 0); // Get coxa speeds
         std::cout << "  Leg " << leg << " speed: " << speeds[leg] << std::endl;
@@ -179,7 +179,7 @@ void testPerLegCompensation() {
 
     // All speeds should be similar for pure rotation (hexapod symmetry)
     // But let's verify they're all reasonably high due to angular motion
-    float avg_speed = 0.0f;
+    double avg_speed = 0.0f;
     for (int leg = 0; leg < NUM_LEGS; leg++) {
         avg_speed += speeds[leg];
     }
@@ -203,9 +203,9 @@ void testJointSpecificScaling() {
 
     locomotion.planGaitSequence(0.1f, 0.0f, 0.0f);
 
-    float coxa_speed = locomotion.getCurrentServoSpeed(0, 0);
-    float femur_speed = locomotion.getCurrentServoSpeed(0, 1);
-    float tibia_speed = locomotion.getCurrentServoSpeed(0, 2);
+    double coxa_speed = locomotion.getCurrentServoSpeed(0, 0);
+    double femur_speed = locomotion.getCurrentServoSpeed(0, 1);
+    double tibia_speed = locomotion.getCurrentServoSpeed(0, 2);
 
     std::cout << "  Coxa speed: " << coxa_speed << std::endl;
     std::cout << "  Femur speed: " << femur_speed << std::endl;
@@ -229,17 +229,17 @@ void testVelocityControlToggle() {
 
     assert(locomotion.initialize(&mock_imu, &mock_fsr, &mock_servo));
 
-    float test_velocity = 0.15f;
+    double test_velocity = 0.15f;
 
     // Test with velocity control enabled
     locomotion.setVelocityControlEnabled(true);
     locomotion.planGaitSequence(test_velocity, 0.0f, 0.0f);
-    float enabled_speed = locomotion.getCurrentServoSpeed(0, 0);
+    double enabled_speed = locomotion.getCurrentServoSpeed(0, 0);
 
     // Test with velocity control disabled
     locomotion.setVelocityControlEnabled(false);
     locomotion.planGaitSequence(test_velocity, 0.0f, 0.0f);
-    float disabled_speed = locomotion.getCurrentServoSpeed(0, 0);
+    double disabled_speed = locomotion.getCurrentServoSpeed(0, 0);
 
     std::cout << "  Velocity control enabled speed: " << enabled_speed << std::endl;
     std::cout << "  Velocity control disabled speed: " << disabled_speed << std::endl;
@@ -262,11 +262,11 @@ void testCustomScaling() {
 
     assert(locomotion.initialize(&mock_imu, &mock_fsr, &mock_servo));
 
-    float test_velocity = 0.1f;
+    double test_velocity = 0.1f;
 
     // Test with default scaling
     locomotion.planGaitSequence(test_velocity, 0.0f, 0.0f);
-    float default_speed = locomotion.getCurrentServoSpeed(0, 0);
+    double default_speed = locomotion.getCurrentServoSpeed(0, 0);
 
     // Test with custom aggressive scaling
     CartesianVelocityController::VelocityScaling custom_scaling;
@@ -276,7 +276,7 @@ void testCustomScaling() {
 
     locomotion.setVelocityScaling(custom_scaling);
     locomotion.planGaitSequence(test_velocity, 0.0f, 0.0f);
-    float custom_speed = locomotion.getCurrentServoSpeed(0, 0);
+    double custom_speed = locomotion.getCurrentServoSpeed(0, 0);
 
     std::cout << "  Default scaling speed: " << default_speed << std::endl;
     std::cout << "  Custom scaling speed: " << custom_speed << std::endl;
@@ -301,15 +301,15 @@ void testVelocityMagnitudeCalculation() {
 
     // Test pure linear motion
     locomotion.planGaitSequence(0.1f, 0.0f, 0.0f);
-    float linear_magnitude = velocity_ctrl->getCurrentVelocityMagnitude();
+    double linear_magnitude = velocity_ctrl->getCurrentVelocityMagnitude();
 
     // Test pure angular motion
     locomotion.planGaitSequence(0.0f, 0.0f, 0.5f);
-    float angular_magnitude = velocity_ctrl->getCurrentVelocityMagnitude();
+    double angular_magnitude = velocity_ctrl->getCurrentVelocityMagnitude();
 
     // Test combined motion
     locomotion.planGaitSequence(0.1f, 0.0f, 0.5f);
-    float combined_magnitude = velocity_ctrl->getCurrentVelocityMagnitude();
+    double combined_magnitude = velocity_ctrl->getCurrentVelocityMagnitude();
 
     std::cout << "  Linear magnitude: " << linear_magnitude << std::endl;
     std::cout << "  Angular magnitude: " << angular_magnitude << std::endl;

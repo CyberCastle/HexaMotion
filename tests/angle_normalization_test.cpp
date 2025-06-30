@@ -9,7 +9,7 @@ int main() {
     p.coxa_length = 50;
     p.femur_length = 101;
     p.tibia_length = 208;
-    p.robot_height = 100;
+    p.robot_height = 120;
     p.coxa_angle_limits[0] = -65;
     p.coxa_angle_limits[1] = 65;
     p.femur_angle_limits[0] = -75;
@@ -25,25 +25,25 @@ int main() {
 
     // Test angle normalization function
     std::cout << "\n=== Angle Normalization Tests ===" << std::endl;
-    std::vector<float> test_angles = {
+    std::vector<double> test_angles = {
         0.0f, 90.0f, -90.0f, 180.0f, -180.0f,
         270.0f, -270.0f, 360.0f, -360.0f,
         450.0f, -450.0f, 720.0f, -720.0f};
 
-    for (float angle : test_angles) {
-        float normalized = model.normalizeAngle(angle);
+    for (double angle : test_angles) {
+        double normalized = model.normalizeAngle(angle);
         std::cout << "  " << angle << "° -> " << normalized << "°" << std::endl;
     }
 
     // Test constraint function
     std::cout << "\n=== Angle Constraint Tests ===" << std::endl;
-    std::vector<float> constraint_test_angles = {
+    std::vector<double> constraint_test_angles = {
         -100.0f, -90.0f, -45.0f, 0.0f, 45.0f, 90.0f, 100.0f,
         270.0f, -270.0f, 450.0f // Test wraparound cases
     };
 
-    for (float angle : constraint_test_angles) {
-        float constrained = model.constrainAngle(angle, -90.0f, 90.0f);
+    for (double angle : constraint_test_angles) {
+        double constrained = model.constrainAngle(angle, -90.0f, 90.0f);
         std::cout << "  " << angle << "° -> " << constrained << "° (constrained to [-90°, 90°])" << std::endl;
     }
 
@@ -68,7 +68,7 @@ int main() {
         local_target.x = target.x - 200; // leg 0 base offset
         local_target.y = target.y - 0;
         local_target.z = target.z;
-        float target_distance = sqrt(local_target.x * local_target.x +
+        double target_distance = sqrt(local_target.x * local_target.x +
                                      local_target.y * local_target.y +
                                      local_target.z * local_target.z);
         std::cout << "  Local target: (" << local_target.x << ", " << local_target.y << ", " << local_target.z << ")" << std::endl;
@@ -83,7 +83,7 @@ int main() {
 
         // Check accuracy
         Point3D fk_result = model.forwardKinematics(0, angles);
-        float error = sqrt(pow(target.x - fk_result.x, 2) +
+        double error = sqrt(pow(target.x - fk_result.x, 2) +
                            pow(target.y - fk_result.y, 2) +
                            pow(target.z - fk_result.z, 2));
         std::cout << "  FK verify: (" << fk_result.x << ", " << fk_result.y << ", " << fk_result.z << ")" << std::endl;

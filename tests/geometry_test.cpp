@@ -12,7 +12,7 @@ int main() {
     p.coxa_length = 50;
     p.femur_length = 101;
     p.tibia_length = 208;
-    p.robot_height = 100;
+    p.robot_height = 120;
     p.coxa_angle_limits[0] = -90;
     p.coxa_angle_limits[1] = 90;
     p.femur_angle_limits[0] = -90;
@@ -60,7 +60,7 @@ int main() {
     std::cout << "IK result: (" << ik_bent.coxa << "°, " << ik_bent.femur << "°, " << ik_bent.tibia << "°)" << std::endl;
     std::cout << "FK verify: " << verify_bent.x << ", " << verify_bent.y << ", " << verify_bent.z << std::endl;
 
-    float error = sqrt(pow(pos_bent.x - verify_bent.x, 2) +
+    double error = sqrt(pow(pos_bent.x - verify_bent.x, 2) +
                        pow(pos_bent.y - verify_bent.y, 2) +
                        pow(pos_bent.z - verify_bent.z, 2));
     std::cout << "Error: " << error << "mm" << std::endl;

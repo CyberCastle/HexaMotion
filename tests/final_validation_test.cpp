@@ -53,14 +53,14 @@ int main() {
 
     sys.setGaitType(METACHRONAL_GAIT);
     std::cout << "   METACHRONAL - Leg 0 trajectory evolution:" << std::endl;
-    for (float phase = 0.0f; phase <= 1.0f; phase += 0.25f) {
+    for (double phase = 0.0f; phase <= 1.0f; phase += 0.25f) {
         Point3D traj = sys.calculateFootTrajectory(0, phase);
         std::cout << "     Phase " << phase << ": (" << (int)traj.x << ", " << (int)traj.y << ", " << (int)traj.z << ") mm" << std::endl;
     }
 
     sys.setGaitType(ADAPTIVE_GAIT);
     std::cout << "   ADAPTIVE - Leg 0 trajectory evolution:" << std::endl;
-    for (float phase = 0.0f; phase <= 1.0f; phase += 0.25f) {
+    for (double phase = 0.0f; phase <= 1.0f; phase += 0.25f) {
         Point3D traj = sys.calculateFootTrajectory(0, phase);
         std::cout << "     Phase " << phase << ": (" << (int)traj.x << ", " << (int)traj.y << ", " << (int)traj.z << ") mm" << std::endl;
     }

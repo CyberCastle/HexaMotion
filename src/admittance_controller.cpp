@@ -1,5 +1,6 @@
 #include "admittance_controller.h"
 #include "hexamotion_constants.h"
+#include "workspace_validator.h" // Use unified validator for workspace utilities
 
 /**
  * @file admittance_controller.cpp
@@ -21,6 +22,13 @@ AdmittanceController::AdmittanceController(RobotModel &model, IIMUInterface *imu
       dynamic_stiffness_enabled_(false), swing_stiffness_scaler_(WORKSPACE_SCALING_FACTOR),
       load_stiffness_scaler_(1.5f), step_clearance_(40.0f),
       current_time_(0.0) {
+
+    // Initialize workspace validator for position calculations
+    ValidationConfig validator_config;
+    validator_config.enable_collision_checking = false;   // Disable for performance in admittance control
+    validator_config.enable_joint_limit_checking = false; // Not needed for stiffness calculations
+    workspace_validator_ = std::make_unique<WorkspaceValidator>(model_, validator_config);
+
     delta_time_ = config_.getDeltaTime();
     selectIntegrationMethod();
 
@@ -31,12 +39,14 @@ AdmittanceController::AdmittanceController(RobotModel &model, IIMUInterface *imu
     }
 }
 
+AdmittanceController::~AdmittanceController() = default;
+
 void AdmittanceController::initialize() {
     initializeDefaultParameters();
     resetAllDynamics();
 }
 
-void AdmittanceController::setLegAdmittance(int leg_index, float mass, float damping, float stiffness) {
+void AdmittanceController::setLegAdmittance(int leg_index, double mass, double damping, double stiffness) {
     if (leg_index >= 0 && leg_index < NUM_LEGS) {
         leg_states_[leg_index].params.virtual_mass = mass;
         leg_states_[leg_index].params.virtual_damping = damping;
@@ -70,7 +80,7 @@ void AdmittanceController::updateAllLegs(const Point3D forces[NUM_LEGS], Point3D
     current_time_ += delta_time_;
 }
 
-void AdmittanceController::setDynamicStiffness(bool enabled, float swing_scaler, float load_scaler) {
+void AdmittanceController::setDynamicStiffness(bool enabled, double swing_scaler, double load_scaler) {
     dynamic_stiffness_enabled_ = enabled;
     swing_stiffness_scaler_ = swing_scaler;
     load_stiffness_scaler_ = load_scaler;
@@ -78,7 +88,7 @@ void AdmittanceController::setDynamicStiffness(bool enabled, float swing_scaler,
 
 void AdmittanceController::updateStiffness(const LegState leg_states[NUM_LEGS],
                                            const Point3D leg_positions[NUM_LEGS],
-                                           float step_clearance) {
+                                           double step_clearance) {
     if (!dynamic_stiffness_enabled_)
         return;
 
@@ -93,7 +103,7 @@ void AdmittanceController::updateStiffness(const LegState leg_states[NUM_LEGS],
     for (int i = 0; i < NUM_LEGS; i++) {
         if (leg_states[i] == SWING_PHASE) {
             // Calculate stiffness scaling for swing leg
-            float scale = calculateStiffnessScale(i, leg_states[i], leg_positions[i]);
+            double scale = calculateStiffnessScale(i, leg_states[i], leg_positions[i]);
             leg_states_[i].stiffness_scale = scale * swing_stiffness_scaler_;
 
             // Update adjacent legs with increased stiffness
@@ -104,7 +114,7 @@ void AdmittanceController::updateStiffness(const LegState leg_states[NUM_LEGS],
     // Apply stiffness scaling to virtual stiffness
     for (int i = 0; i < NUM_LEGS; i++) {
         // Get base stiffness and apply scaling
-        float base_stiffness = leg_states_[i].params.virtual_stiffness / leg_states_[i].stiffness_scale;
+        double base_stiffness = leg_states_[i].params.virtual_stiffness / leg_states_[i].stiffness_scale;
         leg_states_[i].params.virtual_stiffness = base_stiffness * leg_states_[i].stiffness_scale;
     }
 }
@@ -177,23 +187,33 @@ Point3D AdmittanceController::calculateAcceleration(const AdmittanceParams &para
     return total_force * (DEFAULT_ANGULAR_SCALING / params.virtual_mass);
 }
 
-float AdmittanceController::calculateStiffnessScale(int leg_index, LegState leg_state,
+double AdmittanceController::calculateStiffnessScale(int leg_index, LegState leg_state,
                                                     const Point3D &leg_position) {
     if (leg_state != SWING_PHASE)
         return 1.0f;
 
-    // Calculate height difference from default position for stiffness scaling
-    Point3D default_pos = model_.getLegOrigin(leg_index);
-    float z_diff = abs(leg_position.z - default_pos.z);
+    // Use WorkspaceValidator for default position calculation
+    if (!workspace_validator_) {
+        return 1.0f; // Safety fallback
+    }
 
-    // Scale based on step clearance (equivalent to OpenSHC implementation)
-    float step_reference = z_diff / step_clearance_;
+    // Get workspace bounds for more accurate default position
+    auto bounds = workspace_validator_->getWorkspaceBounds(leg_index);
+    Point3D default_pos = bounds.center_position; // Use workspace center as reference
+
+    double z_diff = abs(leg_position.z - default_pos.z);
+
+    // Scale based on step clearance using workspace height range
+    double workspace_height_range = bounds.max_height - bounds.min_height;
+    double normalized_clearance = std::max(step_clearance_, workspace_height_range * 0.1f); // Min 10% of workspace
+
+    double step_reference = z_diff / normalized_clearance;
     step_reference = std::min(1.0f, step_reference);
 
     return step_reference;
 }
 
-void AdmittanceController::updateAdjacentLegStiffness(int swing_leg_index, float load_scaling) {
+void AdmittanceController::updateAdjacentLegStiffness(int swing_leg_index, double load_scaling) {
     int adjacent1 = (swing_leg_index + 1) % NUM_LEGS;
     int adjacent2 = (swing_leg_index + NUM_LEGS - 1) % NUM_LEGS;
 
@@ -212,7 +232,7 @@ Point3D AdmittanceController::orientationError(const Point3D &target) {
     return target - current;
 }
 
-bool AdmittanceController::maintainOrientation(const Point3D &target, Point3D &current, float dt) {
+bool AdmittanceController::maintainOrientation(const Point3D &target, Point3D &current, double dt) {
     if (!imu_)
         return false;
 

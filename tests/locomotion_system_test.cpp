@@ -9,7 +9,7 @@ int main() {
     p.coxa_length = 50;
     p.femur_length = 101;
     p.tibia_length = 208;
-    p.robot_height = 100;
+    p.robot_height = 120;
     p.height_offset = 0;
     p.control_frequency = 50;
     p.coxa_angle_limits[0] = -65;
@@ -27,8 +27,8 @@ int main() {
     assert(sys.calibrateSystem());
     assert(sys.setGaitType(TRIPOD_GAIT));
     assert(sys.update());
-    float len = sys.getStepLength();
-    float h = sys.getStepHeight();
+    double len = sys.getStepLength();
+    double h = sys.getStepHeight();
     assert(len >= 20.0f && len <= 80.0f);
     assert(h >= 15.0f && h <= 50.0f);
 

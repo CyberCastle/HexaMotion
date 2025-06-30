@@ -19,15 +19,15 @@ void setup() {
     Serial.println("PoseController Servo Flags Example");
 
     // Initialize with default pose
-    pose_controller.initializeDefaultPose(leg_positions, joint_angles, 100.0f, 80.0f);
+    pose_controller.initializeDefaultPose(leg_positions, joint_angles);
     Serial.println("Default pose initialized");
 
     // Test 1: Normal operation (no flags set)
     Serial.println("\n=== Test 1: Normal Movement (No Flags) ===");
     servos.setBlockingFlag(0, 0, false); // Ensure no flags are set
 
-    Eigen::Vector3f position(0.0f, 0.0f, 90.0f);
-    Eigen::Vector3f orientation(0.0f, 0.0f, 0.0f);
+    Eigen::Vector3d position(0.0f, 0.0f, 90.0f);
+    Eigen::Vector3d orientation(0.0f, 0.0f, 0.0f);
 
     bool result = pose_controller.setBodyPose(position, orientation, leg_positions, joint_angles);
     Serial.print("Body pose set result: ");
@@ -95,8 +95,8 @@ void loop() {
         // Set a blocking flag
         servos.setBlockingFlag(1, 2, true); // Block tibia joint on leg 1
 
-        Eigen::Vector3f target_pos(10.0f, 10.0f, 85.0f);
-        Eigen::Vector3f target_orient(5.0f, 0.0f, 0.0f);
+        Eigen::Vector3d target_pos(10.0f, 10.0f, 85.0f);
+        Eigen::Vector3d target_orient(5.0f, 0.0f, 0.0f);
 
         bool result = pose_controller.setBodyPose(target_pos, target_orient, leg_positions, joint_angles);
         Serial.print("Smooth trajectory with blocked servo result: ");

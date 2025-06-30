@@ -12,7 +12,7 @@ struct OpenSHCGaitConfig {
     int swing_phase;
     int phase_offset;
     std::vector<int> offset_multiplier; // [AR, BR, CR, CL, BL, AL]
-    std::vector<float> expected_offsets;
+    std::vector<double> expected_offsets;
     std::string name;
 };
 
@@ -28,7 +28,7 @@ void printOpenSHCConfig(const OpenSHCGaitConfig &config) {
     std::cout << "  Phase Offset: " << config.phase_offset << std::endl;
     std::cout << "  Total Period: " << (config.stance_phase + config.swing_phase) << std::endl;
 
-    float stance_ratio = float(config.stance_phase) / (config.stance_phase + config.swing_phase);
+    double stance_ratio = double(config.stance_phase) / (config.stance_phase + config.swing_phase);
     std::cout << "  Stance Ratio: " << std::fixed << std::setprecision(2) << stance_ratio << std::endl;
 
     std::cout << "  Offset Multipliers: ";
@@ -84,16 +84,16 @@ bool validateGaitEquivalence(GaitType gait_type, const OpenSHCGaitConfig &config
 
 void validateStability(const OpenSHCGaitConfig &config) {
     std::cout << "\nStability Analysis:" << std::endl;
-    float stance_ratio = float(config.stance_phase) / (config.stance_phase + config.swing_phase);
+    double stance_ratio = double(config.stance_phase) / (config.stance_phase + config.swing_phase);
 
     int min_legs_stance = NUM_LEGS;
     int max_legs_stance = 0;
 
     // Sample stability across the gait cycle
-    for (float phase = 0.0f; phase < 1.0f; phase += 0.05f) {
+    for (double phase = 0.0f; phase < 1.0f; phase += 0.05f) {
         int legs_in_stance = 0;
         for (size_t i = 0; i < config.expected_offsets.size(); ++i) {
-            float leg_phase = fmod(phase + config.expected_offsets[i], 1.0f);
+            double leg_phase = fmod(phase + config.expected_offsets[i], 1.0f);
             if (leg_phase < stance_ratio) {
                 legs_in_stance++;
             }

@@ -22,7 +22,7 @@ int main() {
 
     // Initialize DH parameters to zero (will use default)
     for (int l = 0; l < NUM_LEGS; ++l) {
-        for (int j = 0; j < DOF_PER_LEG; ++j) {
+        for (int j = 0; j < DOF_PER_LEG + 1; ++j) {
             for (int k = 0; k < 4; ++k) {
                 params.dh_parameters[l][j][k] = 0.0f;
             }
@@ -38,8 +38,8 @@ int main() {
     std::cout << "  Femur length: " << params.femur_length << "mm" << std::endl;
     std::cout << "  Tibia length: " << params.tibia_length << "mm" << std::endl;
 
-    float max_reach = params.coxa_length + params.femur_length + params.tibia_length;
-    float min_reach = abs(params.femur_length - params.tibia_length);
+    double max_reach = params.coxa_length + params.femur_length + params.tibia_length;
+    double min_reach = abs(params.femur_length - params.tibia_length);
     std::cout << "  Theoretical max reach: " << max_reach << "mm" << std::endl;
     std::cout << "  Theoretical min reach: " << min_reach << "mm" << std::endl;
 
@@ -70,12 +70,12 @@ int main() {
         std::cout << "  Target position: (" << target.x << ", " << target.y << ", " << target.z << ")" << std::endl;
 
         // Check reachability
-        float distance_from_origin = sqrt(target.x * target.x + target.y * target.y + target.z * target.z);
+        double distance_from_origin = sqrt(target.x * target.x + target.y * target.y + target.z * target.z);
 
         // For leg 0, base is at (200, 0, 0)
-        float base_x = 200.0f;
-        float base_y = 0.0f;
-        float distance_from_base = sqrt((target.x - base_x) * (target.x - base_x) +
+        double base_x = 200.0f;
+        double base_y = 0.0f;
+        double distance_from_base = sqrt((target.x - base_x) * (target.x - base_x) +
                                         (target.y - base_y) * (target.y - base_y) +
                                         target.z * target.z);
 
@@ -95,8 +95,8 @@ int main() {
     std::cout << "Testing positions at workspace boundaries..." << std::endl;
 
     // Test positions at different distances
-    float test_distances[] = {100.0f, 200.0f, 300.0f, 309.0f, 350.0f};
-    for (float dist : test_distances) {
+    double test_distances[] = {100.0f, 200.0f, 300.0f, 309.0f, 350.0f};
+    for (double dist : test_distances) {
         Point3D test_pos(200.0f + dist, 0.0f, -100.0f); // Relative to leg 0 base
 
         std::cout << "\nTesting position at distance " << dist << "mm from leg base:" << std::endl;
@@ -105,7 +105,7 @@ int main() {
         JointAngles ik_result = model.inverseKinematics(0, test_pos);
         Point3D fk_verify = model.forwardKinematics(0, ik_result);
 
-        float error = sqrt(pow(test_pos.x - fk_verify.x, 2) +
+        double error = sqrt(pow(test_pos.x - fk_verify.x, 2) +
                            pow(test_pos.y - fk_verify.y, 2) +
                            pow(test_pos.z - fk_verify.z, 2));
 

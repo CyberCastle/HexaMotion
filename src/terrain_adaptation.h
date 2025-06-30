@@ -3,7 +3,11 @@
 
 #include "HexaModel.h"
 #include <ArduinoEigen.h>
+#include <memory>
 #include <vector>
+
+// Forward declaration to avoid circular dependency
+class WorkspaceValidator;
 
 /**
  * @brief Terrain adaptation system for hexapod locomotion
@@ -23,7 +27,7 @@ class TerrainAdaptation {
      */
     struct ExternalTarget {
         Point3D position;        ///< Target tip position
-        float swing_clearance;   ///< Height clearance during swing
+        double swing_clearance;   ///< Height clearance during swing
         std::string frame_id;    ///< Reference frame ID
         unsigned long timestamp; ///< Request timestamp
         bool defined;            ///< Whether target is valid
@@ -39,7 +43,7 @@ class TerrainAdaptation {
         Point3D position; ///< Step surface position
         Point3D normal;   ///< Step surface normal vector
         bool valid;       ///< Whether detection is valid
-        float confidence; ///< Detection confidence (0-1)
+        double confidence; ///< Detection confidence (0-1)
 
         StepPlane() : position(0, 0, 0), normal(0, 0, 1), valid(false), confidence(0) {}
     };
@@ -48,24 +52,25 @@ class TerrainAdaptation {
      * @brief Walk plane estimation structure
      */
     struct WalkPlane {
-        Eigen::Vector3f coeffs; ///< Plane coefficients [a,b,c] for ax+by+c=z
-        Eigen::Vector3f normal; ///< Plane normal vector
+        Eigen::Vector3d coeffs; ///< Plane coefficients [a,b,c] for ax+by+c=z
+        Eigen::Vector3d normal; ///< Plane normal vector
         bool valid;             ///< Whether estimation is valid
-        float confidence;       ///< Estimation confidence (0-1)
+        double confidence;       ///< Estimation confidence (0-1)
 
         WalkPlane() : coeffs(0, 0, 0), normal(0, 0, 1), valid(false), confidence(0) {}
     };
 
   private:
     RobotModel &model_;
+    std::unique_ptr<WorkspaceValidator> workspace_validator_; // Workspace validation
     bool rough_terrain_mode_;
     bool force_normal_touchdown_;
     bool gravity_aligned_tips_;
 
     // Terrain detection parameters
-    float touchdown_threshold_; ///< FSR threshold for touchdown detection
-    float liftoff_threshold_;   ///< FSR threshold for liftoff detection
-    float step_depth_;          ///< Depth to probe for reactive terrain detection
+    double touchdown_threshold_; ///< FSR threshold for touchdown detection
+    double liftoff_threshold_;   ///< FSR threshold for liftoff detection
+    double step_depth_;          ///< Depth to probe for reactive terrain detection
 
     // Walk plane estimation
     WalkPlane current_walk_plane_;
@@ -79,10 +84,11 @@ class TerrainAdaptation {
     bool touchdown_detection_[NUM_LEGS];
 
     // IMU integration for gravity estimation
-    Eigen::Vector3f gravity_estimate_;
+    Eigen::Vector3d gravity_estimate_;
 
   public:
     explicit TerrainAdaptation(RobotModel &model);
+    ~TerrainAdaptation(); // Needed for unique_ptr with forward declaration
 
     /**
      * @brief Initialize terrain adaptation system
@@ -118,25 +124,25 @@ class TerrainAdaptation {
      * @brief Set FSR touchdown threshold
      * @param threshold FSR threshold for touchdown detection (N or ADC units)
      */
-    void setTouchdownThreshold(float threshold) { touchdown_threshold_ = threshold; }
+    void setTouchdownThreshold(double threshold) { touchdown_threshold_ = threshold; }
 
     /**
      * @brief Set FSR liftoff threshold
      * @param threshold FSR threshold for liftoff detection (N or ADC units)
      */
-    void setLiftoffThreshold(float threshold) { liftoff_threshold_ = threshold; }
+    void setLiftoffThreshold(double threshold) { liftoff_threshold_ = threshold; }
 
     /**
      * @brief Get current touchdown threshold
      * @return Touchdown threshold value
      */
-    float getTouchdownThreshold() const { return touchdown_threshold_; }
+    double getTouchdownThreshold() const { return touchdown_threshold_; }
 
     /**
      * @brief Get current liftoff threshold
      * @return Liftoff threshold value
      */
-    float getLiftoffThreshold() const { return liftoff_threshold_; }
+    double getLiftoffThreshold() const { return liftoff_threshold_; }
 
     /**
      * @brief Update FSR thresholds from model parameters
@@ -189,13 +195,13 @@ class TerrainAdaptation {
      * @brief Estimate gravity vector from IMU data
      * @return Estimated gravity vector
      */
-    Eigen::Vector3f estimateGravity() const { return gravity_estimate_; }
+    Eigen::Vector3d estimateGravity() const { return gravity_estimate_; }
 
     /**
      * @brief Get current gravity vector estimate
      * @return Gravity vector estimate
      */
-    Eigen::Vector3f getGravityVector() const { return gravity_estimate_; }
+    Eigen::Vector3d getGravityVector() const { return gravity_estimate_; }
 
     /**
      * @brief Adapt foot trajectory for terrain-aware stepping
@@ -206,7 +212,7 @@ class TerrainAdaptation {
      * @return Terrain-adapted trajectory
      */
     Point3D adaptTrajectoryForTerrain(int leg_index, const Point3D &base_trajectory,
-                                      LegState leg_state, float swing_progress);
+                                      LegState leg_state, double swing_progress);
 
     /**
      * @brief Check if target position is reachable within terrain constraints

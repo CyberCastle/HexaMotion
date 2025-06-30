@@ -22,7 +22,7 @@ int main() {
 
     // Initialize DH parameters
     for (int l = 0; l < NUM_LEGS; ++l) {
-        for (int j = 0; j < DOF_PER_LEG; ++j) {
+        for (int j = 0; j < DOF_PER_LEG + 1; ++j) {
             for (int k = 0; k < 4; ++k) {
                 params.dh_parameters[l][j][k] = 0.0f;
             }
@@ -40,9 +40,9 @@ int main() {
     std::vector<Point3D> reachable_positions;
 
     // Sample joint angles within limits
-    for (float coxa = params.coxa_angle_limits[0]; coxa <= params.coxa_angle_limits[1]; coxa += 30.0f) {
-        for (float femur = params.femur_angle_limits[0]; femur <= params.femur_angle_limits[1]; femur += 15.0f) {
-            for (float tibia = params.tibia_angle_limits[0]; tibia <= params.tibia_angle_limits[1]; tibia += 30.0f) {
+    for (double coxa = params.coxa_angle_limits[0]; coxa <= params.coxa_angle_limits[1]; coxa += 30.0f) {
+        for (double femur = params.femur_angle_limits[0]; femur <= params.femur_angle_limits[1]; femur += 15.0f) {
+            for (double tibia = params.tibia_angle_limits[0]; tibia <= params.tibia_angle_limits[1]; tibia += 30.0f) {
                 JointAngles angles(coxa, femur, tibia);
                 samples++;
 
@@ -59,14 +59,14 @@ int main() {
     std::cout << "Found " << valid_positions << " valid positions" << std::endl;
 
     // Find workspace bounds
-    float min_x = 1000, max_x = -1000;
-    float min_y = 1000, max_y = -1000;
-    float min_z = 1000, max_z = -1000;
-    float min_dist = 1000, max_dist = 0;
+    double min_x = 1000, max_x = -1000;
+    double min_y = 1000, max_y = -1000;
+    double min_z = 1000, max_z = -1000;
+    double min_dist = 1000, max_dist = 0;
 
     // Leg 0 base position
-    float base_x = 200.0f;
-    float base_y = 0.0f;
+    double base_x = 200.0f;
+    double base_y = 0.0f;
 
     for (const Point3D &pos : reachable_positions) {
         min_x = std::min(min_x, pos.x);
@@ -76,7 +76,7 @@ int main() {
         min_z = std::min(min_z, pos.z);
         max_z = std::max(max_z, pos.z);
 
-        float dist = sqrt((pos.x - base_x) * (pos.x - base_x) +
+        double dist = sqrt((pos.x - base_x) * (pos.x - base_x) +
                           (pos.y - base_y) * (pos.y - base_y) +
                           pos.z * pos.z);
         min_dist = std::min(min_dist, dist);
@@ -115,7 +115,7 @@ int main() {
         bool within_y = (target.y >= min_y && target.y <= max_y);
         bool within_z = (target.z >= min_z && target.z <= max_z);
 
-        float target_dist = sqrt((target.x - base_x) * (target.x - base_x) +
+        double target_dist = sqrt((target.x - base_x) * (target.x - base_x) +
                                  (target.y - base_y) * (target.y - base_y) +
                                  target.z * target.z);
         bool within_dist = (target_dist >= min_dist && target_dist <= max_dist);

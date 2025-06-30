@@ -5,6 +5,10 @@
 #include "hexamotion_constants.h"
 #include "velocity_limits.h"
 #include <array>
+#include <memory>
+
+// Forward declaration to avoid circular dependency
+class WorkspaceValidator;
 
 /**
  * @brief Cartesian velocity controller equivalent to OpenSHC's velocity control system.
@@ -24,17 +28,17 @@ class CartesianVelocityController {
      * @brief Servo speed configuration for all joints.
      */
     struct ServoSpeedConfig {
-        float base_speed = SERVO_SPEED_DEFAULT;           // Base servo speed multiplier (0.1-3.0)
-        float velocity_scaling = SERVO_SPEED_DEFAULT;     // Velocity-dependent scaling factor
-        float angular_compensation = SERVO_SPEED_DEFAULT; // Angular velocity compensation
-        float gait_adjustment = SERVO_SPEED_DEFAULT;      // Gait-specific adjustment
+        double base_speed = SERVO_SPEED_DEFAULT;           // Base servo speed multiplier (0.1-3.0)
+        double velocity_scaling = SERVO_SPEED_DEFAULT;     // Velocity-dependent scaling factor
+        double angular_compensation = SERVO_SPEED_DEFAULT; // Angular velocity compensation
+        double gait_adjustment = SERVO_SPEED_DEFAULT;      // Gait-specific adjustment
 
         /**
          * @brief Calculate final servo speed from all factors.
          * @return Computed servo speed (clamped to valid range)
          */
-        float getEffectiveSpeed() const {
-            float speed = base_speed * velocity_scaling * angular_compensation * gait_adjustment;
+        double getEffectiveSpeed() const {
+            double speed = base_speed * velocity_scaling * angular_compensation * gait_adjustment;
             return std::max(SERVO_SPEED_MIN, std::min(SERVO_SPEED_MAX, speed)); // Clamp to servo limits
         }
     };
@@ -52,10 +56,10 @@ class CartesianVelocityController {
      * @brief Velocity scaling parameters.
      */
     struct VelocityScaling {
-        float linear_velocity_scale = DEFAULT_LINEAR_VELOCITY_SCALE;   // Linear velocity to speed scaling factor
-        float angular_velocity_scale = DEFAULT_ANGULAR_VELOCITY_SCALE; // Angular velocity to speed scaling factor
-        float minimum_speed_ratio = DEFAULT_MIN_SPEED_RATIO;           // Minimum speed as ratio of max (20%)
-        float maximum_speed_ratio = DEFAULT_MAX_SPEED_RATIO;           // Maximum speed as ratio of max (180%)
+        double linear_velocity_scale = DEFAULT_LINEAR_VELOCITY_SCALE;   // Linear velocity to speed scaling factor
+        double angular_velocity_scale = DEFAULT_ANGULAR_VELOCITY_SCALE; // Angular velocity to speed scaling factor
+        double minimum_speed_ratio = DEFAULT_MIN_SPEED_RATIO;           // Minimum speed as ratio of max (20%)
+        double maximum_speed_ratio = DEFAULT_MAX_SPEED_RATIO;           // Maximum speed as ratio of max (180%)
         bool enable_adaptive_scaling = true;                           // Enable adaptive scaling based on leg workspace
     };
 
@@ -63,11 +67,11 @@ class CartesianVelocityController {
      * @brief Gait-specific speed modifiers.
      */
     struct GaitSpeedModifiers {
-        float tripod_speed_factor = DEFAULT_TRIPOD_SPEED_FACTOR;           // Tripod gait speed multiplier
-        float wave_speed_factor = DEFAULT_WAVE_SPEED_FACTOR;               // Wave gait speed multiplier
-        float ripple_speed_factor = DEFAULT_RIPPLE_SPEED_FACTOR;           // Ripple gait speed multiplier
-        float metachronal_speed_factor = DEFAULT_METACHRONAL_SPEED_FACTOR; // Metachronal gait speed multiplier
-        float adaptive_speed_factor = DEFAULT_ADAPTIVE_SPEED_FACTOR;       // Adaptive gait speed multiplier
+        double tripod_speed_factor = DEFAULT_TRIPOD_SPEED_FACTOR;           // Tripod gait speed multiplier
+        double wave_speed_factor = DEFAULT_WAVE_SPEED_FACTOR;               // Wave gait speed multiplier
+        double ripple_speed_factor = DEFAULT_RIPPLE_SPEED_FACTOR;           // Ripple gait speed multiplier
+        double metachronal_speed_factor = DEFAULT_METACHRONAL_SPEED_FACTOR; // Metachronal gait speed multiplier
+        double adaptive_speed_factor = DEFAULT_ADAPTIVE_SPEED_FACTOR;       // Adaptive gait speed multiplier
     };
 
     /**
@@ -75,6 +79,7 @@ class CartesianVelocityController {
      * @param model Reference to robot model for kinematics.
      */
     explicit CartesianVelocityController(const RobotModel &model);
+    ~CartesianVelocityController(); // Needed for unique_ptr with forward declaration
 
     /**
      * @brief Update servo speeds based on commanded Cartesian velocity.
@@ -84,8 +89,8 @@ class CartesianVelocityController {
      * @param current_gait Active gait type
      * @return True if servo speeds were successfully calculated
      */
-    bool updateServoSpeeds(float linear_velocity_x, float linear_velocity_y,
-                           float angular_velocity, GaitType current_gait);
+    bool updateServoSpeeds(double linear_velocity_x, double linear_velocity_y,
+                           double angular_velocity, GaitType current_gait);
 
     /**
      * @brief Get calculated servo speed for a specific joint.
@@ -93,7 +98,7 @@ class CartesianVelocityController {
      * @param joint_index Joint index (0=coxa, 1=femur, 2=tibia)
      * @return Calculated servo speed
      */
-    float getServoSpeed(int leg_index, int joint_index) const;
+    double getServoSpeed(int leg_index, int joint_index) const;
 
     /**
      * @brief Get servo speeds for an entire leg.
@@ -130,7 +135,7 @@ class CartesianVelocityController {
      * @brief Get current Cartesian velocity magnitude.
      * @return Total velocity magnitude in m/s
      */
-    float getCurrentVelocityMagnitude() const;
+    double getCurrentVelocityMagnitude() const;
 
     /**
      * @brief Reset servo speeds to default configuration.
@@ -139,14 +144,15 @@ class CartesianVelocityController {
 
   private:
     const RobotModel &model_;
+    std::unique_ptr<WorkspaceValidator> workspace_validator_; // Workspace validation
     std::array<LegServoSpeeds, NUM_LEGS> leg_servo_speeds_;
     VelocityScaling velocity_scaling_;
     GaitSpeedModifiers gait_modifiers_;
 
     // Current velocity state
-    float current_linear_vx_ = 0.0f;
-    float current_linear_vy_ = 0.0f;
-    float current_angular_velocity_ = 0.0f;
+    double current_linear_vx_ = 0.0f;
+    double current_linear_vy_ = 0.0f;
+    double current_angular_velocity_ = 0.0f;
     GaitType current_gait_ = TRIPOD_GAIT;
 
     bool velocity_control_enabled_ = true;
@@ -156,21 +162,21 @@ class CartesianVelocityController {
      * @param velocity_magnitude Linear velocity magnitude (m/s)
      * @return Scaling factor for servo speeds
      */
-    float calculateLinearVelocityScale(float velocity_magnitude) const;
+    double calculateLinearVelocityScale(double velocity_magnitude) const;
 
     /**
      * @brief Calculate velocity scaling factor for angular motion.
      * @param angular_velocity Angular velocity magnitude (rad/s)
      * @return Scaling factor for servo speeds
      */
-    float calculateAngularVelocityScale(float angular_velocity) const;
+    double calculateAngularVelocityScale(double angular_velocity) const;
 
     /**
      * @brief Calculate gait-specific speed adjustment.
      * @param gait Current gait type
      * @return Gait speed multiplier
      */
-    float calculateGaitSpeedAdjustment(GaitType gait) const;
+    double calculateGaitSpeedAdjustment(GaitType gait) const;
 
     /**
      * @brief Calculate per-leg speed compensation based on leg position and velocity direction.
@@ -180,8 +186,8 @@ class CartesianVelocityController {
      * @param angular_vel Angular velocity
      * @return Speed compensation factor for this leg
      */
-    float calculateLegSpeedCompensation(int leg_index, float linear_vx,
-                                        float linear_vy, float angular_vel) const;
+    double calculateLegSpeedCompensation(int leg_index, double linear_vx,
+                                        double linear_vy, double angular_vel) const;
 
     /**
      * @brief Apply workspace constraints to servo speed.
@@ -190,7 +196,7 @@ class CartesianVelocityController {
      * @param base_speed Base calculated speed
      * @return Workspace-constrained speed
      */
-    float applyWorkspaceConstraints(int leg_index, int joint_index, float base_speed) const;
+    double applyWorkspaceConstraints(int leg_index, int joint_index, double base_speed) const;
 };
 
 #endif // CARTESIAN_VELOCITY_CONTROLLER_H

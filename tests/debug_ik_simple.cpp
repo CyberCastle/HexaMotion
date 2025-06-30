@@ -48,7 +48,7 @@ int main() {
     Point3D verify_pos = sys.calculateForwardKinematics(0, ik_result);
     std::cout << "FK verify: x=" << verify_pos.x << ", y=" << verify_pos.y << ", z=" << verify_pos.z << std::endl;
 
-    float error = sqrt(pow(fk_pos.x - verify_pos.x, 2) +
+    double error = sqrt(pow(fk_pos.x - verify_pos.x, 2) +
                        pow(fk_pos.y - verify_pos.y, 2) +
                        pow(fk_pos.z - verify_pos.z, 2));
     std::cout << "Total error: " << error << "mm" << std::endl;
@@ -66,7 +66,7 @@ int main() {
     Point3D simple_verify = sys.calculateForwardKinematics(0, simple_ik);
     std::cout << "FK verify: x=" << simple_verify.x << ", y=" << simple_verify.y << ", z=" << simple_verify.z << std::endl;
 
-    float simple_error = sqrt(pow(simple_pos.x - simple_verify.x, 2) +
+    double simple_error = sqrt(pow(simple_pos.x - simple_verify.x, 2) +
                               pow(simple_pos.y - simple_verify.y, 2) +
                               pow(simple_pos.z - simple_verify.z, 2));
     std::cout << "Error: " << simple_error << "mm" << std::endl;

@@ -50,11 +50,6 @@
 #define DEFAULT_METACHRONAL_SPEED_FACTOR 1.0f // Default metachronal gait speed factor
 #define DEFAULT_ADAPTIVE_SPEED_FACTOR 1.1f    // Default adaptive gait speed factor
 
-// Joint-specific speed adjustments
-#define COXA_SPEED_FACTOR 0.9f  // Coxa joint speed adjustment (10% slower)
-#define FEMUR_SPEED_FACTOR 1.0f // Femur joint speed adjustment (normal)
-#define TIBIA_SPEED_FACTOR 1.1f // Tibia joint speed adjustment (10% faster)
-
 // Velocity multipliers for different joints
 #define FEMUR_VELOCITY_MULTIPLIER 1.1f // Femur velocity scaling multiplier
 #define TIBIA_VELOCITY_MULTIPLIER 1.2f // Tibia velocity scaling multiplier
@@ -91,23 +86,16 @@
 #define DEFAULT_MAX_LINEAR_VELOCITY 200.0f // Default maximum linear velocity (mm/s)
 #define DEFAULT_MAX_ANGULAR_VELOCITY 90.0f // Default maximum angular velocity (degrees/s)
 
-// Common robot dimensions (typical values)
-#define DEFAULT_HEXAGON_RADIUS 200.0f // Default body radius (mm)
-#define DEFAULT_COXA_LENGTH 50.0f     // Default coxa segment length (mm)
-#define DEFAULT_FEMUR_LENGTH 101.0f   // Default femur segment length (mm)
-#define DEFAULT_TIBIA_LENGTH 208.0f   // Default tibia segment length (mm)
-#define DEFAULT_ROBOT_HEIGHT 90.0f    // Default robot height (mm)
-
 // Control system defaults
-#define DEFAULT_CONTROL_FREQUENCY 50.0f // Default control frequency (Hz)
+#define DEFAULT_CONTROL_FREQUENCY 50.0 // Default control frequency (Hz)
 
 // Velocity scaling and coupling factors
-#define DEFAULT_ANGULAR_SCALING 1.0f     // Default angular velocity scaling
-#define ANGULAR_LINEAR_COUPLING 0.3f     // Coupling factor between angular and linear velocity
-#define ANGULAR_ACCELERATION_FACTOR 2.0f // Angular acceleration multiplier
-#define WORKSPACE_SCALING_FACTOR 0.5f    // Workspace scaling factor
-#define WALKSPACE_SCALING_FACTOR 0.7f    // Walkspace scaling factor
-#define MIN_SERVO_VELOCITY 0.1f          // Minimum servo velocity (10% of max)
+#define DEFAULT_ANGULAR_SCALING 1.0     // Default angular velocity scaling
+#define ANGULAR_LINEAR_COUPLING 0.3     // Coupling factor between angular and linear velocity
+#define ANGULAR_ACCELERATION_FACTOR 2.0 // Angular acceleration multiplier
+#define WORKSPACE_SCALING_FACTOR 0.5    // Workspace scaling factor
+#define WALKSPACE_SCALING_FACTOR 0.7    // Walkspace scaling factor
+#define MIN_SERVO_VELOCITY 0.1          // Minimum servo velocity (10% of max)
 #define FULL_ROTATION_DEGREES 360.0f     // Full rotation in degrees
 #define HALF_ROTATION_DEGREES 180.0f     // Half rotation in degrees
 #define BEARING_STEP_DEGREES 30.0f       // Bearing sampling step in degrees
@@ -133,7 +121,7 @@
 // DLS (Damped Least Squares) IK parameters
 #define IK_DLS_COEFFICIENT 0.02f       // Damping factor for numerical stability in DLS method
 #define IK_TOLERANCE 1.0f              // Position tolerance for IK convergence (1mm)
-#define IK_MAX_ITERATIONS 75           // Maximum iterations for IK solver
+#define IK_DEFAULT_MAX_ITERATIONS 30   // Default maximum iterations for IK solver
 #define IK_HIGH_DAMPING 0.1f           // High damping factor for singular configurations
 #define IK_STAGNATION_THRESHOLD 0.001f // Threshold for detecting stagnation in IK iteration
 #define IK_STAGNATION_COUNT_MAX 5      // Maximum stagnation count before trying next start

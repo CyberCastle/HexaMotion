@@ -142,7 +142,7 @@ void adaptThresholdsBasedOnEnvironment() {
     auto &terrain_adaptation = locomotion_system->getTerrainAdaptation();
 
     // Calculate average FSR reading across all legs
-    float total_pressure = 0.0f;
+    double total_pressure = 0.0f;
     int active_legs = 0;
 
     for (int leg = 0; leg < 6; leg++) {
@@ -154,12 +154,12 @@ void adaptThresholdsBasedOnEnvironment() {
     }
 
     if (active_legs > 0) {
-        float avg_pressure = total_pressure / active_legs;
+        double avg_pressure = total_pressure / active_legs;
 
         // Adaptive threshold based on average pressure
         // This is a simple example - real implementations would be more sophisticated
-        float new_touchdown_threshold = avg_pressure * 0.6f; // 60% of average
-        float new_liftoff_threshold = avg_pressure * 0.3f;   // 30% of average
+        double new_touchdown_threshold = avg_pressure * 0.6f; // 60% of average
+        double new_liftoff_threshold = avg_pressure * 0.3f;   // 30% of average
 
         // Apply bounds to prevent unreasonable values
         new_touchdown_threshold = constrain(new_touchdown_threshold, 10.0f, 100.0f);
@@ -196,7 +196,7 @@ void calibrateFSRThresholds() {
         delay(100);
     Serial.read(); // Clear buffer
 
-    float baseline_readings[6] = {0};
+    double baseline_readings[6] = {0};
     for (int i = 0; i < 50; i++) { // Average 50 readings
         for (int leg = 0; leg < 6; leg++) {
             FSRData fsr_data = fsr_interface.readFSR(leg);
@@ -215,7 +215,7 @@ void calibrateFSRThresholds() {
         delay(100);
     Serial.read(); // Clear buffer
 
-    float contact_readings[6] = {0};
+    double contact_readings[6] = {0};
     for (int i = 0; i < 50; i++) { // Average 50 readings
         for (int leg = 0; leg < 6; leg++) {
             FSRData fsr_data = fsr_interface.readFSR(leg);
@@ -229,8 +229,8 @@ void calibrateFSRThresholds() {
     }
 
     // Calculate optimal thresholds
-    float max_baseline = 0;
-    float min_contact = 1000;
+    double max_baseline = 0;
+    double min_contact = 1000;
 
     for (int leg = 0; leg < 6; leg++) {
         max_baseline = max(max_baseline, baseline_readings[leg]);
@@ -238,8 +238,8 @@ void calibrateFSRThresholds() {
     }
 
     // Set thresholds with safety margin
-    float optimal_touchdown = max_baseline + (min_contact - max_baseline) * 0.3f;
-    float optimal_liftoff = max_baseline + (min_contact - max_baseline) * 0.1f;
+    double optimal_touchdown = max_baseline + (min_contact - max_baseline) * 0.3f;
+    double optimal_liftoff = max_baseline + (min_contact - max_baseline) * 0.1f;
 
     terrain_adaptation.setTouchdownThreshold(optimal_touchdown);
     terrain_adaptation.setLiftoffThreshold(optimal_liftoff);

@@ -5,6 +5,8 @@
 int main() {
     // Configure test parameters
     Parameters params;
+    // Use DH-based kinematics for DLS validation
+    params.use_custom_dh_parameters = true;
     params.hexagon_radius = 200.0f;
     params.coxa_length = 50.0f;
     params.femur_length = 100.0f;
@@ -20,7 +22,7 @@ int main() {
 
     // Initialize DH parameters to zero (will use default)
     for (int l = 0; l < NUM_LEGS; ++l) {
-        for (int j = 0; j < DOF_PER_LEG; ++j) {
+        for (int j = 0; j < DOF_PER_LEG + 1; ++j) {
             for (int k = 0; k < 4; ++k) {
                 params.dh_parameters[l][j][k] = 0.0f;
             }
@@ -45,8 +47,8 @@ int main() {
 
     int num_tests = sizeof(test_configs) / sizeof(test_configs[0]);
     int passed = 0;
-    float max_error = 0.0f;
-    float total_error = 0.0f;
+    double max_error = 0.0f;
+    double total_error = 0.0f;
 
     for (int i = 0; i < num_tests; i++) {
         JointAngles original = test_configs[i];
@@ -61,7 +63,7 @@ int main() {
         Point3D fk_verify = model.forwardKinematics(0, ik_result);
 
         // Calculate error
-        float error = sqrt(pow(target.x - fk_verify.x, 2) +
+        double error = sqrt(pow(target.x - fk_verify.x, 2) +
                            pow(target.y - fk_verify.y, 2) +
                            pow(target.z - fk_verify.z, 2));
 
