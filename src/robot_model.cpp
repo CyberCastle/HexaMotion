@@ -21,29 +21,29 @@ void RobotModel::initializeDH() {
     // Initialize default DH parameters if custom parameters are not used
     if (!params.use_custom_dh_parameters) {
         for (int l = 0; l < NUM_LEGS; ++l) {
-            // -------- Fila 0  (rigid base -> leg mount) --------
-            dh_transforms[l][0][0] = params.hexagon_radius; // a0  = 200 mm
+            // ── Fila 0: base rígida ───────────────────────────
+            dh_transforms[l][0][0] = params.hexagon_radius; // a0 = 200mm
             dh_transforms[l][0][1] = 0.0f;                  // alpha0
             dh_transforms[l][0][2] = 0.0f;                  // d1
-            dh_transforms[l][0][3] = 0.0f;                  // theta offset (const.)
+            dh_transforms[l][0][3] = BASE_THETA_OFFSETS[l]; // θ0  (fijo)
 
-            // -------- Fila 1  (yaw servo) ---------------------
-            dh_transforms[l][1][0] = 0.0f;                  // a1
-            dh_transforms[l][1][1] = 90.0f;                 // alpha1  (+90°)
-            dh_transforms[l][1][2] = 0.0f;                  // d2
-            dh_transforms[l][1][3] = BASE_THETA_OFFSETS[l]; // theta offset = φ_l
+            // ── Fila 1: servo yaw ─────────────────────────────
+            dh_transforms[l][1][0] = 0.0f;  // a1
+            dh_transforms[l][1][1] = 90.0f; // alpha1 (+90°)
+            dh_transforms[l][1][2] = 0.0f;  // d2
+            dh_transforms[l][1][3] = 0.0f;  // θ1 offset (suma ψ)
 
-            // -------- Fila 2  (hip pitch = coxa link) ---------
-            dh_transforms[l][2][0] = params.coxa_length; // a2  = 50 mm
-            dh_transforms[l][2][1] = 0.0f;               // alpha2
+            // ── Fila 2: servo hip-pitch + coxa ───────────────
+            dh_transforms[l][2][0] = params.coxa_length; // a2 = 50
+            dh_transforms[l][2][1] = 90.0f;              // alpha2 (+90°)
             dh_transforms[l][2][2] = 0.0f;               // d3
-            dh_transforms[l][2][3] = 0.0f;               // theta offset
+            dh_transforms[l][2][3] = 0.0f;               // θ2 offset (suma θ₁)
 
-            // -------- Fila 3  (knee pitch + tibia) ------------
-            dh_transforms[l][3][0] = params.femur_length; // a3  = 101 mm
-            dh_transforms[l][3][1] = 90.0f;               // alpha3  (+90°)
-            dh_transforms[l][3][2] = params.tibia_length; // d4  = 208 mm
-            dh_transforms[l][3][3] = 0.0f;                // theta offset
+            // ── Fila 3: servo knee-pitch + tibia ─────────────
+            dh_transforms[l][3][0] = params.femur_length; // a3 = 101
+            dh_transforms[l][3][1] = 0.0f;                // alpha3
+            dh_transforms[l][3][2] = params.tibia_length; // d4 = 208
+            dh_transforms[l][3][3] = 0.0f;                // θ3 offset (suma θ₂)
         }
     } else {
         // Copy custom DH parameters provided in params.dh_parameters
