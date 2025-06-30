@@ -45,6 +45,15 @@ void RobotModel::initializeDH() {
             dh_transforms[l][3][2] = params.tibia_length; // d4  = 208 mm
             dh_transforms[l][3][3] = 0.0f;                // theta offset
         }
+    } else {
+        // Copy custom DH parameters provided in params.dh_parameters
+        for (int l = 0; l < NUM_LEGS; ++l) {
+            for (int j = 0; j < DOF_PER_LEG + 1; ++j) {
+                for (int k = 0; k < 4; ++k) {
+                    dh_transforms[l][j][k] = params.dh_parameters[l][j][k];
+                }
+            }
+        }
     }
 }
 
