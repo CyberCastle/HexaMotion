@@ -1,6 +1,7 @@
 #include <cmath>
 #include <iomanip>
 #include <iostream>
+#include <limits>
 
 constexpr double A_COXA = 50.0;   // mm
 constexpr double B_FEMUR = 101.0; // mm
@@ -22,42 +23,34 @@ struct Angles {
 //   Cinemática inversa analítica  (altura  →  ángulos)
 //------------------------------------------------------------------
 Angles calcLegAngles(double H_mm) {
-    const double alphaMin = -75.0 * DEG2RAD;
-    const double alphaMax = 75.0 * DEG2RAD;
-    const double betaMin = -45.0 * DEG2RAD;
-    const double betaMax = 45.0 * DEG2RAD;
+    Angles result{0, 0, false};
 
-    Angles best{0, 0, false};
-    double bestScore = 1e9;
+    // Mantener la tibia vertical implica que el ángulo relativo rodilla–fémur
+    // sea opuesto al ángulo absoluto del fémur. Así, la rodilla compensa la
+    // rotación del fémur y la tibia queda perpendicular al suelo.
+    //
+    // 1) Calcular el ángulo del fémur a partir de la altura deseada.
+    //    La geometría resulta en:
+    //       H = C_TIBIA + B_FEMUR * sin(theta_femur)
+    //    de donde theta_femur = asin((H - C_TIBIA) / B_FEMUR).
+    double ratio = (H_mm - C_TIBIA) / B_FEMUR;
+    if (ratio < -1.0 || ratio > 1.0)
+        return result; // la altura no es alcanzable
 
-    for (double beta = betaMin; beta <= betaMax; beta += 0.5 * DEG2RAD) {
-        double sum = A_COXA + B_FEMUR * std::cos(beta);
-        double discriminant =
-            sum * sum - (H_mm * H_mm - C_TIBIA * C_TIBIA);
-        if (discriminant < 0.0)
-            continue;
+    double theta = std::asin(ratio);
+    double femur_deg = theta * RAD2DEG;
+    double tibia_deg = -femur_deg; // compensación para mantener la tibia vertical
 
-        double sqrt_disc = std::sqrt(discriminant);
-        for (int sign = -1; sign <= 1; sign += 2) {
-            double t = (-sum + sign * sqrt_disc) / (H_mm + C_TIBIA);
-            double alpha = 2.0 * std::atan(t);
+    // 2) Verificar que ambos ángulos respeten los límites mecánicos.
+    if (femur_deg < -75.0 || femur_deg > 75.0)
+        return result;
+    if (tibia_deg < -45.0 || tibia_deg > 45.0)
+        return result;
 
-            if (alpha < alphaMin || alpha > alphaMax)
-                continue;
-
-            double score = std::fabs(alpha) + std::fabs(beta);
-            if (score < bestScore) {
-                // Servo angles according to DH model
-                best.theta1 = (alpha - beta) * RAD2DEG; // femur servo
-                best.theta2 = -beta * RAD2DEG;          // tibia servo
-                best.valid = (best.theta1 >= -75.0 && best.theta1 <= 75.0 &&
-                              best.theta2 >= -45.0 && best.theta2 <= 45.0);
-                if (best.valid)
-                    bestScore = score;
-            }
-        }
-    }
-    return best;
+    result.theta1 = femur_deg;
+    result.theta2 = tibia_deg;
+    result.valid = true;
+    return result;
 }
 
 //------------------------------------------------------------------
@@ -65,37 +58,26 @@ Angles calcLegAngles(double H_mm) {
 //   Devuelve la altura alcanzada H_mm y marca "valid" si los ángulos
 //   respetan todos los límites mecánicos.
 //------------------------------------------------------------------
-double calcHeight(double theta1_deg,
-                  double theta2_deg,
-                  bool &valid) {
+double calcHeight(double theta1_deg, double theta2_deg, bool &valid) {
     valid = false;
 
-    // Comprobar límites de los ángulos relativos
+    // Comprobar que las órdenes de servo estén dentro de sus márgenes.
     if (theta1_deg < -75.0 || theta1_deg > 75.0)
         return 0.0;
     if (theta2_deg < -45.0 || theta2_deg > 45.0)
         return 0.0;
 
-    // Convertir a radianes
-    double theta1 = theta1_deg * DEG2RAD;
-    double theta2 = theta2_deg * DEG2RAD;
-
-    // Relaciones geométricas del modelo DH
-    double beta = -theta2;        // β = −θ₂
-    double alpha = theta1 + beta; // α = θ₁ + β
-
-    if (alpha < -75.0 * DEG2RAD || alpha > 75.0 * DEG2RAD)
-        return 0.0;
-    if (beta < -45.0 * DEG2RAD || beta > 45.0 * DEG2RAD)
+    // La tibia debe permanecer vertical. En nuestra convención eso implica que
+    // los ángulos de servo sean opuestos: θ1 + θ2 ≈ 0.
+    if (std::fabs(theta1_deg + theta2_deg) > 1e-6)
         return 0.0;
 
-    // Altura alcanzada según la cadena DH
-    double H_mm = C_TIBIA * std::cos(alpha) -
-                  A_COXA * std::sin(alpha) -
-                  B_FEMUR * std::sin(alpha) * std::cos(beta);
+    // Con la tibia vertical, la altura depende únicamente del ángulo absoluto
+    // del fémur.
+    double theta = theta1_deg * DEG2RAD;
 
     valid = true;
-    return H_mm;
+    return C_TIBIA + B_FEMUR * std::sin(theta);
 }
 
 //------------------------------------------------------------------

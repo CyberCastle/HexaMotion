@@ -2,6 +2,7 @@
 #include "hexamotion_constants.h"
 #include "math_utils.h"
 #include <cmath>
+#include <limits>
 
 /**
  * @file pose_config_factory.cpp
@@ -71,39 +72,39 @@ CalculatedServoAngles calculateServoAnglesForHeight(double target_height_mm, con
     const double femur_length = params.femur_length;
     const double tibia_length = params.tibia_length;
 
-    // Joint limits from parameters (converted to radians)
-    const double alphaMin = params.femur_angle_limits[0] * DEGREES_TO_RADIANS_FACTOR;
-    const double alphaMax = params.femur_angle_limits[1] * DEGREES_TO_RADIANS_FACTOR;
-    const double betaMin = params.tibia_angle_limits[0] * DEGREES_TO_RADIANS_FACTOR;
-    const double betaMax = params.tibia_angle_limits[1] * DEGREES_TO_RADIANS_FACTOR;
+    // Joint limits from parameters
 
-    CalculatedServoAngles best{0.0, 0.0, 0.0, false};
-    double bestScore = 1e9;
+    CalculatedServoAngles result{0.0, 0.0, 0.0, false};
 
-    for (double beta = betaMin; beta <= betaMax; beta += 0.5f * DEGREES_TO_RADIANS_FACTOR) {
-        double sum = coxa_length + femur_length * std::cos(beta);
-        double disc = sum * sum - (target_height_mm * target_height_mm - tibia_length * tibia_length);
-        if (disc < 0.0)
-            continue;
+    // Mantener la tibia vertical significa que la articulación de la rodilla
+    // compensa la rotación del fémur. De esta manera el eslabón distal siempre
+    // queda perpendicular al suelo.
+    //
+    // A partir de la geometría del robot:
+    //   H = tibia_length + femur_length * sin(theta_femur)
+    // donde theta_femur es el ángulo absoluto del fémur respecto a la horizontal.
+    // El servo de la tibia debe adoptar el ángulo opuesto para anular dicha
+    // rotación.
+    double ratio = (target_height_mm - tibia_length) / femur_length;
+    if (ratio < -1.0 || ratio > 1.0)
+        return result;
 
-        double sqrt_disc = std::sqrt(disc);
-        for (int sign = -1; sign <= 1; sign += 2) {
-            double t = (-sum + sign * sqrt_disc) / (target_height_mm + tibia_length);
-            double alpha = 2.0 * std::atan(t);
-            if (alpha < alphaMin || alpha > alphaMax)
-                continue;
+    double theta_rad = std::asin(ratio);
+    double femur_deg = theta_rad * RADIANS_TO_DEGREES_FACTOR;
+    double tibia_deg = -femur_deg;
 
-            double score = std::fabs(alpha) + std::fabs(beta);
-            if (score < bestScore) {
-                best.coxa = 0.0;
-                best.femur = (alpha - beta) * RADIANS_TO_DEGREES_FACTOR;
-                best.tibia = -beta * RADIANS_TO_DEGREES_FACTOR;
-                best.valid = true;
-                bestScore = score;
-            }
-        }
-    }
-    return best;
+    if (femur_deg < params.femur_angle_limits[0] ||
+        femur_deg > params.femur_angle_limits[1])
+        return result;
+    if (tibia_deg < params.tibia_angle_limits[0] ||
+        tibia_deg > params.tibia_angle_limits[1])
+        return result;
+
+    result.coxa = 0.0;
+    result.femur = femur_deg;
+    result.tibia = tibia_deg;
+    result.valid = true;
+    return result;
 }
 
 /**
