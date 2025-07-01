@@ -192,11 +192,11 @@ double LocomotionSystem::getJointLimitProximity(int leg_index, const JointAngles
 
     for (int j = 0; j < 3; ++j) {
         double range = limits[j][1] - limits[j][0];
-        if (range > 0.0f) {
-            double half_range = range * 0.5f;
-            double center = (limits[j][1] + limits[j][0]) * 0.5f;
+        if (range > 0.0) {
+            double half_range = range * 0.5;
+            double center = (limits[j][1] + limits[j][0]) * 0.5;
             double distance_from_center = std::abs(joints[j] - center);
-            double proximity = std::max(0.0f, (half_range - distance_from_center) / half_range);
+            double proximity = std::clamp<double>((half_range - distance_from_center) / half_range, 0.0, 1.0);
             min_proximity = std::min(min_proximity, proximity);
         }
     }
@@ -492,7 +492,7 @@ void LocomotionSystem::calculateAdaptivePhaseOffsets() {
     if (tilt_magnitude > 10.0f) {
         // On steep slopes, use more conservative tripod-like pattern
         double tripod_factor = (tilt_magnitude - 10.0f) / 20.0f; // 0-1 over 10-30 degrees
-        tripod_factor = std::min(tripod_factor, 1.0f);
+        tripod_factor = std::clamp<double>(tripod_factor, 0.0, 1.0);
 
         for (int i = 0; i < NUM_LEGS; i++) {
             double tripod_offset = (i % 2) * 0.5f;
@@ -809,7 +809,7 @@ double LocomotionSystem::calculateStabilityIndex() {
     double required_margin = params.stability_margin;
     stability_index = min_edge_distance / (required_margin * 2.0f); // Factor of 2 for good margin
 
-    return std::min(1.0f, std::max(0.0f, stability_index));
+    return std::clamp<double>(stability_index, 0.0, 1.0);
 }
 
 // Check static stability
@@ -1339,13 +1339,14 @@ void LocomotionSystem::adjustStepParameters() {
 
             // Reduce step parameters during dynamic instability
             if (dynamic_instability > 2.0f) {
-                stability_factor = std::max(0.6f, 1.0f - (dynamic_instability - 2.0f) / 5.0f);
+                stability_factor =
+                    std::clamp<double>(1.0 - (dynamic_instability - 2.0) / 5.0, 0.6, 1.0);
             }
         }
 
         // Enhanced slope-based adjustment
         if (total_tilt > 10.0f) {
-            double slope_factor = std::max(0.5f, 1.0f - (total_tilt - 10.0f) / 30.0f);
+            double slope_factor = std::clamp<double>(1.0 - (total_tilt - 10.0) / 30.0, 0.5, 1.0);
             step_height *= slope_factor * stability_factor;
             step_length *= slope_factor * stability_factor;
         }
@@ -1406,7 +1407,7 @@ void LocomotionSystem::compensateForSlope() {
 
             // Reduce compensation during high lateral acceleration
             if (lateral_accel > 1.5f) {
-                double dynamic_factor = std::max(0.4f, 1.0f - (lateral_accel - 1.5f) / 3.0f);
+                double dynamic_factor = std::clamp<double>(1.0 - (lateral_accel - 1.5) / 3.0, 0.4, 1.0);
                 roll_compensation *= dynamic_factor;
                 pitch_compensation *= dynamic_factor;
             }
@@ -1469,7 +1470,7 @@ double LocomotionSystem::getStepLength() const {
                     // Assess terrain complexity based on quaternion non-uniformity
                     double complexity = abs(qx) + abs(qy) + abs(qz);
                     if (complexity > 0.4f) { // Complex terrain indicator
-                        terrain_factor *= std::max(0.6f, 1.0f - (complexity - 0.4f) / 0.6f);
+                        terrain_factor *= std::clamp<double>(1.0 - (complexity - 0.4) / 0.6, 0.6, 1.0);
                     }
                 }
 
@@ -1482,20 +1483,20 @@ double LocomotionSystem::getStepLength() const {
 
                     // Reduce step length during high dynamic motion
                     if (motion_magnitude > 2.5f) {
-                        terrain_factor *= std::max(0.5f, 1.0f - (motion_magnitude - 2.5f) / 5.0f);
+                        terrain_factor *= std::clamp<double>(1.0 - (motion_magnitude - 2.5) / 5.0, 0.5, 1.0);
                     }
                 }
 
                 // Enhanced slope calculation
                 if (total_tilt > 8.0f) { // Lower threshold for absolute data
-                    terrain_factor *= std::max(0.5f, 1.0f - (total_tilt - 8.0f) / 25.0f);
+                    terrain_factor *= std::clamp<double>(1.0 - (total_tilt - 8.0) / 25.0, 0.5, 1.0);
                 }
             } else {
                 // Fallback to basic IMU data
                 total_tilt = sqrt(imu_data.roll * imu_data.roll + imu_data.pitch * imu_data.pitch);
 
                 if (total_tilt > 10.0f) {
-                    terrain_factor = std::max(0.6f, 1.0f - (total_tilt - 10.0f) / 20.0f);
+                    terrain_factor = std::clamp<double>(1.0 - (total_tilt - 10.0) / 20.0, 0.6, 1.0);
                 }
             }
         }
@@ -1506,7 +1507,8 @@ double LocomotionSystem::getStepLength() const {
 
     // Limit within safe ranges based on parameters
     double min_safe_step = leg_reach * params.gait_factors.min_length_factor;
-    calculated_step_length = std::max(min_safe_step, std::min(max_safe_step, calculated_step_length));
+    calculated_step_length =
+        std::clamp<double>(calculated_step_length, min_safe_step, max_safe_step);
 
     return calculated_step_length;
 }
@@ -1531,7 +1533,8 @@ double LocomotionSystem::calculateDynamicStabilityIndex() {
             imu_data.absolute_data.absolute_pitch * imu_data.absolute_data.absolute_pitch);
 
         if (total_tilt > 5.0f) {
-            orientation_stability = std::max(0.2f, 1.0f - (total_tilt - 5.0f) / 30.0f);
+            orientation_stability =
+                std::clamp<double>(1.0 - (total_tilt - 5.0) / 30.0, 0.2, 1.0);
         }
 
         // Dynamic motion stability from linear acceleration
@@ -1544,7 +1547,8 @@ double LocomotionSystem::calculateDynamicStabilityIndex() {
 
             // High acceleration reduces stability
             if (acceleration_magnitude > 1.0f) {
-                motion_stability = std::max(0.3f, 1.0f - (acceleration_magnitude - 1.0f) / 4.0f);
+                motion_stability =
+                    std::clamp<double>(1.0 - (acceleration_magnitude - 1.0) / 4.0, 0.3, 1.0);
             }
         }
 
@@ -1558,7 +1562,8 @@ double LocomotionSystem::calculateDynamicStabilityIndex() {
             // Calculate rotational deviation from level position
             double rotational_deviation = sqrt(qx * qx + qy * qy + qz * qz);
             if (rotational_deviation > 0.2f) {
-                rotational_stability = std::max(0.4f, 1.0f - (rotational_deviation - 0.2f) / 0.6f);
+                rotational_stability =
+                    std::clamp<double>(1.0 - (rotational_deviation - 0.2) / 0.6, 0.4, 1.0);
             }
         }
 
@@ -1580,7 +1585,7 @@ double LocomotionSystem::calculateDynamicStabilityIndex() {
         stability_index = 0.7f * stability_index + 0.3f * fsr_stability; // Blend IMU and FSR
     }
 
-    return std::max(0.0f, std::min(1.0f, stability_index));
+    return std::clamp<double>(stability_index, 0.0, 1.0);
 }
 
 // Parallel sensor update implementation

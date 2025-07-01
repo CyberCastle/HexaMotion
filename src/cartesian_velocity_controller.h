@@ -3,6 +3,7 @@
 
 #include "HexaModel.h"
 #include "hexamotion_constants.h"
+#include <algorithm>
 #include "velocity_limits.h"
 #include <array>
 #include <memory>
@@ -39,7 +40,7 @@ class CartesianVelocityController {
          */
         double getEffectiveSpeed() const {
             double speed = base_speed * velocity_scaling * angular_compensation * gait_adjustment;
-            return std::max(SERVO_SPEED_MIN, std::min(SERVO_SPEED_MAX, speed)); // Clamp to servo limits
+            return std::clamp<double>(speed, SERVO_SPEED_MIN, SERVO_SPEED_MAX);
         }
     };
 
