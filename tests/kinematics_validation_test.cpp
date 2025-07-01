@@ -13,6 +13,7 @@
 #include <cmath>
 #include <iomanip>
 #include <iostream>
+#include <limits>
 #include <memory>
 #include <vector>
 
@@ -40,6 +41,7 @@ AngleCalcAngles calcLegAngles(double H_mm) {
 
     AngleCalcAngles best{0, 0, false};
     double bestScore = 1e9;
+    double bestOrient = std::numeric_limits<double>::max();
 
     for (double beta = betaMin; beta <= betaMax; beta += 0.5 * DEG2RAD) {
         double sum = A_COXA + B_FEMUR * std::cos(beta);
@@ -64,10 +66,13 @@ AngleCalcAngles calcLegAngles(double H_mm) {
             if (theta2 < -45.0 || theta2 > 45.0)
                 continue;
 
+            double orient_err = std::fabs(alpha);
             double score = std::fabs(alpha) + std::fabs(beta);
-            if (score < bestScore) {
+            if (orient_err < bestOrient ||
+                (std::abs(orient_err - bestOrient) < 1e-6 && score < bestScore)) {
                 best = {theta1, theta2, true};
                 bestScore = score;
+                bestOrient = orient_err;
             }
         }
     }

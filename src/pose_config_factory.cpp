@@ -2,6 +2,7 @@
 #include "hexamotion_constants.h"
 #include "math_utils.h"
 #include <cmath>
+#include <limits>
 
 /**
  * @file pose_config_factory.cpp
@@ -79,6 +80,7 @@ CalculatedServoAngles calculateServoAnglesForHeight(double target_height_mm, con
 
     CalculatedServoAngles best{0.0, 0.0, 0.0, false};
     double bestScore = 1e9;
+    double bestOrient = std::numeric_limits<double>::max();
 
     for (double beta = betaMin; beta <= betaMax; beta += 0.5f * DEGREES_TO_RADIANS_FACTOR) {
         double sum = coxa_length + femur_length * std::cos(beta);
@@ -93,13 +95,16 @@ CalculatedServoAngles calculateServoAnglesForHeight(double target_height_mm, con
             if (alpha < alphaMin || alpha > alphaMax)
                 continue;
 
+            double orient_err = std::fabs(alpha); // tibia angle w.r.t vertical
             double score = std::fabs(alpha) + std::fabs(beta);
-            if (score < bestScore) {
+            if (orient_err < bestOrient ||
+                (std::abs(orient_err - bestOrient) < 1e-6 && score < bestScore)) {
                 best.coxa = 0.0;
                 best.femur = (alpha - beta) * RADIANS_TO_DEGREES_FACTOR;
                 best.tibia = -beta * RADIANS_TO_DEGREES_FACTOR;
                 best.valid = true;
                 bestScore = score;
+                bestOrient = orient_err;
             }
         }
     }
