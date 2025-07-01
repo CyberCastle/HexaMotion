@@ -208,7 +208,7 @@ double AdmittanceController::calculateStiffnessScale(int leg_index, LegState leg
     double normalized_clearance = std::max(step_clearance_, workspace_height_range * 0.1f); // Min 10% of workspace
 
     double step_reference = z_diff / normalized_clearance;
-    step_reference = std::min(1.0f, step_reference);
+    step_reference = std::clamp<double>(step_reference, 0.0, 1.0);
 
     return step_reference;
 }
