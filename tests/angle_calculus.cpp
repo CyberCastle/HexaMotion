@@ -1,6 +1,7 @@
 #include <cmath>
 #include <iomanip>
 #include <iostream>
+#include <limits>
 
 constexpr double A_COXA = 50.0;   // mm
 constexpr double B_FEMUR = 101.0; // mm
@@ -19,44 +20,31 @@ struct Angles {
 };
 
 //------------------------------------------------------------------
-//   Cinemática inversa analítica  (altura  →  ángulos)
+//   Cinemática inversa analítica con tibia vertical (altura → ángulos)
+//   Se busca el par de ángulos que produzca la altura deseada manteniendo
+//   la tibia perpendicular al suelo (θ₁ + θ₂ = 0).
 //------------------------------------------------------------------
 Angles calcLegAngles(double H_mm) {
-    const double alphaMin = -75.0 * DEG2RAD;
-    const double alphaMax = 75.0 * DEG2RAD;
-    const double betaMin = -45.0 * DEG2RAD;
-    const double betaMax = 45.0 * DEG2RAD;
-
     Angles best{0, 0, false};
-    double bestScore = 1e9;
+    double best_err = std::numeric_limits<double>::max();
 
-    for (double beta = betaMin; beta <= betaMax; beta += 0.5 * DEG2RAD) {
-        double sum = A_COXA + B_FEMUR * std::cos(beta);
-        double discriminant =
-            sum * sum - (H_mm * H_mm - C_TIBIA * C_TIBIA);
-        if (discriminant < 0.0)
-            continue;
+    // Recorrer todo el rango permitido del fémur.
+    for (double femur = -75.0; femur <= 75.0; femur += 0.5) {
+        double tibia = -femur; // Mantener la tibia vertical
 
-        double sqrt_disc = std::sqrt(discriminant);
-        for (int sign = -1; sign <= 1; sign += 2) {
-            double t = (-sum + sign * sqrt_disc) / (H_mm + C_TIBIA);
-            double alpha = 2.0 * std::atan(t);
+        if (tibia < -45.0 || tibia > 45.0)
+            continue; // Violación de límites del servo
 
-            if (alpha < alphaMin || alpha > alphaMax)
-                continue;
+        double theta = femur * DEG2RAD;
+        double height = C_TIBIA + B_FEMUR * std::sin(theta);
+        double err = std::fabs(height - H_mm);
 
-            double score = std::fabs(alpha) + std::fabs(beta);
-            if (score < bestScore) {
-                // Servo angles according to DH model
-                best.theta1 = (alpha - beta) * RAD2DEG; // femur servo
-                best.theta2 = -beta * RAD2DEG;          // tibia servo
-                best.valid = (best.theta1 >= -75.0 && best.theta1 <= 75.0 &&
-                              best.theta2 >= -45.0 && best.theta2 <= 45.0);
-                if (best.valid)
-                    bestScore = score;
-            }
+        if (err < best_err) {
+            best = {femur, tibia, err < 1.0}; // 1 mm de tolerancia
+            best_err = err;
         }
     }
+
     return best;
 }
 
@@ -70,32 +58,18 @@ double calcHeight(double theta1_deg,
                   bool &valid) {
     valid = false;
 
-    // Comprobar límites de los ángulos relativos
     if (theta1_deg < -75.0 || theta1_deg > 75.0)
         return 0.0;
     if (theta2_deg < -45.0 || theta2_deg > 45.0)
         return 0.0;
 
-    // Convertir a radianes
-    double theta1 = theta1_deg * DEG2RAD;
-    double theta2 = theta2_deg * DEG2RAD;
+    if (std::fabs(theta1_deg + theta2_deg) > 1e-6)
+        return 0.0; // Tibia not vertical
 
-    // Relaciones geométricas del modelo DH
-    double beta = -theta2;        // β = −θ₂
-    double alpha = theta1 + beta; // α = θ₁ + β
-
-    if (alpha < -75.0 * DEG2RAD || alpha > 75.0 * DEG2RAD)
-        return 0.0;
-    if (beta < -45.0 * DEG2RAD || beta > 45.0 * DEG2RAD)
-        return 0.0;
-
-    // Altura alcanzada según la cadena DH
-    double H_mm = C_TIBIA * std::cos(alpha) -
-                  A_COXA * std::sin(alpha) -
-                  B_FEMUR * std::sin(alpha) * std::cos(beta);
+    double theta = theta1_deg * DEG2RAD;
 
     valid = true;
-    return H_mm;
+    return C_TIBIA + B_FEMUR * std::sin(theta);
 }
 
 //------------------------------------------------------------------

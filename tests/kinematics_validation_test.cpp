@@ -13,6 +13,7 @@
 #include <cmath>
 #include <iomanip>
 #include <iostream>
+#include <limits>
 #include <memory>
 #include <vector>
 
@@ -31,78 +32,47 @@ struct AngleCalcAngles {
     bool valid;    // solución dentro de límites
 };
 
-// Implementación analítica equivalente a angle_calculus.cpp
+// Implementación analítica equivalente a angle_calculus.cpp.
+// Busca el par de ángulos que mantenga la tibia vertical y alcance la altura
+// solicitada. Si la altura no es posible se devuelve la aproximación más cercana
+// y se marca como inválida.
 AngleCalcAngles calcLegAngles(double H_mm) {
-    const double alphaMin = -75.0 * DEG2RAD;
-    const double alphaMax = 75.0 * DEG2RAD;
-    const double betaMin = -45.0 * DEG2RAD;
-    const double betaMax = 45.0 * DEG2RAD;
-
     AngleCalcAngles best{0, 0, false};
-    double bestScore = 1e9;
+    double best_err = std::numeric_limits<double>::max();
 
-    for (double beta = betaMin; beta <= betaMax; beta += 0.5 * DEG2RAD) {
-        double sum = A_COXA + B_FEMUR * std::cos(beta);
-        double discriminant =
-            sum * sum - (H_mm * H_mm - C_TIBIA * C_TIBIA);
-        if (discriminant < 0.0)
+    for (double femur = -75.0; femur <= 75.0; femur += 0.5) {
+        double tibia = -femur;
+        if (tibia < -45.0 || tibia > 45.0)
             continue;
 
-        double sqrt_disc = std::sqrt(discriminant);
-        for (int sign = -1; sign <= 1; sign += 2) {
-            double t = (-sum + sign * sqrt_disc) / (H_mm + C_TIBIA);
-            double alpha = 2.0 * std::atan(t);
+        double theta = femur * DEG2RAD;
+        double height = C_TIBIA + B_FEMUR * std::sin(theta);
+        double err = std::fabs(height - H_mm);
 
-            if (alpha < alphaMin || alpha > alphaMax)
-                continue;
-
-            double theta1 = (alpha - beta) * RAD2DEG;
-            double theta2 = -beta * RAD2DEG;
-
-            if (theta1 < -75.0 || theta1 > 75.0)
-                continue;
-            if (theta2 < -45.0 || theta2 > 45.0)
-                continue;
-
-            double score = std::fabs(alpha) + std::fabs(beta);
-            if (score < bestScore) {
-                best = {theta1, theta2, true};
-                bestScore = score;
-            }
+        if (err < best_err) {
+            best = {femur, tibia, err < 1.0};
+            best_err = err;
         }
     }
+
     return best;
 }
 
 double calcHeight(double theta1_deg, double theta2_deg, bool &valid) {
     valid = false;
 
-    // Comprobar límites de los ángulos relativos
     if (theta1_deg < -75.0 || theta1_deg > 75.0)
         return 0.0;
     if (theta2_deg < -45.0 || theta2_deg > 45.0)
         return 0.0;
 
-    // Convertir a radianes
-    double theta1 = theta1_deg * DEG2RAD;
-    double theta2 = theta2_deg * DEG2RAD;
-
-    // Relaciones geométricas del modelo DH
-    double beta = -theta2;        // β = −θ₂
-    double alpha = theta1 + beta; // α = θ₁ + β
-
-    if (alpha < -75.0 * DEG2RAD || alpha > 75.0 * DEG2RAD)
-        return 0.0;
-    if (beta < -45.0 * DEG2RAD || beta > 45.0 * DEG2RAD)
+    if (std::fabs(theta1_deg + theta2_deg) > 1e-6)
         return 0.0;
 
-    // Altura según la cadena DH
-    double H_mm = C_TIBIA * std::cos(alpha) -
-                  A_COXA * std::sin(alpha) -
-                  B_FEMUR * std::sin(alpha) * std::cos(beta);
+    double theta = theta1_deg * DEG2RAD;
 
     valid = true;
-    return H_mm;
+    return C_TIBIA + B_FEMUR * std::sin(theta);
 }
 
 class KinematicsValidator {
@@ -159,7 +129,7 @@ class KinematicsValidator {
 
         std::cout << std::fixed << std::setprecision(2);
         std::cout << "Height | angle_calculus        | HexaMotion FK Local  | Error     | Status" << std::endl;
-        std::cout << "(mm)   | θ1     θ2     α    β  | α      β     H_calc  | H_err     |" << std::endl;
+        std::cout << "(mm)   | θ1     θ2     | θ1     θ2     H_calc  | H_err     |" << std::endl;
         std::cout << std::string(90, '-') << std::endl;
 
         for (double height : test_heights) {
@@ -183,14 +153,15 @@ class KinematicsValidator {
             double alpha = theta1_rad + beta; // α = θ₁ + β
 
             // Convertir a grados para mostrar y comparar
-            double alpha_deg = alpha * RAD2DEG; // Ángulo femur
-            double beta_deg = beta * RAD2DEG;   // Ángulo tibia
+            double theta_rad = ref_solution.theta1 * DEG2RAD;
+            double alpha_deg = 0.0;                   // Tibia vertical
+            double beta_deg = -ref_solution.theta2;   // β = −θ₂
 
             // 3. PRUEBA DIRECTA: Usar los ángulos convertidos directamente en HexaMotion FK
             JointAngles test_angles;
             test_angles.coxa = 0.0f;       // Sin rotación horizontal
-            test_angles.femur = alpha_deg; // Ángulo femur absoluto
-            test_angles.tibia = beta_deg;  // Ángulo tibia absoluto
+            test_angles.femur = ref_solution.theta1; // femur servo
+            test_angles.tibia = ref_solution.theta2; // tibia servo
 
             // 4. Calcular la posición de la punta con FK en frame global del robot
             Point3D tip_global = model->forwardKinematics(0, test_angles);
@@ -205,9 +176,7 @@ class KinematicsValidator {
             double height_error = std::abs(hexa_height - height);
 
             // 7. Verificar que la fórmula de angle_calculus coincida
-            double expected_height = C_TIBIA * std::cos(alpha) -
-                                     A_COXA * std::sin(alpha) -
-                                     B_FEMUR * std::sin(alpha) * std::cos(beta);
+            double expected_height = C_TIBIA + B_FEMUR * std::sin(theta_rad);
             double formula_error = std::abs(expected_height - height);
 
             // El test pasa si las alturas coinciden
@@ -220,11 +189,9 @@ class KinematicsValidator {
 
             std::cout << std::setw(6) << height << " | "
                       << std::setw(6) << ref_solution.theta1 << " "
+                      << std::setw(6) << ref_solution.theta2 << " | "
+                      << std::setw(6) << ref_solution.theta1 << " "
                       << std::setw(6) << ref_solution.theta2 << " "
-                      << std::setw(5) << alpha_deg << " "
-                      << std::setw(4) << beta_deg << " | "
-                      << std::setw(6) << alpha_deg << " "
-                      << std::setw(5) << beta_deg << " "
                       << std::setw(7) << hexa_height << " | "
                       << std::setw(8) << height_error << "  | "
                       << (test_passed ? "PASS" : "FAIL") << std::endl;

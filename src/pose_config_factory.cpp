@@ -2,6 +2,7 @@
 #include "hexamotion_constants.h"
 #include "math_utils.h"
 #include <cmath>
+#include <limits>
 
 /**
  * @file pose_config_factory.cpp
@@ -71,38 +72,27 @@ CalculatedServoAngles calculateServoAnglesForHeight(double target_height_mm, con
     const double femur_length = params.femur_length;
     const double tibia_length = params.tibia_length;
 
-    // Joint limits from parameters (converted to radians)
-    const double alphaMin = params.femur_angle_limits[0] * DEGREES_TO_RADIANS_FACTOR;
-    const double alphaMax = params.femur_angle_limits[1] * DEGREES_TO_RADIANS_FACTOR;
-    const double betaMin = params.tibia_angle_limits[0] * DEGREES_TO_RADIANS_FACTOR;
-    const double betaMax = params.tibia_angle_limits[1] * DEGREES_TO_RADIANS_FACTOR;
-
     CalculatedServoAngles best{0.0, 0.0, 0.0, false};
-    double bestScore = 1e9;
+    double best_err = std::numeric_limits<double>::max();
 
-    for (double beta = betaMin; beta <= betaMax; beta += 0.5f * DEGREES_TO_RADIANS_FACTOR) {
-        double sum = coxa_length + femur_length * std::cos(beta);
-        double disc = sum * sum - (target_height_mm * target_height_mm - tibia_length * tibia_length);
-        if (disc < 0.0)
+    // Explorar el rango de ángulos del fémur manteniendo la tibia vertical
+    for (double femur = params.femur_angle_limits[0];
+         femur <= params.femur_angle_limits[1]; femur += 0.5) {
+        double tibia = -femur;
+        if (tibia < params.tibia_angle_limits[0] ||
+            tibia > params.tibia_angle_limits[1])
             continue;
 
-        double sqrt_disc = std::sqrt(disc);
-        for (int sign = -1; sign <= 1; sign += 2) {
-            double t = (-sum + sign * sqrt_disc) / (target_height_mm + tibia_length);
-            double alpha = 2.0 * std::atan(t);
-            if (alpha < alphaMin || alpha > alphaMax)
-                continue;
+        double theta = femur * DEGREES_TO_RADIANS_FACTOR;
+        double height = tibia_length + femur_length * std::sin(theta);
+        double err = std::fabs(height - target_height_mm);
 
-            double score = std::fabs(alpha) + std::fabs(beta);
-            if (score < bestScore) {
-                best.coxa = 0.0;
-                best.femur = (alpha - beta) * RADIANS_TO_DEGREES_FACTOR;
-                best.tibia = -beta * RADIANS_TO_DEGREES_FACTOR;
-                best.valid = true;
-                bestScore = score;
-            }
+        if (err < best_err) {
+            best = {0.0, femur, tibia, err < 1.0};
+            best_err = err;
         }
     }
+
     return best;
 }
 
