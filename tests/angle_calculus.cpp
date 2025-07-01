@@ -22,42 +22,48 @@ struct Angles {
 //   Cinemática inversa analítica  (altura  →  ángulos)
 //------------------------------------------------------------------
 Angles calcLegAngles(double H_mm) {
-    const double alphaMin = -75.0 * DEG2RAD;
-    const double alphaMax = 75.0 * DEG2RAD;
-    const double betaMin = -45.0 * DEG2RAD;
-    const double betaMax = 45.0 * DEG2RAD;
+    Angles out{0.0, 0.0, false};
 
-    Angles best{0, 0, false};
-    double bestScore = 1e9;
+    const double B = B_FEMUR;
+    const double C = C_TIBIA;
 
-    for (double beta = betaMin; beta <= betaMax; beta += 0.5 * DEG2RAD) {
-        double sum = A_COXA + B_FEMUR * std::cos(beta);
-        double discriminant =
-            sum * sum - (H_mm * H_mm - C_TIBIA * C_TIBIA);
-        if (discriminant < 0.0)
-            continue;
+    constexpr int MAX_ITERS = 50;
+    constexpr double STEP_MM = 1.0;
 
-        double sqrt_disc = std::sqrt(discriminant);
-        for (int sign = -1; sign <= 1; sign += 2) {
-            double t = (-sum + sign * sqrt_disc) / (H_mm + C_TIBIA);
-            double alpha = 2.0 * std::atan(t);
+    double H = H_mm;
 
-            if (alpha < alphaMin || alpha > alphaMax)
-                continue;
+    for (int i = 0; i < MAX_ITERS; i++) {
+        if (H < C || H > B + C)
+            break;
 
-            double score = std::fabs(alpha) + std::fabs(beta);
-            if (score < bestScore) {
-                // Servo angles according to DH model
-                best.theta1 = (alpha - beta) * RAD2DEG; // femur servo
-                best.theta2 = -beta * RAD2DEG;          // tibia servo
-                best.valid = (best.theta1 >= -75.0 && best.theta1 <= 75.0 &&
-                              best.theta2 >= -45.0 && best.theta2 <= 45.0);
-                if (best.valid)
-                    bestScore = score;
-            }
+        double s = (H - C) / B;
+        if (s < -1.0 || s > 1.0)
+            break;
+        double alpha = std::asin(s);
+        double beta = M_PI_2 - alpha;
+
+        double femurDeg = alpha * RAD2DEG;
+        double tibiaDeg = beta * RAD2DEG;
+
+        bool fem_ok = femurDeg >= -75.0 && femurDeg <= 75.0;
+        bool tib_ok = tibiaDeg >= -45.0 && tibiaDeg <= 45.0;
+
+        if (fem_ok && tib_ok) {
+            out.theta1 = femurDeg;
+            out.theta2 = tibiaDeg;
+            out.valid = true;
+            break;
         }
+
+        if (femurDeg > 75.0 || tibiaDeg < -45.0)
+            H -= STEP_MM;
+        else if (femurDeg < -75.0 || tibiaDeg > 45.0)
+            H += STEP_MM;
+        else
+            break;
     }
-    return best;
+
+    return out;
 }
 
 //------------------------------------------------------------------
