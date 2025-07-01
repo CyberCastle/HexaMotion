@@ -57,11 +57,13 @@ int main() {
     bool height_ok = true;
     for (int leg = 0; leg < NUM_LEGS; ++leg) {
 
-        // Start angles are the same as the base_theta_offsets
-        JointAngles test_angles(base_theta_offsets[leg], 20, 20);
+        // Use the same relative joint angles for every leg; the base offset is
+        // already accounted for in the DH model
+        JointAngles test_angles(0, 20, 20);
         Point3D target = model.forwardKinematics(leg, test_angles);
 
-        JointAngles start_angles(base_theta_offsets[leg], 0, 0); // Test symmetric configuration
+        // Provide a neutral starting guess
+        JointAngles start_angles(0, 0, 0);
         JointAngles ik = model.inverseKinematicsCurrent(leg, start_angles, target);
         Point3D fk = model.forwardKinematics(leg, ik);
         printf("target: %f, %f, %f\n", target.x, target.y, target.z);
