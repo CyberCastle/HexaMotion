@@ -56,7 +56,7 @@ AngleCalcAngles calcLegAngles(double H_mm) {
             if (alpha < alphaMin || alpha > alphaMax)
                 continue;
 
-            double theta1 = (beta - alpha) * RAD2DEG;
+            double theta1 = (alpha - beta) * RAD2DEG;
             double theta2 = -beta * RAD2DEG;
 
             if (theta1 < -75.0 || theta1 > 75.0)
@@ -89,7 +89,7 @@ double calcHeight(double theta1_deg, double theta2_deg, bool &valid) {
 
     // Relaciones geométricas del modelo DH
     double beta = -theta2;        // β = −θ₂
-    double alpha = beta - theta1; // α = β − θ₁
+    double alpha = theta1 + beta; // α = θ₁ + β
 
     if (alpha < -75.0 * DEG2RAD || alpha > 75.0 * DEG2RAD)
         return 0.0;
@@ -180,7 +180,7 @@ class KinematicsValidator {
             double theta2_rad = ref_solution.theta2 * DEG2RAD;
 
             double beta = -theta2_rad;        // β = −θ₂
-            double alpha = beta - theta1_rad; // α = β − θ₁
+            double alpha = theta1_rad + beta; // α = θ₁ + β
 
             // Convertir a grados para mostrar y comparar
             double alpha_deg = alpha * RAD2DEG; // Ángulo femur
@@ -206,8 +206,8 @@ class KinematicsValidator {
 
             // 7. Verificar que la fórmula de angle_calculus coincida
             double expected_height = C_TIBIA * std::cos(alpha) -
-                                    A_COXA * std::sin(alpha) -
-                                    B_FEMUR * std::sin(alpha) * std::cos(beta);
+                                     A_COXA * std::sin(alpha) -
+                                     B_FEMUR * std::sin(alpha) * std::cos(beta);
             double formula_error = std::abs(expected_height - height);
 
             // El test pasa si las alturas coinciden
@@ -377,7 +377,7 @@ class KinematicsValidator {
             double hexa_height = -(hexa_tip_global.z - base_global.z);
 
             double error = std::abs(hexa_height - h); // Error en altura relativa
-            if (error < 20.0f) {                              // Tolerancia razonable
+            if (error < 20.0f) {                      // Tolerancia razonable
                 hexa_valid++;
                 hexa_min_error = std::min(hexa_min_error, error);
                 hexa_max_error = std::max(hexa_max_error, error);
@@ -405,8 +405,8 @@ class KinematicsValidator {
         std::cout << "  Radio hexágono: " << params.hexagon_radius << " mm" << std::endl;
 
         validateVerticalReach();
-        //validateAngleConsistency();
-        //validateWorkspaceComparison();
+        // validateAngleConsistency();
+        // validateWorkspaceComparison();
 
         std::cout << "\n===== VALIDACIÓN COMPLETA =====" << std::endl;
     }

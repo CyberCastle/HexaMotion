@@ -47,10 +47,11 @@ Angles calcLegAngles(double H_mm) {
 
             double score = std::fabs(alpha) + std::fabs(beta);
             if (score < bestScore) {
-                best.theta1 = (beta - alpha) * RAD2DEG; // coxa-fémur
-                best.theta2 = -beta * RAD2DEG;          // fémur-tibia
+                // Servo angles according to DH model
+                best.theta1 = (alpha - beta) * RAD2DEG; // femur servo
+                best.theta2 = -beta * RAD2DEG;          // tibia servo
                 best.valid = (best.theta1 >= -75.0 && best.theta1 <= 75.0 &&
-                             best.theta2 >= -45.0 && best.theta2 <= 45.0);
+                              best.theta2 >= -45.0 && best.theta2 <= 45.0);
                 if (best.valid)
                     bestScore = score;
             }
@@ -81,7 +82,7 @@ double calcHeight(double theta1_deg,
 
     // Relaciones geométricas del modelo DH
     double beta = -theta2;        // β = −θ₂
-    double alpha = beta - theta1; // α = β − θ₁
+    double alpha = theta1 + beta; // α = θ₁ + β
 
     if (alpha < -75.0 * DEG2RAD || alpha > 75.0 * DEG2RAD)
         return 0.0;

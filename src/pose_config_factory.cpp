@@ -62,7 +62,7 @@ struct CalculatedServoAngles {
     double coxa;  // coxa servo angle (degrees)
     double femur; // femur servo angle (degrees)
     double tibia; // tibia servo angle (degrees)
-    bool valid;  // solution validity flag
+    bool valid;   // solution validity flag
 };
 
 CalculatedServoAngles calculateServoAnglesForHeight(double target_height_mm, const Parameters &params) {
@@ -96,8 +96,8 @@ CalculatedServoAngles calculateServoAnglesForHeight(double target_height_mm, con
             double score = std::fabs(alpha) + std::fabs(beta);
             if (score < bestScore) {
                 best.coxa = 0.0;
-                best.femur = alpha * RADIANS_TO_DEGREES_FACTOR;
-                best.tibia = beta * RADIANS_TO_DEGREES_FACTOR;
+                best.femur = (alpha - beta) * RADIANS_TO_DEGREES_FACTOR;
+                best.tibia = -beta * RADIANS_TO_DEGREES_FACTOR;
                 best.valid = true;
                 bestScore = score;
             }
