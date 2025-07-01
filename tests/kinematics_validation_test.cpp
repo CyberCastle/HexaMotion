@@ -34,49 +34,48 @@ struct AngleCalcAngles {
 
 // Implementación analítica equivalente a angle_calculus.cpp
 AngleCalcAngles calcLegAngles(double H_mm) {
-    const double alphaMin = -75.0 * DEG2RAD;
-    const double alphaMax = 75.0 * DEG2RAD;
-    const double betaMin = -45.0 * DEG2RAD;
-    const double betaMax = 45.0 * DEG2RAD;
+    AngleCalcAngles out{0.0, 0.0, false};
 
-    AngleCalcAngles best{0, 0, false};
-    double bestScore = 1e9;
-    double bestOrient = std::numeric_limits<double>::max();
+    const double B = B_FEMUR;
+    const double C = C_TIBIA;
 
-    for (double beta = betaMin; beta <= betaMax; beta += 0.5 * DEG2RAD) {
-        double sum = A_COXA + B_FEMUR * std::cos(beta);
-        double discriminant =
-            sum * sum - (H_mm * H_mm - C_TIBIA * C_TIBIA);
-        if (discriminant < 0.0)
-            continue;
+    constexpr int MAX_ITERS = 50;
+    constexpr double STEP_MM = 1.0;
 
-        double sqrt_disc = std::sqrt(discriminant);
-        for (int sign = -1; sign <= 1; sign += 2) {
-            double t = (-sum + sign * sqrt_disc) / (H_mm + C_TIBIA);
-            double alpha = 2.0 * std::atan(t);
+    double H = H_mm;
 
-            if (alpha < alphaMin || alpha > alphaMax)
-                continue;
+    for (int i = 0; i < MAX_ITERS; i++) {
+        if (H < C || H > B + C)
+            break;
 
-            double theta1 = (alpha - beta) * RAD2DEG;
-            double theta2 = -beta * RAD2DEG;
+        double s = (H - C) / B;
+        if (s < -1.0 || s > 1.0)
+            break;
+        double alpha = std::asin(s);
+        double beta = M_PI_2 - alpha;
 
-            if (theta1 < -75.0 || theta1 > 75.0)
-                continue;
-            if (theta2 < -45.0 || theta2 > 45.0)
-                continue;
+        double femurDeg = alpha * RAD2DEG;
+        double tibiaDeg = beta * RAD2DEG;
 
-            double orient_err = std::fabs(alpha);
-            double score = std::fabs(alpha) + std::fabs(beta);
-            if (orient_err < bestOrient ||
-                (std::abs(orient_err - bestOrient) < 1e-6 && score < bestScore)) {
-                best = {theta1, theta2, true};
-                bestScore = score;
-                bestOrient = orient_err;
-            }
+        bool fem_ok = femurDeg >= -75.0 && femurDeg <= 75.0;
+        bool tib_ok = tibiaDeg >= -45.0 && tibiaDeg <= 45.0;
+
+        if (fem_ok && tib_ok) {
+            out.theta1 = femurDeg;
+            out.theta2 = tibiaDeg;
+            out.valid = true;
+            break;
         }
+
+        if (femurDeg > 75.0 || tibiaDeg < -45.0)
+            H -= STEP_MM;
+        else if (femurDeg < -75.0 || tibiaDeg > 45.0)
+            H += STEP_MM;
+        else
+            break;
     }
-    return best;
+
+    return out;
 }
 
 double calcHeight(double theta1_deg, double theta2_deg, bool &valid) {
@@ -92,19 +91,17 @@ double calcHeight(double theta1_deg, double theta2_deg, bool &valid) {
     double theta1 = theta1_deg * DEG2RAD;
     double theta2 = theta2_deg * DEG2RAD;
 
-    // Relaciones geométricas del modelo DH
-    double beta = -theta2;        // β = −θ₂
-    double alpha = theta1 + beta; // α = θ₁ + β
+    // Convertir a radianes según nueva geometría
+    double alpha = theta1_deg * DEG2RAD;
 
     if (alpha < -75.0 * DEG2RAD || alpha > 75.0 * DEG2RAD)
         return 0.0;
-    if (beta < -45.0 * DEG2RAD || beta > 45.0 * DEG2RAD)
-        return 0.0;
 
-    // Altura según la cadena DH
-    double H_mm = C_TIBIA * std::cos(alpha) -
-                  A_COXA * std::sin(alpha) -
-                  B_FEMUR * std::sin(alpha) * std::cos(beta);
+    double beta = M_PI_2 - alpha; // β determinado por tibia vertical
+    (void)theta2_deg;              // Ignorar ángulo tibia (redundante)
+
+    // Altura con tibia perpendicular al suelo
+    double H_mm = C_TIBIA + B_FEMUR * std::sin(alpha);
 
     valid = true;
     return H_mm;
@@ -180,16 +177,13 @@ class KinematicsValidator {
                 continue;
             }
 
-            // 2. Convertir ángulos relativos de angle_calculus a ángulos absolutos DH
-            double theta1_rad = ref_solution.theta1 * DEG2RAD;
-            double theta2_rad = ref_solution.theta2 * DEG2RAD;
-
-            double beta = -theta2_rad;        // β = −θ₂
-            double alpha = theta1_rad + beta; // α = θ₁ + β
+            // 2. Convertir ángulos a la representación absoluta
+            double alpha = ref_solution.theta1 * DEG2RAD;
+            double beta = ref_solution.theta2 * DEG2RAD;
 
             // Convertir a grados para mostrar y comparar
-            double alpha_deg = alpha * RAD2DEG; // Ángulo femur
-            double beta_deg = beta * RAD2DEG;   // Ángulo tibia
+            double alpha_deg = ref_solution.theta1; // Ángulo femur
+            double beta_deg = ref_solution.theta2;  // Ángulo tibia
 
             // 3. PRUEBA DIRECTA: Usar los ángulos convertidos directamente en HexaMotion FK
             JointAngles test_angles;
@@ -210,9 +204,7 @@ class KinematicsValidator {
             double height_error = std::abs(hexa_height - height);
 
             // 7. Verificar que la fórmula de angle_calculus coincida
-            double expected_height = C_TIBIA * std::cos(alpha) -
-                                     A_COXA * std::sin(alpha) -
-                                     B_FEMUR * std::sin(alpha) * std::cos(beta);
+            double expected_height = C_TIBIA + B_FEMUR * std::sin(alpha);
             double formula_error = std::abs(expected_height - height);
 
             // El test pasa si las alturas coinciden

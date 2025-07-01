@@ -67,48 +67,54 @@ struct CalculatedServoAngles {
 };
 
 CalculatedServoAngles calculateServoAnglesForHeight(double target_height_mm, const Parameters &params) {
-    // Robot dimensions from parameters
-    const double coxa_length = params.coxa_length;
-    const double femur_length = params.femur_length;
-    const double tibia_length = params.tibia_length;
+    const double B = params.femur_length;
+    const double C = params.tibia_length;
 
-    // Joint limits from parameters (converted to radians)
-    const double alphaMin = params.femur_angle_limits[0] * DEGREES_TO_RADIANS_FACTOR;
-    const double alphaMax = params.femur_angle_limits[1] * DEGREES_TO_RADIANS_FACTOR;
-    const double betaMin = params.tibia_angle_limits[0] * DEGREES_TO_RADIANS_FACTOR;
-    const double betaMax = params.tibia_angle_limits[1] * DEGREES_TO_RADIANS_FACTOR;
+    CalculatedServoAngles result{0.0, 0.0, 0.0, false};
 
-    CalculatedServoAngles best{0.0, 0.0, 0.0, false};
-    double bestScore = 1e9;
-    double bestOrient = std::numeric_limits<double>::max();
+    // Use IK settings for iteration parameters
+    int max_iters = params.ik.max_iterations > 0 ? params.ik.max_iterations : 1;
+    double step = params.ik.pos_threshold_mm > 0.0 ? params.ik.pos_threshold_mm : 1.0;
 
-    for (double beta = betaMin; beta <= betaMax; beta += 0.5f * DEGREES_TO_RADIANS_FACTOR) {
-        double sum = coxa_length + femur_length * std::cos(beta);
-        double disc = sum * sum - (target_height_mm * target_height_mm - tibia_length * tibia_length);
-        if (disc < 0.0)
-            continue;
+    double H = target_height_mm;
 
-        double sqrt_disc = std::sqrt(disc);
-        for (int sign = -1; sign <= 1; sign += 2) {
-            double t = (-sum + sign * sqrt_disc) / (target_height_mm + tibia_length);
-            double alpha = 2.0 * std::atan(t);
-            if (alpha < alphaMin || alpha > alphaMax)
-                continue;
+    for (int i = 0; i < max_iters; i++) {
+        if (H < C || H > B + C) {
+            break; // outside reachable range
+        }
 
-            double orient_err = std::fabs(alpha); // tibia angle w.r.t vertical
-            double score = std::fabs(alpha) + std::fabs(beta);
-            if (orient_err < bestOrient ||
-                (std::abs(orient_err - bestOrient) < 1e-6 && score < bestScore)) {
-                best.coxa = 0.0;
-                best.femur = (alpha - beta) * RADIANS_TO_DEGREES_FACTOR;
-                best.tibia = -beta * RADIANS_TO_DEGREES_FACTOR;
-                best.valid = true;
-                bestScore = score;
-                bestOrient = orient_err;
-            }
+        double s = (H - C) / B;
+        if (s < -1.0 || s > 1.0) {
+            break; // numerically invalid
+        }
+        double alpha = std::asin(s);
+        double beta = M_PI_2 - alpha;
+
+        double femurDeg = alpha * RADIANS_TO_DEGREES_FACTOR;
+        double tibiaDeg = beta * RADIANS_TO_DEGREES_FACTOR;
+
+        bool femur_ok = femurDeg >= params.femur_angle_limits[0] && femurDeg <= params.femur_angle_limits[1];
+        bool tibia_ok = tibiaDeg >= params.tibia_angle_limits[0] && tibiaDeg <= params.tibia_angle_limits[1];
+
+        if (femur_ok && tibia_ok) {
+            result.coxa = 0.0;
+            result.femur = femurDeg;
+            result.tibia = tibiaDeg;
+            result.valid = true;
+            break;
+        }
+
+        // Adjust height for next iteration depending on which limit was violated
+        if (femurDeg > params.femur_angle_limits[1] || tibiaDeg < params.tibia_angle_limits[0]) {
+            H -= step; // reduce height
+        } else if (femurDeg < params.femur_angle_limits[0] || tibiaDeg > params.tibia_angle_limits[1]) {
+            H += step; // increase height
+        } else {
+            break;
         }
     }
-    return best;
+
+    return result;
 }
 
 /**
