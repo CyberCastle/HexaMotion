@@ -77,53 +77,30 @@ CalculatedServoAngles calculateServoAnglesForHeight(double target_height_mm, con
     const double betaMin = params.tibia_angle_limits[0] * DEGREES_TO_RADIANS_FACTOR;
     const double betaMax = params.tibia_angle_limits[1] * DEGREES_TO_RADIANS_FACTOR;
 
-    const double Ytarget = target_height_mm - tibia_length;
+    CalculatedServoAngles best{0.0, 0.0, 0.0, false};
+    double bestScore = 1e9;
 
-    CalculatedServoAngles best;
-    best.coxa = 0;
-    best.femur = 0;
-    best.tibia = 0;
-    best.valid = false;
-    double bestScore = 1e9f;
-
-    // Iterative search for optimal angles (following angle_calculus.cpp algorithm)
     for (double beta = betaMin; beta <= betaMax; beta += 0.5f * DEGREES_TO_RADIANS_FACTOR) {
-        double yRem = Ytarget - femur_length * sin(beta);
-        double s = yRem / coxa_length; // argument of asin
-
-        if (s < -1.0f || s > 1.0f)
+        double sum = coxa_length + femur_length * std::cos(beta);
+        double disc = sum * sum - (target_height_mm * target_height_mm - tibia_length * tibia_length);
+        if (disc < 0.0)
             continue;
 
-        double alpha = asin(s);
+        double sqrt_disc = std::sqrt(disc);
+        for (int sign = -1; sign <= 1; sign += 2) {
+            double t = (-sum + sign * sqrt_disc) / (target_height_mm + tibia_length);
+            double alpha = 2.0 * std::atan(t);
+            if (alpha < alphaMin || alpha > alphaMax)
+                continue;
 
-        if (alpha < alphaMin || alpha > alphaMax)
-            continue;
-
-        // Calculate relative angles
-        double theta1 = (beta - alpha) * RADIANS_TO_DEGREES_FACTOR; // coxa-femur relative angle
-        if (theta1 < params.femur_angle_limits[0] || theta1 > params.femur_angle_limits[1])
-            continue;
-
-        double theta2 = -beta * RADIANS_TO_DEGREES_FACTOR; // femur-tibia relative angle
-
-        // Convert to individual servo angles based on geometric relationships:
-        // From angle_calculus.cpp geometric relationships:
-        //   θ₂ = −β     ⇒  β = −θ₂
-        //   θ₁ = β − α  ⇒  α = β − θ₁
-        // Therefore:
-        //   femur_angle = α = β − θ₁
-        //   tibia_angle = β = −θ₂
-        double coxa_angle = 0.0f;                               // Coxa remains aligned radially
-        double femur_angle = alpha * RADIANS_TO_DEGREES_FACTOR; // Convert alpha to degrees
-        double tibia_angle = beta * RADIANS_TO_DEGREES_FACTOR;  // Convert beta to degrees
-
-        double score = fabs(alpha) + fabs(beta);
-        if (score < bestScore) {
-            best.coxa = coxa_angle;
-            best.femur = femur_angle;
-            best.tibia = tibia_angle;
-            best.valid = true;
-            bestScore = score;
+            double score = std::fabs(alpha) + std::fabs(beta);
+            if (score < bestScore) {
+                best.coxa = 0.0;
+                best.femur = alpha * RADIANS_TO_DEGREES_FACTOR;
+                best.tibia = beta * RADIANS_TO_DEGREES_FACTOR;
+                best.valid = true;
+                bestScore = score;
+            }
         }
     }
     return best;
