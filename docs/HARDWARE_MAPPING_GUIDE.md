@@ -53,7 +53,7 @@ Each leg's base position is calculated relative to the robot's center:
 
 ```cpp
 // From locomotion_system.cpp - leg base position calculation
-Point3D LocomotionSystem::getLegBasePosition(int leg_index) {
+Point3D LocomotionSystem::getDHLegBasePosition(int leg_index) {
     float angle_deg = leg_index * 60.0f;  // 60° between legs
     float angle_rad = angle_deg * M_PI / 180.0f;
 
@@ -598,7 +598,7 @@ void validateHardwareMapping() {
     // Test 3: Coordinate system validation
     Serial.println("Testing coordinate system...");
     for (int leg = 0; leg < NUM_LEGS; leg++) {
-        Point3D base_pos = locomotion_system->getLegBasePosition(leg);
+        Point3D base_pos = locomotion_system->getDHLegBasePosition(leg);
         Serial.print("Leg ");
         Serial.print(leg);
         Serial.print(" base: (");

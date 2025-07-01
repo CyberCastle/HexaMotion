@@ -228,7 +228,18 @@ Point3D RobotModel::forwardKinematics(int leg_index, const JointAngles &angles) 
     return Point3D{transform(0, 3), transform(1, 3), transform(2, 3)};
 }
 
-Point3D RobotModel::getLegBasePosition(int leg_index) const {
+Point3D RobotModel::getAnalyticLegBasePosition(int leg_index) const {
+    // Compute base position using nominal leg offset angle
+    const double angle_deg = BASE_THETA_OFFSETS[leg_index];
+    const double angle_rad = math_utils::degreesToRadians(angle_deg);
+
+    double x = params.hexagon_radius * cos(angle_rad);
+    double y = params.hexagon_radius * sin(angle_rad);
+
+    return Point3D{x, y, 0.0f};
+}
+
+Point3D RobotModel::getDHLegBasePosition(int leg_index) const {
     // Get only the base transform (without joint angles)
     Eigen::Matrix4d base_transform = math_utils::dhTransform(
         dh_transforms[leg_index][0][0],
