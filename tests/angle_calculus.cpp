@@ -19,7 +19,7 @@ struct Angles {
 };
 
 //------------------------------------------------------------------
-//   Cinemática inversa  (altura  →  ángulos)
+//   Cinemática inversa analítica  (altura  →  ángulos)
 //------------------------------------------------------------------
 Angles calcLegAngles(double H_mm) {
     const double alphaMin = -75.0 * DEG2RAD;
@@ -27,33 +27,34 @@ Angles calcLegAngles(double H_mm) {
     const double betaMin = -45.0 * DEG2RAD;
     const double betaMax = 45.0 * DEG2RAD;
 
-    const double Ytarget = H_mm - C_TIBIA;
-
     Angles best{0, 0, false};
     double bestScore = 1e9;
 
     for (double beta = betaMin; beta <= betaMax; beta += 0.5 * DEG2RAD) {
-        double yRem = Ytarget - B_FEMUR * std::sin(beta);
-        double s = yRem / A_COXA; // argumento de asin
-
-        if (s < -1.0 || s > 1.0)
+        double sum = A_COXA + B_FEMUR * std::cos(beta);
+        double discriminant =
+            sum * sum - (H_mm * H_mm - C_TIBIA * C_TIBIA);
+        if (discriminant < 0.0)
             continue;
 
-        double alpha = std::asin(s);
+        double sqrt_disc = std::sqrt(discriminant);
+        for (int sign = -1; sign <= 1; sign += 2) {
+            double t = (-sum + sign * sqrt_disc) / (H_mm + C_TIBIA);
+            double alpha = 2.0 * std::atan(t);
 
-        if (alpha < alphaMin || alpha > alphaMax)
-            continue;
+            if (alpha < alphaMin || alpha > alphaMax)
+                continue;
 
-        double theta1 = (beta - alpha) * RAD2DEG; // coxa-fémur
-        if (theta1 < -75.0 || theta1 > 75.0)
-            continue;
-
-        double theta2 = -beta * RAD2DEG; // fémur-tibia
-
-        double score = std::fabs(alpha) + std::fabs(beta);
-        if (score < bestScore) {
-            best = {theta1, theta2, true};
-            bestScore = score;
+            double score = std::fabs(alpha) + std::fabs(beta);
+            if (score < bestScore) {
+                // Servo angles according to DH model
+                best.theta1 = (alpha - beta) * RAD2DEG; // femur servo
+                best.theta2 = -beta * RAD2DEG;          // tibia servo
+                best.valid = (best.theta1 >= -75.0 && best.theta1 <= 75.0 &&
+                             best.theta2 >= -45.0 && best.theta2 <= 45.0);
+                if (best.valid)
+                    bestScore = score;
+            }
         }
     }
     return best;
@@ -79,20 +80,19 @@ double calcHeight(double theta1_deg,
     double theta1 = theta1_deg * DEG2RAD;
     double theta2 = theta2_deg * DEG2RAD;
 
-    // Relaciones geométricas empleadas en la inversa:
-    //   θ₂ = −β     ⇒  β = −θ₂
-    //   θ₁ = β − α  ⇒  α = β − θ₁
-    double beta = -theta2;
-    double alpha = beta - theta1;
+    // Relaciones geométricas del modelo DH
+    double beta = -theta2;        // β = −θ₂
+    double alpha = theta1 + beta; // α = θ₁ + β
 
-    // Chequeo opcional de los límites absolutos de α y β
     if (alpha < -75.0 * DEG2RAD || alpha > 75.0 * DEG2RAD)
         return 0.0;
     if (beta < -45.0 * DEG2RAD || beta > 45.0 * DEG2RAD)
         return 0.0;
 
-    // Altura alcanzada (positivo hacia abajo)
-    double H_mm = A_COXA * std::sin(alpha) + B_FEMUR * std::sin(beta) + C_TIBIA;
+    // Altura alcanzada según la cadena DH
+    double H_mm = C_TIBIA * std::cos(alpha) -
+                  A_COXA * std::sin(alpha) -
+                  B_FEMUR * std::sin(alpha) * std::cos(beta);
 
     valid = true;
     return H_mm;
