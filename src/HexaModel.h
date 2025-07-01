@@ -463,7 +463,7 @@ class RobotModel {
     Pose getTipPoseLegFrame(int leg_index, const JointAngles &joint_angles, const Pose &robot_frame_pose = Pose::Identity()) const;
 
     /** Get the Analytic position of the leg base (without joint transformations) */
-    Point3D getAnalitycLegBasePosition(int leg_index) const;
+    Point3D getAnalyticLegBasePosition(int leg_index) const;
 
     /** Get the DH position of the leg base (without joint transformations) */
     Point3D getDHLegBasePosition(int leg_index) const;
