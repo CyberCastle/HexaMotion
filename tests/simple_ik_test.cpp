@@ -53,7 +53,7 @@ int main() {
     }
 
     // Validación coherencia de IK con FK
-    std::cout << "\n=== IK Height 120mm Test ===" << std::endl;
+    std::cout << "\n=== Validación coherencia de IK con FK ===" << std::endl;
     bool height_ok = true;
     for (int leg = 0; leg < NUM_LEGS; ++leg) {
 
