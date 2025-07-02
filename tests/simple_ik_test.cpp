@@ -52,12 +52,41 @@ int main() {
         return 1;
     }
 
-    // Validación de altura de 120mm bajo la base del robot
-    std::cout << "\n=== IK Height 120mm Test ===" << std::endl;
+    // Validación coherencia de IK con FK
+    std::cout << "\n=== Validación coherencia de IK con FK ===" << std::endl;
     bool height_ok = true;
     for (int leg = 0; leg < NUM_LEGS; ++leg) {
+
+        // Use the same relative joint angles for every leg; the base offset is
+        // already accounted for in the DH model
+        JointAngles test_angles(0, 20, 20);
+        Point3D target = model.forwardKinematics(leg, test_angles);
+
+        // Provide a neutral starting guess
+        JointAngles start_angles(0, 0, 0);
+        JointAngles ik = model.inverseKinematicsCurrent(leg, start_angles, target);
+        Point3D fk = model.forwardKinematics(leg, ik);
+        printf("target: %f, %f, %f\n", target.x, target.y, target.z);
+        printf("fk    : %f, %f, %f\n", fk.x, fk.y, fk.z);
+        double z_err = std::abs(fk.z - target.z);
+        std::cout << "Leg " << leg << ": target altura -"<< target.z <<" -> IK(" << ik.coxa << ", "
+                  << ik.femur << ", " << ik.tibia << ") FK altura=" << fk.z << " error_z=" << z_err << std::endl;
+        if (z_err > 2.0f) {
+            height_ok = false;
+        }
+        printf("\n");
+    }
+    if (height_ok) {
+        std::cout << "Hay coherencia entre IK y FK" << std::endl;
+    } else {
+        std::cerr << "No hay coherencia entre IK y FK" << std::endl;
+    }
+
+    // Validación de altura de 120mm bajo la base del robot
+    std::cout << "\n=== IK Height 120mm Test ===" << std::endl;
+    for (int leg = 0; leg < NUM_LEGS; ++leg) {
         // Obtener la posición de la base de la pierna
-        Point3D base = model.getLegBasePosition(leg);
+        Point3D base = model.getAnalyticLegBasePosition(leg);
         // Target: misma X, Y que la base, Z = base.z - 120
         Point3D target;
         target.x = base.x;

@@ -1,6 +1,7 @@
 #include <cmath>
 #include <iomanip>
 #include <iostream>
+#include <limits>
 
 constexpr double A_COXA = 50.0;   // mm
 constexpr double B_FEMUR = 101.0; // mm
@@ -10,121 +11,132 @@ constexpr double DEG2RAD = M_PI / 180.0;
 constexpr double RAD2DEG = 180.0 / M_PI;
 
 //------------------------------------------------------------------
-//   Estructuras auxiliares
+//   Helper structures
 //------------------------------------------------------------------
 struct Angles {
-    double theta1; // °  coxa-fémur
-    double theta2; // °  fémur-tibia
-    bool valid;    // solución dentro de límites
+    double theta1; // °  coxa-femur
+    double theta2; // °  femur-tibia
+    bool valid;    // solution within limits
 };
 
 //------------------------------------------------------------------
-//   Cinemática inversa  (altura  →  ángulos)
+//   Analytic inverse kinematics  (height → angles)
 //------------------------------------------------------------------
 Angles calcLegAngles(double H_mm) {
+    Angles best{0.0, 0.0, false};
+    double bestErr = std::numeric_limits<double>::infinity();
+
+    // Ranges in radians
     const double alphaMin = -75.0 * DEG2RAD;
     const double alphaMax = 75.0 * DEG2RAD;
     const double betaMin = -45.0 * DEG2RAD;
     const double betaMax = 45.0 * DEG2RAD;
+    const double dBeta = 0.1 * DEG2RAD; // sweep step
 
-    const double Ytarget = H_mm - C_TIBIA;
+    const double A = A_COXA;
+    const double B = B_FEMUR;
+    const double C = C_TIBIA;
 
-    Angles best{0, 0, false};
-    double bestScore = 1e9;
-
-    for (double beta = betaMin; beta <= betaMax; beta += 0.5 * DEG2RAD) {
-        double yRem = Ytarget - B_FEMUR * std::sin(beta);
-        double s = yRem / A_COXA; // argumento de asin
-
-        if (s < -1.0 || s > 1.0)
+    // Sweep beta to find a solution with a vertical tibia
+    for (double beta = betaMin; beta <= betaMax; beta += dBeta) {
+        double sum = A + B * std::cos(beta);
+        double discriminant = sum * sum - (H_mm * H_mm - C * C);
+        if (discriminant < 0.0)
             continue;
 
-        double alpha = std::asin(s);
+        double sqrtD = std::sqrt(discriminant);
+        // Two possible roots for alpha
+        for (int sign : {-1, 1}) {
+            double t = (-sum + sign * sqrtD) / (H_mm + C);
+            double alpha = 2.0 * std::atan(t);
+            if (alpha < alphaMin || alpha > alphaMax)
+                continue;
 
-        if (alpha < alphaMin || alpha > alphaMax)
-            continue;
+            double err = std::fabs(alpha + beta);
+            if (err >= bestErr)
+                continue;
 
-        double theta1 = (beta - alpha) * RAD2DEG; // coxa-fémur
-        if (theta1 < -75.0 || theta1 > 75.0)
-            continue;
+            double theta1 = (alpha - beta) * RAD2DEG; // θ₁ = α - β
+            double theta2 = -beta * RAD2DEG;          // θ₂ = −β
 
-        double theta2 = -beta * RAD2DEG; // fémur-tibia
+            if (theta1 < -75.0 || theta1 > 75.0)
+                continue;
+            if (theta2 < -45.0 || theta2 > 45.0)
+                continue;
 
-        double score = std::fabs(alpha) + std::fabs(beta);
-        if (score < bestScore) {
+            bestErr = err;
             best = {theta1, theta2, true};
-            bestScore = score;
         }
     }
+
     return best;
 }
 
 //------------------------------------------------------------------
-//   Cinemática directa  (ángulos  →  altura)
-//   Devuelve la altura alcanzada H_mm y marca "valid" si los ángulos
-//   respetan todos los límites mecánicos.
+//   Forward kinematics (angles → height)
+//   Returns the achieved height H_mm and marks "valid" if the angles
+//   respect all mechanical limits.
 //------------------------------------------------------------------
 double calcHeight(double theta1_deg,
                   double theta2_deg,
                   bool &valid) {
     valid = false;
 
-    // Comprobar límites de los ángulos relativos
+    // Check relative angle limits
     if (theta1_deg < -75.0 || theta1_deg > 75.0)
         return 0.0;
     if (theta2_deg < -45.0 || theta2_deg > 45.0)
         return 0.0;
 
-    // Convertir a radianes
+    // Convert to radians
     double theta1 = theta1_deg * DEG2RAD;
     double theta2 = theta2_deg * DEG2RAD;
 
-    // Relaciones geométricas empleadas en la inversa:
-    //   θ₂ = −β     ⇒  β = −θ₂
-    //   θ₁ = β − α  ⇒  α = β − θ₁
-    double beta = -theta2;
-    double alpha = beta - theta1;
+    // DH model geometric relations
+    double beta = -theta2;        // β = −θ₂
+    double alpha = theta1 + beta; // α = θ₁ + β
 
-    // Chequeo opcional de los límites absolutos de α y β
     if (alpha < -75.0 * DEG2RAD || alpha > 75.0 * DEG2RAD)
         return 0.0;
     if (beta < -45.0 * DEG2RAD || beta > 45.0 * DEG2RAD)
         return 0.0;
 
-    // Altura alcanzada (positivo hacia abajo)
-    double H_mm = A_COXA * std::sin(alpha) + B_FEMUR * std::sin(beta) + C_TIBIA;
+    // Height computed using the DH chain
+    double H_mm = C_TIBIA * std::cos(alpha) -
+                  A_COXA * std::sin(alpha) -
+                  B_FEMUR * std::sin(alpha) * std::cos(beta);
 
     valid = true;
     return H_mm;
 }
 
 //------------------------------------------------------------------
-//   Programa de demostración
+//   Demonstration program
 //------------------------------------------------------------------
 int main() {
-    std::cout << "1) Calcular angulos a partir de la altura\n"
-                 "2) Calcular altura a partir de los angulos\n"
-                 "Opcion: ";
+    std::cout << "1) Compute angles from height\n"
+                 "2) Compute height from angles\n"
+                 "Option: ";
     int opt;
     std::cin >> opt;
 
     if (opt == 1) {
         double H;
-        std::cout << "Altura deseada (mm): ";
+        std::cout << "Desired height (mm): ";
         std::cin >> H;
         Angles sol = calcLegAngles(H);
 
         if (sol.valid)
             std::cout << std::fixed << std::setprecision(2)
-                      << "θ₁ (coxa-fémur)  = " << sol.theta1 << "°\n"
-                      << "θ₂ (fémur-tibia) = " << sol.theta2 << "°\n";
+                      << "θ₁ (coxa-femur)  = " << sol.theta1 << "°\n"
+                      << "θ₂ (femur-tibia) = " << sol.theta2 << "°\n";
         else
-            std::cout << "La altura solicitada esta fuera del rango alcanzable.\n";
+            std::cout << "Requested height is out of reach.\n";
     } else if (opt == 2) {
         double t1, t2;
-        std::cout << "θ₁ (coxa-fémur)  en grados: ";
+        std::cout << "θ₁ (coxa-femur)  in degrees: ";
         std::cin >> t1;
-        std::cout << "θ₂ (fémur-tibia) en grados: ";
+        std::cout << "θ₂ (femur-tibia) in degrees: ";
         std::cin >> t2;
 
         bool ok;
@@ -132,10 +144,10 @@ int main() {
 
         if (ok)
             std::cout << std::fixed << std::setprecision(2)
-                      << "Altura resultante = " << H << " mm\n";
+                      << "Resulting height = " << H << " mm\n";
         else
-            std::cout << "Los angulos introducidos violan los limites mecánicos.\n";
+            std::cout << "Input angles violate mechanical limits.\n";
     } else
-        std::cout << "Opcion no valida.\n";
+        std::cout << "Invalid option.\n";
     return 0;
 }

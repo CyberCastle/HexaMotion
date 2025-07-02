@@ -2,6 +2,7 @@
 #include "hexamotion_constants.h"
 #include "math_utils.h"
 #include <cmath>
+#include <limits>
 
 /**
  * @file pose_config_factory.cpp
@@ -52,80 +53,78 @@ std::array<LegStancePosition, NUM_LEGS> calculateHexagonalStancePositions(
 }
 
 /**
- * @brief Calculate joint angles for a given height using inverse kinematics
- * Based on the angle_calculus.cpp implementation
- * @param target_height_mm Target height in millimeters
- * @param params Robot parameters containing dimensions and joint limits
- * @return Calculated individual servo angles or default values if no solution found
+ * @brief Calculate joint angles for a given height using analytic IK
+ *
+ * This helper mimics the logic from angle_calculus.cpp. It sweeps the
+ * tibia angle (\f$\beta\f$) across its allowed range and solves for the
+ * femur angle (\f$\alpha\f$) so the tibia remains as vertical as possible
+ * while respecting the servo limits.
+ *
+ * @param target_height_mm Target height in millimeters.
+ * @param params Robot parameters containing dimensions and joint limits.
+ * @return Calculated individual servo angles or default values if no solution
+ *         is found.
  */
 struct CalculatedServoAngles {
     double coxa;  // coxa servo angle (degrees)
     double femur; // femur servo angle (degrees)
     double tibia; // tibia servo angle (degrees)
-    bool valid;  // solution validity flag
+    bool valid;   // solution validity flag
 };
 
-CalculatedServoAngles calculateServoAnglesForHeight(double target_height_mm, const Parameters &params) {
-    // Robot dimensions from parameters
-    const double coxa_length = params.coxa_length;
-    const double femur_length = params.femur_length;
-    const double tibia_length = params.tibia_length;
+CalculatedServoAngles calculateServoAnglesForHeight(double target_height_mm,
+                                                   const Parameters &params) {
+    CalculatedServoAngles best{0.0, 0.0, 0.0, false};
+    double bestErr = std::numeric_limits<double>::infinity();
 
-    // Joint limits from parameters (converted to radians)
+    // Ranges based on servo limits
     const double alphaMin = params.femur_angle_limits[0] * DEGREES_TO_RADIANS_FACTOR;
     const double alphaMax = params.femur_angle_limits[1] * DEGREES_TO_RADIANS_FACTOR;
     const double betaMin = params.tibia_angle_limits[0] * DEGREES_TO_RADIANS_FACTOR;
     const double betaMax = params.tibia_angle_limits[1] * DEGREES_TO_RADIANS_FACTOR;
+    const double dBeta = 0.1 * DEGREES_TO_RADIANS_FACTOR;
 
-    const double Ytarget = target_height_mm - tibia_length;
+    const double A = params.coxa_length;
+    const double B = params.femur_length;
+    const double C = params.tibia_length;
 
-    CalculatedServoAngles best;
-    best.coxa = 0;
-    best.femur = 0;
-    best.tibia = 0;
-    best.valid = false;
-    double bestScore = 1e9f;
-
-    // Iterative search for optimal angles (following angle_calculus.cpp algorithm)
-    for (double beta = betaMin; beta <= betaMax; beta += 0.5f * DEGREES_TO_RADIANS_FACTOR) {
-        double yRem = Ytarget - femur_length * sin(beta);
-        double s = yRem / coxa_length; // argument of asin
-
-        if (s < -1.0f || s > 1.0f)
+    // Sweep the tibia angle to search for a valid configuration
+    for (double beta = betaMin; beta <= betaMax; beta += dBeta) {
+        double sum = A + B * std::cos(beta);
+        double discriminant = sum * sum - (target_height_mm * target_height_mm - C * C);
+        if (discriminant < 0.0)
             continue;
 
-        double alpha = asin(s);
+        double sqrtD = std::sqrt(discriminant);
+        // Evaluate both quadratic roots for alpha
+        for (int sign : {-1, 1}) {
+            double t = (-sum + sign * sqrtD) / (target_height_mm + C);
+            double alpha = 2.0 * std::atan(t);
+            if (alpha < alphaMin || alpha > alphaMax)
+                continue;
 
-        if (alpha < alphaMin || alpha > alphaMax)
-            continue;
+            // Measure deviation from a perfectly vertical tibia
+            double err = std::fabs(alpha + beta);
+            if (err >= bestErr)
+                continue;
 
-        // Calculate relative angles
-        double theta1 = (beta - alpha) * RADIANS_TO_DEGREES_FACTOR; // coxa-femur relative angle
-        if (theta1 < params.femur_angle_limits[0] || theta1 > params.femur_angle_limits[1])
-            continue;
+            double theta1 = (alpha - beta) * RADIANS_TO_DEGREES_FACTOR;
+            double theta2 = -beta * RADIANS_TO_DEGREES_FACTOR;
 
-        double theta2 = -beta * RADIANS_TO_DEGREES_FACTOR; // femur-tibia relative angle
+            // Skip solutions that exceed servo limits
+            if (theta1 < params.femur_angle_limits[0] ||
+                theta1 > params.femur_angle_limits[1])
+                continue;
+            if (theta2 < params.tibia_angle_limits[0] ||
+                theta2 > params.tibia_angle_limits[1])
+                continue;
 
-        // Convert to individual servo angles based on geometric relationships:
-        // From angle_calculus.cpp geometric relationships:
-        //   θ₂ = −β     ⇒  β = −θ₂
-        //   θ₁ = β − α  ⇒  α = β − θ₁
-        // Therefore:
-        //   femur_angle = α = β − θ₁
-        //   tibia_angle = β = −θ₂
-        double coxa_angle = 0.0f;                               // Coxa remains aligned radially
-        double femur_angle = alpha * RADIANS_TO_DEGREES_FACTOR; // Convert alpha to degrees
-        double tibia_angle = beta * RADIANS_TO_DEGREES_FACTOR;  // Convert beta to degrees
-
-        double score = fabs(alpha) + fabs(beta);
-        if (score < bestScore) {
-            best.coxa = coxa_angle;
-            best.femur = femur_angle;
-            best.tibia = tibia_angle;
-            best.valid = true;
-            bestScore = score;
+            // Keep the best solution found so far
+            bestErr = err;
+            best = {0.0, theta1, theta2, true};
         }
     }
+
     return best;
 }
 

@@ -21,29 +21,38 @@ void RobotModel::initializeDH() {
     // Initialize default DH parameters if custom parameters are not used
     if (!params.use_custom_dh_parameters) {
         for (int l = 0; l < NUM_LEGS; ++l) {
-            // Base transform from body center to leg mount
-            dh_transforms[l][0][0] = params.hexagon_radius; // a
-            dh_transforms[l][0][1] = 0.0f;                  // alpha
-            dh_transforms[l][0][2] = 0.0f;                  // d
-            dh_transforms[l][0][3] = BASE_THETA_OFFSETS[l]; // theta
+            // ── Fila 0: base rígida ───────────────────────────
+            dh_transforms[l][0][0] = params.hexagon_radius; // a0 = 200mm
+            dh_transforms[l][0][1] = 0.0f;                  // alpha0
+            dh_transforms[l][0][2] = 0.0f;                  // d1
+            dh_transforms[l][0][3] = BASE_THETA_OFFSETS[l]; // θ0  (fijo)
 
-            // Coxa link (horizontal rotation)
-            dh_transforms[l][1][0] = params.coxa_length; // a
-            dh_transforms[l][1][1] = 0.0f;               // alpha (no twist)
-            dh_transforms[l][1][2] = 0.0f;               // d
-            dh_transforms[l][1][3] = 0.0f;               // theta offset
+            // ── Fila 1: servo yaw ─────────────────────────────
+            dh_transforms[l][1][0] = 0.0f;  // a1
+            dh_transforms[l][1][1] = 90.0f; // alpha1 (+90°)
+            dh_transforms[l][1][2] = 0.0f;  // d2
+            dh_transforms[l][1][3] = 0.0f;  // θ1 offset (suma ψ)
 
-            // Femur link (vertical rotation)
-            dh_transforms[l][2][0] = params.femur_length; // a
-            dh_transforms[l][2][1] = 90.0f;               // alpha (90° twist to vertical)
-            dh_transforms[l][2][2] = 0.0f;                // d
-            dh_transforms[l][2][3] = 0.0f;                // theta offset
+            // ── Fila 2: servo hip-pitch + coxa ───────────────
+            dh_transforms[l][2][0] = params.coxa_length; // a2 = 50
+            dh_transforms[l][2][1] = 90.0f;              // alpha2 (+90°)
+            dh_transforms[l][2][2] = 0.0f;               // d3
+            dh_transforms[l][2][3] = 0.0f;               // θ2 offset (suma θ₁)
 
-            // Tibia link (vertical rotation)
-            dh_transforms[l][3][0] = params.tibia_length; // a
-            dh_transforms[l][3][1] = 0.0f;                // alpha (no twist)
-            dh_transforms[l][3][2] = 0.0f;                // d
-            dh_transforms[l][3][3] = -90.0f;              // theta offset (vertical tibia)
+            // ── Fila 3: servo knee-pitch + tibia ─────────────
+            dh_transforms[l][3][0] = params.femur_length; // a3 = 101
+            dh_transforms[l][3][1] = 0.0f;                // alpha3
+            dh_transforms[l][3][2] = params.tibia_length; // d4 = 208
+            dh_transforms[l][3][3] = 0.0f;                // θ3 offset (suma θ₂)
+        }
+    } else {
+        // Copy custom DH parameters provided in params.dh_parameters
+        for (int l = 0; l < NUM_LEGS; ++l) {
+            for (int j = 0; j < DOF_PER_LEG + 1; ++j) {
+                for (int k = 0; k < 4; ++k) {
+                    dh_transforms[l][j][k] = params.dh_parameters[l][j][k];
+                }
+            }
         }
     }
 }
@@ -219,7 +228,18 @@ Point3D RobotModel::forwardKinematics(int leg_index, const JointAngles &angles) 
     return Point3D{transform(0, 3), transform(1, 3), transform(2, 3)};
 }
 
-Point3D RobotModel::getLegBasePosition(int leg_index) const {
+Point3D RobotModel::getAnalyticLegBasePosition(int leg_index) const {
+    // Compute base position using nominal leg offset angle
+    const double angle_deg = BASE_THETA_OFFSETS[leg_index];
+    const double angle_rad = math_utils::degreesToRadians(angle_deg);
+
+    double x = params.hexagon_radius * cos(angle_rad);
+    double y = params.hexagon_radius * sin(angle_rad);
+
+    return Point3D{x, y, 0.0f};
+}
+
+Point3D RobotModel::getDHLegBasePosition(int leg_index) const {
     // Get only the base transform (without joint angles)
     Eigen::Matrix4d base_transform = math_utils::dhTransform(
         dh_transforms[leg_index][0][0],
