@@ -69,7 +69,8 @@ bool validateGaitImplementation(GaitType gait, const std::string &name,
     DummyFSR fsr;
     DummyServo servos;
 
-    assert(sys.initialize(&imu, &fsr, &servos));
+    PoseConfiguration pose_config;
+    assert(sys.initialize(&imu, &fsr, &servos, pose_config));
     assert(sys.calibrateSystem());
     assert(sys.setGaitType(gait));
 
@@ -102,7 +103,8 @@ int main() {
     DummyFSR fsr;
     DummyServo servos;
 
-    assert(sys.initialize(&imu, &fsr, &servos));
+    PoseConfiguration pose_config;
+    assert(sys.initialize(&imu, &fsr, &servos, pose_config));
     assert(sys.calibrateSystem());
 
     int passed_tests = 0;

@@ -23,12 +23,14 @@ class StateControllerTest {
     MockServo servo;
     int test_count = 0;
     int passed_tests = 0;
+    PoseConfiguration pose_config;
 
   public:
     StateControllerTest() {
         setupParameters();
+        PoseConfiguration pose_config;
         locomotion = new LocomotionSystem(params);
-        locomotion->initialize(&imu, &fsr, &servo);
+        locomotion->initialize(&imu, &fsr, &servo, pose_config);
 
         // Set the robot to a valid standing pose for proper state detection
         // This ensures the body position is at a reasonable height for testing
@@ -98,7 +100,7 @@ class StateControllerTest {
         state_controller = new StateController(*locomotion, config);
 
         assert_test(state_controller != nullptr, "StateController creation");
-        assert_test(state_controller->initialize(), "StateController initialization");
+        assert_test(state_controller->initialize(pose_config), "StateController initialization");
         assert_test(state_controller->isInitialized(), "StateController initialized flag");
 
         // Test initial states
@@ -350,7 +352,7 @@ class StateControllerTest {
         alt_config.max_manual_legs = 1;
 
         state_controller = new StateController(*locomotion, alt_config);
-        assert_test(state_controller->initialize(), "Alternative configuration initialization");
+        assert_test(state_controller->initialize(pose_config), "Alternative configuration initialization");
 
         // Test reduced manual leg limit
         state_controller->requestRobotState(ROBOT_RUNNING);
@@ -474,7 +476,7 @@ class StateControllerTest {
         StateMachineConfig default_config;
         default_config.max_manual_legs = 2; // Allow 2 manual legs for this test
         state_controller = new StateController(*locomotion, default_config);
-        state_controller->initialize();
+        state_controller->initialize(pose_config);
 
         // Ensure robot is running
         state_controller->requestSystemState(SYSTEM_OPERATIONAL);

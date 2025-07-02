@@ -496,7 +496,8 @@ int main() {
 
     // Locomotion system
     LocomotionSystem sys(p);
-    assert(sys.initialize(&imu, &fsr, &servos));
+    PoseConfiguration pose_config;
+    assert(sys.initialize(&imu, &fsr, &servos, pose_config));
     assert(sys.calibrateSystem());
     assert(sys.setGaitType(TRIPOD_GAIT));
 

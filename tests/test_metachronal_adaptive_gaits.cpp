@@ -14,8 +14,9 @@ int main() {
     DummyIMU imu;
     DummyFSR fsr;
     ProgressiveServo servos; // Use ProgressiveServo for realistic simulation
+    PoseConfiguration pose_config;
 
-    assert(sys.initialize(&imu, &fsr, &servos));
+    assert(sys.initialize(&imu, &fsr, &servos, pose_config));
     assert(sys.calibrateSystem());
 
     // Set standing pose to initialize joint angles properly

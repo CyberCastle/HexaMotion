@@ -30,7 +30,8 @@ int main() {
     DummyIMU imu;
     DummyFSR fsr;
     DummyServo servos;
-    sys.initialize(&imu, &fsr, &servos);
+    PoseConfiguration pose_config;
+    sys.initialize(&imu, &fsr, &servos, pose_config);
 
     // Test basic leg 0 geometry
     std::cout << "\n=== Leg 0 FK Analysis ===" << std::endl;

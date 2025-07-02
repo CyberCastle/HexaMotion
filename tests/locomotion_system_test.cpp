@@ -22,8 +22,11 @@ int main() {
     DummyFSR fsr;
     DummyServo servos;
 
+    // Antes de las llamadas a initialize, define un PoseConfiguration dummy si no existe
+    PoseConfiguration pose_config;
+
     LocomotionSystem sys(p);
-    assert(sys.initialize(&imu, &fsr, &servos));
+    assert(sys.initialize(&imu, &fsr, &servos, pose_config));
     assert(sys.calibrateSystem());
     assert(sys.setGaitType(TRIPOD_GAIT));
     assert(sys.update());
@@ -50,7 +53,7 @@ int main() {
     bad.ik.clamp_joints = false;
 
     LocomotionSystem sys2(bad);
-    assert(sys2.initialize(&imu, &fsr, &servos));
+    assert(sys2.initialize(&imu, &fsr, &servos, pose_config));
     assert(sys2.calibrateSystem());
     assert(sys2.setGaitType(TRIPOD_GAIT));
     assert(sys2.update());
