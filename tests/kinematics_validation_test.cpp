@@ -32,52 +32,88 @@ struct AngleCalcAngles {
     bool valid;    // solución dentro de límites
 };
 
-// Implementación analítica equivalente a angle_calculus.cpp
-AngleCalcAngles calcLegAngles(double H_mm) {
-    AngleCalcAngles out{0.0, 0.0, false};
+constexpr double FEMUR_MIN_DEG = -75.0; // °  límites de servo
+constexpr double FEMUR_MAX_DEG = 75.0;  // °  límites de servo
+constexpr double TIBIA_MIN_DEG = -45.0; // °  límites de servo
+constexpr double TIBIA_MAX_DEG = 45.0;  // °  límites de servo
 
+/**
+ * @brief  Calcula los ángulos de servo para una altura dada, asegurando que la tibia
+ *         sea perpendicular al suelo (α = 0).
+ *
+ * @param H_mm  Altura desde el plano de la base de la pierna hasta la punta [mm].
+ * @return      Estructura con los ángulos θ₁ y θ₂ en grados, y un booleano valid.
+ */
+AngleCalcAngles calcLegAngles(double H_mm) {
+    AngleCalcAngles best{0, 0, false};
+    double bestErr = std::numeric_limits<double>::infinity();
+
+    // ---------------------------------------
+    // 1) RANGOS (radianes)
+    const double alphaMin = -75.0 * DEG2RAD;
+    const double alphaMax = 75.0 * DEG2RAD;
+    const double betaMin = -45.0 * DEG2RAD;
+    const double betaMax = 45.0 * DEG2RAD;
+    const double dBeta = 0.1 * DEG2RAD; // paso, ajústalo si quieres más precisión
+
+    // 2) LONGITUDES
+    const double A = A_COXA;
     const double B = B_FEMUR;
     const double C = C_TIBIA;
 
-    constexpr int MAX_ITERS = 50;
-    constexpr double STEP_MM = 1.0;
+    // 3) BARRIDO de β
+    for (double beta = betaMin; beta <= betaMax; beta += dBeta) {
+        // discriminante de la misma ecuación que tenías:
+        //    C·cosα - (A + B·cosβ)·sinα  = H_mm
+        double sum = A + B * std::cos(beta);
+        double discriminant = sum * sum - (H_mm * H_mm - C * C);
+        if (discriminant < 0.0)
+            continue;
 
-    double H = H_mm;
+        double sqrtD = std::sqrt(discriminant);
+        // dos raíces en α
+        for (int sign : {-1, +1}) {
+            double t = (-sum + sign * sqrtD) / (H_mm + C);
+            double alpha = 2.0 * std::atan(t);
+            if (alpha < alphaMin || alpha > alphaMax)
+                continue;
 
-    for (int i = 0; i < MAX_ITERS; i++) {
-        if (H < C || H > B + C)
-            break;
+            //  Medir error de verticalidad real
+            double err = std::fabs(alpha + beta);
+            if (err >= bestErr)
+                continue;
 
-        double s = (H - C) / B;
-        if (s < -1.0 || s > 1.0)
-            break;
-        double alpha = std::asin(s);
-        double beta = M_PI_2 - alpha;
+            // printf("DEBUG: α=%.2f°, β=%.2f° -> err=%.2f\n", alpha * RAD2DEG, beta * RAD2DEG, err);
+            // 4) Paso a grados y a ángulos de servo
+            double theta1 = (alpha - beta) * RAD2DEG; // θ₁ = α - β
+            double theta2 = -beta * RAD2DEG;          // θ₂ = −β
 
-        double femurDeg = alpha * RAD2DEG;
-        double tibiaDeg = beta * RAD2DEG;
+            // 5) LÍMITES de servo
+            if (theta1 < -75.0 || theta1 > 75.0)
+                continue;
+            if (theta2 < -45.0 || theta2 > 45.0)
+                continue;
 
-        bool fem_ok = femurDeg >= -75.0 && femurDeg <= 75.0;
-        bool tib_ok = tibiaDeg >= -45.0 && tibiaDeg <= 45.0;
-
-        if (fem_ok && tib_ok) {
-            out.theta1 = femurDeg;
-            out.theta2 = tibiaDeg;
-            out.valid = true;
-            break;
+            // 6) ERROR de verticalidad: α debe ser 0 para tibia perpendicular
+            bestErr = err;
+            best = {theta1, theta2, true};
         }
-
-        if (femurDeg > 75.0 || tibiaDeg < -45.0)
-            H -= STEP_MM;
-        else if (femurDeg < -75.0 || tibiaDeg > 45.0)
-            H += STEP_MM;
-        else
-            break;
     }
 
-    return out;
+    return best;
 }
 
+/**
+ * @brief  Calcula la altura del extremo del pie por debajo de la base de la pierna
+ *         (eje de unión coxa–fémur), a partir de los dos ángulos de servo.
+ *
+ * @param theta1_deg  Ángulo del servo de fémur en grados.
+ *                    0° → fémur horizontal; + → levanta el pie.
+ * @param theta2_deg  Ángulo del servo de tibia en grados.
+ *                    0° → tibia vertical; + → inclina la tibia hacia atrás.
+ * @param[out] valid  Se pone true si ambos ángulos estaban dentro de sus límites.
+ * @return            Altura desde el plano de la base de la pierna hasta la punta [mm].
+ */
 double calcHeight(double theta1_deg, double theta2_deg, bool &valid) {
     valid = false;
 
@@ -91,17 +127,20 @@ double calcHeight(double theta1_deg, double theta2_deg, bool &valid) {
     double theta1 = theta1_deg * DEG2RAD;
     double theta2 = theta2_deg * DEG2RAD;
 
-    // Convertir a radianes según nueva geometría
-    double alpha = theta1_deg * DEG2RAD;
+    // Relaciones geométricas empleadas en la inversa:
+    //   θ₂ = −β     ⇒  β = −θ₂
+    //   θ₁ = β − α  ⇒  α = β − θ₁
+    double beta = -theta2;
+    double alpha = beta - theta1;
 
+    // Chequeo opcional de los límites absolutos de α y β
     if (alpha < -75.0 * DEG2RAD || alpha > 75.0 * DEG2RAD)
         return 0.0;
+    if (beta < -45.0 * DEG2RAD || beta > 45.0 * DEG2RAD)
+        return 0.0;
 
-    double beta = M_PI_2 - alpha; // β determinado por tibia vertical
-    (void)theta2_deg;              // Ignorar ángulo tibia (redundante)
-
-    // Altura con tibia perpendicular al suelo
-    double H_mm = C_TIBIA + B_FEMUR * std::sin(alpha);
+    // Altura alcanzada (positivo hacia abajo)
+    double H_mm = A_COXA * std::sin(alpha) + B_FEMUR * std::sin(beta) + C_TIBIA;
 
     valid = true;
     return H_mm;
@@ -177,13 +216,16 @@ class KinematicsValidator {
                 continue;
             }
 
-            // 2. Convertir ángulos a la representación absoluta
-            double alpha = ref_solution.theta1 * DEG2RAD;
-            double beta = ref_solution.theta2 * DEG2RAD;
+            // 2. Convertir ángulos relativos de angle_calculus a ángulos absolutos DH
+            double theta1_rad = ref_solution.theta1 * DEG2RAD;
+            double theta2_rad = ref_solution.theta2 * DEG2RAD;
+
+            double beta = -theta2_rad;        // β = −θ₂
+            double alpha = theta1_rad + beta; // α = θ₁ + β
 
             // Convertir a grados para mostrar y comparar
-            double alpha_deg = ref_solution.theta1; // Ángulo femur
-            double beta_deg = ref_solution.theta2;  // Ángulo tibia
+            double alpha_deg = alpha * RAD2DEG; // Ángulo femur
+            double beta_deg = beta * RAD2DEG;   // Ángulo tibia
 
             // 3. PRUEBA DIRECTA: Usar los ángulos convertidos directamente en HexaMotion FK
             JointAngles test_angles;
@@ -204,7 +246,9 @@ class KinematicsValidator {
             double height_error = std::abs(hexa_height - height);
 
             // 7. Verificar que la fórmula de angle_calculus coincida
-            double expected_height = C_TIBIA + B_FEMUR * std::sin(alpha);
+            double expected_height = C_TIBIA * std::cos(alpha) -
+                                     A_COXA * std::sin(alpha) -
+                                     B_FEMUR * std::sin(alpha) * std::cos(beta);
             double formula_error = std::abs(expected_height - height);
 
             // El test pasa si las alturas coinciden
@@ -227,7 +271,7 @@ class KinematicsValidator {
                       << (test_passed ? "PASS" : "FAIL") << std::endl;
 
             // Debug detallado para casos problemáticos o muestras
-            if (!test_passed || height == 120.0 || height == 200.0) {
+            /*if (!test_passed || height == 120.0 || height == 200.0) {
                 std::cout << "  DEBUG altura " << height << ":" << std::endl;
                 std::cout << "    angle_calculus: θ1=" << ref_solution.theta1
                           << "°, θ2=" << ref_solution.theta2 << "°" << std::endl;
@@ -241,7 +285,7 @@ class KinematicsValidator {
                 std::cout << "    HexaMotion altura relativa: " << hexa_height << "mm" << std::endl;
                 std::cout << "    Error altura: " << height_error << "mm" << std::endl;
                 std::cout << "    Error fórmula: " << formula_error << "mm" << std::endl;
-            }
+            }*/
         }
 
         std::cout << std::string(90, '-') << std::endl;
@@ -293,7 +337,7 @@ class KinematicsValidator {
             // angle_calculus.cpp asume que el leg se mueve verticalmente desde el cuerpo
             // Necesitamos crear un target que represente la altura deseada
             JointAngles zero_angles(0, 0, 0);
-            Point3D base_global = model->getDHLegBasePosition(0);
+            Point3D base_global = model->getAnalyticLegBasePosition(0);
 
             // Target en la misma posición X,Y que la base, pero con la altura deseada
             Point3D target_global;
@@ -402,8 +446,8 @@ class KinematicsValidator {
         std::cout << "  Radio hexágono: " << params.hexagon_radius << " mm" << std::endl;
 
         validateVerticalReach();
-        // validateAngleConsistency();
-        // validateWorkspaceComparison();
+        validateAngleConsistency();
+        validateWorkspaceComparison();
 
         std::cout << "\n===== VALIDACIÓN COMPLETA =====" << std::endl;
     }
