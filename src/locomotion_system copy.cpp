@@ -36,7 +36,7 @@ LocomotionSystem::LocomotionSystem(const Parameters &params)
       model(params), pose_ctrl(nullptr), walk_ctrl(nullptr), admittance_ctrl(nullptr) {
 
     // Initialize leg states and phase offsets for tripod gait
-    static const double tripod_phase_offsets[NUM_LEGS] = {0.0f, 0.5f, 0.0f, 0.0f, 0.5f, 0.0f};
+    static const double tripod_phase_offsets[NUM_LEGS] = {0.0f, 0.5f, 0.5f, 0.0f, 0.0f, 0.5f};
     for (int i = 0; i < NUM_LEGS; i++) {
         leg_states[i] = STANCE_PHASE;
         leg_phase_offsets[i] = tripod_phase_offsets[i];
@@ -48,6 +48,8 @@ LocomotionSystem::LocomotionSystem(const Parameters &params)
             fsr_contact_history[i][j] = 0.0f;
     // Initialize sensor log timestamp to avoid static local in updateSensorsParallel
     last_sensor_log_time = 0;
+
+    initializeDefaultPose();
 }
 
 // Destructor
@@ -279,8 +281,44 @@ bool LocomotionSystem::setGaitType(GaitType gait) {
     current_gait = gait;
     gait_phase = 0.0f;
 
-    // Set phase offsets based on gait type
+    // Set phase offsets and timing parameters based on gait type
     switch (gait) {
+    case TRIPOD_GAIT:
+        // Tripod: two groups of 3 legs, 180° out of phase
+        // Group A (L1, L3, L5): offset 0.0
+        // Group B (L2, L4, L6): offset 0.5
+        leg_phase_offsets[0] = 0.0f; // L1
+        leg_phase_offsets[1] = 0.5f; // L2
+        leg_phase_offsets[2] = 0.0f; // L3
+        leg_phase_offsets[3] = 0.5f; // L4
+        leg_phase_offsets[4] = 0.0f; // L5
+        leg_phase_offsets[5] = 0.5f; // L6
+
+        // Tripod gait timing: 60% stance, 40% swing for stability
+        stance_duration = 0.6f;
+        swing_duration = 0.4f;
+
+        // Configure velocity controller for tripod gait
+        if (velocity_controller) {
+            // Set tripod-specific velocity scaling
+            CartesianVelocityController::VelocityScaling tripod_scaling;
+            tripod_scaling.linear_velocity_scale = 1.5f;  // Moderate scaling for tripod
+            tripod_scaling.angular_velocity_scale = 1.2f; // Lower angular scaling for stability
+            tripod_scaling.minimum_speed_ratio = 0.3f;    // Higher minimum speed for responsiveness
+            tripod_scaling.maximum_speed_ratio = 2.0f;    // Moderate maximum speed
+            tripod_scaling.enable_adaptive_scaling = true;
+            velocity_controller->setVelocityScaling(tripod_scaling);
+
+            // Set tripod-specific gait modifiers
+            CartesianVelocityController::GaitSpeedModifiers tripod_modifiers;
+            tripod_modifiers.tripod_speed_factor = 1.2f;  // Tripod is faster than other gaits
+            tripod_modifiers.wave_speed_factor = 0.8f;    // Wave is slower
+            tripod_modifiers.ripple_speed_factor = 0.9f;  // Ripple is moderate
+            tripod_modifiers.metachronal_speed_factor = 1.0f; // Metachronal is standard
+            tripod_modifiers.adaptive_speed_factor = 1.1f; // Adaptive is slightly faster
+            velocity_controller->setGaitSpeedModifiers(tripod_modifiers);
+        }
+        break;
     case WAVE_GAIT:
         // Wave: OpenSHC-compatible phase offsets
         // Based on offset_multiplier: [2,3,4,1,0,5] with base_offset=2, total_period=12
@@ -290,6 +328,21 @@ bool LocomotionSystem::setGaitType(GaitType gait) {
         leg_phase_offsets[3] = 1.0f / 6.0f; // CL: mult=1 -> 0.167
         leg_phase_offsets[4] = 0.0f / 6.0f; // BL: mult=0 -> 0.000
         leg_phase_offsets[5] = 5.0f / 6.0f; // AL: mult=5 -> 0.833
+
+        // Wave gait timing: 75% stance, 25% swing for maximum stability
+        stance_duration = 0.75f;
+        swing_duration = 0.25f;
+
+        // Configure velocity controller for wave gait
+        if (velocity_controller) {
+            CartesianVelocityController::VelocityScaling wave_scaling;
+            wave_scaling.linear_velocity_scale = 1.0f;   // Conservative scaling for stability
+            wave_scaling.angular_velocity_scale = 0.8f;  // Lower angular scaling
+            wave_scaling.minimum_speed_ratio = 0.2f;     // Lower minimum speed
+            wave_scaling.maximum_speed_ratio = 1.5f;     // Lower maximum speed
+            wave_scaling.enable_adaptive_scaling = true;
+            velocity_controller->setVelocityScaling(wave_scaling);
+        }
         break;
     case RIPPLE_GAIT:
         // Ripple: OpenSHC-compatible phase offsets
@@ -300,6 +353,21 @@ bool LocomotionSystem::setGaitType(GaitType gait) {
         leg_phase_offsets[3] = 1.0f / 6.0f; // CL: mult=1 -> 0.167
         leg_phase_offsets[4] = 3.0f / 6.0f; // BL: mult=3 -> 0.500
         leg_phase_offsets[5] = 5.0f / 6.0f; // AL: mult=5 -> 0.833
+
+        // Ripple gait timing: 67% stance, 33% swing for balanced stability
+        stance_duration = 0.67f;
+        swing_duration = 0.33f;
+
+        // Configure velocity controller for ripple gait
+        if (velocity_controller) {
+            CartesianVelocityController::VelocityScaling ripple_scaling;
+            ripple_scaling.linear_velocity_scale = 1.2f;  // Moderate scaling
+            ripple_scaling.angular_velocity_scale = 1.0f; // Standard angular scaling
+            ripple_scaling.minimum_speed_ratio = 0.25f;   // Moderate minimum speed
+            ripple_scaling.maximum_speed_ratio = 1.8f;    // Moderate maximum speed
+            ripple_scaling.enable_adaptive_scaling = true;
+            velocity_controller->setVelocityScaling(ripple_scaling);
+        }
         break;
     case METACHRONAL_GAIT:
         // Metachronal: Smooth wave-like progression clockwise
@@ -311,6 +379,21 @@ bool LocomotionSystem::setGaitType(GaitType gait) {
         leg_phase_offsets[3] = 3.0f / 6.0f; // CL: 0.500
         leg_phase_offsets[4] = 4.0f / 6.0f; // BL: 0.667
         leg_phase_offsets[5] = 5.0f / 6.0f; // AL: 0.833
+
+        // Metachronal gait timing: 70% stance, 30% swing for smooth wave motion
+        stance_duration = 0.7f;
+        swing_duration = 0.3f;
+
+        // Configure velocity controller for metachronal gait
+        if (velocity_controller) {
+            CartesianVelocityController::VelocityScaling metachronal_scaling;
+            metachronal_scaling.linear_velocity_scale = 1.3f; // Higher scaling for smooth motion
+            metachronal_scaling.angular_velocity_scale = 1.1f; // Moderate angular scaling
+            metachronal_scaling.minimum_speed_ratio = 0.3f;    // Higher minimum speed
+            metachronal_scaling.maximum_speed_ratio = 2.2f;    // Higher maximum speed
+            metachronal_scaling.enable_adaptive_scaling = true;
+            velocity_controller->setVelocityScaling(metachronal_scaling);
+        }
         break;
     case ADAPTIVE_GAIT:
         // Adaptive: Dynamic pattern that changes based on conditions
@@ -321,10 +404,24 @@ bool LocomotionSystem::setGaitType(GaitType gait) {
         leg_phase_offsets[3] = 6.0f / 8.0f; // CL: 0.750
         leg_phase_offsets[4] = 4.0f / 8.0f; // BL: 0.500
         leg_phase_offsets[5] = 7.0f / 8.0f; // AL: 0.875
+
+        // Adaptive gait timing: 65% stance, 35% swing (will be adjusted dynamically)
+        stance_duration = 0.65f;
+        swing_duration = 0.35f;
+
+        // Configure velocity controller for adaptive gait
+        if (velocity_controller) {
+            CartesianVelocityController::VelocityScaling adaptive_scaling;
+            adaptive_scaling.linear_velocity_scale = 1.4f; // Higher scaling for adaptability
+            adaptive_scaling.angular_velocity_scale = 1.3f; // Higher angular scaling
+            adaptive_scaling.minimum_speed_ratio = 0.35f;   // Higher minimum speed
+            adaptive_scaling.maximum_speed_ratio = 2.5f;    // Higher maximum speed
+            adaptive_scaling.enable_adaptive_scaling = true;
+            velocity_controller->setVelocityScaling(adaptive_scaling);
+        }
         break;
-    case TRIPOD_GAIT:
     default:
-        // Tripod (default): two groups of 3 legs, 180° out of phase
+        // Default to tripod
         // Group A (L1, L3, L5): offset 0.0
         // Group B (L2, L4, L6): offset 0.5
         leg_phase_offsets[0] = 0.0f; // L1
@@ -333,6 +430,21 @@ bool LocomotionSystem::setGaitType(GaitType gait) {
         leg_phase_offsets[3] = 0.5f; // L4
         leg_phase_offsets[4] = 0.0f; // L5
         leg_phase_offsets[5] = 0.5f; // L6
+
+        // Default timing: 60% stance, 40% swing
+        stance_duration = 0.6f;
+        swing_duration = 0.4f;
+
+        // Configure default velocity controller settings
+        if (velocity_controller) {
+            CartesianVelocityController::VelocityScaling default_scaling;
+            default_scaling.linear_velocity_scale = 1.5f;
+            default_scaling.angular_velocity_scale = 1.2f;
+            default_scaling.minimum_speed_ratio = 0.3f;
+            default_scaling.maximum_speed_ratio = 2.0f;
+            default_scaling.enable_adaptive_scaling = true;
+            velocity_controller->setVelocityScaling(default_scaling);
+        }
         break;
     }
 
@@ -588,7 +700,7 @@ bool LocomotionSystem::walkSideways(double velocity, bool right_direction) {
     return planGaitSequence(0.0f, lateral_velocity, 0.0f);
 }
 
-// Advance for "duration"seconds
+// Advance for "duration" seconds
 bool LocomotionSystem::walkForward(double velocity, double duration) {
     if (!system_enabled)
         return false;
@@ -610,7 +722,7 @@ bool LocomotionSystem::walkForward(double velocity, double duration) {
     return true;
 }
 
-// Move backward for "duration"seconds
+// Move backward for "duration" seconds
 bool LocomotionSystem::walkBackward(double velocity, double duration) {
     if (!system_enabled)
         return false;
@@ -631,7 +743,7 @@ bool LocomotionSystem::walkBackward(double velocity, double duration) {
     return true;
 }
 
-// Turn in place for "duration"seconds
+// Turn in place for "duration" seconds
 bool LocomotionSystem::turnInPlace(double angular_velocity, double duration) {
     if (!system_enabled)
         return false;
@@ -652,7 +764,7 @@ bool LocomotionSystem::turnInPlace(double angular_velocity, double duration) {
     return true;
 }
 
-// Walk sideways (right/left) for "duration"seconds
+// Walk sideways (right/left) for "duration" seconds
 bool LocomotionSystem::walkSideways(double velocity, double duration, bool right_direction) {
     if (!system_enabled)
         return false;
@@ -680,7 +792,7 @@ bool LocomotionSystem::stopMovement() {
 
     // Plan gait with zero velocities to stop the robot
     planGaitSequence(0.0f, 0.0f, 0.0f);
-    // Call update() once to resend no movement angles
+    // Call update() once to resend "no movement" angles
     update();
     return true;
 }
@@ -797,7 +909,7 @@ double LocomotionSystem::calculateStabilityIndex() {
     // For each stance leg, calculate distance from COP
     for (int i = 0; i < stance_count; i++) {
         double distance = sqrt((stance_positions[i].x - cop[0]) * (stance_positions[i].x - cop[0]) +
-                               (stance_positions[i].y - cop[1]) * (stance_positions[i].y - cop[1]));
+                              (stance_positions[i].y - cop[1]) * (stance_positions[i].y - cop[1]));
         if (distance < min_edge_distance) {
             min_edge_distance = distance;
         }
@@ -953,465 +1065,6 @@ bool LocomotionSystem::update() {
             Serial.print("Joint limit violation on leg ");
             Serial.println(i);
 #endif
-        }
-    }
-
-    // Automatic orientation control
-    if (imu_interface && imu_interface->isConnected()) {
-        correctBodyTilt();
-    }
-
-    // Check stability
-    if (!checkStabilityMargin()) {
-        // Implement corrective actions if necessary
-        last_error = STABILITY_ERROR;
-    }
-
-    return true;
-}
-
-// Error handling
-String LocomotionSystem::getErrorMessage(ErrorCode error) {
-    switch (error) {
-    case NO_ERROR:
-        return "No errors";
-    case IMU_ERROR:
-        return "IMU error";
-    case FSR_ERROR:
-        return "FSR sensor error";
-    case SERVO_ERROR:
-        return "Servo error";
-    case KINEMATICS_ERROR:
-        return "Kinematics error";
-    case STABILITY_ERROR:
-        return "Stability error";
-    case PARAMETER_ERROR:
-        return "Parameter error";
-    case SENSOR_ERROR:
-        return "Sensor communication error";
-    case SERVO_BLOCKED_ERROR:
-        return "Servo blocked by status flags";
-    default:
-        return "Unknown error";
-    }
-}
-
-bool LocomotionSystem::handleError(ErrorCode error) {
-    last_error = error;
-
-    switch (error) {
-    case IMU_ERROR:
-        // Try to reinitialize IMU
-        if (imu_interface) {
-            return imu_interface->initialize();
-        }
-        break;
-
-    case FSR_ERROR:
-        // Try to recalibrate FSRs
-        if (fsr_interface) {
-            for (int i = 0; i < NUM_LEGS; i++) {
-                fsr_interface->calibrateFSR(i);
-            }
-            return true;
-        }
-        break;
-
-    case SERVO_ERROR:
-        // Try to reinitialize servos
-        if (servo_interface) {
-            return servo_interface->initialize();
-        }
-        break;
-
-    case STABILITY_ERROR:
-        // Adopt a more stable pose
-        return setStandingPose();
-
-    case KINEMATICS_ERROR:
-        // Return to a safe pose
-        return setStandingPose();
-
-    case SERVO_BLOCKED_ERROR:
-        // Cannot recover from blocked servos automatically - requires manual intervention
-        // The error provides diagnostic information about which servos are blocked
-        return false;
-
-    default:
-        return false;
-    }
-
-    return false;
-}
-
-// System self test
-bool LocomotionSystem::performSelfTest() {
-#if defined(ENABLE_LOG) && defined(ARDUINO)
-    Serial.println("=== Starting self test ===");
-
-    // IMU test
-    if (!imu_interface || !imu_interface->isConnected()) {
-        Serial.println("X Error: IMU not connected");
-        return false;
-    }
-
-    IMUData imu_test = imu_interface->readIMU();
-    if (!imu_test.is_valid) {
-        Serial.println("X Error: invalid IMU data");
-        return false;
-    }
-    Serial.println("OK IMU working correctly");
-
-    // FSR test
-    for (int i = 0; i < NUM_LEGS; i++) {
-        FSRData fsr_test = fsr_interface->readFSR(i);
-        if (fsr_test.pressure < 0) {
-            Serial.print("X Error: FSR leg ");
-            Serial.print(i);
-            Serial.println(" malfunction");
-            return false;
-        }
-    }
-    Serial.println("OK All FSRs working");
-
-    // Servo test
-    for (int i = 0; i < NUM_LEGS; i++) {
-        for (int j = 0; j < DOF_PER_LEG; j++) {
-            double current_angle = servo_interface->getJointAngle(i, j);
-            if (current_angle < -180 || current_angle > 180) {
-                Serial.print("X Error: Servo leg ");
-                Serial.print(i);
-                Serial.print(" joint ");
-                Serial.println(j);
-                return false;
-            }
-        }
-    }
-    Serial.println("OK All servos working");
-
-    // Kinematics test
-    for (int i = 0; i < NUM_LEGS; i++) {
-        Point3D test_point(100, 0, -100);
-        JointAngles angles = calculateInverseKinematics(i, test_point);
-        Point3D calculated_point = calculateForwardKinematics(i, angles);
-
-        double error = math_utils::distance3D(test_point, calculated_point);
-        if (error > 5.0f) { // Error greater than 5mm
-            Serial.print("X Error: leg kinematics ");
-            Serial.print(i);
-            Serial.print(" error=");
-            Serial.print(error);
-            Serial.println("mm");
-            return false;
-        }
-    }
-    Serial.println("OK Kinematics working correctly");
-
-    Serial.println("=== Self test completed successfully ===");
-    return true;
-#else
-    // Self test not available without Arduino environment
-    return false;
-#endif
-}
-
-void LocomotionSystem::updateLegStates() {
-    if (!fsr_interface)
-        return;
-
-    // Update circular buffer index for filtered contact history
-    fsr_history_index = (fsr_history_index + 1) % 3;
-
-    // Iterate over each leg and filter FSR contact
-    for (int i = 0; i < NUM_LEGS; ++i) {
-        FSRData fsr = fsr_interface->readFSR(i);
-
-        // Store contact value in instance history buffer (1.0 for contact, 0.0 for no contact)
-        fsr_contact_history[i][fsr_history_index] = fsr.in_contact ? 1.0f : 0.0f;
-
-        // Calculate filtered contact using 3-sample average
-        double contact_average = (fsr_contact_history[i][0] + fsr_contact_history[i][1] + fsr_contact_history[i][2]) / 3.0f;
-
-        // Hysteresis thresholds to prevent chattering
-        const double CONTACT_THRESHOLD = 0.7f; // Need 70% confidence for contact
-        const double RELEASE_THRESHOLD = 0.3f; // Need 30% confidence for release
-
-        LegState current_state = leg_states[i];
-
-        // State transition logic with hysteresis
-        if (current_state == SWING_PHASE && contact_average > CONTACT_THRESHOLD) {
-            leg_states[i] = STANCE_PHASE;
-        } else if (current_state == STANCE_PHASE && contact_average < RELEASE_THRESHOLD) {
-            leg_states[i] = SWING_PHASE;
-        }
-        // Otherwise maintain current state
-
-        // Additional validation: Don't allow contact during planned swing phase
-        // Only validate during active movement (non-zero gait phase progression)
-        if (cycle_frequency > 0.0f) {
-            // Check if leg should be in swing based on gait phase
-            double leg_phase = fmod(gait_phase + leg_phase_offsets[i], 1.0f);
-            bool should_be_swinging = (leg_phase > stance_duration);
-
-            if (should_be_swinging && leg_states[i] == STANCE_PHASE) {
-                // Only override if pressure is very low (potential sensor error)
-                if (fsr.pressure < 10.0f) { // Low pressure threshold
-                    leg_states[i] = SWING_PHASE;
-                }
-            }
-        }
-    }
-}
-
-void LocomotionSystem::updateStepParameters() {
-    // Calculate leg reach and robot dimensions
-    double leg_reach = calculateLegReach(); // Use standardized function
-    double robot_height = params.robot_height;
-
-    // Adjust step parameters depending on gait type using parametrizable factors
-    switch (current_gait) {
-    case TRIPOD_GAIT:
-        // Longer steps for speed
-        step_length = leg_reach * params.gait_factors.tripod_length_factor;
-        step_height = robot_height * params.gait_factors.tripod_height_factor;
-        break;
-
-    case WAVE_GAIT:
-        // Shorter steps for stability
-        step_length = leg_reach * params.gait_factors.wave_length_factor;
-        step_height = robot_height * params.gait_factors.wave_height_factor;
-        break;
-
-    case RIPPLE_GAIT:
-        // Medium steps for balance
-        step_length = leg_reach * params.gait_factors.ripple_length_factor;
-        step_height = robot_height * params.gait_factors.ripple_height_factor;
-        break;
-
-    case METACHRONAL_GAIT:
-        // Adaptive steps
-        step_length = leg_reach * params.gait_factors.metachronal_length_factor;
-        step_height = robot_height * params.gait_factors.metachronal_height_factor;
-        break;
-
-    case ADAPTIVE_GAIT:
-        // They will be adjusted dynamically
-        step_length = leg_reach * params.gait_factors.adaptive_length_factor;
-        step_height = robot_height * params.gait_factors.adaptive_height_factor;
-        break;
-    }
-
-    // Calculate dynamic limits based on robot dimensions
-    double min_step_length = leg_reach * params.gait_factors.min_length_factor;
-    double max_step_length = leg_reach * params.gait_factors.max_length_factor;
-    double min_step_height = robot_height * params.gait_factors.min_height_factor;
-    double max_step_height = robot_height * params.gait_factors.max_height_factor;
-
-    // Verify that parameters are within dynamic limits
-    step_length = constrainAngle(step_length, min_step_length, max_step_length);
-    step_height = constrainAngle(step_height, min_step_height, max_step_height);
-}
-
-bool LocomotionSystem::checkJointLimits(int leg_index, const JointAngles &angles) {
-    return model.checkJointLimits(leg_index, angles);
-}
-
-double LocomotionSystem::constrainAngle(double angle, double min_angle, double max_angle) {
-    return model.constrainAngle(angle, min_angle, max_angle);
-}
-
-bool LocomotionSystem::validateParameters() {
-    return model.validate();
-}
-
-void LocomotionSystem::adaptGaitToTerrain() {
-    // Analyze FSR data to adapt gait
-    double avg_pressure = 0;
-    int contact_count = 0;
-
-    for (int i = 0; i < NUM_LEGS; i++) {
-        FSRData fsr_data = fsr_interface->readFSR(i);
-        if (fsr_data.in_contact) {
-            avg_pressure += fsr_data.pressure;
-            contact_count++;
-        }
-    }
-
-    if (contact_count > 0) {
-        avg_pressure /= contact_count;
-
-        // If average pressure is high use a more stable gait
-        if (avg_pressure > params.fsr_max_pressure * 0.8f) {
-            current_gait = WAVE_GAIT;
-        } else {
-            current_gait = TRIPOD_GAIT;
-        }
-    }
-}
-
-// Additional implementations pending
-
-bool LocomotionSystem::setLegPosition(int leg_index, const Point3D &position) {
-    if (!system_enabled || leg_index < 0 || leg_index >= NUM_LEGS || !pose_ctrl)
-        return false;
-    if (!pose_ctrl->setLegPosition(leg_index, position, leg_positions, joint_angles)) {
-        last_error = KINEMATICS_ERROR;
-        return false;
-    }
-    return true;
-}
-
-bool LocomotionSystem::setStepParameters(double height, double length) {
-    if (height < 15.0f || height > 50.0f || length < 20.0f || length > 80.0f) {
-        last_error = PARAMETER_ERROR;
-        return false;
-    }
-
-    step_height = height;
-    step_length = length;
-    return true;
-}
-
-bool LocomotionSystem::setParameters(const Parameters &new_params) {
-    // Validate new parameters
-    if (new_params.hexagon_radius <= 0 || new_params.coxa_length <= 0 ||
-        new_params.femur_length <= 0 || new_params.tibia_length <= 0) {
-        last_error = PARAMETER_ERROR;
-        return false;
-    }
-
-    params = new_params;
-    return validateParameters();
-}
-
-bool LocomotionSystem::setControlFrequency(double frequency) {
-    if (frequency < 10.0f || frequency > 200.0f) {
-        last_error = PARAMETER_ERROR;
-        return false;
-    }
-
-    params.control_frequency = frequency;
-    return true;
-}
-
-double LocomotionSystem::calculateLegReach() const {
-    return params.coxa_length + params.femur_length + params.tibia_length;
-}
-
-void LocomotionSystem::adjustStepParameters() {
-    // Enhanced step parameter adjustment with absolute positioning support
-    IMUData imu_data = imu_interface->readIMU();
-    if (!imu_data.is_valid)
-        return;
-
-    double total_tilt;
-    double stability_factor = 1.0f;
-
-    // Use enhanced data for more precise adjustment
-    if (imu_data.has_absolute_capability && imu_data.absolute_data.absolute_orientation_valid) {
-        // More precise tilt calculation using absolute orientation
-        total_tilt = sqrt(
-            imu_data.absolute_data.absolute_roll * imu_data.absolute_data.absolute_roll +
-            imu_data.absolute_data.absolute_pitch * imu_data.absolute_data.absolute_pitch);
-
-        // Consider dynamic stability using linear acceleration
-        if (imu_data.absolute_data.linear_acceleration_valid) {
-            double dynamic_instability = sqrt(
-                imu_data.absolute_data.linear_accel_x * imu_data.absolute_data.linear_accel_x +
-                imu_data.absolute_data.linear_accel_y * imu_data.absolute_data.linear_accel_y);
-
-            // Reduce step parameters during dynamic instability
-            if (dynamic_instability > 2.0f) {
-                stability_factor =
-                    std::clamp<double>(1.0 - (dynamic_instability - 2.0) / 5.0, 0.6, 1.0);
-            }
-        }
-
-        // Enhanced slope-based adjustment
-        if (total_tilt > 10.0f) {
-            double slope_factor = std::clamp<double>(1.0 - (total_tilt - 10.0) / 30.0, 0.5, 1.0);
-            step_height *= slope_factor * stability_factor;
-            step_length *= slope_factor * stability_factor;
-        }
-    } else {
-        // Fallback to basic IMU data
-        total_tilt = sqrt(imu_data.roll * imu_data.roll + imu_data.pitch * imu_data.pitch);
-
-        // Original logic for basic IMU
-        if (total_tilt > 15.0f) {
-            step_height *= 0.8f;
-            step_length *= 0.7f;
-        }
-    }
-
-    // Limit parameters
-    step_height = constrainAngle(step_height, 15.0f, 50.0f);
-    step_length = constrainAngle(step_length, 20.0f, 80.0f);
-}
-
-void LocomotionSystem::compensateForSlope() {
-    if (!imu_interface)
-        return;
-
-    IMUData imu_data = imu_interface->readIMU();
-    if (!imu_data.is_valid)
-        return;
-
-    double roll_compensation, pitch_compensation;
-
-    // Enhanced slope compensation using absolute positioning data
-    if (imu_data.has_absolute_capability && imu_data.absolute_data.absolute_orientation_valid) {
-        // Use absolute orientation for more precise compensation
-        roll_compensation = -imu_data.absolute_data.absolute_roll * 0.6f; // Enhanced compensation
-        pitch_compensation = -imu_data.absolute_data.absolute_pitch * 0.6f;
-
-        // Additional quaternion-based compensation for complex terrain
-        if (imu_data.absolute_data.quaternion_valid) {
-            // Extract more sophisticated orientation information from quaternion
-            double qw = imu_data.absolute_data.quaternion_w;
-            double qx = imu_data.absolute_data.quaternion_x;
-            double qy = imu_data.absolute_data.quaternion_y;
-            double qz = imu_data.absolute_data.quaternion_z;
-
-            // Calculate terrain-aligned compensation using quaternion
-            double quat_roll = atan2(2.0f * (qw * qx + qy * qz), 1.0f - 2.0f * (qx * qx + qy * qy)) * RADIANS_TO_DEGREES_FACTOR;
-            double quat_pitch = asin(2.0f * (qw * qy - qz * qx)) * RADIANS_TO_DEGREES_FACTOR;
-
-            // Blend quaternion and Euler compensations for robustness
-            roll_compensation = 0.7f * roll_compensation + 0.3f * (-quat_roll * 0.6f);
-            pitch_compensation = 0.7f * pitch_compensation + 0.3f * (-quat_pitch * 0.6f);
-        }
-
-        // Dynamic adjustment based on linear acceleration
-        if (imu_data.absolute_data.linear_acceleration_valid) {
-            double lateral_accel = sqrt(
-                imu_data.absolute_data.linear_accel_x * imu_data.absolute_data.linear_accel_x +
-                imu_data.absolute_data.linear_accel_y * imu_data.absolute_data.linear_accel_y);
-
-            // Reduce compensation during high lateral acceleration
-            if (lateral_accel > 1.5f) {
-                double dynamic_factor = std::clamp<double>(1.0 - (lateral_accel - 1.5) / 3.0, 0.4, 1.0);
-                roll_compensation *= dynamic_factor;
-                pitch_compensation *= dynamic_factor;
-            }
-        }
-    } else {
-        // Fallback to basic IMU compensation
-        roll_compensation = -imu_data.roll * 0.5f; // Compensation factor
-        pitch_compensation = -imu_data.pitch * 0.5f;
-    }
-
-    // Adjust body orientation
-    body_orientation[0] += roll_compensation * dt;
-    body_orientation[1] += pitch_compensation * dt;
-
-    // Clamp compensation
-    body_orientation[0] = constrainAngle(body_orientation[0], -15.0f, 15.0f);
-    body_orientation[1] = constrainAngle(body_orientation[1], -15.0f, 15.0f);
-
-    // Reproject standing feet after slope compensation changes body orientation
-    reprojectStandingFeet();
-}
 
 double LocomotionSystem::getStepLength() const {
     // Base step length according to the current gait
@@ -1564,7 +1217,7 @@ double LocomotionSystem::calculateDynamicStabilityIndex() {
 
     // Include FSR-based stability if available
     if (fsr_interface) {
-        double fsr_stability = calculateStabilityIndex();                // Basic FSR stability
+        double fsr_stability = calculateStabilityIndex();                 // Basic FSR stability
         stability_index = 0.7f * stability_index + 0.3f * fsr_stability; // Blend IMU and FSR
     }
 

@@ -313,7 +313,6 @@ class LocomotionSystem {
     // Helper methods
     double constrainAngle(double angle, double min_angle, double max_angle);
     bool validateParameters();
-    void initializeDefaultPose();
     void updateStepParameters();
     bool checkJointLimits(int leg_index, const JointAngles &angles);
     double calculateLegReach() const;

@@ -586,6 +586,7 @@ int main() {
     // std::cout << "✓ Desired velocity set: " << velocity << " mm/s forward" << std::endl;
 
     // Setup gait after state controller is ready
+    assert(sys.setStandingPose());
     assert(sys.setGaitType(TRIPOD_GAIT));
     assert(sys.walkForward(velocity));
 
@@ -671,92 +672,92 @@ int main() {
         // std::this_thread::sleep_for(std::chrono::milliseconds(20));
     }
 
- /*    // Final status
-    std::cout << std::endl
-              << "=========================================" << std::endl;
-    std::cout << "SIMULATION COMPLETED WITH STATE MACHINE" << std::endl;
-    std::cout << "=========================================" << std::endl;
+    /*    // Final status
+       std::cout << std::endl
+                 << "=========================================" << std::endl;
+       std::cout << "SIMULATION COMPLETED WITH STATE MACHINE" << std::endl;
+       std::cout << "=========================================" << std::endl;
 
-    // Parallel sensor system performance report
-    std::cout << "\n📊 PARALLEL SENSOR SYSTEM PERFORMANCE:" << std::endl;
-    std::cout << "Total update cycles: " << (successful_updates + failed_updates) << std::endl;
-    std::cout << "Successful updates: " << successful_updates << " ("
-              << std::fixed << std::setprecision(1)
-              << (100.0f * successful_updates / (successful_updates + failed_updates)) << "%)" << std::endl;
-    std::cout << "Failed updates: " << failed_updates << " ("
-              << std::fixed << std::setprecision(1)
-              << (100.0f * failed_updates / (successful_updates + failed_updates)) << "%)" << std::endl;
+       // Parallel sensor system performance report
+       std::cout << "\n📊 PARALLEL SENSOR SYSTEM PERFORMANCE:" << std::endl;
+       std::cout << "Total update cycles: " << (successful_updates + failed_updates) << std::endl;
+       std::cout << "Successful updates: " << successful_updates << " ("
+                 << std::fixed << std::setprecision(1)
+                 << (100.0f * successful_updates / (successful_updates + failed_updates)) << "%)" << std::endl;
+       std::cout << "Failed updates: " << failed_updates << " ("
+                 << std::fixed << std::setprecision(1)
+                 << (100.0f * failed_updates / (successful_updates + failed_updates)) << "%)" << std::endl;
 
-    if (failed_updates > 0) {
-        std::cout << "⚠️ Warning: " << failed_updates << " sensor update failures detected" << std::endl;
-    } else {
-        std::cout << "✅ Perfect sensor update performance - no failures detected" << std::endl;
-    }
+       if (failed_updates > 0) {
+           std::cout << "⚠️ Warning: " << failed_updates << " sensor update failures detected" << std::endl;
+       } else {
+           std::cout << "✅ Perfect sensor update performance - no failures detected" << std::endl;
+       }
 
-    // Final State Controller status
-    printStateControllerStatus(stateController, steps);
+       // Final State Controller status
+       printStateControllerStatus(stateController, steps);
 
-    if (!changed) {
-        std::cout << "⚠️  Warning: servo angles did not change during simulation" << std::endl;
-    } else {
-        std::cout << "✓ Servo angles changed correctly during simulation" << std::endl;
-    }
+       if (!changed) {
+           std::cout << "⚠️  Warning: servo angles did not change during simulation" << std::endl;
+       } else {
+           std::cout << "✓ Servo angles changed correctly during simulation" << std::endl;
+       }
 
-    // Test state machine functionality during simulation
-    std::cout << "\n--- Testing State Machine Advanced Features ---" << std::endl;
+       // Test state machine functionality during simulation
+       std::cout << "\n--- Testing State Machine Advanced Features ---" << std::endl;
 
-    // Test emergency stop
-    std::cout << "Testing emergency stop..." << std::endl;
-    stateController.emergencyStop();
-    stateController.update(0.02f);
-    std::cout << "✓ Emergency stop executed" << std::endl;
+       // Test emergency stop
+       std::cout << "Testing emergency stop..." << std::endl;
+       stateController.emergencyStop();
+       stateController.update(0.02f);
+       std::cout << "✓ Emergency stop executed" << std::endl;
 
-    // Clear error and resume
-    std::cout << "Clearing error and resuming..." << std::endl;
-    stateController.clearError();
-    stateController.requestSystemState(SYSTEM_OPERATIONAL);
-    for (int i = 0; i < 10; i++) {
-        stateController.update(0.02f);
-        if (!stateController.isTransitioning())
-            break;
-    }
-    std::cout << "✓ System resumed operational state" << std::endl;
+       // Clear error and resume
+       std::cout << "Clearing error and resuming..." << std::endl;
+       stateController.clearError();
+       stateController.requestSystemState(SYSTEM_OPERATIONAL);
+       for (int i = 0; i < 10; i++) {
+           stateController.update(0.02f);
+           if (!stateController.isTransitioning())
+               break;
+       }
+       std::cout << "✓ System resumed operational state" << std::endl;
 
-    // Test pose control
-    std::cout << "Testing pose control..." << std::endl;
-    stateController.setPosingMode(POSING_X_Y);
-    Eigen::Vector3d position(10.0f, 5.0f, 0.0f);
-    Eigen::Vector3d orientation(0.0f, 0.0f, 0.1f);
-    stateController.setDesiredPose(position, orientation);
-    std::cout << "✓ X-Y posing mode set with desired pose" << std::endl;
+       // Test pose control
+       std::cout << "Testing pose control..." << std::endl;
+       stateController.setPosingMode(POSING_X_Y);
+       Eigen::Vector3d position(10.0f, 5.0f, 0.0f);
+       Eigen::Vector3d orientation(0.0f, 0.0f, 0.1f);
+       stateController.setDesiredPose(position, orientation);
+       std::cout << "✓ X-Y posing mode set with desired pose" << std::endl;
 
-    // Test cruise control
-    std::cout << "Testing cruise control..." << std::endl;
-    Eigen::Vector3d cruise_velocity(200.0f, 0.0f, 0.0f);
-    stateController.setCruiseControlMode(CRUISE_CONTROL_ON, cruise_velocity);
-    std::cout << "✓ Cruise control enabled" << std::endl;
+       // Test cruise control
+       std::cout << "Testing cruise control..." << std::endl;
+       Eigen::Vector3d cruise_velocity(200.0f, 0.0f, 0.0f);
+       stateController.setCruiseControlMode(CRUISE_CONTROL_ON, cruise_velocity);
+       std::cout << "✓ Cruise control enabled" << std::endl;
 
-    // Final robot state
-    // printLegStateVisualization(sys);
-    // printRobotDiagram(sys, distance);
-    // printServoAngleGraph(sys, steps);
-    // printTripodGaitPattern(sys, 1.0f);
-    printDetailedRobotStatus(sys, distance, steps);
+       // Final robot state
+       // printLegStateVisualization(sys);
+       // printRobotDiagram(sys, distance);
+       // printServoAngleGraph(sys, steps);
+       // printTripodGaitPattern(sys, 1.0f);
+       printDetailedRobotStatus(sys, distance, steps);
 
-    // Final state controller status
-    // printStateControllerStatus(stateController, steps + 1);
+       // Final state controller status
+       // printStateControllerStatus(stateController, steps + 1);
 
-    std::cout << std::endl
-              << "🎉 Robot successfully completed 800mm tripod gait with State Controller!" << std::endl;
-    std::cout << "✅ State Machine Integration: SUCCESSFUL" << std::endl;
-    std::cout << "✅ Hierarchical State Management: VALIDATED" << std::endl;
-    std::cout << "✅ Parallel Sensor System: " << (failed_updates == 0 ? "PERFECT" : "FUNCTIONAL") << std::endl;
-    std::cout << "✅ Advanced Features: TESTED" << std::endl;
+       std::cout << std::endl
+                 << "🎉 Robot successfully completed 800mm tripod gait with State Controller!" << std::endl;
+       std::cout << "✅ State Machine Integration: SUCCESSFUL" << std::endl;
+       std::cout << "✅ Hierarchical State Management: VALIDATED" << std::endl;
+       std::cout << "✅ Parallel Sensor System: " << (failed_updates == 0 ? "PERFECT" : "FUNCTIONAL") << std::endl;
+       std::cout << "✅ Advanced Features: TESTED" << std::endl;
 
-    if (failed_updates > 0) {
-        std::cout << "⚠️ NOTE: " << failed_updates << " sensor failures occurred during test" << std::endl;
-    }
+       if (failed_updates > 0) {
+           std::cout << "⚠️ NOTE: " << failed_updates << " sensor failures occurred during test" << std::endl;
+       }
 
-    std::cout << "tripod_gait_sim_test with StateController and Parallel Sensors executed successfully" << std::endl; */
+       std::cout << "tripod_gait_sim_test with StateController and Parallel Sensors executed successfully" << std::endl; */
     return 0;
 }

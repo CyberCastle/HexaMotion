@@ -10,7 +10,7 @@
 #include <vector>
 
 // Per-leg base orientation offsets (degrees)
-static const double BASE_THETA_OFFSETS[NUM_LEGS] = {0.0f, -60.0f, -120.0f, 180.0f, 120.0f, 60.0f};
+static const double BASE_THETA_OFFSETS[NUM_LEGS] = {-30.0f, -90.0f, -150.0f, 30.0f, 90.0f, 150.0f};
 
 RobotModel::RobotModel(const Parameters &p) : params(p) {
     initializeDH();
