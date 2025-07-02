@@ -30,16 +30,23 @@ LocomotionSystem::LocomotionSystem(const Parameters &params)
     : params(params), imu_interface(nullptr), fsr_interface(nullptr), servo_interface(nullptr),
       body_position(0.0f, 0.0f, params.robot_height), body_orientation(0.0f, 0.0f, 0.0f),
       current_gait(TRIPOD_GAIT), gait_phase(0.0f), step_height(30.0f), step_length(50.0f),
-      stance_duration(WORKSPACE_SCALING_FACTOR), swing_duration(WORKSPACE_SCALING_FACTOR), cycle_frequency(ANGULAR_ACCELERATION_FACTOR),
+      stance_duration(WORKSPACE_SCALING_FACTOR), swing_duration(WORKSPACE_SCALING_FACTOR), cycle_frequency(ANGULAR_ACCELERATION_FACTOR), // OpenSHC-compatible tripod timing: 50% stance, 50% swing
       system_enabled(false), last_update_time(0), dt(0.02f),
       velocity_controller(nullptr), last_error(NO_ERROR),
       model(params), pose_ctrl(nullptr), walk_ctrl(nullptr), admittance_ctrl(nullptr) {
 
     // Initialize leg states and phase offsets for tripod gait
-    // Tripod gait requires legs in alternate groups to be half a
-    // cycle out of phase. Legs 1, 3 and 5 step together while
-    // legs 2, 4 and 6 are offset by 180 degrees.
-    static const double tripod_phase_offsets[NUM_LEGS] = {0.0f, 0.5f, 0.0f, 0.5f, 0.0f, 0.5f};
+    // OpenSHC-compatible tripod gait: Group A (AR, CR, BL) vs Group B (BR, CL, AL)
+    // Group A legs step together (phase 0.0), Group B legs step 180° out of phase (phase 0.5)
+    // This ensures proper tripod stability with symmetric left-right pattern
+    static const double tripod_phase_offsets[NUM_LEGS] = {
+        0.0f, // AR (Anterior Right) - Group A
+        0.5f, // BR (Middle Right) - Group B
+        0.0f, // CR (Posterior Right) - Group A
+        0.5f, // CL (Posterior Left) - Group B
+        0.0f, // BL (Middle Left) - Group A
+        0.5f  // AL (Anterior Left) - Group B
+    };
 
     for (int i = 0; i < NUM_LEGS; i++) {
         leg_states[i] = STANCE_PHASE;
@@ -283,27 +290,35 @@ bool LocomotionSystem::setGaitType(GaitType gait) {
     current_gait = gait;
     gait_phase = 0.0f;
 
-    // Set phase offsets based on gait type
+    // Set phase offsets and timing parameters based on gait type
     switch (gait) {
     case WAVE_GAIT:
-        // Wave: OpenSHC-compatible phase offsets
+        // Wave: OpenSHC-compatible phase offsets and timing
         // Based on offset_multiplier: [2,3,4,1,0,5] with base_offset=2, total_period=12
+        // Wave gait has 83.3% stance duration for maximum stability
         leg_phase_offsets[0] = 2.0f / 6.0f; // AR: mult=2 -> 0.333
         leg_phase_offsets[1] = 3.0f / 6.0f; // BR: mult=3 -> 0.500
         leg_phase_offsets[2] = 4.0f / 6.0f; // CR: mult=4 -> 0.667
         leg_phase_offsets[3] = 1.0f / 6.0f; // CL: mult=1 -> 0.167
         leg_phase_offsets[4] = 0.0f / 6.0f; // BL: mult=0 -> 0.000
         leg_phase_offsets[5] = 5.0f / 6.0f; // AL: mult=5 -> 0.833
+        stance_duration = 0.833f;           // 83.3% stance for stability
+        swing_duration = 0.167f;            // 16.7% swing
+        cycle_frequency = 0.8f;             // Slower cycle for stability
         break;
     case RIPPLE_GAIT:
-        // Ripple: OpenSHC-compatible phase offsets
+        // Ripple: OpenSHC-compatible phase offsets and timing
         // Based on offset_multiplier: [2,0,4,1,3,5] with base_offset=1, total_period=6
+        // Ripple gait has 66.7% stance duration for balance of speed and stability
         leg_phase_offsets[0] = 2.0f / 6.0f; // AR: mult=2 -> 0.333
         leg_phase_offsets[1] = 0.0f / 6.0f; // BR: mult=0 -> 0.000
         leg_phase_offsets[2] = 4.0f / 6.0f; // CR: mult=4 -> 0.667
         leg_phase_offsets[3] = 1.0f / 6.0f; // CL: mult=1 -> 0.167
         leg_phase_offsets[4] = 3.0f / 6.0f; // BL: mult=3 -> 0.500
         leg_phase_offsets[5] = 5.0f / 6.0f; // AL: mult=5 -> 0.833
+        stance_duration = 0.667f;           // 66.7% stance
+        swing_duration = 0.333f;            // 33.3% swing
+        cycle_frequency = 0.9f;             // Medium cycle frequency
         break;
     case METACHRONAL_GAIT:
         // Metachronal: Smooth wave-like progression clockwise
@@ -315,6 +330,9 @@ bool LocomotionSystem::setGaitType(GaitType gait) {
         leg_phase_offsets[3] = 3.0f / 6.0f; // CL: 0.500
         leg_phase_offsets[4] = 4.0f / 6.0f; // BL: 0.667
         leg_phase_offsets[5] = 5.0f / 6.0f; // AL: 0.833
+        stance_duration = 0.75f;            // 75% stance for smooth wave
+        swing_duration = 0.25f;             // 25% swing
+        cycle_frequency = 1.0f;             // Normal cycle frequency
         break;
     case ADAPTIVE_GAIT:
         // Adaptive: Dynamic pattern that changes based on conditions
@@ -325,18 +343,26 @@ bool LocomotionSystem::setGaitType(GaitType gait) {
         leg_phase_offsets[3] = 6.0f / 8.0f; // CL: 0.750
         leg_phase_offsets[4] = 4.0f / 8.0f; // BL: 0.500
         leg_phase_offsets[5] = 7.0f / 8.0f; // AL: 0.875
+        stance_duration = 0.6f;             // 60% stance - adaptive
+        swing_duration = 0.4f;              // 40% swing - adaptive
+        cycle_frequency = 1.0f;             // Will adapt based on conditions
         break;
     case TRIPOD_GAIT:
     default:
-        // Tripod (default): two groups of 3 legs, 180° out of phase
-        // Group A (L1, L3, L5): offset 0.0
-        // Group B (L2, L4, L6): offset 0.5
-        leg_phase_offsets[0] = 0.0f; // L1
-        leg_phase_offsets[1] = 0.5f; // L2
-        leg_phase_offsets[2] = 0.0f; // L3
-        leg_phase_offsets[3] = 0.5f; // L4
-        leg_phase_offsets[4] = 0.0f; // L5
-        leg_phase_offsets[5] = 0.5f; // L6
+        // OpenSHC-compatible Tripod gait: symmetric alternating groups
+        // Group A (AR=0, CR=2, BL=4): phase offset 0.0 (step together)
+        // Group B (BR=1, CL=3, AL=5): phase offset 0.5 (180° out of phase)
+        // This ensures proper left-right symmetry and optimal stability
+        // Critical: Tripod gait has exactly 50% stance, 50% swing for speed
+        leg_phase_offsets[0] = 0.0f; // AR (Anterior Right) - Group A
+        leg_phase_offsets[1] = 0.5f; // BR (Middle Right) - Group B
+        leg_phase_offsets[2] = 0.0f; // CR (Posterior Right) - Group A
+        leg_phase_offsets[3] = 0.5f; // CL (Posterior Left) - Group B
+        leg_phase_offsets[4] = 0.0f; // BL (Middle Left) - Group A
+        leg_phase_offsets[5] = 0.5f; // AL (Anterior Left) - Group B
+        stance_duration = 0.5f;      // 50% stance - critical for tripod pattern
+        swing_duration = 0.5f;       // 50% swing - critical for tripod pattern
+        cycle_frequency = 1.2f;      // Faster cycle for speed
         break;
     }
 
@@ -953,10 +979,6 @@ bool LocomotionSystem::update() {
             leg_positions[i] = target_position;
         } else {
             last_error = KINEMATICS_ERROR;
-#if defined(ENABLE_LOG) && defined(ARDUINO)
-            Serial.print("Joint limit violation on leg ");
-            Serial.println(i);
-#endif
         }
     }
 
