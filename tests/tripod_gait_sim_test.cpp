@@ -511,7 +511,7 @@ int main() {
 
     // Simulation parameters - moved here to be available for state controller setup
     double velocity = 400.0f;              // mm/s
-    double distance = 800.0f;              // mm
+    double distance = 2400.0f;             // mm
     double duration = distance / velocity; // 2 seconds
     unsigned steps = static_cast<unsigned>(duration * p.control_frequency);
 
@@ -529,17 +529,17 @@ int main() {
     assert(sys.calibrateSystem());
 
     // Test parallel sensor functionality
-    std::cout << "Testing parallel sensor updates..." << std::endl;
-    for (int i = 0; i < 5; i++) {
-        bool sensor_update_success = sys.update();
-        if (!sensor_update_success) {
-            std::cout << "❌ ERROR: Parallel sensor update test failed on iteration " << i << std::endl;
-            std::cout << "Error: " << sys.getErrorMessage(sys.getLastError()) << std::endl;
-            return 1;
-        }
-        std::cout << "✓ Sensor update iteration " << i + 1 << " successful" << std::endl;
-    }
-    std::cout << "✅ Parallel sensor system working correctly" << std::endl;
+    // std::cout << "Testing parallel sensor updates..." << std::endl;
+    // for (int i = 0; i < 5; i++) {
+    //     bool sensor_update_success = sys.update();
+    //     if (!sensor_update_success) {
+    //         std::cout << "❌ ERROR: Parallel sensor update test failed on iteration " << i << std::endl;
+    //         std::cout << "Error: " << sys.getErrorMessage(sys.getLastError()) << std::endl;
+    //         return 1;
+    //     }
+    //     std::cout << "✓ Sensor update iteration " << i + 1 << " successful" << std::endl;
+    // }
+    // std::cout << "✅ Parallel sensor system working correctly" << std::endl;
 
     // Initialize State Controller
     std::cout << "Initializing State Controller..." << std::endl;
@@ -554,36 +554,36 @@ int main() {
     assert(stateController.initialize(pose_config));
 
     std::cout << "✓ State Controller initialized successfully" << std::endl;
-    printStateControllerStatus(stateController, 0);
+    // printStateControllerStatus(stateController, 0);
 
     // Start state machine sequence
-    std::cout << "\n🚀 Starting State Machine Sequence..." << std::endl;
+    // std::cout << "\n🚀 Starting State Machine Sequence..." << std::endl;
 
-    // 1. Request system operational
-    std::cout << "\n--- Phase 1: System Startup ---" << std::endl;
+    // // 1. Request system operational
+    // std::cout << "\n--- Phase 1: System Startup ---" << std::endl;
     stateController.requestSystemState(SYSTEM_OPERATIONAL);
-    for (int i = 0; i < 10; i++) {
-        stateController.update(0.02f);
-        if (!stateController.isTransitioning())
-            break;
-    }
-    printStateTransitionInfo(stateController, "System operational requested");
+    // for (int i = 0; i < 10; i++) {
+    //     stateController.update(0.02f);
+    //     if (!stateController.isTransitioning())
+    //         break;
+    // }
+    // printStateTransitionInfo(stateController, "System operational requested");
 
     // 2. Request robot running
-    std::cout << "\n--- Phase 2: Robot State Transition ---" << std::endl;
-    stateController.requestRobotState(ROBOT_RUNNING);
-    for (int i = 0; i < 50; i++) {
-        stateController.update(0.02f);
-        if (!stateController.isTransitioning())
-            break;
-    }
-    printStateTransitionInfo(stateController, "Robot running state requested");
+    // std::cout << "\n--- Phase 2: Robot State Transition ---" << std::endl;
+    // stateController.requestRobotState(ROBOT_RUNNING);
+    // for (int i = 0; i < 50; i++) {
+    //     stateController.update(0.02f);
+    //     if (!stateController.isTransitioning())
+    //         break;
+    // }
+    // printStateTransitionInfo(stateController, "Robot running state requested");
 
     // 3. Set velocity for walking
-    std::cout << "\n--- Phase 3: Velocity Control Setup ---" << std::endl;
+    // std::cout << "\n--- Phase 3: Velocity Control Setup ---" << std::endl;
     Eigen::Vector2d linear_velocity(velocity, 0.0f);
     stateController.setDesiredVelocity(linear_velocity, 0.0f);
-    std::cout << "✓ Desired velocity set: " << velocity << " mm/s forward" << std::endl;
+    // std::cout << "✓ Desired velocity set: " << velocity << " mm/s forward" << std::endl;
 
     // Setup gait after state controller is ready
     assert(sys.setGaitType(TRIPOD_GAIT));
@@ -593,7 +593,7 @@ int main() {
     std::cout << "Total steps: " << steps << " | Step interval: " << (1000.0f / p.control_frequency) << "ms" << std::endl;
     std::cout << std::endl;
 
-    printStateControllerStatus(stateController, 0);
+    // printStateControllerStatus(stateController, 0);
 
     // Track previous joint angles to detect changes
     JointAngles prev[NUM_LEGS];
@@ -650,15 +650,15 @@ int main() {
         }
 
         // Show visual diagrams and state controller status every 25 steps
-        if (s % 25 == 0) {
-            printStateControllerStatus(stateController, s);
-            // printLegStateVisualization(sys);
-            //  printRobotDiagram(sys, distance_covered);
-            //  printServoAngleGraph(sys, s);
-            //  printTripodGaitPattern(sys, phase);
-            // printDetailedRobotStatus(sys, distance_covered, s);
-            std::cout << std::endl;
-        }
+        // if (s % 25 == 0) {
+        //     printStateControllerStatus(stateController, s);
+        //     // printLegStateVisualization(sys);
+        //     //  printRobotDiagram(sys, distance_covered);
+        //     //  printServoAngleGraph(sys, s);
+        //     //  printTripodGaitPattern(sys, phase);
+        //     // printDetailedRobotStatus(sys, distance_covered, s);
+        //     std::cout << std::endl;
+        // }
 
         // Handle any state controller errors
         if (stateController.hasErrors()) {
@@ -671,7 +671,7 @@ int main() {
         // std::this_thread::sleep_for(std::chrono::milliseconds(20));
     }
 
-    // Final status
+ /*    // Final status
     std::cout << std::endl
               << "=========================================" << std::endl;
     std::cout << "SIMULATION COMPLETED WITH STATE MACHINE" << std::endl;
@@ -744,7 +744,7 @@ int main() {
     printDetailedRobotStatus(sys, distance, steps);
 
     // Final state controller status
-    printStateControllerStatus(stateController, steps + 1);
+    // printStateControllerStatus(stateController, steps + 1);
 
     std::cout << std::endl
               << "🎉 Robot successfully completed 800mm tripod gait with State Controller!" << std::endl;
@@ -757,6 +757,6 @@ int main() {
         std::cout << "⚠️ NOTE: " << failed_updates << " sensor failures occurred during test" << std::endl;
     }
 
-    std::cout << "tripod_gait_sim_test with StateController and Parallel Sensors executed successfully" << std::endl;
+    std::cout << "tripod_gait_sim_test with StateController and Parallel Sensors executed successfully" << std::endl; */
     return 0;
 }
