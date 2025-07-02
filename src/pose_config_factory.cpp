@@ -53,11 +53,17 @@ std::array<LegStancePosition, NUM_LEGS> calculateHexagonalStancePositions(
 }
 
 /**
- * @brief Calculate joint angles for a given height using inverse kinematics
- * Based on the angle_calculus.cpp implementation
- * @param target_height_mm Target height in millimeters
- * @param params Robot parameters containing dimensions and joint limits
- * @return Calculated individual servo angles or default values if no solution found
+ * @brief Calculate joint angles for a given height using analytic IK
+ *
+ * This helper mimics the logic from angle_calculus.cpp. It sweeps the
+ * tibia angle (\f$\beta\f$) across its allowed range and solves for the
+ * femur angle (\f$\alpha\f$) so the tibia remains as vertical as possible
+ * while respecting the servo limits.
+ *
+ * @param target_height_mm Target height in millimeters.
+ * @param params Robot parameters containing dimensions and joint limits.
+ * @return Calculated individual servo angles or default values if no solution
+ *         is found.
  */
 struct CalculatedServoAngles {
     double coxa;  // coxa servo angle (degrees)
@@ -66,55 +72,60 @@ struct CalculatedServoAngles {
     bool valid;   // solution validity flag
 };
 
-CalculatedServoAngles calculateServoAnglesForHeight(double target_height_mm, const Parameters &params) {
+CalculatedServoAngles calculateServoAnglesForHeight(double target_height_mm,
+                                                   const Parameters &params) {
+    CalculatedServoAngles best{0.0, 0.0, 0.0, false};
+    double bestErr = std::numeric_limits<double>::infinity();
+
+    // Ranges based on servo limits
+    const double alphaMin = params.femur_angle_limits[0] * DEGREES_TO_RADIANS_FACTOR;
+    const double alphaMax = params.femur_angle_limits[1] * DEGREES_TO_RADIANS_FACTOR;
+    const double betaMin = params.tibia_angle_limits[0] * DEGREES_TO_RADIANS_FACTOR;
+    const double betaMax = params.tibia_angle_limits[1] * DEGREES_TO_RADIANS_FACTOR;
+    const double dBeta = 0.1 * DEGREES_TO_RADIANS_FACTOR;
+
+    const double A = params.coxa_length;
     const double B = params.femur_length;
     const double C = params.tibia_length;
 
-    CalculatedServoAngles result{0.0, 0.0, 0.0, false};
+    // Sweep the tibia angle to search for a valid configuration
+    for (double beta = betaMin; beta <= betaMax; beta += dBeta) {
+        double sum = A + B * std::cos(beta);
+        double discriminant = sum * sum - (target_height_mm * target_height_mm - C * C);
+        if (discriminant < 0.0)
+            continue;
 
-    // Use IK settings for iteration parameters
-    int max_iters = params.ik.max_iterations > 0 ? params.ik.max_iterations : 1;
-    double step = params.ik.pos_threshold_mm > 0.0 ? params.ik.pos_threshold_mm : 1.0;
+        double sqrtD = std::sqrt(discriminant);
+        // Evaluate both quadratic roots for alpha
+        for (int sign : {-1, 1}) {
+            double t = (-sum + sign * sqrtD) / (target_height_mm + C);
+            double alpha = 2.0 * std::atan(t);
+            if (alpha < alphaMin || alpha > alphaMax)
+                continue;
 
-    double H = target_height_mm;
+            // Measure deviation from a perfectly vertical tibia
+            double err = std::fabs(alpha + beta);
+            if (err >= bestErr)
+                continue;
 
-    for (int i = 0; i < max_iters; i++) {
-        if (H < C || H > B + C) {
-            break; // outside reachable range
-        }
+            double theta1 = (alpha - beta) * RADIANS_TO_DEGREES_FACTOR;
+            double theta2 = -beta * RADIANS_TO_DEGREES_FACTOR;
 
-        double s = (H - C) / B;
-        if (s < -1.0 || s > 1.0) {
-            break; // numerically invalid
-        }
-        double alpha = std::asin(s);
-        double beta = M_PI_2 - alpha;
+            // Skip solutions that exceed servo limits
+            if (theta1 < params.femur_angle_limits[0] ||
+                theta1 > params.femur_angle_limits[1])
+                continue;
+            if (theta2 < params.tibia_angle_limits[0] ||
+                theta2 > params.tibia_angle_limits[1])
+                continue;
 
-        double femurDeg = alpha * RADIANS_TO_DEGREES_FACTOR;
-        double tibiaDeg = beta * RADIANS_TO_DEGREES_FACTOR;
-
-        bool femur_ok = femurDeg >= params.femur_angle_limits[0] && femurDeg <= params.femur_angle_limits[1];
-        bool tibia_ok = tibiaDeg >= params.tibia_angle_limits[0] && tibiaDeg <= params.tibia_angle_limits[1];
-
-        if (femur_ok && tibia_ok) {
-            result.coxa = 0.0;
-            result.femur = femurDeg;
-            result.tibia = tibiaDeg;
-            result.valid = true;
-            break;
-        }
-
-        // Adjust height for next iteration depending on which limit was violated
-        if (femurDeg > params.femur_angle_limits[1] || tibiaDeg < params.tibia_angle_limits[0]) {
-            H -= step; // reduce height
-        } else if (femurDeg < params.femur_angle_limits[0] || tibiaDeg > params.tibia_angle_limits[1]) {
-            H += step; // increase height
-        } else {
-            break;
+            // Keep the best solution found so far
+            bestErr = err;
+            best = {0.0, theta1, theta2, true};
         }
     }
 
-    return result;
+    return best;
 }
 
 /**
