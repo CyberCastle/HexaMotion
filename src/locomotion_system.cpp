@@ -1260,8 +1260,6 @@ void LocomotionSystem::adaptGaitToTerrain() {
     }
 }
 
-// Additional implementations pending
-
 bool LocomotionSystem::setLegPosition(int leg_index, const Point3D &position) {
     if (!system_enabled || leg_index < 0 || leg_index >= NUM_LEGS || !pose_ctrl)
         return false;
