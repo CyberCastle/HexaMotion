@@ -82,5 +82,32 @@ int main() {
         std::cerr << "No hay coherencia entre IK y FK" << std::endl;
     }
 
+    // Validación de altura de 120mm bajo la base del robot
+    std::cout << "\n=== IK Height 120mm Test ===" << std::endl;
+    for (int leg = 0; leg < NUM_LEGS; ++leg) {
+        // Obtener la posición de la base de la pierna
+        Point3D base = model.getAnalyticLegBasePosition(leg);
+        // Target: misma X, Y que la base, Z = base.z - 120
+        Point3D target;
+        target.x = base.x;
+        target.y = base.y;
+        target.z = base.z - 120.0f;
+
+        JointAngles start_angles(0, 0, 0); // Test symmetric configuration
+        JointAngles ik = model.inverseKinematicsCurrent(leg, start_angles, target);
+        Point3D fk = model.forwardKinematics(leg, ik);
+        double z_err = std::abs(fk.z - target.z);
+        std::cout << "Leg " << leg << ": target altura -120mm -> IK(" << ik.coxa << ", "
+                  << ik.femur << ", " << ik.tibia << ") FK altura=" << fk.z << " error_z=" << z_err << std::endl;
+        if (z_err > 2.0f) {
+            height_ok = false;
+        }
+    }
+    if (height_ok) {
+        std::cout << "IK puede posicionar todas las patas a 120mm de altura dentro de la tolerancia." << std::endl;
+    } else {
+        std::cerr << "IK NO puede posicionar todas las patas a 120mm de altura dentro de la tolerancia." << std::endl;
+    }
+
     return 0;
 }
