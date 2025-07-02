@@ -384,118 +384,13 @@ static void printStateTransitionInfo(StateController &stateController, const std
 int main() {
     printWelcome();
 
-    // Test with different robot heights to demonstrate the height parameter effect
-    std::cout << "Testing robot height parameter effect on servo angles..." << std::endl;
-    std::cout << "=========================================" << std::endl;
-
-    // Test configuration 1: Lower height (80mm)
-    std::cout << "Configuration 1: Robot Height = 120mm" << std::endl;
-    Parameters p1{};
-    p1.hexagon_radius = 200;
-    p1.coxa_length = 50;
-    p1.femur_length = 101;
-    p1.tibia_length = 208;
-    p1.robot_height = 80; // Lower height
-    p1.height_offset = 0;
-    p1.control_frequency = 50;
-    p1.coxa_angle_limits[0] = -65;
-    p1.coxa_angle_limits[1] = 65;
-    p1.femur_angle_limits[0] = -75;
-    p1.femur_angle_limits[1] = 75;
-    p1.tibia_angle_limits[0] = -45;
-    p1.tibia_angle_limits[1] = 45;
-
-    LocomotionSystem sys1(p1);
-    DummyIMU imu1;
-    DummyFSR fsr1;
-    DummyServo servos1;
-
-    // Create pose configuration for first test system
-    PoseConfiguration pose_config1 = getDefaultPoseConfig(p1);
-
-    assert(sys1.initialize(&imu1, &fsr1, &servos1, pose_config1));
-    assert(sys1.calibrateSystem());
-    assert(sys1.setGaitType(TRIPOD_GAIT));
-    assert(sys1.walkForward(400.0f));
-
-    std::cout << "Sample joint angles at 100mm height:" << std::endl;
-    std::cout << "=== About to call trajectory and setLegPosition ===" << std::endl;
-    for (int leg = 0; leg < NUM_LEGS; ++leg) {
-        Point3D pos = sys1.calculateFootTrajectory(leg, 0.5f);
-        std::cout << "  Leg " << leg + 1 << " target position: x=" << std::fixed << std::setprecision(1) << pos.x << ", y=" << pos.y << ", z=" << pos.z << std::endl;
-        sys1.setLegPosition(leg, pos);
-        JointAngles q = sys1.getJointAngles(leg);
-        std::cout << "  Leg " << leg + 1 << ": Coxa=" << std::fixed << std::setw(6) << std::setprecision(1) << q.coxa
-                  << "° Femur=" << std::fixed << std::setw(6) << q.femur << "° Tibia=" << std::fixed << std::setw(6) << q.tibia << "°" << std::endl;
-
-        // Verify forward kinematics result
-        Point3D fk_pos = sys1.calculateForwardKinematics(leg, q);
-        std::cout << "  FK verification: x=" << std::fixed << std::setprecision(1) << fk_pos.x << ", y=" << fk_pos.y << ", z=" << fk_pos.z << std::endl;
-        double error = sqrt(pow(pos.x - fk_pos.x, 2) + pow(pos.y - fk_pos.y, 2) + pow(pos.z - fk_pos.z, 2));
-        std::cout << "  IK error: " << std::fixed << std::setprecision(1) << error << "mm" << std::endl;
-    }
-
-    std::cout << std::endl;
-
-    // Test configuration 2: Higher height (200mm)
-    std::cout << "Configuration 2: Robot Height = 200mm" << std::endl;
-    Parameters p2{};
-    p2.hexagon_radius = 200;
-    p2.coxa_length = 50;
-    p2.femur_length = 101;
-    p2.tibia_length = 208;
-    p2.robot_height = 200; // Higher height
-    p2.height_offset = 0;
-    p2.control_frequency = 50;
-    p2.coxa_angle_limits[0] = -65;
-    p2.coxa_angle_limits[1] = 65;
-    p2.femur_angle_limits[0] = -75;
-    p2.femur_angle_limits[1] = 75;
-    p2.tibia_angle_limits[0] = -45;
-    p2.tibia_angle_limits[1] = 45;
-
-    LocomotionSystem sys2(p2);
-    DummyIMU imu2;
-    DummyFSR fsr2;
-    DummyServo servos2;
-
-    // Create pose configuration for second test system
-    PoseConfiguration pose_config2 = getDefaultPoseConfig(p2);
-
-    assert(sys2.initialize(&imu2, &fsr2, &servos2, pose_config2));
-    assert(sys2.calibrateSystem());
-    assert(sys2.setGaitType(TRIPOD_GAIT));
-    assert(sys2.walkForward(400.0f));
-
-    std::cout << "Sample joint angles at 200mm height:" << std::endl;
-    std::cout << "=== About to call trajectory and setLegPosition ===" << std::endl;
-    for (int leg = 0; leg < NUM_LEGS; ++leg) {
-        Point3D pos = sys2.calculateFootTrajectory(leg, 0.5f);
-        std::cout << "  Leg " << leg + 1 << " target position: x=" << std::fixed << std::setprecision(1) << pos.x << ", y=" << pos.y << ", z=" << pos.z << std::endl;
-        sys2.setLegPosition(leg, pos);
-        JointAngles q = sys2.getJointAngles(leg);
-        std::cout << "  Leg " << leg + 1 << ": Coxa=" << std::fixed << std::setw(6) << std::setprecision(1) << q.coxa
-                  << "° Femur=" << std::fixed << std::setw(6) << q.femur << "° Tibia=" << std::fixed << std::setw(6) << q.tibia << "°" << std::endl;
-
-        // Verify forward kinematics result
-        Point3D fk_pos = sys2.calculateForwardKinematics(leg, q);
-        std::cout << "  FK verification: x=" << std::fixed << std::setprecision(1) << fk_pos.x << ", y=" << fk_pos.y << ", z=" << fk_pos.z << std::endl;
-        double error = sqrt(pow(pos.x - fk_pos.x, 2) + pow(pos.y - fk_pos.y, 2) + pow(pos.z - fk_pos.z, 2));
-        std::cout << "  IK error: " << std::fixed << std::setprecision(1) << error << "mm" << std::endl;
-    }
-
-    std::cout << std::endl
-              << "Notice how the servo angles differ between 100mm and 200mm heights!" << std::endl;
-    std::cout << "=========================================" << std::endl
-              << std::endl;
-
-    // Initialize robot parameters for main simulation (use 150mm height)
+    // Initialize robot parameters for main simulation (use 120mm height)
     Parameters p{};
     p.hexagon_radius = 200;
     p.coxa_length = 50;
     p.femur_length = 101;
     p.tibia_length = 208;
-    p.robot_height = 150;
+    p.robot_height = 120;
     p.height_offset = 0;
     p.control_frequency = 50;
     // Use proper CSIRO-style joint limits
