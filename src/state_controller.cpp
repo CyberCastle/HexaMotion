@@ -1173,7 +1173,7 @@ int StateController::executePackSequence() {
             transition_progress_.is_complete = true;
             // Capture packed target joint angles
             for (int i = 0; i < NUM_LEGS; ++i) {
-                packed_target_angles_[i] = locomotion_system_.getCurrentAngles(i);
+                packed_target_angles_[i] = locomotion_system_.getJointAngles(i);
             }
             return 100;
         }
@@ -1196,7 +1196,7 @@ int StateController::executeUnpackSequence() {
             transition_progress_.is_complete = true;
             // Capture ready target joint angles
             for (int i = 0; i < NUM_LEGS; ++i) {
-                ready_target_angles_[i] = locomotion_system_.getCurrentAngles(i);
+                ready_target_angles_[i] = locomotion_system_.getJointAngles(i);
             }
             return 100;
         }
@@ -1234,7 +1234,7 @@ bool StateController::isRobotPacked() const {
     // Joint-based packed check
     bool joints_ok = true;
     for (int i = 0; i < NUM_LEGS; ++i) {
-        JointAngles cur = locomotion_system_.getCurrentAngles(i);
+        JointAngles cur = locomotion_system_.getJointAngles(i);
         JointAngles tgt = packed_target_angles_[i];
         if (abs(cur.coxa - tgt.coxa) > JOINT_TOLERANCE ||
             abs(cur.femur - tgt.femur) > JOINT_TOLERANCE ||
@@ -1263,7 +1263,7 @@ bool StateController::isRobotReady() const {
     // Joint-based ready check
     bool joints_ok = true;
     for (int i = 0; i < NUM_LEGS; ++i) {
-        JointAngles cur = locomotion_system_.getCurrentAngles(i);
+        JointAngles cur = locomotion_system_.getJointAngles(i);
         JointAngles tgt = ready_target_angles_[i];
         if (abs(cur.coxa - tgt.coxa) > JOINT_TOLERANCE ||
             abs(cur.femur - tgt.femur) > JOINT_TOLERANCE ||

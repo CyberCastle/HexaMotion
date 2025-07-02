@@ -232,18 +232,11 @@ bool LocomotionSystem::setLegJointAngles(int leg, const JointAngles &q) {
     if (!servo_interface)
         return false;
 
-    // CHECK SERVO STATUS FLAGS BEFORE ATTEMPTING MOVEMENT
     // Verify that all servos in this leg are ready for movement
     for (int joint = 0; joint < DOF_PER_LEG; ++joint) {
         if (servo_interface->hasBlockingStatusFlags(leg, joint)) {
             // Servo is blocked, cannot move this leg
             last_error = SERVO_BLOCKED_ERROR;
-#if defined(ENABLE_LOG) && defined(ARDUINO)
-            Serial.print("Servo blocked - leg ");
-            Serial.print(leg);
-            Serial.print(" joint ");
-            Serial.println(joint);
-#endif
             return false;
         }
     }
@@ -255,18 +248,10 @@ bool LocomotionSystem::setLegJointAngles(int leg, const JointAngles &q) {
                          q.tibia >= params.tibia_angle_limits[0] &&
                          q.tibia <= params.tibia_angle_limits[1];
 
-    JointAngles clamped;
-    clamped.coxa = constrainAngle(q.coxa, params.coxa_angle_limits[0],
-                                  params.coxa_angle_limits[1]);
-    clamped.femur = constrainAngle(q.femur, params.femur_angle_limits[0],
-                                   params.femur_angle_limits[1]);
-    clamped.tibia = constrainAngle(q.tibia, params.tibia_angle_limits[0],
-                                   params.tibia_angle_limits[1]);
-
     if (!within_limits)
         return false;
 
-    joint_angles[leg] = clamped; // internal state
+    joint_angles[leg] = q; // internal state
 
     // Use velocity controller to get appropriate servo speeds
     double coxa_speed = velocity_controller ? velocity_controller->getServoSpeed(leg, 0) : params.default_servo_speed;
@@ -274,9 +259,9 @@ bool LocomotionSystem::setLegJointAngles(int leg, const JointAngles &q) {
     double tibia_speed = velocity_controller ? velocity_controller->getServoSpeed(leg, 2) : params.default_servo_speed;
 
     // Apply sign inversion/preservation per servo using params.angle_sign_* (adjust left/right or above/below servo orientation)
-    double servo_coxa = clamped.coxa * params.angle_sign_coxa;
-    double servo_femur = clamped.femur * params.angle_sign_femur;
-    double servo_tibia = clamped.tibia * params.angle_sign_tibia;
+    double servo_coxa = q.coxa * params.angle_sign_coxa;
+    double servo_femur = q.femur * params.angle_sign_femur;
+    double servo_tibia = q.tibia * params.angle_sign_tibia;
     servo_interface->setJointAngleAndSpeed(leg, 0, servo_coxa, coxa_speed);
     servo_interface->setJointAngleAndSpeed(leg, 1, servo_femur, femur_speed);
     servo_interface->setJointAngleAndSpeed(leg, 2, servo_tibia, tibia_speed);
