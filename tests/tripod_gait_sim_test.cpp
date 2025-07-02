@@ -616,7 +616,7 @@ int main() {
         stateController.update(deltaTime);
 
         // Then update the locomotion system with error checking
-        bool update_success = sys.update();
+        bool update_success = sys.update(deltaTime);
         if (!update_success) {
             failed_updates++;
             LocomotionSystem::ErrorCode last_error = sys.getLastError();

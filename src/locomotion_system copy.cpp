@@ -36,7 +36,9 @@ LocomotionSystem::LocomotionSystem(const Parameters &params)
       model(params), pose_ctrl(nullptr), walk_ctrl(nullptr), admittance_ctrl(nullptr) {
 
     // Initialize leg states and phase offsets for tripod gait
-    static const double tripod_phase_offsets[NUM_LEGS] = {0.0f, 0.5f, 0.5f, 0.0f, 0.0f, 0.5f};
+    // Tripod gait offsets: legs 1, 3 and 5 form one tripod while
+    // legs 2, 4 and 6 are half a cycle out of phase.
+    static const double tripod_phase_offsets[NUM_LEGS] = {0.0f, 0.5f, 0.0f, 0.5f, 0.0f, 0.5f};
     for (int i = 0; i < NUM_LEGS; i++) {
         leg_states[i] = STANCE_PHASE;
         leg_phase_offsets[i] = tripod_phase_offsets[i];

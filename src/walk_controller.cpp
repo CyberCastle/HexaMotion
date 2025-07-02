@@ -72,12 +72,15 @@ Point3D WalkController::footTrajectory(int leg_index, double phase, double step_
     if (leg_phase >= 1.0f)
         leg_phase -= 1.0f;
     Point3D trajectory;
-    double base_angle = leg_index * LEG_ANGLE_SPACING;
     const Parameters &p = model.getParams();
 
-    // Calculate leg base position (hexagon corner)
-    double base_x = p.hexagon_radius * cos(math_utils::degreesToRadians(base_angle));
-    double base_y = p.hexagon_radius * sin(math_utils::degreesToRadians(base_angle));
+    // Use the analytic base position from RobotModel to ensure consistency with
+    // inverse kinematics. Derive the base angle from this position.
+    Point3D base_pos = model.getAnalyticLegBasePosition(leg_index);
+    double base_angle =
+        atan2(base_pos.y, base_pos.x) * RADIANS_TO_DEGREES_FACTOR;
+    double base_x = base_pos.x;
+    double base_y = base_pos.y;
 
     // Calculate default foot position within reachable workspace
     double leg_reach = p.coxa_length + p.femur_length + p.tibia_length;

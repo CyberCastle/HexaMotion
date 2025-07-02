@@ -36,7 +36,10 @@ LocomotionSystem::LocomotionSystem(const Parameters &params)
       model(params), pose_ctrl(nullptr), walk_ctrl(nullptr), admittance_ctrl(nullptr) {
 
     // Initialize leg states and phase offsets for tripod gait
-    static const double tripod_phase_offsets[NUM_LEGS] = {0.0f, 0.5f, 0.0f, 0.0f, 0.5f, 0.0f};
+    // Tripod gait requires legs in alternate groups to be half a
+    // cycle out of phase. Legs 1, 3 and 5 step together while
+    // legs 2, 4 and 6 are offset by 180 degrees.
+    static const double tripod_phase_offsets[NUM_LEGS] = {0.0f, 0.5f, 0.0f, 0.5f, 0.0f, 0.5f};
     for (int i = 0; i < NUM_LEGS; i++) {
         leg_states[i] = STANCE_PHASE;
         leg_phase_offsets[i] = tripod_phase_offsets[i];
@@ -900,17 +903,20 @@ void LocomotionSystem::resetSmoothMovement() {
 }
 
 // Main system update
-bool LocomotionSystem::update() {
+bool LocomotionSystem::update(double dt_override) {
     if (!system_enabled)
         return false;
 
-    unsigned long current_time = millis();
-    dt = (current_time - last_update_time) / 1000.0f; // Convert to seconds
-    last_update_time = current_time;
-
-    // Limit dt to avoid large jumps
-    if (dt > 0.1f)
-        dt = 0.1f;
+    if (dt_override >= 0.0) {
+        dt = dt_override;
+    } else {
+        unsigned long current_time = millis();
+        dt = (current_time - last_update_time) / 1000.0f; // Convert to seconds
+        last_update_time = current_time;
+        // Limit dt to avoid large jumps
+        if (dt > 0.1f)
+            dt = 0.1f;
+    }
 
     // PARALLEL SENSOR READING IMPLEMENTATION
     // Update both FSR and IMU sensors simultaneously for optimal performance

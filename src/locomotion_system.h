@@ -143,7 +143,8 @@ class LocomotionSystem {
      * @param pose_config Pose configuration for the robot.
      * @return True on successful initialization.
      */
-    bool initialize(IIMUInterface *imu, IFSRInterface *fsr, IServoInterface *servo, const PoseConfiguration &pose_config);
+    bool initialize(IIMUInterface *imu, IFSRInterface *fsr, IServoInterface *servo,
+                    const PoseConfiguration &pose_config = PoseConfiguration());
 
     /**
      * @brief Run calibration sequence for sensors and servos.
@@ -245,8 +246,11 @@ class LocomotionSystem {
     void reprojectStandingFeet();
 
     // System update
-    /** Update all controllers and state machines. */
-    bool update();
+    /** Update all controllers and state machines.
+     *  @param dt_override Optional time step in seconds. When negative the
+     *         update uses the elapsed real time based on millis().
+     */
+    bool update(double dt_override = -1.0);
 
     /** Update FSR and IMU sensors in parallel for optimal performance. */
     bool updateSensorsParallel();
