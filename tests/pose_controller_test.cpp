@@ -67,7 +67,7 @@ int main() {
 
     // Create default configuration using factory (proper approach)
     PoseConfiguration default_config = getDefaultPoseConfig(p);
-    PoseController pc(model, &servos, default_config);
+    PoseController pc(model, default_config);
 
     // Test OpenSHC-style configuration modes
     std::cout << "=== Testing OpenSHC-style Pose Configuration ===" << std::endl;

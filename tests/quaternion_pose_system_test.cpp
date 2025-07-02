@@ -1,6 +1,7 @@
 #include "manual_pose_controller.h"
 #include "math_utils.h"
 #include "pose_controller.h"
+#include "pose_config_factory.h"
 #include "test_stubs.h"
 #include <cmath>
 #include <iostream>
@@ -13,7 +14,10 @@ int main() {
 
     RobotModel model(params);
     DummyServo servos;
-    PoseController pose_controller(model, &servos);
+
+    // Create default pose configuration
+    PoseConfiguration default_config = getDefaultPoseConfig(params);
+    PoseController pose_controller(model, default_config);
     ManualPoseController manual_controller(model);
 
     manual_controller.initialize();

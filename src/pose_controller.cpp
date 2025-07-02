@@ -6,8 +6,8 @@
  * @brief Implementation of the kinematic pose controller.
  */
 
-PoseController::PoseController(RobotModel &m, IServoInterface *s, const PoseConfiguration &config)
-    : model(m), servos(s), pose_config(config), trajectory_in_progress(false), trajectory_progress(0.0f), trajectory_step_count(0) {
+PoseController::PoseController(RobotModel &m, const PoseConfiguration &config)
+    : model(m), pose_config(config), trajectory_in_progress(false), trajectory_progress(0.0f), trajectory_step_count(0) {
     // Initialize trajectory arrays
     for (int i = 0; i < NUM_LEGS; i++) {
         trajectory_start_positions[i] = Point3D(0, 0, 0);
@@ -48,17 +48,8 @@ bool PoseController::setLegPosition(int leg_index, const Point3D &position,
     leg_pos[leg_index] = model.forwardKinematics(leg_index, angles);
     joint_q[leg_index] = angles;
 
-    if (servos) {
-        double speed = model.getParams().default_servo_speed;
-        for (int j = 0; j < DOF_PER_LEG; ++j) {
-            // Check servo status flags before movement
-            if (servos->hasBlockingStatusFlags(leg_index, j)) {
-                return false; // Servo blocked by status flags
-            }
-            double angle = (j == 0 ? angles.coxa : (j == 1 ? angles.femur : angles.tibia));
-            servos->setJointAngleAndSpeed(leg_index, j, angle, speed);
-        }
-    }
+    // Note: Servo commands are now handled by the calling LocomotionSystem through setLegJointAngles
+    // This ensures consistency and proper state management
 
     return true;
 }
@@ -123,17 +114,8 @@ bool PoseController::setStandingPose(Point3D leg_pos[NUM_LEGS], JointAngles join
         leg_pos[i] = model.forwardKinematics(i, angles);
         joint_q[i] = angles;
 
-        // Apply to servos if available
-        if (servos) {
-            double speed = model.getParams().default_servo_speed;
-            for (int j = 0; j < DOF_PER_LEG; ++j) {
-                if (servos->hasBlockingStatusFlags(i, j)) {
-                    return false; // Servo blocked by status flags
-                }
-                double angle = (j == 0 ? angles.coxa : (j == 1 ? angles.femur : angles.tibia));
-                servos->setJointAngleAndSpeed(i, j, angle, speed);
-            }
-        }
+        // Note: Servo commands are now handled by the calling LocomotionSystem through setLegJointAngles
+        // This ensures consistency and proper state management
     }
 
     return true;
@@ -209,7 +191,8 @@ Eigen::Vector4d PoseController::quaternionSlerp(const Eigen::Vector4d &q1, const
 }
 
 bool PoseController::setBodyPoseSmooth(const Eigen::Vector3d &position, const Eigen::Vector3d &orientation,
-                                       Point3D leg_positions[NUM_LEGS], JointAngles joint_angles[NUM_LEGS]) {
+                                       Point3D leg_positions[NUM_LEGS], JointAngles joint_angles[NUM_LEGS],
+                                       IServoInterface *servos) {
     // Check if smooth trajectory is enabled
     if (!model.getParams().smooth_trajectory.use_current_servo_positions) {
         // Fall back to original non-smooth method
@@ -218,7 +201,7 @@ bool PoseController::setBodyPoseSmooth(const Eigen::Vector3d &position, const Ei
 
     // If not already in progress, initialize trajectory from current servo positions
     if (!trajectory_in_progress) {
-        return initializeTrajectoryFromCurrent(position, orientation, leg_positions, joint_angles);
+        return initializeTrajectoryFromCurrent(position, orientation, leg_positions, joint_angles, servos);
     } else {
         // Continue existing trajectory
         return updateTrajectoryStep(leg_positions, joint_angles);
@@ -236,7 +219,7 @@ bool PoseController::setBodyPoseSmoothQuaternion(const Eigen::Vector3d &position
     return setBodyPoseSmooth(position, orientation, leg_positions, joint_angles);
 }
 
-bool PoseController::getCurrentServoPositions(Point3D leg_positions[NUM_LEGS], JointAngles joint_angles[NUM_LEGS]) {
+bool PoseController::getCurrentServoPositions(IServoInterface *servos, Point3D leg_positions[NUM_LEGS], JointAngles joint_angles[NUM_LEGS]) {
     if (!servos) {
         return false;
     }
@@ -256,15 +239,22 @@ bool PoseController::getCurrentServoPositions(Point3D leg_positions[NUM_LEGS], J
 
 bool PoseController::initializeTrajectoryFromCurrent(const Eigen::Vector3d &target_position,
                                                      const Eigen::Vector3d &target_orientation,
-                                                     Point3D leg_positions[NUM_LEGS], JointAngles joint_angles[NUM_LEGS]) {
+                                                     Point3D leg_positions[NUM_LEGS], JointAngles joint_angles[NUM_LEGS],
+                                                     IServoInterface *servos) {
     // OpenSHC-style: Check pose limits before starting trajectory
     if (!checkPoseLimits(target_position, target_orientation)) {
         return false; // Target pose exceeds configured limits
     }
 
-    // Get current servo positions as starting point (OpenSHC-style)
-    if (!getCurrentServoPositions(trajectory_start_positions, trajectory_start_angles)) {
+    // Get current servo positions as starting point if servo interface is provided
+    if (servos && !getCurrentServoPositions(servos, trajectory_start_positions, trajectory_start_angles)) {
         // If can't read current positions, fall back to passed positions
+        for (int i = 0; i < NUM_LEGS; i++) {
+            trajectory_start_positions[i] = leg_positions[i];
+            trajectory_start_angles[i] = joint_angles[i];
+        }
+    } else if (!servos) {
+        // Use passed positions as starting point when no servo interface is provided
         for (int i = 0; i < NUM_LEGS; i++) {
             trajectory_start_positions[i] = leg_positions[i];
             trajectory_start_angles[i] = joint_angles[i];
@@ -340,18 +330,8 @@ bool PoseController::updateTrajectoryStep(Point3D leg_positions[NUM_LEGS], Joint
                                                      model.getParams().tibia_angle_limits[0],
                                                      model.getParams().tibia_angle_limits[1]);
 
-        // Send servo commands with smooth speed
-        if (servos) {
-            double speed = model.getParams().default_servo_speed * config.interpolation_speed;
-            for (int j = 0; j < DOF_PER_LEG; ++j) {
-                // Check servo status flags before movement
-                if (servos->hasBlockingStatusFlags(i, j)) {
-                    return false; // Servo blocked by status flags
-                }
-                double angle = (j == 0 ? joint_angles[i].coxa : (j == 1 ? joint_angles[i].femur : joint_angles[i].tibia));
-                servos->setJointAngleAndSpeed(i, j, angle, speed);
-            }
-        }
+        // Note: Servo commands are now handled by the calling LocomotionSystem through setLegJointAngles
+        // This ensures consistency and proper state management during smooth trajectory interpolation
     }
 
     // Check if trajectory is complete
@@ -372,20 +352,8 @@ bool PoseController::isTrajectoryComplete() const {
         return true;
     }
 
-    // Check if all joints are within tolerance of target positions
-    if (servos) {
-        for (int i = 0; i < NUM_LEGS; i++) {
-            // Check position tolerance (approximate)
-            double pos_diff_x = std::abs(trajectory_target_positions[i].x - trajectory_start_positions[i].x) * (DEFAULT_ANGULAR_SCALING - trajectory_progress);
-            double pos_diff_y = std::abs(trajectory_target_positions[i].y - trajectory_start_positions[i].y) * (DEFAULT_ANGULAR_SCALING - trajectory_progress);
-            double pos_diff_z = std::abs(trajectory_target_positions[i].z - trajectory_start_positions[i].z) * (DEFAULT_ANGULAR_SCALING - trajectory_progress);
-
-            double total_diff = sqrt(pos_diff_x * pos_diff_x + pos_diff_y * pos_diff_y + pos_diff_z * pos_diff_z);
-            if (total_diff > config.position_tolerance_mm) {
-                return false;
-            }
-        }
-    }
+    // Note: Position tolerance checking removed since we no longer have access to servo interface
+    // The calling code should handle position tolerance checking if needed
 
     return true;
 }
@@ -416,17 +384,8 @@ bool PoseController::setBodyPoseImmediate(const Eigen::Vector3d &position, const
         joint_q[i] = angles;
         leg_pos[i] = leg_world;
 
-        if (servos) {
-            double speed = model.getParams().default_servo_speed;
-            for (int j = 0; j < DOF_PER_LEG; ++j) {
-                // Check servo status flags before movement
-                if (servos->hasBlockingStatusFlags(i, j)) {
-                    return false; // Servo blocked by status flags
-                }
-                double angle = (j == 0 ? angles.coxa : (j == 1 ? angles.femur : angles.tibia));
-                servos->setJointAngleAndSpeed(i, j, angle, speed);
-            }
-        }
+        // Note: Servo commands are now handled by the calling LocomotionSystem through setLegJointAngles
+        // This ensures consistency and proper state management
     }
     return true;
 }

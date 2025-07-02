@@ -97,7 +97,7 @@ bool LocomotionSystem::initialize(IIMUInterface *imu, IFSRInterface *fsr, IServo
         return false;
     }
 
-    pose_ctrl = new PoseController(model, servo_interface, pose_config);
+    pose_ctrl = new PoseController(model, pose_config);
     walk_ctrl = new WalkController(model);
     admittance_ctrl = new AdmittanceController(model, imu_interface, fsr_interface);
     velocity_controller = new CartesianVelocityController(model);
@@ -251,7 +251,9 @@ bool LocomotionSystem::setLegJointAngles(int leg, const JointAngles &q) {
     if (!within_limits)
         return false;
 
+    // Update both joint angles and leg positions in a single atomic operation
     joint_angles[leg] = q; // internal state
+    leg_positions[leg] = calculateForwardKinematics(leg, q); // Update leg position based on new angles
 
     // Use velocity controller to get appropriate servo speeds
     double coxa_speed = velocity_controller ? velocity_controller->getServoSpeed(leg, 0) : params.default_servo_speed;
@@ -726,11 +728,8 @@ void LocomotionSystem::reprojectStandingFeet() {
         // IK for the new body orientation
         JointAngles q_new = calculateInverseKinematics(leg, tip_body);
 
-        // Apply angles to servos and RAM
+        // Apply angles to servos and RAM - this will update both joint_angles and leg_positions internally
         setLegJointAngles(leg, q_new);
-
-        // Update world position for consistency
-        leg_positions[leg] = calculateForwardKinematics(leg, q_new);
     }
 }
 
@@ -834,10 +833,31 @@ bool LocomotionSystem::isStaticallyStable() {
 bool LocomotionSystem::setBodyPose(const Eigen::Vector3d &position, const Eigen::Vector3d &orientation) {
     if (!system_enabled || !pose_ctrl)
         return false;
-    if (!pose_ctrl->setBodyPose(position, orientation, leg_positions, joint_angles)) {
+
+    // Create temporary arrays for pose calculation
+    Point3D temp_leg_positions[NUM_LEGS];
+    JointAngles temp_joint_angles[NUM_LEGS];
+
+    // Copy current state to temp arrays
+    for (int i = 0; i < NUM_LEGS; i++) {
+        temp_leg_positions[i] = leg_positions[i];
+        temp_joint_angles[i] = joint_angles[i];
+    }
+
+    // Calculate new pose using pose controller
+    if (!pose_ctrl->setBodyPose(position, orientation, temp_leg_positions, temp_joint_angles)) {
         last_error = KINEMATICS_ERROR;
         return false;
     }
+
+    // Apply calculated angles using setLegJointAngles to maintain consistency
+    for (int i = 0; i < NUM_LEGS; i++) {
+        if (!setLegJointAngles(i, temp_joint_angles[i])) {
+            last_error = KINEMATICS_ERROR;
+            return false;
+        }
+    }
+
     body_position = position;
     body_orientation = orientation;
 
@@ -851,7 +871,31 @@ bool LocomotionSystem::setBodyPose(const Eigen::Vector3d &position, const Eigen:
 bool LocomotionSystem::setStandingPose() {
     if (!pose_ctrl)
         return false;
-    return pose_ctrl->setStandingPose(leg_positions, joint_angles);
+
+    // Create temporary arrays for pose calculation
+    Point3D temp_leg_positions[NUM_LEGS];
+    JointAngles temp_joint_angles[NUM_LEGS];
+
+    // Copy current state to temp arrays
+    for (int i = 0; i < NUM_LEGS; i++) {
+        temp_leg_positions[i] = leg_positions[i];
+        temp_joint_angles[i] = joint_angles[i];
+    }
+
+    // Calculate standing pose using pose controller
+    if (!pose_ctrl->setStandingPose(temp_leg_positions, temp_joint_angles)) {
+        return false;
+    }
+
+    // Apply calculated angles using setLegJointAngles to maintain consistency
+    for (int i = 0; i < NUM_LEGS; i++) {
+        if (!setLegJointAngles(i, temp_joint_angles[i])) {
+            last_error = KINEMATICS_ERROR;
+            return false;
+        }
+    }
+
+    return true;
 }
 
 // Smooth trajectory configuration methods (OpenSHC-style movement)
@@ -869,10 +913,28 @@ bool LocomotionSystem::setBodyPoseSmooth(const Eigen::Vector3d &position, const 
     if (!system_enabled || !pose_ctrl)
         return false;
 
+    // Create temporary arrays for pose calculation
+    Point3D temp_leg_positions[NUM_LEGS];
+    JointAngles temp_joint_angles[NUM_LEGS];
+
+    // Copy current state to temp arrays
+    for (int i = 0; i < NUM_LEGS; i++) {
+        temp_leg_positions[i] = leg_positions[i];
+        temp_joint_angles[i] = joint_angles[i];
+    }
+
     // Use the smooth trajectory method explicitly
-    if (!pose_ctrl->setBodyPoseSmooth(position, orientation, leg_positions, joint_angles)) {
+    if (!pose_ctrl->setBodyPoseSmooth(position, orientation, temp_leg_positions, temp_joint_angles, servo_interface)) {
         last_error = KINEMATICS_ERROR;
         return false;
+    }
+
+    // Apply calculated angles using setLegJointAngles to maintain consistency
+    for (int i = 0; i < NUM_LEGS; i++) {
+        if (!setLegJointAngles(i, temp_joint_angles[i])) {
+            last_error = KINEMATICS_ERROR;
+            return false;
+        }
     }
 
     body_position = position;
@@ -888,10 +950,28 @@ bool LocomotionSystem::setBodyPoseImmediate(const Eigen::Vector3d &position, con
     if (!system_enabled || !pose_ctrl)
         return false;
 
+    // Create temporary arrays for pose calculation
+    Point3D temp_leg_positions[NUM_LEGS];
+    JointAngles temp_joint_angles[NUM_LEGS];
+
+    // Copy current state to temp arrays
+    for (int i = 0; i < NUM_LEGS; i++) {
+        temp_leg_positions[i] = leg_positions[i];
+        temp_joint_angles[i] = joint_angles[i];
+    }
+
     // Use the immediate (non-smooth) method for compatibility
-    if (!pose_ctrl->setBodyPoseImmediate(position, orientation, leg_positions, joint_angles)) {
+    if (!pose_ctrl->setBodyPoseImmediate(position, orientation, temp_leg_positions, temp_joint_angles)) {
         last_error = KINEMATICS_ERROR;
         return false;
+    }
+
+    // Apply calculated angles using setLegJointAngles to maintain consistency
+    for (int i = 0; i < NUM_LEGS; i++) {
+        if (!setLegJointAngles(i, temp_joint_angles[i])) {
+            last_error = KINEMATICS_ERROR;
+            return false;
+        }
     }
 
     body_position = position;
@@ -960,9 +1040,8 @@ bool LocomotionSystem::update() {
 
         // Use setLegJointAngles to enforce constraints at servo level
         // This implements the CSIRO syropod approach of joint position clamping
-        if (setLegJointAngles(i, target_angles)) {
-            leg_positions[i] = target_position;
-        } else {
+        // setLegJointAngles will update both joint_angles and leg_positions internally
+        if (!setLegJointAngles(i, target_angles)) {
             last_error = KINEMATICS_ERROR;
         }
     }
@@ -1263,10 +1342,28 @@ void LocomotionSystem::adaptGaitToTerrain() {
 bool LocomotionSystem::setLegPosition(int leg_index, const Point3D &position) {
     if (!system_enabled || leg_index < 0 || leg_index >= NUM_LEGS || !pose_ctrl)
         return false;
-    if (!pose_ctrl->setLegPosition(leg_index, position, leg_positions, joint_angles)) {
+
+    // Create temporary arrays for pose calculation
+    Point3D temp_leg_positions[NUM_LEGS];
+    JointAngles temp_joint_angles[NUM_LEGS];
+
+    // Copy current state to temp arrays
+    for (int i = 0; i < NUM_LEGS; i++) {
+        temp_leg_positions[i] = leg_positions[i];
+        temp_joint_angles[i] = joint_angles[i];
+    }
+
+    if (!pose_ctrl->setLegPosition(leg_index, position, temp_leg_positions, temp_joint_angles)) {
         last_error = KINEMATICS_ERROR;
         return false;
     }
+
+    // Apply calculated angles using setLegJointAngles to maintain consistency
+    if (!setLegJointAngles(leg_index, temp_joint_angles[leg_index])) {
+        last_error = KINEMATICS_ERROR;
+        return false;
+    }
+
     return true;
 }
 

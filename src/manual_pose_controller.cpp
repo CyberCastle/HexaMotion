@@ -129,7 +129,7 @@ void ManualPoseController::resetPose() {
 
 void ManualPoseController::setSmoothTransitions(bool enable, double speed) {
     smooth_transitions_ = enable;
-    interpolation_speed_ = std::max(0.01f, std::min(DEFAULT_ANGULAR_SCALING, speed));
+    interpolation_speed_ = std::max(0.01, std::min(DEFAULT_ANGULAR_SCALING, speed));
 }
 
 void ManualPoseController::savePosePreset(const std::string &name) {
@@ -363,7 +363,7 @@ void ManualPoseController::interpolateToQuaternionPose(const Point3D &target_pos
     }
 
     // Clamp speed
-    speed = std::max(0.0f, std::min(DEFAULT_ANGULAR_SCALING, speed));
+    speed = std::max(0.0, std::min(DEFAULT_ANGULAR_SCALING, speed));
 
     // Linear interpolation for position
     current_pose_.body_position.x += speed * (target_pos.x - current_pose_.body_position.x);

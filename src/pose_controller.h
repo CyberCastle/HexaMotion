@@ -4,6 +4,9 @@
 #include "HexaModel.h"
 #include "pose_config.h"
 
+// Forward declaration
+class IServoInterface;
+
 /**
  * @brief Kinematic pose controller for body and legs.
  */
@@ -12,10 +15,9 @@ class PoseController {
     /**
      * @brief Construct a pose controller.
      * @param model  Reference to the robot model.
-     * @param servos Servo interface used to command joints.
      * @param config Initial pose configuration (use pose_config_factory.h to create)
      */
-    PoseController(RobotModel &model, IServoInterface *servos, const PoseConfiguration &config);
+    PoseController(RobotModel &model, const PoseConfiguration &config);
 
     /**
      * @brief Set the robot body pose.
@@ -91,7 +93,8 @@ class PoseController {
      * @return True if pose is achievable and applied.
      */
     bool setBodyPoseSmooth(const Eigen::Vector3d &position, const Eigen::Vector3d &orientation,
-                           Point3D leg_positions[NUM_LEGS], JointAngles joint_angles[NUM_LEGS]);
+                           Point3D leg_positions[NUM_LEGS], JointAngles joint_angles[NUM_LEGS],
+                           IServoInterface *servos = nullptr);
 
     /**
      * @brief Set body pose with smooth trajectory interpolation using quaternions.
@@ -106,11 +109,14 @@ class PoseController {
 
     /**
      * @brief Get current servo positions and calculate corresponding leg positions.
+     * Note: This method now requires the servo interface to be passed as a parameter
+     * since the PoseController no longer stores a reference to it.
+     * @param servos Servo interface to read current positions from.
      * @param leg_positions Array to store current leg positions.
      * @param joint_angles Array to store current joint angles.
      * @return True if current positions were successfully retrieved.
      */
-    bool getCurrentServoPositions(Point3D leg_positions[NUM_LEGS], JointAngles joint_angles[NUM_LEGS]);
+    bool getCurrentServoPositions(IServoInterface *servos, Point3D leg_positions[NUM_LEGS], JointAngles joint_angles[NUM_LEGS]);
 
     /**
      * @brief Set body pose using original non-smooth method (for compatibility).
@@ -185,7 +191,6 @@ class PoseController {
     bool checkPoseLimits(const Eigen::Vector3d &position, const Eigen::Vector3d &orientation);
 
     RobotModel &model;
-    IServoInterface *servos;
 
     // OpenSHC-style pose configuration
     PoseConfiguration pose_config;
@@ -202,7 +207,8 @@ class PoseController {
     // Internal smooth trajectory methods
     bool initializeTrajectoryFromCurrent(const Eigen::Vector3d &target_position,
                                          const Eigen::Vector3d &target_orientation,
-                                         Point3D leg_positions[NUM_LEGS], JointAngles joint_angles[NUM_LEGS]);
+                                         Point3D leg_positions[NUM_LEGS], JointAngles joint_angles[NUM_LEGS],
+                                         IServoInterface *servos = nullptr);
     bool updateTrajectoryStep(Point3D leg_positions[NUM_LEGS], JointAngles joint_angles[NUM_LEGS]);
     bool isTrajectoryComplete() const;
 

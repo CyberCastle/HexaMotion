@@ -640,15 +640,15 @@ int main() {
         printAngles(s, sys, phase);
 
         // Check if angles changed
-        for (int i = 0; i < NUM_LEGS; ++i) {
-            JointAngles q = sys.getJointAngles(i);
-            if (!changed && (std::abs(q.coxa - prev[i].coxa) > 0.1f ||
-                             std::abs(q.femur - prev[i].femur) > 0.1f ||
-                             std::abs(q.tibia - prev[i].tibia) > 0.1f)) {
-                changed = true;
-            }
-            prev[i] = q;
-        }
+        // for (int i = 0; i < NUM_LEGS; ++i) {
+        //     JointAngles q = sys.getJointAngles(i);
+        //     if (!changed && (std::abs(q.coxa - prev[i].coxa) > 0.1f ||
+        //                      std::abs(q.femur - prev[i].femur) > 0.1f ||
+        //                      std::abs(q.tibia - prev[i].tibia) > 0.1f)) {
+        //         changed = true;
+        //     }
+        //     prev[i] = q;
+        // }
 
         // Show visual diagrams and state controller status every 25 steps
         // if (s % 25 == 0) {

@@ -209,7 +209,6 @@ bool StateController::initialize(const PoseConfiguration &pose_config) {
     // Initialize pose controller (equivalent to OpenSHC poser_)
     try {
         pose_controller_ = std::make_unique<PoseController>(locomotion_system_.getRobotModel(),
-                                                            locomotion_system_.getServoInterface(),
                                                             pose_config);
         logDebug("PoseController initialized successfully");
     } catch (const std::exception &e) {
