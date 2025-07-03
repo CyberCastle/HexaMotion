@@ -23,7 +23,7 @@ int main() {
     DummyServo servos;
 
     // Antes de las llamadas a initialize, define un PoseConfiguration dummy si no existe
-    PoseConfiguration pose_config;
+    // PoseConfiguration pose_config; // Elimina o reemplaza por una construcción válida con parámetros
 
     LocomotionSystem sys(p);
     assert(sys.initialize(&imu, &fsr, &servos, pose_config));

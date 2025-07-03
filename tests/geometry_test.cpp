@@ -30,7 +30,7 @@ int main() {
     DummyIMU imu;
     DummyFSR fsr;
     DummyServo servos;
-    PoseConfiguration pose_config;
+    // PoseConfiguration pose_config; // Elimina o reemplaza por una construcción válida con parámetros
     sys.initialize(&imu, &fsr, &servos, pose_config);
 
     // Test basic leg 0 geometry

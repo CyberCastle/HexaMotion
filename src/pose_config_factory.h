@@ -14,12 +14,10 @@
 
 /**
  * @brief Calculate hexagonal leg stance positions based on robot parameters
- * @param hexagon_radius Body hexagon radius in mm
- * @param coxa_length Coxa length in mm
+ * @param params Robot parameters containing dimensions and joint limits
  * @return Array of calculated stance positions in meters
  */
-std::array<LegStancePosition, NUM_LEGS> calculateHexagonalStancePositions(
-    double hexagon_radius, double coxa_length);
+std::array<LegStancePosition, NUM_LEGS> calculateHexagonalStancePositions(const Parameters &params);
 
 /**
  * @brief Get default standing pose joint angles (OpenSHC equivalent)

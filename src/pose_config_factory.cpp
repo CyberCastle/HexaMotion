@@ -25,30 +25,19 @@
 /**
  * @brief Calculate hexagonal leg stance positions based on robot parameters
  * Following OpenSHC's stance positioning approach from default.yaml
- * @param hexagon_radius Body hexagon radius in mm
- * @param coxa_length Coxa length in mm
+ * @param params Robot parameters containing dimensions and joint limits.
  * @return Array of calculated stance positions in meters
  */
-std::array<LegStancePosition, NUM_LEGS> calculateHexagonalStancePositions(
-    double hexagon_radius, double coxa_length) {
-
+std::array<LegStancePosition, NUM_LEGS> calculateHexagonalStancePositions(const Parameters &params) {
     std::array<LegStancePosition, NUM_LEGS> positions;
-
-    // Calculate total radius from center to leg tip (OpenSHC equivalent)
-    double total_radius_mm = hexagon_radius + coxa_length;
-    double total_radius_m = total_radius_mm / 1000.0f; // Convert to meters
-
-    // Calculate positions for each leg using hexagonal spacing (OpenSHC style)
-    // OpenSHC leg naming: AR, BR, CR, CL, BL, AL (right-front to left-front)
-    // HexaMotion mapping: 0=AR, 1=BR, 2=CR, 3=CL, 4=BL, 5=AL
+    double total_radius_mm = params.hexagon_radius + params.coxa_length;
+    double total_radius_m = total_radius_mm / 1000.0f;
     for (int i = 0; i < NUM_LEGS; i++) {
         double angle_deg = params.dh_parameters[i][0][3];
         double angle_rad = math_utils::degreesToRadians(angle_deg);
-
         positions[i].x = total_radius_m * cos(angle_rad);
         positions[i].y = total_radius_m * sin(angle_rad);
     }
-
     return positions;
 }
 
@@ -178,13 +167,8 @@ std::array<StandingPoseJoints, NUM_LEGS> getDefaultStandingPoseJoints(const Para
  * @return Complete pose configuration following OpenSHC structure
  */
 PoseConfiguration createPoseConfiguration(const Parameters &params, const std::string &config_type) {
-    PoseConfiguration config;
-
-    // Calculate stance positions based on robot dimensions (OpenSHC equivalent)
-    config.leg_stance_positions = calculateHexagonalStancePositions(
-        params.hexagon_radius, params.coxa_length);
-
-    // Set standing pose joints (OpenSHC equivalent - calculated using parameters)
+    PoseConfiguration config(params);
+    config.leg_stance_positions = calculateHexagonalStancePositions(params);
     config.standing_pose_joints = getDefaultStandingPoseJoints(params);
 
     // OpenSHC equivalent pose controller parameters

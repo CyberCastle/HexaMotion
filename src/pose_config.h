@@ -39,6 +39,8 @@ struct StandingPoseJoints {
  * Equivalent to OpenSHC's stance positioning and pose control system
  */
 struct PoseConfiguration {
+    Parameters params;
+    PoseConfiguration(const Parameters& p) : params(p) {}
     // OpenSHC equivalent stance positions
     std::array<LegStancePosition, NUM_LEGS> leg_stance_positions;
 
