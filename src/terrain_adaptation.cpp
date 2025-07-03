@@ -243,10 +243,10 @@ void TerrainAdaptation::detectTouchdownEvents(int leg_index, const FSRData &fsr_
         auto scaling_factors = workspace_validator_->getScalingFactors();
 
         // Calculate foot position using workspace scaling
-        const Parameters &params = model_.getParams();
-        double base_angle = leg_index * LEG_ANGLE_SPACING;
-        double base_x = params.hexagon_radius * cos(math_utils::degreesToRadians(base_angle));
-        double base_y = params.hexagon_radius * sin(math_utils::degreesToRadians(base_angle));
+        const Parameters &p = model_.getParams();
+        double base_angle = p.dh_parameters[leg_index][0][3];
+        double base_x = p.hexagon_radius * cos(math_utils::degreesToRadians(base_angle));
+        double base_y = p.hexagon_radius * sin(math_utils::degreesToRadians(base_angle));
 
         // Use scaling instead of hardcoded 65%
         double safe_reach = bounds.max_radius * scaling_factors.workspace_scale;
@@ -254,7 +254,7 @@ void TerrainAdaptation::detectTouchdownEvents(int leg_index, const FSRData &fsr_
         Point3D foot_position;
         foot_position.x = base_x + safe_reach * cos(math_utils::degreesToRadians(base_angle));
         foot_position.y = base_y + safe_reach * sin(math_utils::degreesToRadians(base_angle));
-        foot_position.z = -params.robot_height;
+        foot_position.z = -p.robot_height;
 
         // Configure step plane with detected position and current walk plane normal
         step_plane.position = foot_position;

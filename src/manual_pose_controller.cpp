@@ -94,7 +94,7 @@ void ManualPoseController::updatePoseInterpolation(double dt) {
         return;
     }
 
-    double alpha = std::min(DEFAULT_ANGULAR_SCALING, interpolation_speed_ * dt * LEG_ANGLE_SPACING); // Normalize to 60 FPS
+    double alpha = std::min(DEFAULT_ANGULAR_SCALING, interpolation_speed_ * dt * 60.0); // Normalize to 60 FPS
 
     // Interpolate body position
     current_pose_.body_position = interpolatePoint3D(current_pose_.body_position,
@@ -224,7 +224,7 @@ void ManualPoseController::initializeDefaultPresets() {
     pose_presets_["high"] = high_pose;
 
     PoseState low_pose;
-    low_pose.body_height = LEG_ANGLE_SPACING;
+    low_pose.body_height = 0.0;
     pose_presets_["low"] = low_pose;
 
     PoseState forward_lean;

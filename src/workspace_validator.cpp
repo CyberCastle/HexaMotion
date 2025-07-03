@@ -163,7 +163,7 @@ WorkspaceValidator::calculateVelocityConstraints(int leg_index, double bearing_d
 
     // Calculate effective workspace radius based on bearing
     Point3D leg_base = getLegBase(leg_index);
-    double leg_angle = leg_index * LEG_ANGLE_SPACING;
+    double leg_angle = model_.getParams().dh_parameters[leg_index][0][3];
     double bearing_offset = std::abs(bearing_degrees - leg_angle);
     if (bearing_offset > 180.0f) {
         bearing_offset = 360.0f - bearing_offset;
@@ -323,7 +323,8 @@ bool WorkspaceValidator::adjustForCollisionAvoidance(int leg_index, Point3D &tar
     }
 
     // Calculate leg base position
-    double base_angle = leg_index * LEG_ANGLE_SPACING;
+    const Parameters &params = model_.getParams();
+    double base_angle = params.dh_parameters[leg_index][0][3];
     double base_x = hexagon_radius * cos(base_angle * M_PI / 180.0f);
     double base_y = hexagon_radius * sin(base_angle * M_PI / 180.0f);
 
@@ -363,7 +364,7 @@ Point3D WorkspaceValidator::getLegBase(int leg_index) const {
     }
 
     const Parameters &params = model_.getParams();
-    double angle_rad = math_utils::degreesToRadians(leg_index * LEG_ANGLE_SPACING_DEGREES);
+    double angle_rad = math_utils::degreesToRadians(params.dh_parameters[leg_index][0][3]);
 
     return Point3D{
         params.hexagon_radius * cos(angle_rad),

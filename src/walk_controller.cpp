@@ -81,7 +81,7 @@ void WalkController::updateGaitPhase(double dt) {
 
 Point3D WalkController::footTrajectory(int leg_index, double phase, double step_height, double step_length,
                                        double stance_duration, double swing_duration, double robot_height,
-                                       const double leg_phase_offsets[NUM_LEGS], LegState leg_states[NUM_LEGS],
+                                       const double leg_phase_offsets[NUM_LEGS], LegState (&leg_states)[NUM_LEGS],
                                        IFSRInterface *fsr, IIMUInterface *imu) {
     // Update terrain adaptation system
     terrain_adaptation_.update(fsr, imu);
@@ -90,8 +90,8 @@ Point3D WalkController::footTrajectory(int leg_index, double phase, double step_
     if (leg_phase >= 1.0f)
         leg_phase -= 1.0f;
     Point3D trajectory;
-    double base_angle = leg_index * LEG_ANGLE_SPACING;
     const Parameters &p = model.getParams();
+    double base_angle = p.dh_parameters[leg_index][0][3]; // theta DH de la base de la pierna
 
     // Calculate leg base position (hexagon corner)
     double base_x = p.hexagon_radius * cos(math_utils::degreesToRadians(base_angle));

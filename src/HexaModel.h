@@ -38,6 +38,9 @@ struct Parameters {
     double angle_sign_femur = 1.0f; ///< Sign multiplier for femur joint output (+1.0 or -1.0 to match servo direction)
     double angle_sign_tibia = 1.0f; ///< Sign multiplier for tibia joint output (+1.0 or -1.0 to match servo direction)
 
+    // Enable FSR contact detection
+    bool use_fsr_contact = false;
+
     bool use_custom_dh_parameters = false; ///< Use custom Denavit-Hartenberg parameters
     /**
      * @brief DH parameter table for each leg.

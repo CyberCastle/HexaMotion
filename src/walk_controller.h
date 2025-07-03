@@ -102,7 +102,7 @@ class WalkController {
      */
     Point3D footTrajectory(int leg, double phase, double step_height, double step_length,
                            double stance_duration, double swing_duration, double robot_height,
-                           const double leg_phase_offsets[NUM_LEGS], LegState leg_states[NUM_LEGS],
+                           const double leg_phase_offsets[NUM_LEGS], LegState (&leg_states)[NUM_LEGS],
                            IFSRInterface *fsr, IIMUInterface *imu);
 
     // Terrain adaptation methods

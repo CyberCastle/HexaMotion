@@ -109,7 +109,6 @@ class CollisionDiagnostics {
 
   private:
     static constexpr int NUM_LEGS_COUNT = 6;
-    static constexpr double LEG_ANGLE_SPACING_DEG = 60.0f;
 };
 
 // Example usage function

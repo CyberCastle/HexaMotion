@@ -44,7 +44,7 @@ static void printRobotDimensions(const Parameters &p) {
     double body_diagonal = p.hexagon_radius * 2;
 
     std::cout << "CALCULATED DIMENSIONS:" << std::endl;
-    std::cout << "Max Leg Reach:     " << std::setw(6) << std::setprecision(1) << std::fixed << max_reach << " mm" << std::endl;
+    std::cout << "Max Leg Reach:     " << std::setw(6) << std::setprecision(1) << max_reach << " mm" << std::endl;
     std::cout << "Body Diagonal:     " << std::setw(6) << std::setprecision(1) << body_diagonal << " mm" << std::endl;
     std::cout << "Working Radius:    " << std::setw(6) << std::setprecision(1) << (p.hexagon_radius + max_reach) << " mm" << std::endl;
     std::cout << std::endl;
@@ -400,6 +400,9 @@ int main() {
     p.femur_angle_limits[1] = 75;
     p.tibia_angle_limits[0] = -45;
     p.tibia_angle_limits[1] = 45;
+
+    // Disable FSR contact detection
+    p.use_fsr_contact = false;
 
     // Display robot dimensions
     printRobotDimensions(p);

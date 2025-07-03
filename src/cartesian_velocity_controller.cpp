@@ -268,7 +268,7 @@ double CartesianVelocityController::calculateLegSpeedCompensation(int leg_index,
 
     // Get leg position in robot frame
     const Parameters &params = model_.getParams();
-    double leg_angle_deg = leg_index * LEG_ANGLE_SPACING; // Hexapod legs spaced 60° apart
+    double leg_angle_deg = params.dh_parameters[leg_index][0][3];
     double leg_angle_rad = math_utils::degreesToRadians(leg_angle_deg);
 
     // Leg position relative to robot center

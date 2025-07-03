@@ -42,7 +42,7 @@ std::array<LegStancePosition, NUM_LEGS> calculateHexagonalStancePositions(
     // OpenSHC leg naming: AR, BR, CR, CL, BL, AL (right-front to left-front)
     // HexaMotion mapping: 0=AR, 1=BR, 2=CR, 3=CL, 4=BL, 5=AL
     for (int i = 0; i < NUM_LEGS; i++) {
-        double angle_deg = i * LEG_ANGLE_SPACING;
+        double angle_deg = params.dh_parameters[i][0][3];
         double angle_rad = math_utils::degreesToRadians(angle_deg);
 
         positions[i].x = total_radius_m * cos(angle_rad);

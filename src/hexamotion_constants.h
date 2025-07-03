@@ -67,7 +67,6 @@
 #define TIBIA_ANGLE_MAX 45.0f  // Maximum tibia angle (degrees)
 
 // Robot geometry angles
-#define LEG_ANGLE_SPACING 60.0f // Angular spacing between hexapod legs (degrees)
 #define FULL_ROTATION 360.0f    // Full rotation in degrees
 
 // Inverse kinematics starting poses (degrees)

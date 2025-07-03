@@ -1216,6 +1216,19 @@ bool LocomotionSystem::performSelfTest() {
 }
 
 void LocomotionSystem::updateLegStates() {
+    // Si no se usa FSR/contacto, alternar solo por fase de marcha
+    if (!params.use_fsr_contact) {
+        for (int i = 0; i < NUM_LEGS; ++i) {
+            double leg_phase = fmod(gait_phase + leg_phase_offsets[i], 1.0f);
+            if (leg_phase < stance_duration) {
+                leg_states[i] = STANCE_PHASE;
+            } else {
+                leg_states[i] = SWING_PHASE;
+            }
+        }
+        return;
+    }
+
     if (!fsr_interface)
         return;
 

@@ -317,7 +317,6 @@ class WorkspaceValidator {
                                                 const Point3D current_leg_positions[NUM_LEGS]) const;
 
     // Constants
-    static constexpr double LEG_ANGLE_SPACING_DEGREES = 60.0f;
     static constexpr double MIN_LEG_SEPARATION = 50.0f; // Minimum distance between leg tips (mm)
 };
 
