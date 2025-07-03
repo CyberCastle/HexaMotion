@@ -252,7 +252,7 @@ bool LocomotionSystem::setLegJointAngles(int leg, const JointAngles &q) {
         return false;
 
     // Update both joint angles and leg positions in a single atomic operation
-    joint_angles[leg] = q; // internal state
+    joint_angles[leg] = q;                                   // internal state
     leg_positions[leg] = calculateForwardKinematics(leg, q); // Update leg position based on new angles
 
     // Use velocity controller to get appropriate servo speeds
@@ -1019,7 +1019,10 @@ bool LocomotionSystem::update() {
     adaptGaitToTerrain();
     updateStepParameters();
     adjustStepParameters();
-    compensateForSlope();
+
+    // TODO: Implement slope compensation
+    // This would adjust leg positions based on terrain slope
+    // compensateForSlope();
 
     // Update leg contact states from FSR sensors
     updateLegStates();
@@ -1028,8 +1031,9 @@ bool LocomotionSystem::update() {
     updateGaitPhase();
 
     // Update advanced gait patterns
-    updateMetachronalPattern();
-    updateAdaptivePattern();
+    // TODO: Implement advanced gait patterns
+    // updateMetachronalPattern();
+    // updateAdaptivePattern();
 
     // Calculate new leg positions
     for (int i = 0; i < NUM_LEGS; i++) {
@@ -1046,16 +1050,18 @@ bool LocomotionSystem::update() {
         }
     }
 
-    // Automatic orientation control
-    if (imu_interface && imu_interface->isConnected()) {
-        correctBodyTilt();
-    }
+    // // Automatic orientation control
+    // TODO: Implement automatic body tilt correction
+    // if (imu_interface && imu_interface->isConnected()) {
+    //     correctBodyTilt();
+    // }
 
-    // Check stability
-    if (!checkStabilityMargin()) {
-        // Implement corrective actions if necessary
-        last_error = STABILITY_ERROR;
-    }
+    // // Check stability
+    // TODO: Implement stability margin check
+    // if (!checkStabilityMargin()) {
+    //     // Implement corrective actions if necessary
+    //     last_error = STABILITY_ERROR;
+    // }
 
     return true;
 }
