@@ -56,7 +56,25 @@ bool WalkController::planGaitSequence(double vx, double vy, double omega) {
 }
 
 void WalkController::updateGaitPhase(double dt) {
-    gait_phase += dt;
+    // Calculate step frequency based on velocity and step parameters
+    // This follows OpenSHC's approach for proper gait timing
+    double step_frequency = 1.0; // Default frequency
+
+    // If we have velocity commands, calculate appropriate step frequency
+    if (std::abs(current_velocities_.linear_x) > 0.01 ||
+        std::abs(current_velocities_.linear_y) > 0.01 ||
+        std::abs(current_velocities_.angular_z) > 0.01) {
+
+        // Calculate step frequency based on velocity magnitude
+        double velocity_magnitude = sqrt(current_velocities_.linear_x * current_velocities_.linear_x +
+                                        current_velocities_.linear_y * current_velocities_.linear_y);
+
+        // Base frequency on velocity - typical range 0.5 to 2.0 Hz
+        step_frequency = std::max(0.5, std::min(2.0, velocity_magnitude / 100.0));
+    }
+
+    // Update gait phase with proper frequency
+    gait_phase += dt * step_frequency;
     if (gait_phase >= 1.0f)
         gait_phase -= 1.0f;
 }

@@ -166,10 +166,10 @@ JointAngles RobotModel::inverseKinematics(int leg, const Point3D &p_target) cons
                            local_target.z * local_target.z);
 
     if (distance > max_reach * 0.98f || distance < min_reach * 1.02f) {
-        // Target outside workspace - return safe default angles
+        // Target outside workspace - return safe default angles within joint limits
         double coxa_angle = atan2(local_target.y, local_target.x) * RADIANS_TO_DEGREES_FACTOR;
         coxa_angle = constrainAngle(coxa_angle, params.coxa_angle_limits[0], params.coxa_angle_limits[1]);
-        return JointAngles(coxa_angle, -45.0f, 60.0f);
+        return JointAngles(coxa_angle, params.femur_angle_limits[0] / 2.0f, params.tibia_angle_limits[0] / 2.0f);
     }
 
     // Initial guess based on target direction and realistic kinematics
@@ -180,14 +180,9 @@ JointAngles RobotModel::inverseKinematics(int leg, const Point3D &p_target) cons
     double femur_estimate = 0.0f;
     double tibia_estimate = 0.0f;
 
-    // Clamp initial estimates to joint limits
-    femur_estimate = constrainAngle(femur_estimate, params.femur_angle_limits[0], params.femur_angle_limits[1]);
-    tibia_estimate = constrainAngle(tibia_estimate, params.tibia_angle_limits[0], params.tibia_angle_limits[1]);
-
     JointAngles current_angles(coxa_start, femur_estimate, tibia_estimate);
 
     // Clamp to joint limits
-
     if (params.ik.clamp_joints) {
         current_angles.coxa = constrainAngle(current_angles.coxa, params.coxa_angle_limits[0], params.coxa_angle_limits[1]);
         current_angles.femur = constrainAngle(current_angles.femur, params.femur_angle_limits[0], params.femur_angle_limits[1]);

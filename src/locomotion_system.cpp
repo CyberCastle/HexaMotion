@@ -36,16 +36,16 @@ LocomotionSystem::LocomotionSystem(const Parameters &params)
       model(params), pose_ctrl(nullptr), walk_ctrl(nullptr), admittance_ctrl(nullptr) {
 
     // Initialize leg states and phase offsets for tripod gait
-    // OpenSHC-compatible tripod gait: Group A (AR, CR, BL) vs Group B (BR, CL, AL)
+    // OpenSHC-compatible tripod gait: Group A (legs 0,2,4) vs Group B (legs 1,3,5)
     // Group A legs step together (phase 0.0), Group B legs step 180° out of phase (phase 0.5)
-    // This ensures proper tripod stability with symmetric left-right pattern
+    // This matches OpenSHC's group_ = (id_number % 2) implementation
     static const double tripod_phase_offsets[NUM_LEGS] = {
-        0.0f, // AR (Anterior Right) - Group A
-        0.5f, // BR (Middle Right) - Group B
-        0.0f, // CR (Posterior Right) - Group A
-        0.5f, // CL (Posterior Left) - Group B
-        0.0f, // BL (Middle Left) - Group A
-        0.5f  // AL (Anterior Left) - Group B
+        0.0f, // Leg 0 (Anterior Right) - Group A (even)
+        0.5f, // Leg 1 (Middle Right) - Group B (odd)
+        0.0f, // Leg 2 (Posterior Right) - Group A (even)
+        0.5f, // Leg 3 (Posterior Left) - Group B (odd)
+        0.0f, // Leg 4 (Middle Left) - Group A (even)
+        0.5f  // Leg 5 (Anterior Left) - Group B (odd)
     };
 
     for (int i = 0; i < NUM_LEGS; i++) {
@@ -555,11 +555,10 @@ bool LocomotionSystem::planGaitSequence(double vx, double vy, double omega) {
 // Gait phase update
 void LocomotionSystem::updateGaitPhase() {
     if (walk_ctrl) {
+        // Use walk controller's phase update which handles frequency correctly
         walk_ctrl->updateGaitPhase(dt);
-        // Synchronize gait phase - use cycle_frequency to determine progression rate
-        gait_phase += dt * cycle_frequency;
-        if (gait_phase >= 1.0f)
-            gait_phase -= 1.0f;
+        // Get the updated phase from walk controller to avoid duplication
+        gait_phase = walk_ctrl->getGaitPhase();
     }
 }
 

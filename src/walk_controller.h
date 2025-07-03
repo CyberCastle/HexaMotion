@@ -40,6 +40,9 @@ class WalkController {
      */
     void updateGaitPhase(double dt);
 
+    // Gait phase management
+    double getGaitPhase() const { return gait_phase; }
+
     // Velocity limiting methods
     /**
      * @brief Get velocity limits for a given bearing.
