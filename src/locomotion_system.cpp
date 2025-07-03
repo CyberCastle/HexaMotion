@@ -1002,6 +1002,11 @@ bool LocomotionSystem::update() {
     dt = (current_time - last_update_time) / 1000.0f; // Convert to seconds
     last_update_time = current_time;
 
+    // Ensure minimum timestep using control frequency when running faster than real time
+    double min_dt = 1.0f / params.control_frequency;
+    if (dt <= 0.0f || dt < min_dt)
+        dt = min_dt;
+
     // Limit dt to avoid large jumps
     if (dt > 0.1f)
         dt = 0.1f;
