@@ -132,6 +132,49 @@ inline T quarticBezierDot(const T *points, double t) {
 }
 
 /**
+ * @brief Smooth step function for interpolation (OpenSHC equivalent)
+ * Provides smooth interpolation with zero derivatives at endpoints
+ * @param control_input The linear control input from 0.0 to 1.0
+ * @return The output of the control input run through a smoothStep function
+ */
+inline double smoothStep(double control_input) {
+    return (6.0 * pow(control_input, 5) - 15.0 * pow(control_input, 4) + 10.0 * pow(control_input, 3));
+}
+
+/**
+ * @brief Linear interpolation between two values
+ * @param origin The origin value
+ * @param target The target value
+ * @param control_input The interpolation factor (0.0 to 1.0)
+ * @return The interpolated value
+ */
+template <class T>
+inline T interpolate(const T& origin, const T& target, double control_input) {
+    return (1.0 - control_input) * origin + control_input * target;
+}
+
+/**
+ * @brief Clamp a value between min and max
+ * @param value The value to clamp
+ * @param min_value Minimum value
+ * @param max_value Maximum value
+ * @return Clamped value
+ */
+template <class T>
+inline T clamped(T value, T min_value, T max_value) {
+    return std::max(min_value, std::min(max_value, value));
+}
+
+/**
+ * @brief Round to nearest integer
+ * @param x The value to round
+ * @return Rounded integer
+ */
+inline int roundToInt(double x) {
+    return (x >= 0) ? static_cast<int>(x + 0.5) : -static_cast<int>(0.5 - x);
+}
+
+/**
  * @brief State vector for numerical integration
  */
 template <typename T>

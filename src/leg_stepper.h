@@ -2,6 +2,7 @@
 #define LEG_STEPPER_H
 
 #include "HexaModel.h"
+#include "leg.h"
 
 // Forward declarations
 class WalkController;
@@ -38,11 +39,11 @@ struct ExternalTarget {
  */
 class LegStepper {
 public:
-    LegStepper(WalkController* walker, int leg_index, const Point3D& identity_tip_pose);
+    LegStepper(WalkController* walker, int leg_index, const Point3D& identity_tip_pose, Leg& leg);
 
     // Accessors
     int getLegIndex() const { return leg_index_; }
-    Point3D getCurrentTipPose() const { return current_tip_pose_; }
+    Point3D getCurrentTipPose() const { return leg_.getTipPosition(); }
     Point3D getDefaultTipPose() const { return default_tip_pose_; }
     Point3D getIdentityTipPose() const { return identity_tip_pose_; }
     Point3D getTargetTipPose() const { return target_tip_pose_; }
@@ -51,7 +52,7 @@ public:
     Point3D getWalkPlaneNormal() const;
     StepState getStepState() const { return step_state_; }
     int getPhase() const { return phase_; }
-    double getPhaseOffset() const { return phase_offset_; }
+    double getPhaseOffset() const { return leg_.getPhaseOffset(); }
     Point3D getStrideVector() const { return stride_vector_; }
     Point3D getSwingClearance() const { return swing_clearance_; }
     double getSwingProgress() const { return swing_progress_; }
@@ -65,13 +66,13 @@ public:
     ExternalTarget getExternalDefault() const { return external_default_; }
 
     // Modifiers
-    void setCurrentTipPose(const Point3D& pose) { current_tip_pose_ = pose; }
+    void setCurrentTipPose(const Point3D& pose) { leg_.setTipPosition(pose); }
     void setDefaultTipPose(const Point3D& pose) { default_tip_pose_ = pose; }
     void setStepState(StepState state) { step_state_ = state; }
     void setPhase(int phase) { phase_ = phase; }
     void setSwingProgress(int progress) { swing_progress_ = progress; }
     void setStanceProgress(int progress) { stance_progress_ = progress; }
-    void setPhaseOffset(double offset) { phase_offset_ = offset; }
+    void setPhaseOffset(double offset) { leg_.setPhaseOffset(offset); }
     void setCompletedFirstStep(bool completed) { completed_first_step_ = completed; }
     void setAtCorrectPhase(bool at_correct) { at_correct_phase_ = at_correct; }
     void setTouchdownDetection(bool detection) { touchdown_detection_ = detection; }
@@ -94,9 +95,9 @@ public:
 private:
     WalkController* walker_;
     int leg_index_;
+    Leg& leg_;
     Point3D identity_tip_pose_;
     Point3D default_tip_pose_;
-    Point3D current_tip_pose_;
     Point3D origin_tip_pose_;
     Point3D target_tip_pose_;
 
@@ -114,7 +115,6 @@ private:
     bool at_correct_phase_;
     bool completed_first_step_;
     int phase_;
-    double phase_offset_;
     double stance_progress_;
     double swing_progress_;
     double step_progress_;

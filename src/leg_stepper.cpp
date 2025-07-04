@@ -5,11 +5,10 @@
 #include <cmath>
 
 // Constructor implementation
-LegStepper::LegStepper(WalkController* walker, int leg_index, const Point3D& identity_tip_pose)
-            : walker_(walker), leg_index_(leg_index), identity_tip_pose_(identity_tip_pose),
-          default_tip_pose_(identity_tip_pose), current_tip_pose_(identity_tip_pose),
-          origin_tip_pose_(identity_tip_pose), target_tip_pose_(identity_tip_pose),
-          at_correct_phase_(false), completed_first_step_(false), phase_(0), phase_offset_(0),
+LegStepper::LegStepper(WalkController* walker, int leg_index, const Point3D& identity_tip_pose, Leg& leg)
+            : walker_(walker), leg_index_(leg_index), leg_(leg), identity_tip_pose_(identity_tip_pose),
+          default_tip_pose_(identity_tip_pose), origin_tip_pose_(identity_tip_pose), target_tip_pose_(identity_tip_pose),
+          at_correct_phase_(false), completed_first_step_(false), phase_(0),
           stance_progress_(0.0), swing_progress_(0.0), step_progress_(0.0), step_state_(STEP_STANCE),
           swing_delta_t_(0.0), stance_delta_t_(0.0), touchdown_detection_(false)
 {
@@ -139,11 +138,11 @@ void LegStepper::updateTipPosition(double step_length) {
     // Sincronizar posición y progreso al inicio de cada transición de estado
     if (state_transition) {
         if (step_state_ == STEP_SWING) {
-            swing_origin_tip_position_ = current_tip_pose_;
+            swing_origin_tip_position_ = leg_.getTipPosition();
             swing_origin_tip_velocity_ = current_tip_velocity_;
             swing_progress_ = 0.0;
         } else if (step_state_ == STEP_STANCE || step_state_ == STEP_FORCE_STANCE) {
-            stance_origin_tip_position_ = current_tip_pose_;
+            stance_origin_tip_position_ = leg_.getTipPosition();
             stance_progress_ = 0.0;
         }
     }
@@ -156,7 +155,7 @@ void LegStepper::updateTipPosition(double step_length) {
 
         // Guardar posición/velocidad inicial del tip
         if (iteration == 1) {
-            swing_origin_tip_position_ = current_tip_pose_;
+            swing_origin_tip_position_ = leg_.getTipPosition();
             swing_origin_tip_velocity_ = current_tip_velocity_;
             if (rough_terrain_mode) {
                 updateDefaultTipPosition();
@@ -183,7 +182,7 @@ void LegStepper::updateTipPosition(double step_length) {
             delta_pos = math_utils::quarticBezierDot(swing_2_nodes_, time_input) * swing_delta_t_;
         }
 
-        current_tip_pose_ = current_tip_pose_ + delta_pos;
+        leg_.setTipPosition(leg_.getTipPosition() + delta_pos);
         current_tip_velocity_ = delta_pos / walker_->getTimeDelta();
     }
     // Período de Stance
@@ -194,7 +193,7 @@ void LegStepper::updateTipPosition(double step_length) {
 
         // Guardar posición inicial del tip al inicio del stance
         if (iteration == 1) {
-            stance_origin_tip_position_ = current_tip_pose_;
+            stance_origin_tip_position_ = leg_.getTipPosition();
             external_target_.defined = false; // Reset external target después de cada período de swing
             if (rough_terrain_mode) {
                 updateDefaultTipPosition();
@@ -208,7 +207,7 @@ void LegStepper::updateTipPosition(double step_length) {
         // Usar derivada de la curva Bézier para asegurar velocidad correcta a lo largo del suelo
         double time_input = iteration * stance_delta_t_;
         Point3D delta_pos = math_utils::quarticBezierDot(stance_nodes_, time_input) * stance_delta_t_;
-        current_tip_pose_ = current_tip_pose_ + delta_pos;
+        leg_.setTipPosition(leg_.getTipPosition() + delta_pos);
         current_tip_velocity_ = delta_pos / walker_->getTimeDelta();
     }
 }
@@ -250,11 +249,12 @@ void LegStepper::generateSecondarySwingControlNodes(bool ground_contact) {
 
     // Detener movimiento adicional de la posición del tip en dirección normal al plano de marcha
     if (ground_contact) {
-        swing_2_nodes_[0] = current_tip_pose_ + stance_node_separation * 0.0;
-        swing_2_nodes_[1] = current_tip_pose_ + stance_node_separation * 1.0;
-        swing_2_nodes_[2] = current_tip_pose_ + stance_node_separation * 2.0;
-        swing_2_nodes_[3] = current_tip_pose_ + stance_node_separation * 3.0;
-        swing_2_nodes_[4] = current_tip_pose_ + stance_node_separation * 4.0;
+        Point3D current_pos = leg_.getTipPosition();
+        swing_2_nodes_[0] = current_pos + stance_node_separation * 0.0;
+        swing_2_nodes_[1] = current_pos + stance_node_separation * 1.0;
+        swing_2_nodes_[2] = current_pos + stance_node_separation * 2.0;
+        swing_2_nodes_[3] = current_pos + stance_node_separation * 3.0;
+        swing_2_nodes_[4] = current_pos + stance_node_separation * 4.0;
     }
 }
 

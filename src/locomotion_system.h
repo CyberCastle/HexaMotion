@@ -49,6 +49,7 @@
 #include "cartesian_velocity_controller.h"
 #include "pose_controller.h"
 #include "walk_controller.h"
+#include "leg.h"
 #include <Arduino.h>
 #include <ArduinoEigen.h>
 #include <math.h>
@@ -84,9 +85,7 @@ class LocomotionSystem {
     // System states
     Eigen::Vector3d body_position;      // Body position [x,y,z]
     Eigen::Vector3d body_orientation;   // Body orientation [roll,pitch,yaw]
-    Point3D leg_positions[NUM_LEGS];    // Leg positions
-    JointAngles joint_angles[NUM_LEGS]; // Joint angles
-    StepPhase leg_states[NUM_LEGS];      // Leg states
+    Leg legs[NUM_LEGS];                 // Leg objects containing all leg data
 
     // Gait control
     GaitType current_gait;
@@ -98,7 +97,6 @@ class LocomotionSystem {
     double stance_duration;             // Stance phase duration (0-1)
     double swing_duration;              // Swing phase duration (0-1)
     double cycle_frequency;             // Gait cycle frequency (Hz)
-    double leg_phase_offsets[NUM_LEGS]; // Phase offset per leg
 
     // Control variables
     bool system_enabled;
@@ -115,10 +113,6 @@ class LocomotionSystem {
     PoseController *pose_ctrl;
     WalkController *walk_ctrl;
     AdmittanceController *admittance_ctrl;
-    // FSR contact history for updateLegStates filtering
-    double fsr_contact_history[NUM_LEGS][3];
-    // Circular buffer index for FSR history
-    int fsr_history_index;
     // Last log time for sensor update profiling
     unsigned long last_sensor_log_time;
 
@@ -197,6 +191,16 @@ class LocomotionSystem {
     /** Compute foot trajectory for a leg at given phase. */
     Point3D calculateFootTrajectory(int leg_index, double phase);
 
+    // Phase offset management
+    /** Set phase offset for a specific leg. */
+    void setLegPhaseOffset(int leg_index, double offset);
+    /** Get phase offset for a specific leg. */
+    double getLegPhaseOffset(int leg_index) const;
+    /** Set phase offsets for all legs at once. */
+    void setAllLegPhaseOffsets(const double offsets[NUM_LEGS]);
+    /** Configure phase offsets for a specific gait type. */
+    void configureGaitPhaseOffsets(GaitType gait);
+
     // Locomotion control
     /** Start walking forward indefinitely. */
     bool walkForward(double velocity);
@@ -261,11 +265,17 @@ class LocomotionSystem {
     IServoInterface *getServoInterface() { return servo_interface; }
     Eigen::Vector3d getBodyPosition() const { return body_position; }
     Eigen::Vector3d getBodyOrientation() const { return body_orientation; }
-    StepPhase getLegState(int leg_index) const { return leg_states[leg_index]; }
-    JointAngles getJointAngles(int leg_index) const { return joint_angles[leg_index]; }
-    Point3D getLegPosition(int leg_index) const { return leg_positions[leg_index]; }
+    StepPhase getLegState(int leg_index) const { return legs[leg_index].getStepPhase(); }
+    JointAngles getJointAngles(int leg_index) const { return legs[leg_index].getJointAngles(); }
+    Point3D getLegPosition(int leg_index) const { return legs[leg_index].getTipPosition(); }
     double getStepHeight() const { return step_height; }
     double getStepLength() const;
+
+    // Leg access methods
+    /** Get leg object by index. */
+    const Leg& getLeg(int leg_index) const { return legs[leg_index]; }
+    /** Get leg object by index (mutable). */
+    Leg& getLeg(int leg_index) { return legs[leg_index]; }
 
     // Setters
     /** Replace the current parameter set. */

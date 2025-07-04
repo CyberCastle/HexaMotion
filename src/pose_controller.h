@@ -3,6 +3,7 @@
 
 #include "HexaModel.h"
 #include "pose_config.h"
+#include "leg.h"
 
 // Forward declaration
 class IServoInterface;
@@ -23,23 +24,21 @@ class PoseController {
      * @brief Set the robot body pose.
      * @param position Desired body position in world frame.
      * @param orientation Desired body orientation (roll, pitch, yaw in degrees).
-     * @param leg_positions Array of leg tip positions, updated in place.
-     * @param joint_angles Array of joint angles, updated in place.
+     * @param legs Array of Leg objects, updated in place.
      * @return True if pose is achievable and applied.
      */
     bool setBodyPose(const Eigen::Vector3d &position, const Eigen::Vector3d &orientation,
-                     Point3D leg_positions[NUM_LEGS], JointAngles joint_angles[NUM_LEGS]);
+                     Leg legs[NUM_LEGS]);
 
     /**
      * @brief Set the robot body pose using quaternion for orientation.
      * @param position Desired body position in world frame.
      * @param quaternion Desired body orientation as quaternion [w, x, y, z].
-     * @param leg_positions Array of leg tip positions, updated in place.
-     * @param joint_angles Array of joint angles, updated in place.
+     * @param legs Array of Leg objects, updated in place.
      * @return True if pose is achievable and applied.
      */
     bool setBodyPoseQuaternion(const Eigen::Vector3d &position, const Eigen::Vector4d &quaternion,
-                               Point3D leg_positions[NUM_LEGS], JointAngles joint_angles[NUM_LEGS]);
+                               Leg legs[NUM_LEGS]);
 
     /**
      * @brief Interpolate between two poses using quaternions for smooth orientation.
@@ -48,39 +47,34 @@ class PoseController {
      * @param end_pos End position.
      * @param end_quat End orientation as quaternion [w, x, y, z].
      * @param t Interpolation parameter (0.0 to 1.0).
-     * @param leg_positions Array of leg tip positions, updated in place.
-     * @param joint_angles Array of joint angles, updated in place.
+     * @param legs Array of Leg objects, updated in place.
      * @return True if interpolated pose is achievable and applied.
      */
     bool interpolatePose(const Eigen::Vector3d &start_pos, const Eigen::Vector4d &start_quat,
                          const Eigen::Vector3d &end_pos, const Eigen::Vector4d &end_quat,
-                         double t, Point3D leg_positions[NUM_LEGS], JointAngles joint_angles[NUM_LEGS]);
+                         double t, Leg legs[NUM_LEGS]);
 
     /**
      * @brief Move a single leg to a target position.
      * @param leg_index Index of the leg to move (0-5).
      * @param position  Target tip position in world frame.
-     * @param leg_positions Array of leg tip positions, updated in place.
-     * @param joint_angles Array of joint angles, updated in place.
+     * @param legs Array of Leg objects, updated in place.
      * @return True if the command was successful.
      */
-    bool setLegPosition(int leg_index, const Point3D &position,
-                        Point3D leg_positions[NUM_LEGS], JointAngles joint_angles[NUM_LEGS]);
+    bool setLegPosition(int leg_index, const Point3D &position, Leg legs[NUM_LEGS]);
 
     /**
      * @brief Initialize default leg pose around the body.
-     * @param leg_positions Array of leg tip positions to fill.
-     * @param joint_angles Array of joint angles to fill.
+     * @param legs Array of Leg objects to initialize.
      */
-    void initializeDefaultPose(Point3D leg_positions[NUM_LEGS], JointAngles joint_angles[NUM_LEGS]);
+    void initializeDefaultPose(Leg legs[NUM_LEGS]);
 
     /**
      * @brief Set the robot to a standing pose.
-     * @param leg_positions Array of leg positions to update.
-     * @param joint_angles Array of joint angles to update.
+     * @param legs Array of Leg objects to update.
      * @return True on success.
      */
-    bool setStandingPose(Point3D leg_positions[NUM_LEGS], JointAngles joint_angles[NUM_LEGS]);
+    bool setStandingPose(Leg legs[NUM_LEGS]);
 
     /**
      * @brief Set body pose with smooth trajectory interpolation from current servo positions.
@@ -88,47 +82,42 @@ class PoseController {
      * equivalent to OpenSHC's smooth movement approach.
      * @param position Desired body position in world frame.
      * @param orientation Desired body orientation (roll, pitch, yaw in degrees).
-     * @param leg_positions Array of leg tip positions, updated in place.
-     * @param joint_angles Array of joint angles, updated in place.
+     * @param legs Array of Leg objects, updated in place.
      * @return True if pose is achievable and applied.
      */
     bool setBodyPoseSmooth(const Eigen::Vector3d &position, const Eigen::Vector3d &orientation,
-                           Point3D leg_positions[NUM_LEGS], JointAngles joint_angles[NUM_LEGS],
-                           IServoInterface *servos = nullptr);
+                           Leg legs[NUM_LEGS], IServoInterface *servos = nullptr);
 
     /**
      * @brief Set body pose with smooth trajectory interpolation using quaternions.
      * @param position Desired body position in world frame.
      * @param quaternion Desired body orientation as quaternion [w, x, y, z].
-     * @param leg_positions Array of leg tip positions, updated in place.
-     * @param joint_angles Array of joint angles, updated in place.
+     * @param legs Array of Leg objects, updated in place.
      * @return True if pose is achievable and applied.
      */
     bool setBodyPoseSmoothQuaternion(const Eigen::Vector3d &position, const Eigen::Vector4d &quaternion,
-                                     Point3D leg_positions[NUM_LEGS], JointAngles joint_angles[NUM_LEGS]);
+                                     Leg legs[NUM_LEGS]);
 
     /**
      * @brief Get current servo positions and calculate corresponding leg positions.
      * Note: This method now requires the servo interface to be passed as a parameter
      * since the PoseController no longer stores a reference to it.
      * @param servos Servo interface to read current positions from.
-     * @param leg_positions Array to store current leg positions.
-     * @param joint_angles Array to store current joint angles.
+     * @param legs Array of Leg objects to update with current positions.
      * @return True if current positions were successfully retrieved.
      */
-    bool getCurrentServoPositions(IServoInterface *servos, Point3D leg_positions[NUM_LEGS], JointAngles joint_angles[NUM_LEGS]);
+    bool getCurrentServoPositions(IServoInterface *servos, Leg legs[NUM_LEGS]);
 
     /**
      * @brief Set body pose using original non-smooth method (for compatibility).
      * This method bypasses smooth trajectory interpolation.
      * @param position Desired body position in world frame.
      * @param orientation Desired body orientation (roll, pitch, yaw in degrees).
-     * @param leg_positions Array of leg tip positions, updated in place.
-     * @param joint_angles Array of joint angles, updated in place.
+     * @param legs Array of Leg objects, updated in place.
      * @return True if pose is achievable and applied.
      */
     bool setBodyPoseImmediate(const Eigen::Vector3d &position, const Eigen::Vector3d &orientation,
-                              Point3D leg_positions[NUM_LEGS], JointAngles joint_angles[NUM_LEGS]);
+                              Leg legs[NUM_LEGS]);
 
     /**
      * @brief Configure smooth trajectory behavior.
@@ -185,7 +174,7 @@ class PoseController {
 
   private:
     // OpenSHC-style pose calculation using dynamic configuration
-    bool calculatePoseFromConfig(double height_offset, Point3D leg_positions[NUM_LEGS], JointAngles joint_angles[NUM_LEGS]);
+    bool calculatePoseFromConfig(double height_offset, Leg legs[NUM_LEGS]);
 
     // OpenSHC-style pose limit validation
     bool checkPoseLimits(const Eigen::Vector3d &position, const Eigen::Vector3d &orientation);
@@ -207,9 +196,8 @@ class PoseController {
     // Internal smooth trajectory methods
     bool initializeTrajectoryFromCurrent(const Eigen::Vector3d &target_position,
                                          const Eigen::Vector3d &target_orientation,
-                                         Point3D leg_positions[NUM_LEGS], JointAngles joint_angles[NUM_LEGS],
-                                         IServoInterface *servos = nullptr);
-    bool updateTrajectoryStep(Point3D leg_positions[NUM_LEGS], JointAngles joint_angles[NUM_LEGS]);
+                                         Leg legs[NUM_LEGS], IServoInterface *servos = nullptr);
+    bool updateTrajectoryStep(Leg legs[NUM_LEGS]);
     bool isTrajectoryComplete() const;
 
     // Quaternion utility functions

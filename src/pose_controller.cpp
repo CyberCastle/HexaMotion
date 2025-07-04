@@ -18,7 +18,7 @@ PoseController::PoseController(RobotModel &m, const PoseConfiguration &config)
 }
 
 bool PoseController::setBodyPose(const Eigen::Vector3d &position, const Eigen::Vector3d &orientation,
-                                 Point3D leg_pos[NUM_LEGS], JointAngles joint_q[NUM_LEGS]) {
+                                 Leg legs[NUM_LEGS]) {
     // OpenSHC-style: Check pose limits before applying
     if (!checkPoseLimits(position, orientation)) {
         return false; // Pose exceeds configured limits
@@ -27,15 +27,14 @@ bool PoseController::setBodyPose(const Eigen::Vector3d &position, const Eigen::V
     // Use smooth trajectory as default behavior if enabled
     if (model.getParams().smooth_trajectory.use_current_servo_positions &&
         model.getParams().smooth_trajectory.enable_pose_interpolation) {
-        return setBodyPoseSmooth(position, orientation, leg_pos, joint_q);
+        return setBodyPoseSmooth(position, orientation, legs);
     }
 
     // Original implementation for compatibility when smooth trajectory is disabled
-    return setBodyPoseImmediate(position, orientation, leg_pos, joint_q);
+    return setBodyPoseImmediate(position, orientation, legs);
 }
 
-bool PoseController::setLegPosition(int leg_index, const Point3D &position,
-                                    Point3D leg_pos[NUM_LEGS], JointAngles joint_q[NUM_LEGS]) {
+bool PoseController::setLegPosition(int leg_index, const Point3D &position, Leg legs[NUM_LEGS]) {
     JointAngles angles = model.inverseKinematics(leg_index, position);
 
     angles.coxa = model.constrainAngle(angles.coxa, model.getParams().coxa_angle_limits[0],
@@ -45,8 +44,8 @@ bool PoseController::setLegPosition(int leg_index, const Point3D &position,
     angles.tibia = model.constrainAngle(angles.tibia, model.getParams().tibia_angle_limits[0],
                                         model.getParams().tibia_angle_limits[1]);
 
-    leg_pos[leg_index] = model.forwardKinematics(leg_index, angles);
-    joint_q[leg_index] = angles;
+    legs[leg_index].setJointAngles(angles);
+    legs[leg_index].setTipPosition(model.forwardKinematics(leg_index, angles));
 
     // Note: Servo commands are now handled by the calling LocomotionSystem through setLegJointAngles
     // This ensures consistency and proper state management
@@ -56,7 +55,7 @@ bool PoseController::setLegPosition(int leg_index, const Point3D &position,
 
 // OpenSHC-style pose calculation using dynamic configuration
 // Calculates leg positions based on pose configuration and desired body height
-bool PoseController::calculatePoseFromConfig(double height_offset, Point3D leg_pos[NUM_LEGS], JointAngles joint_q[NUM_LEGS]) {
+bool PoseController::calculatePoseFromConfig(double height_offset, Leg legs[NUM_LEGS]) {
     // Calculate Z position based on body clearance and height offset
     double target_z = -(pose_config.body_clearance * 1000.0f + height_offset); // Convert to mm and apply offset
 
@@ -79,19 +78,19 @@ bool PoseController::calculatePoseFromConfig(double height_offset, Point3D leg_p
             return false;
         }
 
-        leg_pos[i] = target_pos;
-        joint_q[i] = angles;
+        legs[i].setTipPosition(target_pos);
+        legs[i].setJointAngles(angles);
     }
 
     return true;
 }
 
-void PoseController::initializeDefaultPose(Point3D leg_pos[NUM_LEGS], JointAngles joint_q[NUM_LEGS]) {
+void PoseController::initializeDefaultPose(Leg legs[NUM_LEGS]) {
     // OpenSHC-style: Use configuration-based calculation instead of direct geometry
-    calculatePoseFromConfig(0.0f, leg_pos, joint_q); // No height offset for default pose
+    calculatePoseFromConfig(0.0f, legs); // No height offset for default pose
 }
 
-bool PoseController::setStandingPose(Point3D leg_pos[NUM_LEGS], JointAngles joint_q[NUM_LEGS]) {
+bool PoseController::setStandingPose(Leg legs[NUM_LEGS]) {
     // OpenSHC-style: Standing pose uses pre-configured joint angles, not calculated positions
     // This ensures coxa ≈ 0° and femur/tibia equal for all legs (symmetric posture)
 
@@ -111,8 +110,8 @@ bool PoseController::setStandingPose(Point3D leg_pos[NUM_LEGS], JointAngles join
                                             model.getParams().tibia_angle_limits[1]);
 
         // Calculate resulting position using forward kinematics
-        leg_pos[i] = model.forwardKinematics(i, angles);
-        joint_q[i] = angles;
+        legs[i].setTipPosition(model.forwardKinematics(i, angles));
+        legs[i].setJointAngles(angles);
 
         // Note: Servo commands are now handled by the calling LocomotionSystem through setLegJointAngles
         // This ensures consistency and proper state management
@@ -122,12 +121,12 @@ bool PoseController::setStandingPose(Point3D leg_pos[NUM_LEGS], JointAngles join
 }
 
 bool PoseController::setBodyPoseQuaternion(const Eigen::Vector3d &position, const Eigen::Vector4d &quaternion,
-                                           Point3D leg_positions[NUM_LEGS], JointAngles joint_angles[NUM_LEGS]) {
+                                           Leg legs[NUM_LEGS]) {
     // Use smooth trajectory with quaternion if enabled
     if (model.getParams().smooth_trajectory.use_current_servo_positions &&
         model.getParams().smooth_trajectory.enable_pose_interpolation &&
         model.getParams().smooth_trajectory.use_quaternion_slerp) {
-        return setBodyPoseSmoothQuaternion(position, quaternion, leg_positions, joint_angles);
+        return setBodyPoseSmoothQuaternion(position, quaternion, legs);
     }
 
     // Original implementation for compatibility
@@ -136,12 +135,12 @@ bool PoseController::setBodyPoseQuaternion(const Eigen::Vector3d &position, cons
         math_utils::radiansToDegrees(euler_rad.x),
         math_utils::radiansToDegrees(euler_rad.y),
         math_utils::radiansToDegrees(euler_rad.z));
-    return setBodyPose(position, orientation, leg_positions, joint_angles);
+    return setBodyPose(position, orientation, legs);
 }
 
 bool PoseController::interpolatePose(const Eigen::Vector3d &start_pos, const Eigen::Vector4d &start_quat,
                                      const Eigen::Vector3d &end_pos, const Eigen::Vector4d &end_quat,
-                                     double t, Point3D leg_positions[NUM_LEGS], JointAngles joint_angles[NUM_LEGS]) {
+                                     double t, Leg legs[NUM_LEGS]) {
     // Clamp interpolation parameter
     t = std::max(0.0, std::min(DEFAULT_ANGULAR_SCALING, t));
 
@@ -151,7 +150,7 @@ bool PoseController::interpolatePose(const Eigen::Vector3d &start_pos, const Eig
     // Spherical linear interpolation (SLERP) for quaternion
     Eigen::Vector4d interp_quat = quaternionSlerp(start_quat, end_quat, t);
 
-    return setBodyPoseQuaternion(interp_pos, interp_quat, leg_positions, joint_angles);
+    return setBodyPoseQuaternion(interp_pos, interp_quat, legs);
 }
 
 // Quaternion spherical linear interpolation (SLERP)
@@ -191,47 +190,48 @@ Eigen::Vector4d PoseController::quaternionSlerp(const Eigen::Vector4d &q1, const
 }
 
 bool PoseController::setBodyPoseSmooth(const Eigen::Vector3d &position, const Eigen::Vector3d &orientation,
-                                       Point3D leg_positions[NUM_LEGS], JointAngles joint_angles[NUM_LEGS],
-                                       IServoInterface *servos) {
+                                       Leg legs[NUM_LEGS], IServoInterface *servos) {
     // Check if smooth trajectory is enabled
     if (!model.getParams().smooth_trajectory.use_current_servo_positions) {
         // Fall back to original non-smooth method
-        return setBodyPoseImmediate(position, orientation, leg_positions, joint_angles);
+        return setBodyPoseImmediate(position, orientation, legs);
     }
 
     // If not already in progress, initialize trajectory from current servo positions
     if (!trajectory_in_progress) {
-        return initializeTrajectoryFromCurrent(position, orientation, leg_positions, joint_angles, servos);
+        return initializeTrajectoryFromCurrent(position, orientation, legs, servos);
     } else {
         // Continue existing trajectory
-        return updateTrajectoryStep(leg_positions, joint_angles);
+        return updateTrajectoryStep(legs);
     }
 }
 
 bool PoseController::setBodyPoseSmoothQuaternion(const Eigen::Vector3d &position, const Eigen::Vector4d &quaternion,
-                                                 Point3D leg_positions[NUM_LEGS], JointAngles joint_angles[NUM_LEGS]) {
+                                                 Leg legs[NUM_LEGS]) {
     // Convert quaternion to Euler angles and use smooth method
     Point3D euler_rad = math_utils::quaternionToEulerPoint3D(quaternion);
     Eigen::Vector3d orientation(
         math_utils::radiansToDegrees(euler_rad.x),
         math_utils::radiansToDegrees(euler_rad.y),
         math_utils::radiansToDegrees(euler_rad.z));
-    return setBodyPoseSmooth(position, orientation, leg_positions, joint_angles);
+    return setBodyPoseSmooth(position, orientation, legs);
 }
 
-bool PoseController::getCurrentServoPositions(IServoInterface *servos, Point3D leg_positions[NUM_LEGS], JointAngles joint_angles[NUM_LEGS]) {
+bool PoseController::getCurrentServoPositions(IServoInterface *servos, Leg legs[NUM_LEGS]) {
     if (!servos) {
         return false;
     }
 
     for (int i = 0; i < NUM_LEGS; i++) {
         // Read current servo angles
-        joint_angles[i].coxa = servos->getJointAngle(i, 0);
-        joint_angles[i].femur = servos->getJointAngle(i, 1);
-        joint_angles[i].tibia = servos->getJointAngle(i, 2);
+        JointAngles angles;
+        angles.coxa = servos->getJointAngle(i, 0);
+        angles.femur = servos->getJointAngle(i, 1);
+        angles.tibia = servos->getJointAngle(i, 2);
 
         // Calculate corresponding leg positions using forward kinematics
-        leg_positions[i] = model.forwardKinematics(i, joint_angles[i]);
+        legs[i].setJointAngles(angles);
+        legs[i].setTipPosition(model.forwardKinematics(i, angles));
     }
 
     return true;
@@ -239,47 +239,44 @@ bool PoseController::getCurrentServoPositions(IServoInterface *servos, Point3D l
 
 bool PoseController::initializeTrajectoryFromCurrent(const Eigen::Vector3d &target_position,
                                                      const Eigen::Vector3d &target_orientation,
-                                                     Point3D leg_positions[NUM_LEGS], JointAngles joint_angles[NUM_LEGS],
-                                                     IServoInterface *servos) {
+                                                     Leg legs[NUM_LEGS], IServoInterface *servos) {
     // OpenSHC-style: Check pose limits before starting trajectory
     if (!checkPoseLimits(target_position, target_orientation)) {
         return false; // Target pose exceeds configured limits
     }
 
     // Get current servo positions as starting point if servo interface is provided
-    if (servos && !getCurrentServoPositions(servos, trajectory_start_positions, trajectory_start_angles)) {
+    if (servos && !getCurrentServoPositions(servos, legs)) {
         // If can't read current positions, fall back to passed positions
         for (int i = 0; i < NUM_LEGS; i++) {
-            trajectory_start_positions[i] = leg_positions[i];
-            trajectory_start_angles[i] = joint_angles[i];
+            trajectory_start_positions[i] = legs[i].getTipPosition();
+            trajectory_start_angles[i] = legs[i].getJointAngles();
         }
     } else if (!servos) {
         // Use passed positions as starting point when no servo interface is provided
         for (int i = 0; i < NUM_LEGS; i++) {
-            trajectory_start_positions[i] = leg_positions[i];
-            trajectory_start_angles[i] = joint_angles[i];
+            trajectory_start_positions[i] = legs[i].getTipPosition();
+            trajectory_start_angles[i] = legs[i].getJointAngles();
         }
     }
 
     // Calculate target leg positions using OpenSHC-style configuration-based calculation
-    Point3D temp_leg_positions[NUM_LEGS];
-    JointAngles temp_joint_angles[NUM_LEGS];
-
-    // Copy current positions to temp arrays
+    // Create temporary leg objects for target calculation
+    Leg temp_legs[NUM_LEGS];
     for (int i = 0; i < NUM_LEGS; i++) {
-        temp_leg_positions[i] = trajectory_start_positions[i];
-        temp_joint_angles[i] = trajectory_start_angles[i];
+        temp_legs[i].setTipPosition(trajectory_start_positions[i]);
+        temp_legs[i].setJointAngles(trajectory_start_angles[i]);
     }
 
     // Calculate target pose using OpenSHC-style method (bypassing smooth trajectory to avoid recursion)
-    if (!setBodyPoseImmediate(target_position, target_orientation, temp_leg_positions, temp_joint_angles)) {
+    if (!setBodyPoseImmediate(target_position, target_orientation, temp_legs)) {
         return false;
     }
 
     // Store target positions
     for (int i = 0; i < NUM_LEGS; i++) {
-        trajectory_target_positions[i] = temp_leg_positions[i];
-        trajectory_target_angles[i] = temp_joint_angles[i];
+        trajectory_target_positions[i] = temp_legs[i].getTipPosition();
+        trajectory_target_angles[i] = temp_legs[i].getJointAngles();
     }
 
     // Initialize trajectory state
@@ -287,10 +284,10 @@ bool PoseController::initializeTrajectoryFromCurrent(const Eigen::Vector3d &targ
     trajectory_progress = 0.0f;
     trajectory_step_count = 0;
 
-    return updateTrajectoryStep(leg_positions, joint_angles);
+    return updateTrajectoryStep(legs);
 }
 
-bool PoseController::updateTrajectoryStep(Point3D leg_positions[NUM_LEGS], JointAngles joint_angles[NUM_LEGS]) {
+bool PoseController::updateTrajectoryStep(Leg legs[NUM_LEGS]) {
     const auto &config = model.getParams().smooth_trajectory;
 
     // Calculate interpolation progress
@@ -304,31 +301,37 @@ bool PoseController::updateTrajectoryStep(Point3D leg_positions[NUM_LEGS], Joint
     // Interpolate each leg position and angles
     for (int i = 0; i < NUM_LEGS; i++) {
         // Linear interpolation for positions
-        leg_positions[i].x = trajectory_start_positions[i].x +
-                             trajectory_progress * (trajectory_target_positions[i].x - trajectory_start_positions[i].x);
-        leg_positions[i].y = trajectory_start_positions[i].y +
-                             trajectory_progress * (trajectory_target_positions[i].y - trajectory_start_positions[i].y);
-        leg_positions[i].z = trajectory_start_positions[i].z +
-                             trajectory_progress * (trajectory_target_positions[i].z - trajectory_start_positions[i].z);
+        Point3D new_position;
+        new_position.x = trajectory_start_positions[i].x +
+                         trajectory_progress * (trajectory_target_positions[i].x - trajectory_start_positions[i].x);
+        new_position.y = trajectory_start_positions[i].y +
+                         trajectory_progress * (trajectory_target_positions[i].y - trajectory_start_positions[i].y);
+        new_position.z = trajectory_start_positions[i].z +
+                         trajectory_progress * (trajectory_target_positions[i].z - trajectory_start_positions[i].z);
 
         // Linear interpolation for joint angles
-        joint_angles[i].coxa = trajectory_start_angles[i].coxa +
-                               trajectory_progress * (trajectory_target_angles[i].coxa - trajectory_start_angles[i].coxa);
-        joint_angles[i].femur = trajectory_start_angles[i].femur +
-                                trajectory_progress * (trajectory_target_angles[i].femur - trajectory_start_angles[i].femur);
-        joint_angles[i].tibia = trajectory_start_angles[i].tibia +
-                                trajectory_progress * (trajectory_target_angles[i].tibia - trajectory_start_angles[i].tibia);
+        JointAngles new_angles;
+        new_angles.coxa = trajectory_start_angles[i].coxa +
+                          trajectory_progress * (trajectory_target_angles[i].coxa - trajectory_start_angles[i].coxa);
+        new_angles.femur = trajectory_start_angles[i].femur +
+                           trajectory_progress * (trajectory_target_angles[i].femur - trajectory_start_angles[i].femur);
+        new_angles.tibia = trajectory_start_angles[i].tibia +
+                           trajectory_progress * (trajectory_target_angles[i].tibia - trajectory_start_angles[i].tibia);
 
         // Apply joint limits
-        joint_angles[i].coxa = model.constrainAngle(joint_angles[i].coxa,
-                                                    model.getParams().coxa_angle_limits[0],
-                                                    model.getParams().coxa_angle_limits[1]);
-        joint_angles[i].femur = model.constrainAngle(joint_angles[i].femur,
-                                                     model.getParams().femur_angle_limits[0],
-                                                     model.getParams().femur_angle_limits[1]);
-        joint_angles[i].tibia = model.constrainAngle(joint_angles[i].tibia,
-                                                     model.getParams().tibia_angle_limits[0],
-                                                     model.getParams().tibia_angle_limits[1]);
+        new_angles.coxa = model.constrainAngle(new_angles.coxa,
+                                               model.getParams().coxa_angle_limits[0],
+                                               model.getParams().coxa_angle_limits[1]);
+        new_angles.femur = model.constrainAngle(new_angles.femur,
+                                                model.getParams().femur_angle_limits[0],
+                                                model.getParams().femur_angle_limits[1]);
+        new_angles.tibia = model.constrainAngle(new_angles.tibia,
+                                                model.getParams().tibia_angle_limits[0],
+                                                model.getParams().tibia_angle_limits[1]);
+
+        // Update leg object
+        legs[i].setTipPosition(new_position);
+        legs[i].setJointAngles(new_angles);
 
         // Note: Servo commands are now handled by the calling LocomotionSystem through setLegJointAngles
         // This ensures consistency and proper state management during smooth trajectory interpolation
@@ -359,7 +362,7 @@ bool PoseController::isTrajectoryComplete() const {
 }
 
 bool PoseController::setBodyPoseImmediate(const Eigen::Vector3d &position, const Eigen::Vector3d &orientation,
-                                          Point3D leg_pos[NUM_LEGS], JointAngles joint_q[NUM_LEGS]) {
+                                          Leg legs[NUM_LEGS]) {
     // OpenSHC-style: Transform stance positions based on body pose
     for (int i = 0; i < NUM_LEGS; ++i) {
         // Start with configured stance position (convert from meters to mm)
@@ -381,8 +384,8 @@ bool PoseController::setBodyPoseImmediate(const Eigen::Vector3d &position, const
         JointAngles angles = model.inverseKinematics(i, leg_world);
         if (!model.checkJointLimits(i, angles))
             return false;
-        joint_q[i] = angles;
-        leg_pos[i] = leg_world;
+        legs[i].setJointAngles(angles);
+        legs[i].setTipPosition(leg_world);
 
         // Note: Servo commands are now handled by the calling LocomotionSystem through setLegJointAngles
         // This ensures consistency and proper state management

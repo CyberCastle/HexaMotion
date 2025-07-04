@@ -36,7 +36,12 @@ LocomotionSystem::LocomotionSystem(const Parameters &params)
       velocity_controller(nullptr), last_error(NO_ERROR),
       model(params), pose_ctrl(nullptr), walk_ctrl(nullptr), admittance_ctrl(nullptr) {
 
-    // Initialize leg states and phase offsets for tripod gait
+    // Initialize leg objects
+    for (int i = 0; i < NUM_LEGS; i++) {
+        legs[i] = Leg(i, params);
+    }
+
+    // Initialize leg phase offsets for tripod gait
     // OpenSHC-compatible tripod gait: Group A (legs 0,2,4) vs Group B (legs 1,3,5)
     // Group A legs step together (phase 0.0), Group B legs step 180° out of phase (phase 0.5)
     // This matches OpenSHC's group_ = (id_number % 2) implementation
@@ -50,14 +55,9 @@ LocomotionSystem::LocomotionSystem(const Parameters &params)
     };
 
     for (int i = 0; i < NUM_LEGS; i++) {
-        leg_states[i] = STANCE_PHASE;
-        leg_phase_offsets[i] = tripod_phase_offsets[i];
+        legs[i].setPhaseOffset(tripod_phase_offsets[i]);
     }
-    // Initialize FSR contact history buffer and index
-    fsr_history_index = -1;
-    for (int i = 0; i < NUM_LEGS; ++i)
-        for (int j = 0; j < 3; ++j)
-            fsr_contact_history[i][j] = 0.0f;
+
     // Initialize sensor log timestamp to avoid static local in updateSensorsParallel
     last_sensor_log_time = 0;
 }
@@ -107,6 +107,13 @@ bool LocomotionSystem::initialize(IIMUInterface *imu, IFSRInterface *fsr, IServo
     if (!validateParameters()) {
         last_error = PARAMETER_ERROR;
         return false;
+    }
+
+    // Initialize legs with default stance position
+    // This happens after DH parameters are initialized in the constructor
+    Pose default_stance(Point3D(0, 0, -params.robot_height), Eigen::Vector3d(0, 0, 0));
+    for (int i = 0; i < NUM_LEGS; i++) {
+        legs[i].initialize(model, default_stance);
     }
 
     system_enabled = true;
@@ -265,8 +272,8 @@ bool LocomotionSystem::setLegJointAngles(int leg, const JointAngles &q) {
     }
 
     // Update both joint angles and leg positions in a single atomic operation
-    joint_angles[leg] = clamped_angles;                                   // internal state
-    leg_positions[leg] = calculateForwardKinematics(leg, clamped_angles); // Update leg position based on new angles
+    legs[leg].setJointAngles(clamped_angles);                            // Update leg object
+    legs[leg].updateForwardKinematics(model);                            // Update leg position based on new angles
 
     // Use velocity controller to get appropriate servo speeds
     double coxa_speed = velocity_controller ? velocity_controller->getServoSpeed(leg, 0) : params.default_servo_speed;
@@ -296,12 +303,12 @@ bool LocomotionSystem::setGaitType(GaitType gait) {
         // Wave: OpenSHC-compatible phase offsets and timing
         // Based on offset_multiplier: [2,3,4,1,0,5] with base_offset=2, total_period=12
         // Wave gait has 83.3% stance duration for maximum stability
-        leg_phase_offsets[0] = 2.0f / 6.0f; // AR: mult=2 -> 0.333
-        leg_phase_offsets[1] = 3.0f / 6.0f; // BR: mult=3 -> 0.500
-        leg_phase_offsets[2] = 4.0f / 6.0f; // CR: mult=4 -> 0.667
-        leg_phase_offsets[3] = 1.0f / 6.0f; // CL: mult=1 -> 0.167
-        leg_phase_offsets[4] = 0.0f / 6.0f; // BL: mult=0 -> 0.000
-        leg_phase_offsets[5] = 5.0f / 6.0f; // AL: mult=5 -> 0.833
+        legs[0].setPhaseOffset(2.0f / 6.0f); // AR: mult=2 -> 0.333
+        legs[1].setPhaseOffset(3.0f / 6.0f); // BR: mult=3 -> 0.500
+        legs[2].setPhaseOffset(4.0f / 6.0f); // CR: mult=4 -> 0.667
+        legs[3].setPhaseOffset(1.0f / 6.0f); // CL: mult=1 -> 0.167
+        legs[4].setPhaseOffset(0.0f / 6.0f); // BL: mult=0 -> 0.000
+        legs[5].setPhaseOffset(5.0f / 6.0f); // AL: mult=5 -> 0.833
         stance_duration = 0.833f;           // 83.3% stance for stability
         swing_duration = 0.167f;            // 16.7% swing
         cycle_frequency = 0.8f;             // Slower cycle for stability
@@ -310,12 +317,12 @@ bool LocomotionSystem::setGaitType(GaitType gait) {
         // Ripple: OpenSHC-compatible phase offsets and timing
         // Based on offset_multiplier: [2,0,4,1,3,5] with base_offset=1, total_period=6
         // Ripple gait has 66.7% stance duration for balance of speed and stability
-        leg_phase_offsets[0] = 2.0f / 6.0f; // AR: mult=2 -> 0.333
-        leg_phase_offsets[1] = 0.0f / 6.0f; // BR: mult=0 -> 0.000
-        leg_phase_offsets[2] = 4.0f / 6.0f; // CR: mult=4 -> 0.667
-        leg_phase_offsets[3] = 1.0f / 6.0f; // CL: mult=1 -> 0.167
-        leg_phase_offsets[4] = 3.0f / 6.0f; // BL: mult=3 -> 0.500
-        leg_phase_offsets[5] = 5.0f / 6.0f; // AL: mult=5 -> 0.833
+        legs[0].setPhaseOffset(2.0f / 6.0f); // AR: mult=2 -> 0.333
+        legs[1].setPhaseOffset(0.0f / 6.0f); // BR: mult=0 -> 0.000
+        legs[2].setPhaseOffset(4.0f / 6.0f); // CR: mult=4 -> 0.667
+        legs[3].setPhaseOffset(1.0f / 6.0f); // CL: mult=1 -> 0.167
+        legs[4].setPhaseOffset(3.0f / 6.0f); // BL: mult=3 -> 0.500
+        legs[5].setPhaseOffset(5.0f / 6.0f); // AL: mult=5 -> 0.833
         stance_duration = 0.667f;           // 66.7% stance
         swing_duration = 0.333f;            // 33.3% swing
         cycle_frequency = 0.9f;             // Medium cycle frequency
@@ -324,12 +331,12 @@ bool LocomotionSystem::setGaitType(GaitType gait) {
         // Metachronal: Smooth wave-like progression clockwise
         // Creates a flowing wave motion around the body perimeter
         // Sequence: AR → BR → CR → CL → BL → AL (clockwise progression)
-        leg_phase_offsets[0] = 0.0f / 6.0f; // AR: 0.000 (starts first)
-        leg_phase_offsets[1] = 1.0f / 6.0f; // BR: 0.167
-        leg_phase_offsets[2] = 2.0f / 6.0f; // CR: 0.333
-        leg_phase_offsets[3] = 3.0f / 6.0f; // CL: 0.500
-        leg_phase_offsets[4] = 4.0f / 6.0f; // BL: 0.667
-        leg_phase_offsets[5] = 5.0f / 6.0f; // AL: 0.833
+        legs[0].setPhaseOffset(0.0f / 6.0f); // AR: 0.000 (starts first)
+        legs[1].setPhaseOffset(1.0f / 6.0f); // BR: 0.167
+        legs[2].setPhaseOffset(2.0f / 6.0f); // CR: 0.333
+        legs[3].setPhaseOffset(3.0f / 6.0f); // CL: 0.500
+        legs[4].setPhaseOffset(4.0f / 6.0f); // BL: 0.667
+        legs[5].setPhaseOffset(5.0f / 6.0f); // AL: 0.833
         stance_duration = 0.75f;            // 75% stance for smooth wave
         swing_duration = 0.25f;             // 25% swing
         cycle_frequency = 1.0f;             // Normal cycle frequency
@@ -337,12 +344,12 @@ bool LocomotionSystem::setGaitType(GaitType gait) {
     case ADAPTIVE_GAIT:
         // Adaptive: Dynamic pattern that changes based on conditions
         // Starts with a stable base pattern similar to ripple but with adaptive spacing
-        leg_phase_offsets[0] = 1.0f / 8.0f; // AR: 0.125 (fine-tuned timing)
-        leg_phase_offsets[1] = 0.0f / 8.0f; // BR: 0.000 (anchor leg)
-        leg_phase_offsets[2] = 3.0f / 8.0f; // CR: 0.375
-        leg_phase_offsets[3] = 6.0f / 8.0f; // CL: 0.750
-        leg_phase_offsets[4] = 4.0f / 8.0f; // BL: 0.500
-        leg_phase_offsets[5] = 7.0f / 8.0f; // AL: 0.875
+        legs[0].setPhaseOffset(1.0f / 8.0f); // AR: 0.125 (fine-tuned timing)
+        legs[1].setPhaseOffset(0.0f / 8.0f); // BR: 0.000 (anchor leg)
+        legs[2].setPhaseOffset(3.0f / 8.0f); // CR: 0.375
+        legs[3].setPhaseOffset(6.0f / 8.0f); // CL: 0.750
+        legs[4].setPhaseOffset(4.0f / 8.0f); // BL: 0.500
+        legs[5].setPhaseOffset(7.0f / 8.0f); // AL: 0.875
         stance_duration = 0.6f;             // 60% stance - adaptive
         swing_duration = 0.4f;              // 40% swing - adaptive
         cycle_frequency = 1.0f;             // Will adapt based on conditions
@@ -354,12 +361,12 @@ bool LocomotionSystem::setGaitType(GaitType gait) {
         // Group B (BR=1, CL=3, AL=5): phase offset 0.5 (180° out of phase)
         // This ensures proper left-right symmetry and optimal stability
         // Critical: Tripod gait has exactly 50% stance, 50% swing for speed
-        leg_phase_offsets[0] = 0.0f; // AR (Anterior Right) - Group A
-        leg_phase_offsets[1] = 0.5f; // BR (Middle Right) - Group B
-        leg_phase_offsets[2] = 0.0f; // CR (Posterior Right) - Group A
-        leg_phase_offsets[3] = 0.5f; // CL (Posterior Left) - Group B
-        leg_phase_offsets[4] = 0.0f; // BL (Middle Left) - Group A
-        leg_phase_offsets[5] = 0.5f; // AL (Anterior Left) - Group B
+        legs[0].setPhaseOffset(0.0f); // AR (Anterior Right) - Group A
+        legs[1].setPhaseOffset(0.5f); // BR (Middle Right) - Group B
+        legs[2].setPhaseOffset(0.0f); // CR (Posterior Right) - Group A
+        legs[3].setPhaseOffset(0.5f); // CL (Posterior Left) - Group B
+        legs[4].setPhaseOffset(0.0f); // BL (Middle Left) - Group A
+        legs[5].setPhaseOffset(0.5f); // AL (Anterior Left) - Group B
         stance_duration = 0.5f;      // 50% stance - critical for tripod pattern
         swing_duration = 0.5f;       // 50% swing - critical for tripod pattern
         cycle_frequency = 1.2f;      // Faster cycle for speed
@@ -403,20 +410,20 @@ void LocomotionSystem::updateMetachronalPattern() {
 
     if (reverse_wave) {
         // Reverse wave pattern: AL → BL → CL → CR → BR → AR
-        leg_phase_offsets[0] = 5.0f / 6.0f; // AR: 0.833
-        leg_phase_offsets[1] = 4.0f / 6.0f; // BR: 0.667
-        leg_phase_offsets[2] = 3.0f / 6.0f; // CR: 0.500
-        leg_phase_offsets[3] = 2.0f / 6.0f; // CL: 0.333
-        leg_phase_offsets[4] = 1.0f / 6.0f; // BL: 0.167
-        leg_phase_offsets[5] = 0.0f / 6.0f; // AL: 0.000
+        legs[0].setPhaseOffset(5.0f / 6.0f); // AR: 0.833
+        legs[1].setPhaseOffset(4.0f / 6.0f); // BR: 0.667
+        legs[2].setPhaseOffset(3.0f / 6.0f); // CR: 0.500
+        legs[3].setPhaseOffset(2.0f / 6.0f); // CL: 0.333
+        legs[4].setPhaseOffset(1.0f / 6.0f); // BL: 0.167
+        legs[5].setPhaseOffset(0.0f / 6.0f); // AL: 0.000
     } else {
         // Forward wave pattern: AR → BR → CR → CL → BL → AL
-        leg_phase_offsets[0] = 0.0f / 6.0f; // AR: 0.000
-        leg_phase_offsets[1] = 1.0f / 6.0f; // BR: 0.167
-        leg_phase_offsets[2] = 2.0f / 6.0f; // CR: 0.333
-        leg_phase_offsets[3] = 3.0f / 6.0f; // CL: 0.500
-        leg_phase_offsets[4] = 4.0f / 6.0f; // BL: 0.667
-        leg_phase_offsets[5] = 5.0f / 6.0f; // AL: 0.833
+        legs[0].setPhaseOffset(0.0f / 6.0f); // AR: 0.000
+        legs[1].setPhaseOffset(1.0f / 6.0f); // BR: 0.167
+        legs[2].setPhaseOffset(2.0f / 6.0f); // CR: 0.333
+        legs[3].setPhaseOffset(3.0f / 6.0f); // CL: 0.500
+        legs[4].setPhaseOffset(4.0f / 6.0f); // BL: 0.667
+        legs[5].setPhaseOffset(5.0f / 6.0f); // AL: 0.833
     }
 }
 
@@ -524,8 +531,9 @@ void LocomotionSystem::calculateAdaptivePhaseOffsets() {
 
         for (int i = 0; i < NUM_LEGS; i++) {
             double tripod_offset = (i % 2) * 0.5f;
-            leg_phase_offsets[i] = base_offsets[i] * (1.0f - tripod_factor) +
-                                   tripod_offset * tripod_factor;
+            double new_offset = base_offsets[i] * (1.0f - tripod_factor) +
+                               tripod_offset * tripod_factor;
+            legs[i].setPhaseOffset(new_offset);
         }
     } else if (stability_index < 0.3f) {
         // Low stability - move toward wave gait pattern
@@ -541,13 +549,14 @@ void LocomotionSystem::calculateAdaptivePhaseOffsets() {
         double wave_factor = (0.3f - stability_index) / 0.3f; // 0-1 as stability decreases
 
         for (int i = 0; i < NUM_LEGS; i++) {
-            leg_phase_offsets[i] = base_offsets[i] * (1.0f - wave_factor) +
-                                   wave_offsets[i] * wave_factor;
+            double new_offset = base_offsets[i] * (1.0f - wave_factor) +
+                               wave_offsets[i] * wave_factor;
+            legs[i].setPhaseOffset(new_offset);
         }
     } else {
         // Good conditions - use base adaptive pattern
         for (int i = 0; i < NUM_LEGS; i++) {
-            leg_phase_offsets[i] = base_offsets[i];
+            legs[i].setPhaseOffset(base_offsets[i]);
         }
     }
 }
@@ -736,11 +745,11 @@ bool LocomotionSystem::maintainOrientation(const Eigen::Vector3d &target_rpy) {
 
 void LocomotionSystem::reprojectStandingFeet() {
     for (int leg = 0; leg < NUM_LEGS; ++leg) {
-        if (leg_states[leg] != STANCE_PHASE)
+        if (legs[leg].getStepPhase() != STANCE_PHASE)
             continue;
 
         // Current foot position world -> body
-        Point3D tip_body = transformWorldToBody(leg_positions[leg]);
+        Point3D tip_body = transformWorldToBody(legs[leg].getTipPosition());
 
         // IK for the new body orientation
         JointAngles q_new = calculateInverseKinematics(leg, tip_body);
@@ -769,7 +778,17 @@ Eigen::Vector3d LocomotionSystem::calculateOrientationError() {
 bool LocomotionSystem::checkStabilityMargin() {
     if (!system_enabled || !admittance_ctrl)
         return false;
-    return admittance_ctrl->checkStability(leg_positions, leg_states);
+
+    // Create temporary arrays for compatibility with admittance controller
+    Point3D temp_leg_positions[NUM_LEGS];
+    StepPhase temp_leg_states[NUM_LEGS];
+
+    for (int i = 0; i < NUM_LEGS; i++) {
+        temp_leg_positions[i] = legs[i].getTipPosition();
+        temp_leg_states[i] = legs[i].getStepPhase();
+    }
+
+    return admittance_ctrl->checkStability(temp_leg_positions, temp_leg_states);
 }
 
 // Compute center of pressure
@@ -778,11 +797,11 @@ Eigen::Vector2d LocomotionSystem::calculateCenterOfPressure() {
     double total_force = 0.0f;
 
     for (int i = 0; i < NUM_LEGS; i++) {
-        if (leg_states[i] == STANCE_PHASE) {
+        if (legs[i].getStepPhase() == STANCE_PHASE) {
             FSRData fsr_data = fsr_interface->readFSR(i);
             if (fsr_data.in_contact && fsr_data.pressure > 0) {
-                cop[0] += leg_positions[i].x * fsr_data.pressure;
-                cop[1] += leg_positions[i].y * fsr_data.pressure;
+                cop[0] += legs[i].getTipPosition().x * fsr_data.pressure;
+                cop[1] += legs[i].getTipPosition().y * fsr_data.pressure;
                 total_force += fsr_data.pressure;
             }
         }
@@ -810,9 +829,9 @@ double LocomotionSystem::calculateStabilityIndex() {
     int stance_count = 0;
 
     for (int i = 0; i < NUM_LEGS; i++) {
-        if (leg_states[i] == STANCE_PHASE) {
-            stance_positions[stance_count] = leg_positions[i];
-            support_polygon.push_back(leg_positions[i]);
+        if (legs[i].getStepPhase() == STANCE_PHASE) {
+            stance_positions[stance_count] = legs[i].getTipPosition();
+            support_polygon.push_back(legs[i].getTipPosition());
             stance_count++;
         }
     }
@@ -857,8 +876,8 @@ bool LocomotionSystem::setBodyPose(const Eigen::Vector3d &position, const Eigen:
 
     // Copy current state to temp arrays
     for (int i = 0; i < NUM_LEGS; i++) {
-        temp_leg_positions[i] = leg_positions[i];
-        temp_joint_angles[i] = joint_angles[i];
+        temp_leg_positions[i] = legs[i].getTipPosition();
+        temp_joint_angles[i] = legs[i].getJointAngles();
     }
 
     // Calculate new pose using pose controller
@@ -895,8 +914,8 @@ bool LocomotionSystem::setStandingPose() {
 
     // Copy current state to temp arrays
     for (int i = 0; i < NUM_LEGS; i++) {
-        temp_leg_positions[i] = leg_positions[i];
-        temp_joint_angles[i] = joint_angles[i];
+        temp_leg_positions[i] = legs[i].getTipPosition();
+        temp_joint_angles[i] = legs[i].getJointAngles();
     }
 
     // Calculate standing pose using pose controller
@@ -936,8 +955,8 @@ bool LocomotionSystem::setBodyPoseSmooth(const Eigen::Vector3d &position, const 
 
     // Copy current state to temp arrays
     for (int i = 0; i < NUM_LEGS; i++) {
-        temp_leg_positions[i] = leg_positions[i];
-        temp_joint_angles[i] = joint_angles[i];
+        temp_leg_positions[i] = legs[i].getTipPosition();
+        temp_joint_angles[i] = legs[i].getJointAngles();
     }
 
     // Use the smooth trajectory method explicitly
@@ -973,8 +992,8 @@ bool LocomotionSystem::setBodyPoseImmediate(const Eigen::Vector3d &position, con
 
     // Copy current state to temp arrays
     for (int i = 0; i < NUM_LEGS; i++) {
-        temp_leg_positions[i] = leg_positions[i];
-        temp_joint_angles[i] = joint_angles[i];
+        temp_leg_positions[i] = legs[i].getTipPosition();
+        temp_joint_angles[i] = legs[i].getJointAngles();
     }
 
     // Use the immediate (non-smooth) method for compatibility
@@ -1072,9 +1091,7 @@ bool LocomotionSystem::update() {
     // Luego genera la trayectoria y aplica los ángulos
     for (int i = 0; i < NUM_LEGS; i++) {
         // Calcular la fase individual de cada pata basada en los offsets del trípode
-        double leg_phase = gait_phase + leg_phase_offsets[i];
-        if (leg_phase >= 1.0f)
-            leg_phase -= 1.0f;
+        double leg_phase = legs[i].calculateLegPhase(gait_phase);
 
         Point3D target_position = calculateFootTrajectory(i, leg_phase);
         JointAngles target_angles = calculateInverseKinematics(i, target_position);
@@ -1248,11 +1265,10 @@ void LocomotionSystem::updateLegStates() {
     // Si no se usa FSR/contacto, alternar solo por fase de marcha
     if (!params.use_fsr_contact) {
         for (int i = 0; i < NUM_LEGS; ++i) {
-            double leg_phase = fmod(gait_phase + leg_phase_offsets[i], 1.0f);
-            if (leg_phase < stance_duration) {
-                leg_states[i] = STANCE_PHASE;
+            if (legs[i].shouldBeInStance(gait_phase, stance_duration)) {
+                legs[i].setStepPhase(STANCE_PHASE);
             } else {
-                leg_states[i] = SWING_PHASE;
+                legs[i].setStepPhase(SWING_PHASE);
             }
         }
         return;
@@ -1261,30 +1277,23 @@ void LocomotionSystem::updateLegStates() {
     if (!fsr_interface)
         return;
 
-    // Update circular buffer index for filtered contact history
-    fsr_history_index = (fsr_history_index + 1) % 3;
-
     // Iterate over each leg and filter FSR contact
     for (int i = 0; i < NUM_LEGS; ++i) {
         FSRData fsr = fsr_interface->readFSR(i);
 
-        // Store contact value in instance history buffer (1.0 for contact, 0.0 for no contact)
-        fsr_contact_history[i][fsr_history_index] = fsr.in_contact ? 1.0f : 0.0f;
+        // Update FSR contact history using Leg class methods
+        legs[i].updateFSRHistory(fsr.in_contact, fsr.pressure);
 
-        // Calculate filtered contact using 3-sample average
-        double contact_average = (fsr_contact_history[i][0] + fsr_contact_history[i][1] + fsr_contact_history[i][2]) / 3.0f;
+        // Get filtered contact state using Leg class methods
+        bool filtered_contact = legs[i].getFilteredContactState(0.7f, 0.3f);
 
-        // Hysteresis thresholds to prevent chattering
-        const double CONTACT_THRESHOLD = 0.7f; // Need 70% confidence for contact
-        const double RELEASE_THRESHOLD = 0.3f; // Need 30% confidence for release
-
-        StepPhase current_state = leg_states[i];
+        StepPhase current_state = legs[i].getStepPhase();
 
         // State transition logic with hysteresis
-        if (current_state == SWING_PHASE && contact_average > CONTACT_THRESHOLD) {
-            leg_states[i] = STANCE_PHASE;
-        } else if (current_state == STANCE_PHASE && contact_average < RELEASE_THRESHOLD) {
-            leg_states[i] = SWING_PHASE;
+        if (current_state == SWING_PHASE && filtered_contact) {
+            legs[i].setStepPhase(STANCE_PHASE);
+        } else if (current_state == STANCE_PHASE && !filtered_contact) {
+            legs[i].setStepPhase(SWING_PHASE);
         }
         // Otherwise maintain current state
 
@@ -1292,13 +1301,12 @@ void LocomotionSystem::updateLegStates() {
         // Only validate during active movement (non-zero gait phase progression)
         if (cycle_frequency > 0.0f) {
             // Check if leg should be in swing based on gait phase
-            double leg_phase = fmod(gait_phase + leg_phase_offsets[i], 1.0f);
-            bool should_be_swinging = (leg_phase > stance_duration);
+            bool should_be_swinging = legs[i].shouldBeInSwing(gait_phase, stance_duration);
 
-            if (should_be_swinging && leg_states[i] == STANCE_PHASE) {
+            if (should_be_swinging && legs[i].getStepPhase() == STANCE_PHASE) {
                 // Only override if pressure is very low (potential sensor error)
                 if (fsr.pressure < 10.0f) { // Low pressure threshold
-                    leg_states[i] = SWING_PHASE;
+                    legs[i].setStepPhase(SWING_PHASE);
                 }
             }
         }
@@ -1401,8 +1409,8 @@ bool LocomotionSystem::setLegPosition(int leg_index, const Point3D &position) {
 
     // Copy current state to temp arrays
     for (int i = 0; i < NUM_LEGS; i++) {
-        temp_leg_positions[i] = leg_positions[i];
-        temp_joint_angles[i] = joint_angles[i];
+        temp_leg_positions[i] = legs[i].getTipPosition();
+        temp_joint_angles[i] = legs[i].getJointAngles();
     }
 
     if (!pose_ctrl->setLegPosition(leg_index, position, temp_leg_positions, temp_joint_angles)) {
@@ -1822,4 +1830,76 @@ double LocomotionSystem::getCurrentServoSpeed(int leg_index, int joint_index) co
         return velocity_controller->getServoSpeed(leg_index, joint_index);
     }
     return params.default_servo_speed;
+}
+
+// ===== PHASE OFFSET MANAGEMENT METHODS =====
+
+void LocomotionSystem::setLegPhaseOffset(int leg_index, double offset) {
+    if (leg_index >= 0 && leg_index < NUM_LEGS) {
+        legs[leg_index].setPhaseOffset(offset);
+    }
+}
+
+double LocomotionSystem::getLegPhaseOffset(int leg_index) const {
+    if (leg_index >= 0 && leg_index < NUM_LEGS) {
+        return legs[leg_index].getPhaseOffset();
+    }
+    return 0.0;
+}
+
+void LocomotionSystem::setAllLegPhaseOffsets(const double offsets[NUM_LEGS]) {
+    for (int i = 0; i < NUM_LEGS; ++i) {
+        legs[i].setPhaseOffset(offsets[i]);
+    }
+}
+
+void LocomotionSystem::configureGaitPhaseOffsets(GaitType gait) {
+    // This method provides a convenient way to configure phase offsets for a specific gait
+    // without changing the current gait type
+    switch (gait) {
+    case TRIPOD_GAIT:
+        legs[0].setPhaseOffset(0.0f); // AR - Group A
+        legs[1].setPhaseOffset(0.5f); // BR - Group B
+        legs[2].setPhaseOffset(0.0f); // CR - Group A
+        legs[3].setPhaseOffset(0.5f); // CL - Group B
+        legs[4].setPhaseOffset(0.0f); // BL - Group A
+        legs[5].setPhaseOffset(0.5f); // AL - Group B
+        break;
+
+    case WAVE_GAIT:
+        legs[0].setPhaseOffset(2.0f / 6.0f); // AR: 0.333
+        legs[1].setPhaseOffset(3.0f / 6.0f); // BR: 0.500
+        legs[2].setPhaseOffset(4.0f / 6.0f); // CR: 0.667
+        legs[3].setPhaseOffset(1.0f / 6.0f); // CL: 0.167
+        legs[4].setPhaseOffset(0.0f / 6.0f); // BL: 0.000
+        legs[5].setPhaseOffset(5.0f / 6.0f); // AL: 0.833
+        break;
+
+    case RIPPLE_GAIT:
+        legs[0].setPhaseOffset(2.0f / 6.0f); // AR: 0.333
+        legs[1].setPhaseOffset(0.0f / 6.0f); // BR: 0.000
+        legs[2].setPhaseOffset(4.0f / 6.0f); // CR: 0.667
+        legs[3].setPhaseOffset(1.0f / 6.0f); // CL: 0.167
+        legs[4].setPhaseOffset(3.0f / 6.0f); // BL: 0.500
+        legs[5].setPhaseOffset(5.0f / 6.0f); // AL: 0.833
+        break;
+
+    case METACHRONAL_GAIT:
+        legs[0].setPhaseOffset(0.0f / 6.0f); // AR: 0.000
+        legs[1].setPhaseOffset(1.0f / 6.0f); // BR: 0.167
+        legs[2].setPhaseOffset(2.0f / 6.0f); // CR: 0.333
+        legs[3].setPhaseOffset(3.0f / 6.0f); // CL: 0.500
+        legs[4].setPhaseOffset(4.0f / 6.0f); // BL: 0.667
+        legs[5].setPhaseOffset(5.0f / 6.0f); // AL: 0.833
+        break;
+
+    case ADAPTIVE_GAIT:
+        legs[0].setPhaseOffset(1.0f / 8.0f); // AR: 0.125
+        legs[1].setPhaseOffset(0.0f / 8.0f); // BR: 0.000
+        legs[2].setPhaseOffset(3.0f / 8.0f); // CR: 0.375
+        legs[3].setPhaseOffset(6.0f / 8.0f); // CL: 0.750
+        legs[4].setPhaseOffset(4.0f / 8.0f); // BL: 0.500
+        legs[5].setPhaseOffset(7.0f / 8.0f); // AL: 0.875
+        break;
+    }
 }
