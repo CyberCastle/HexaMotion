@@ -26,9 +26,8 @@ class StateControllerTest {
     PoseConfiguration pose_config;
 
   public:
-    StateControllerTest() {
+    StateControllerTest() : pose_config(createDefaultParameters()) {
         setupParameters();
-        PoseConfiguration pose_config;
         locomotion = new LocomotionSystem(params);
         locomotion->initialize(&imu, &fsr, &servo, pose_config);
 
@@ -493,8 +492,8 @@ class StateControllerTest {
         state_controller->setLegTipVelocity(1, tip_velocity);
         assert_test(true, "Set leg tip velocity");
 
-        // Test getting leg state (note: returns AdvancedLegState, not LegState)
-        AdvancedLegState leg_state = state_controller->getLegState(1);
+        // Test getting leg state (note: returns LegState, not StepPhase)
+        LegState leg_state = state_controller->getLegState(1);
         assert_test(leg_state == LEG_MANUAL, "Get leg state correctly");
 
         // Return leg to walking

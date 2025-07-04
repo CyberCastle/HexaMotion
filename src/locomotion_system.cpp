@@ -18,6 +18,7 @@
 #include "math_utils.h"
 #include "pose_config_factory.h"
 #include "workspace_validator.h" // Add unified validator
+#include "walk_controller.h"
 #include <algorithm>
 #include <cmath>
 #include <vector>
@@ -241,19 +242,31 @@ bool LocomotionSystem::setLegJointAngles(int leg, const JointAngles &q) {
         }
     }
 
-    bool within_limits = q.coxa >= params.coxa_angle_limits[0] &&
-                         q.coxa <= params.coxa_angle_limits[1] &&
-                         q.femur >= params.femur_angle_limits[0] &&
-                         q.femur <= params.femur_angle_limits[1] &&
-                         q.tibia >= params.tibia_angle_limits[0] &&
-                         q.tibia <= params.tibia_angle_limits[1];
+    // Clamp angles to joint limits instead of rejecting them
+    // This is the OpenSHC approach for handling workspace edge cases
+    JointAngles clamped_angles = q;
+    clamped_angles.coxa = std::clamp(q.coxa, params.coxa_angle_limits[0], params.coxa_angle_limits[1]);
+    clamped_angles.femur = std::clamp(q.femur, params.femur_angle_limits[0], params.femur_angle_limits[1]);
+    clamped_angles.tibia = std::clamp(q.tibia, params.tibia_angle_limits[0], params.tibia_angle_limits[1]);
 
-    if (!within_limits)
-        return false;
+    // Check if clamping was needed
+    bool was_clamped = (clamped_angles.coxa != q.coxa) ||
+                      (clamped_angles.femur != q.femur) ||
+                      (clamped_angles.tibia != q.tibia);
+
+    if (was_clamped) {
+        // Debug output for joint limit clamping
+        std::cout << "[setLegJointAngles] Leg " << leg << " angles clamped:" << std::endl;
+        std::cout << "  Original: coxa=" << q.coxa << " femur=" << q.femur << " tibia=" << q.tibia << std::endl;
+        std::cout << "  Clamped:  coxa=" << clamped_angles.coxa << " femur=" << clamped_angles.femur << " tibia=" << clamped_angles.tibia << std::endl;
+        std::cout << "  Limits: coxa=[" << params.coxa_angle_limits[0] << "," << params.coxa_angle_limits[1] << "]";
+        std::cout << " femur=[" << params.femur_angle_limits[0] << "," << params.femur_angle_limits[1] << "]";
+        std::cout << " tibia=[" << params.tibia_angle_limits[0] << "," << params.tibia_angle_limits[1] << "]" << std::endl;
+    }
 
     // Update both joint angles and leg positions in a single atomic operation
-    joint_angles[leg] = q;                                   // internal state
-    leg_positions[leg] = calculateForwardKinematics(leg, q); // Update leg position based on new angles
+    joint_angles[leg] = clamped_angles;                                   // internal state
+    leg_positions[leg] = calculateForwardKinematics(leg, clamped_angles); // Update leg position based on new angles
 
     // Use velocity controller to get appropriate servo speeds
     double coxa_speed = velocity_controller ? velocity_controller->getServoSpeed(leg, 0) : params.default_servo_speed;
@@ -261,9 +274,9 @@ bool LocomotionSystem::setLegJointAngles(int leg, const JointAngles &q) {
     double tibia_speed = velocity_controller ? velocity_controller->getServoSpeed(leg, 2) : params.default_servo_speed;
 
     // Apply sign inversion/preservation per servo using params.angle_sign_* (adjust left/right or above/below servo orientation)
-    double servo_coxa = q.coxa * params.angle_sign_coxa;
-    double servo_femur = q.femur * params.angle_sign_femur;
-    double servo_tibia = q.tibia * params.angle_sign_tibia;
+    double servo_coxa = clamped_angles.coxa * params.angle_sign_coxa;
+    double servo_femur = clamped_angles.femur * params.angle_sign_femur;
+    double servo_tibia = clamped_angles.tibia * params.angle_sign_tibia;
     servo_interface->setJointAngleAndSpeed(leg, 0, servo_coxa, coxa_speed);
     servo_interface->setJointAngleAndSpeed(leg, 1, servo_femur, femur_speed);
     servo_interface->setJointAngleAndSpeed(leg, 2, servo_tibia, tibia_speed);
@@ -566,9 +579,14 @@ void LocomotionSystem::updateGaitPhase() {
 Point3D LocomotionSystem::calculateFootTrajectory(int leg_index, double phase) {
     if (!walk_ctrl)
         return Point3D();
+    // Crea un arreglo temporal de LegState y haz el mapeo desde StepPhase si es necesario
+    LegState adv_leg_states[NUM_LEGS];
+    for (int i = 0; i < NUM_LEGS; ++i) {
+        adv_leg_states[i] = LEG_WALKING; // O mapea según lógica si tienes más estados
+    }
     return walk_ctrl->footTrajectory(leg_index, phase, step_height, step_length,
                                      stance_duration, swing_duration, params.robot_height,
-                                     leg_phase_offsets, leg_states, fsr_interface, imu_interface);
+                                     leg_phase_offsets, adv_leg_states, fsr_interface, imu_interface);
 }
 
 // Forward locomotion control
@@ -1050,8 +1068,14 @@ bool LocomotionSystem::update() {
     for (int i = 0; i < NUM_LEGS; i++) {
         Point3D target_position = calculateFootTrajectory(i, gait_phase);
 
+        // Debug output for target positions
+        // std::cout << "[update] Leg " << i << " target position: (" << target_position.x << ", " << target_position.y << ", " << target_position.z << ")" << std::endl;
+
         // Compute inverse kinematics
         JointAngles target_angles = calculateInverseKinematics(i, target_position);
+
+        // Debug output for calculated angles
+        // std::cout << "[update] Leg " << i << " calculated angles: coxa=" << target_angles.coxa << " femur=" << target_angles.femur << " tibia=" << target_angles.tibia << std::endl;
 
         // Use setLegJointAngles to enforce constraints at servo level
         // This implements the CSIRO syropod approach of joint position clamping
@@ -1256,7 +1280,7 @@ void LocomotionSystem::updateLegStates() {
         const double CONTACT_THRESHOLD = 0.7f; // Need 70% confidence for contact
         const double RELEASE_THRESHOLD = 0.3f; // Need 30% confidence for release
 
-        LegState current_state = leg_states[i];
+        StepPhase current_state = leg_states[i];
 
         // State transition logic with hysteresis
         if (current_state == SWING_PHASE && contact_average > CONTACT_THRESHOLD) {

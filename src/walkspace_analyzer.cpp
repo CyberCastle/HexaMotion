@@ -57,7 +57,7 @@ void WalkspaceAnalyzer::generateWalkspace() {
             min_radius = std::min(min_radius, projected_reach);
         }
 
-        walkspace_map_[bearing] = std::max(min_radius, 0.0f);
+        walkspace_map_[bearing] = std::max(min_radius, 0.0);
     }
 
     // Ensure symmetry (OpenSHC equivalent)

@@ -5,13 +5,43 @@
 #include "terrain_adaptation.h"
 #include "velocity_limits.h"
 #include "workspace_validator.h"
+#include "math_utils.h"
+#include "leg_stepper.h"
 #include <memory>
+#include <map>
 
 /**
- * @brief High level walking controller handling gaits and terrain adaptation.
+ * @brief Leg states for state machine control (OpenSHC equivalent)
+ */
+enum LegState {
+    LEG_WALKING,                ///< The leg is in a 'walking' state - participates in walking cycle
+    LEG_MANUAL,                 ///< The leg is in a 'manual' state - able to move via manual manipulation inputs
+    LEG_STATE_COUNT,            ///< Misc enum defining number of LegStates
+    LEG_WALKING_TO_MANUAL = -1, ///< The leg is in 'walking to manual' state - transitioning from 'walking' to 'manual' state
+    LEG_MANUAL_TO_WALKING = -2, ///< The leg is in 'manual to walking' state - transitioning from 'manual' to 'walking' state
+};
+
+/**
+ * @brief Step cycle timing parameters (OpenSHC equivalent)
+ */
+struct StepCycle {
+    double frequency_;      ///< Step frequency in Hz
+    int period_;           ///< Total step cycle length in iterations
+    int swing_period_;     ///< Swing period length in iterations
+    int stance_period_;    ///< Stance period length in iterations
+    int stance_end_;       ///< Iteration when stance period ends
+    int swing_start_;      ///< Iteration when swing period starts
+    int swing_end_;        ///< Iteration when swing period ends
+    int stance_start_;     ///< Iteration when stance period starts
+};
+
+// WalkState and StepState are defined above
+
+/**
+ * @brief Complete walking controller with OpenSHC architecture
  */
 class WalkController {
-  public:
+public:
     /**
      * @brief Construct a walk controller.
      * @param model Reference to the robot model used for kinematics.
@@ -19,147 +49,140 @@ class WalkController {
     explicit WalkController(RobotModel &model);
 
     /**
-     * @brief Select the active gait type.
-     * @param gait Desired gait enumeration value.
-     * @return True if the gait was set successfully.
+     * @brief Initialize the walk controller with default parameters
      */
+    void init();
+
+    /**
+     * @brief Generate walkspace for the robot
+     */
+    void generateWalkspace();
+
+    /**
+     * @brief Generate velocity limits for the current step cycle
+     */
+    void generateLimits(StepCycle step);
+
+    /**
+     * @brief Generate step cycle timing parameters
+     */
+    StepCycle generateStepCycle(bool set_step_cycle = true);
+
+    /**
+     * @brief Get velocity limit for a given bearing
+     */
+    double getLimit(const Point3D& linear_velocity_input, double angular_velocity_input,
+                   const std::map<int, double>& limit);
+
+    /**
+     * @brief Update walking with velocity commands (OpenSHC equivalent)
+     */
+    void updateWalk(const Point3D& linear_velocity_input, double angular_velocity_input);
+
+    /**
+     * @brief Update walk plane estimation
+     */
+    void updateWalkPlane();
+
+    /**
+     * @brief Calculate odometry for the given time period
+     */
+    Point3D calculateOdometry(double time_period);
+
+    /**
+     * @brief Estimate gravity vector
+     */
+    Point3D estimateGravity() const;
+
+    // Accessors
+    StepCycle getStepCycle() const { return step_; }
+    double getTimeDelta() const { return time_delta_; }
+    double getStepClearance() const { return step_clearance_; }
+    double getStepDepth() const { return step_depth_; }
+    double getBodyClearance() const { return body_clearance_; }
+    Point3D getDesiredLinearVelocity() const { return desired_linear_velocity_; }
+    double getDesiredAngularVelocity() const { return desired_angular_velocity_; }
+    WalkState getWalkState() const { return walk_state_; }
+    std::map<int, double> getWalkspace() const { return walkspace_; }
+    Point3D getWalkPlane() const { return walk_plane_; }
+    Point3D getWalkPlaneNormal() const { return walk_plane_normal_; }
+    Point3D getOdometryIdeal() const { return odometry_ideal_; }
+    Point3D getModelCurrentPose() const;
+    std::shared_ptr<LegStepper> getLegStepper(int leg_index) const;
+
+    // Modifiers
+    void setPoseState(int state) { pose_state_ = state; }
+    void setLinearSpeedLimitMap(const std::map<int, double>& limit_map) { max_linear_speed_ = limit_map; }
+    void setAngularSpeedLimitMap(const std::map<int, double>& limit_map) { max_angular_speed_ = limit_map; }
+    void setLinearAccelerationLimitMap(const std::map<int, double>& limit_map) { max_linear_acceleration_ = limit_map; }
+    void setAngularAccelerationLimitMap(const std::map<int, double>& limit_map) { max_angular_acceleration_ = limit_map; }
+    void setRegenerateWalkspace() { regenerate_walkspace_ = true; }
+
+    // Legacy interface compatibility
     bool setGaitType(GaitType gait);
-
-    /**
-     * @brief Plan the next gait sequence given velocity commands.
-     * @param vx Linear velocity in X (m/s).
-     * @param vy Linear velocity in Y (m/s).
-     * @param omega Angular velocity around Z (rad/s).
-     * @return True if planning succeeded.
-     */
     bool planGaitSequence(double vx, double vy, double omega);
-
-    /**
-     * @brief Update internal gait phase progression.
-     * @param dt Time step in seconds.
-     */
     void updateGaitPhase(double dt);
-
-    // Gait phase management
     double getGaitPhase() const { return gait_phase; }
-
-    // Velocity limiting methods
-    /**
-     * @brief Get velocity limits for a given bearing.
-     * @param bearing_degrees Direction of travel in degrees.
-     * @return Calculated limit values.
-     */
-    VelocityLimits::LimitValues getVelocityLimits(double bearing_degrees = 0.0f) const;
-
-    /**
-     * @brief Apply velocity limits to a commanded velocity vector.
-     * @param vx Desired X velocity.
-     * @param vy Desired Y velocity.
-     * @param omega Desired angular velocity.
-     * @return Limited velocity values.
-     */
-    VelocityLimits::LimitValues applyVelocityLimits(double vx, double vy, double omega) const;
-
-    /**
-     * @brief Validate a velocity command against computed limits.
-     * @param vx Commanded X velocity.
-     * @param vy Commanded Y velocity.
-     * @param omega Commanded angular velocity.
-     * @return True if the command is within limits.
-     */
-    bool validateVelocityCommand(double vx, double vy, double omega) const;
-
-    /**
-     * @brief Update velocity limit tables for new gait parameters.
-     * @param frequency Step frequency in Hz.
-     * @param stance_ratio Ratio of stance phase (0-1).
-     * @param time_to_max_stride Time to reach maximum stride length.
-     */
-    void updateVelocityLimits(double frequency, double stance_ratio, double time_to_max_stride = 2.0f);
-
-    // Velocity limiting configuration
-    /** Set workspace safety margin used for velocity limiting. */
-    void setVelocitySafetyMargin(double margin);
-    /** Set scaling factor for angular velocity commands. */
-    void setAngularVelocityScaling(double scaling);
-    /** Retrieve the current workspace configuration. */
-    VelocityLimits::WorkspaceConfig getWorkspaceConfig() const;
-
-    /**
-     * @brief Calculate foot trajectory for a single leg.
-     * @param leg Index of the leg (0-5).
-     * @param phase Current gait phase (0-1).
-     * @param step_height Step height in mm.
-     * @param step_length Step length in mm.
-     * @param stance_duration Stance phase duration fraction.
-     * @param swing_duration Swing phase duration fraction.
-     * @param robot_height Current body height.
-     * @param leg_phase_offsets Phase offset array for each leg.
-     * @param leg_states Array of leg state values.
-     * @param fsr Interface to FSR sensors.
-     * @param imu Interface to IMU.
-     * @return Calculated foot position in world frame.
-     */
     Point3D footTrajectory(int leg, double phase, double step_height, double step_length,
                            double stance_duration, double swing_duration, double robot_height,
                            const double leg_phase_offsets[NUM_LEGS], LegState (&leg_states)[NUM_LEGS],
                            IFSRInterface *fsr, IIMUInterface *imu);
 
+    // Velocity limiting methods
+    VelocityLimits::LimitValues getVelocityLimits(double bearing_degrees = 0.0f) const;
+    VelocityLimits::LimitValues applyVelocityLimits(double vx, double vy, double omega) const;
+    bool validateVelocityCommand(double vx, double vy, double omega) const;
+    void updateVelocityLimits(double frequency, double stance_ratio, double time_to_max_stride = 2.0f);
+    void setVelocitySafetyMargin(double margin);
+    void setAngularVelocityScaling(double scaling);
+    VelocityLimits::WorkspaceConfig getWorkspaceConfig() const;
+
     // Terrain adaptation methods
-    /**
-     * @brief Enable rough terrain mode with advanced features
-     * @param enabled Whether to enable rough terrain mode
-     * @param force_normal_touchdown Force touchdown normal to terrain
-     * @param proactive_adaptation Use proactive terrain adaptation
-     */
-    void enableRoughTerrainMode(bool enabled, bool force_normal_touchdown = true,
-                                bool proactive_adaptation = true);
-
-    /**
-     * @brief Enable force normal touchdown mode
-     * @param enabled Whether to force normal touchdown to walk plane
-     */
+    void enableRoughTerrainMode(bool enabled, bool force_normal_touchdown = true, bool proactive_adaptation = true);
     void enableForceNormalTouchdown(bool enabled);
-
-    /**
-     * @brief Enable gravity-aligned tips mode
-     * @param enabled Whether tips should align with gravity
-     */
     void enableGravityAlignedTips(bool enabled);
-
-    /** Set an external target for a specific leg. */
     void setExternalTarget(int leg_index, const TerrainAdaptation::ExternalTarget &target);
-    /** Set an external default position for a leg. */
     void setExternalDefault(int leg_index, const TerrainAdaptation::ExternalTarget &default_pos);
-
-    // Terrain state accessors
-    /**
-     * @brief Get current walk plane estimation
-     * @return Current walk plane structure
-     */
-    const TerrainAdaptation::WalkPlane &getWalkPlane() const;
-
-    /** Retrieve the external target for a leg if available. */
+    const TerrainAdaptation::WalkPlane &getTerrainWalkPlane() const;
     const TerrainAdaptation::ExternalTarget &getExternalTarget(int leg_index) const;
-    /** Get the detected step plane for a specific leg. */
     const TerrainAdaptation::StepPlane &getStepPlane(int leg_index) const;
-    /** Check if touchdown detection is active for a leg. */
     bool hasTouchdownDetection(int leg_index) const;
-
-    /**
-     * @brief Estimate gravity vector from IMU
-     * @return Estimated gravity vector
-     */
-    Eigen::Vector3d estimateGravity() const;
-
-    /**
-     * @brief Get current velocity commands for gait pattern decisions
-     * @return Current velocity values stored from last planGaitSequence call
-     */
     const VelocityLimits::LimitValues &getCurrentVelocities() const;
 
-  private:
+private:
     RobotModel &model;
+
+    // OpenSHC architecture components
+    StepCycle step_;
+    double time_delta_;
+    double step_clearance_;
+    double step_depth_;
+    double body_clearance_;
+    Point3D desired_linear_velocity_;
+    double desired_angular_velocity_;
+    WalkState walk_state_;
+    std::map<int, double> walkspace_;
+    Point3D walk_plane_;
+    Point3D walk_plane_normal_;
+    Point3D odometry_ideal_;
+    int pose_state_;
+
+    // Velocity limits
+    std::map<int, double> max_linear_speed_;
+    std::map<int, double> max_angular_speed_;
+    std::map<int, double> max_linear_acceleration_;
+    std::map<int, double> max_angular_acceleration_;
+
+    // State tracking
+    bool regenerate_walkspace_;
+    int legs_at_correct_phase_;
+    int legs_completed_first_step_;
+    bool return_to_default_attempted_;
+
+    // Leg steppers
+    std::vector<std::shared_ptr<LegStepper>> leg_steppers_;
+
+    // Legacy compatibility
     GaitType current_gait;
     double gait_phase;
 

@@ -128,7 +128,7 @@ enum GaitType {
     ADAPTIVE_GAIT
 };
 
-enum LegState {
+enum StepPhase {
     STANCE_PHASE,
     SWING_PHASE,
     LIFT_PHASE,

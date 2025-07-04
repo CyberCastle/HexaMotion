@@ -1,4 +1,4 @@
-#include "../src/HexaModel.h" // for LegState enum
+#include "../src/HexaModel.h" // for StepPhase enum
 #include "../src/admittance_controller.h"
 #include "test_stubs.h"
 #include <cassert>
@@ -21,7 +21,7 @@ int main() {
     Point3D target(0, 0, 0);
     Point3D current(0, 0, 0);
     assert(ac.maintainOrientation(target, current, 0.1f));
-    LegState states[NUM_LEGS];
+    StepPhase states[NUM_LEGS];
     Point3D legs[NUM_LEGS];
     for (int i = 0; i < NUM_LEGS; i++) {
         states[i] = STANCE_PHASE;

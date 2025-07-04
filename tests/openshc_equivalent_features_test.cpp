@@ -230,7 +230,7 @@ void testAdmittanceControlWithODE() {
 
         // Test dynamic stiffness
         controller.setDynamicStiffness(true, 0.5f, 1.5f);
-        LegState leg_states[NUM_LEGS];
+        StepPhase leg_states[NUM_LEGS];
         Point3D leg_positions[NUM_LEGS];
 
         // Set one leg to swing phase
@@ -329,7 +329,7 @@ void testRoughTerrainMode() {
 
     // Test terrain-adapted foot trajectory
     double leg_phase_offsets[NUM_LEGS] = {0.0f, 0.33f, 0.67f, 0.0f, 0.33f, 0.67f};
-    LegState leg_states[NUM_LEGS];
+    StepPhase leg_states[NUM_LEGS];
 
     for (int i = 0; i < NUM_LEGS; i++) {
         leg_states[i] = (i < 3) ? STANCE_PHASE : SWING_PHASE;

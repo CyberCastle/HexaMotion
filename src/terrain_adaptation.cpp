@@ -117,13 +117,13 @@ bool TerrainAdaptation::hasTouchdownDetection(int leg_index) const {
     return false;
 }
 
-Point3D TerrainAdaptation::adaptTrajectoryForTerrain(int leg_index, const Point3D &base_trajectory,
-                                                     LegState leg_state, double swing_progress) {
+Point3D TerrainAdaptation::adaptTrajectoryForTerrain(int leg_index, const Point3D &trajectory,
+                                                     StepPhase leg_state, double swing_progress) {
     if (!rough_terrain_mode_ || leg_index < 0 || leg_index >= NUM_LEGS) {
-        return base_trajectory;
+        return trajectory;
     }
 
-    Point3D adapted_trajectory = base_trajectory;
+    Point3D adapted_trajectory = trajectory;
 
     // Apply external target if defined
     if (external_targets_[leg_index].defined && leg_state == SWING_PHASE) {
@@ -132,9 +132,9 @@ Point3D TerrainAdaptation::adaptTrajectoryForTerrain(int leg_index, const Point3
 
         // Interpolate towards external target
         double blend_factor = swing_progress;
-        adapted_trajectory.x = base_trajectory.x * (DEFAULT_ANGULAR_SCALING - blend_factor) + target.position.x * blend_factor;
-        adapted_trajectory.y = base_trajectory.y * (DEFAULT_ANGULAR_SCALING - blend_factor) + target.position.y * blend_factor;
-        adapted_trajectory.z = base_trajectory.z * (DEFAULT_ANGULAR_SCALING - blend_factor) + target.position.z * blend_factor;
+        adapted_trajectory.x = trajectory.x * (DEFAULT_ANGULAR_SCALING - blend_factor) + target.position.x * blend_factor;
+        adapted_trajectory.y = trajectory.y * (DEFAULT_ANGULAR_SCALING - blend_factor) + target.position.y * blend_factor;
+        adapted_trajectory.z = trajectory.z * (DEFAULT_ANGULAR_SCALING - blend_factor) + target.position.z * blend_factor;
 
         // Apply swing clearance
         if (swing_progress > 0.2 && swing_progress < 0.8) {

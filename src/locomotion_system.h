@@ -53,6 +53,9 @@
 #include <ArduinoEigen.h>
 #include <math.h>
 
+// Forward declarations
+class WalkController;
+
 // Main locomotion system class
 class LocomotionSystem {
   public:
@@ -83,7 +86,7 @@ class LocomotionSystem {
     Eigen::Vector3d body_orientation;   // Body orientation [roll,pitch,yaw]
     Point3D leg_positions[NUM_LEGS];    // Leg positions
     JointAngles joint_angles[NUM_LEGS]; // Joint angles
-    LegState leg_states[NUM_LEGS];      // Leg states
+    StepPhase leg_states[NUM_LEGS];      // Leg states
 
     // Gait control
     GaitType current_gait;
@@ -258,7 +261,7 @@ class LocomotionSystem {
     IServoInterface *getServoInterface() { return servo_interface; }
     Eigen::Vector3d getBodyPosition() const { return body_position; }
     Eigen::Vector3d getBodyOrientation() const { return body_orientation; }
-    LegState getLegState(int leg_index) const { return leg_states[leg_index]; }
+    StepPhase getLegState(int leg_index) const { return leg_states[leg_index]; }
     JointAngles getJointAngles(int leg_index) const { return joint_angles[leg_index]; }
     Point3D getLegPosition(int leg_index) const { return leg_positions[leg_index]; }
     double getStepHeight() const { return step_height; }

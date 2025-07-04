@@ -89,7 +89,7 @@ static void printAngles(int step, LocomotionSystem &sys, double phase, const std
 
     // Show which legs are in stance/swing
     for (int leg = 0; leg < NUM_LEGS; ++leg) {
-        LegState state = sys.getLegState(leg);
+        StepPhase state = sys.getLegState(leg);
         char symbol = (state == STANCE_PHASE) ? 'S' : 'W';
         std::cout << symbol;
     }
@@ -222,37 +222,37 @@ static void printGaitPattern(LocomotionSystem &sys, const std::string &current_g
     if (current_gait == "TRIPOD") {
         std::cout << "Group A (L1,L3,L5): ";
         for (int leg : {0, 2, 4}) {
-            LegState state = sys.getLegState(leg);
+            StepPhase state = sys.getLegState(leg);
             std::cout << (state == STANCE_PHASE ? "▓▓" : "░░");
         }
         std::cout << std::endl
                   << "Group B (L2,L4,L6): ";
         for (int leg : {1, 3, 5}) {
-            LegState state = sys.getLegState(leg);
+            StepPhase state = sys.getLegState(leg);
             std::cout << (state == STANCE_PHASE ? "▓▓" : "░░");
         }
     } else if (current_gait == "WAVE") {
         std::cout << "Wave sequence (BL→CL→AR→BR→CR→AL): ";
         for (int leg = 0; leg < NUM_LEGS; ++leg) {
-            LegState state = sys.getLegState(leg);
+            StepPhase state = sys.getLegState(leg);
             std::cout << (state == STANCE_PHASE ? "▓" : "░");
         }
     } else if (current_gait == "RIPPLE") {
         std::cout << "Ripple sequence (BR→CL→AR→BL→CR→AL): ";
         for (int leg = 0; leg < NUM_LEGS; ++leg) {
-            LegState state = sys.getLegState(leg);
+            StepPhase state = sys.getLegState(leg);
             std::cout << (state == STANCE_PHASE ? "▓" : "░");
         }
     } else if (current_gait == "METACHRONAL") {
         std::cout << "Metachronal wave (AR→BR→CR→CL→BL→AL): ";
         for (int leg = 0; leg < NUM_LEGS; ++leg) {
-            LegState state = sys.getLegState(leg);
+            StepPhase state = sys.getLegState(leg);
             std::cout << (state == STANCE_PHASE ? "▓" : "░");
         }
     } else if (current_gait == "ADAPTIVE") {
         std::cout << "Adaptive pattern (terrain-responsive): ";
         for (int leg = 0; leg < NUM_LEGS; ++leg) {
-            LegState state = sys.getLegState(leg);
+            StepPhase state = sys.getLegState(leg);
             std::cout << (state == STANCE_PHASE ? "▓" : "░");
         }
     }
@@ -315,7 +315,7 @@ static void printDetailedAngleVisualization(LocomotionSystem &sys, int step, con
 
     for (int leg = 0; leg < NUM_LEGS; ++leg) {
         JointAngles q = sys.getJointAngles(leg);
-        LegState state = sys.getLegState(leg);
+        StepPhase state = sys.getLegState(leg);
         char leg_symbol = (state == STANCE_PHASE) ? 'S' : 'W';
 
         std::cout << std::endl
@@ -377,7 +377,7 @@ static void printAngleChangesSummary(LocomotionSystem &sys, const JointAngles pr
 
     for (int leg = 0; leg < NUM_LEGS; ++leg) {
         JointAngles q = sys.getJointAngles(leg);
-        LegState state = sys.getLegState(leg);
+        StepPhase state = sys.getLegState(leg);
 
         double coxa_diff = q.coxa - prev[leg].coxa;
         double femur_diff = q.femur - prev[leg].femur;
@@ -412,7 +412,7 @@ static void printCompactAngleStatus(LocomotionSystem &sys, int step, const std::
 
     for (int leg = 0; leg < NUM_LEGS; ++leg) {
         JointAngles q = sys.getJointAngles(leg);
-        LegState state = sys.getLegState(leg);
+        StepPhase state = sys.getLegState(leg);
         char symbol = (state == STANCE_PHASE) ? 'S' : 'W';
 
         std::cout << "L" << (leg + 1) << symbol << "(";
@@ -496,7 +496,7 @@ int main() {
 
     // Locomotion system
     LocomotionSystem sys(p);
-    PoseConfiguration pose_config;
+    PoseConfiguration pose_config(p);
     assert(sys.initialize(&imu, &fsr, &servos, pose_config));
     assert(sys.calibrateSystem());
     assert(sys.setGaitType(TRIPOD_GAIT));
@@ -510,7 +510,7 @@ int main() {
     state_cfg.enable_startup_sequence = false;
     state_cfg.transition_timeout = 10.0f;
     StateController controller(sys, state_cfg);
-    assert(controller.initialize());
+    assert(controller.initialize(pose_config));
     controller.requestSystemState(SYSTEM_OPERATIONAL);
     controller.requestRobotState(ROBOT_RUNNING);
     controller.setDesiredVelocity(Eigen::Vector2d(400.0f, 0.0f), 0.0f);

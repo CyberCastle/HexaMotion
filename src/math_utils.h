@@ -31,6 +31,11 @@ double distance(const Point3D &p1, const Point3D &p2);
 /** Calculate perpendicular distance from point to line segment. */
 double pointToLineDistance(const Point3D &point, const Point3D &line_start, const Point3D &line_end);
 
+/** Cross product of two 3D vectors. */
+Point3D crossProduct(const Point3D &a, const Point3D &b);
+/** Project a vector onto another vector. */
+Point3D projectVector(const Point3D &vector, const Point3D &onto);
+
 /** Rotation matrix about X axis (angle in radians). */
 Eigen::Matrix3d rotationMatrixX(double angle);
 /** Rotation matrix about Y axis (angle in radians). */
@@ -96,9 +101,9 @@ inline T cubicBezier(const T *points, double t) {
 template <class T>
 inline T cubicBezierDot(const T *points, double t) {
     double s = 1.0 - t;
-    return 3.0 * s * s * (points[1] - points[0]) +
-           6.0 * s * t * (points[2] - points[1]) +
-           3.0 * t * t * (points[3] - points[2]);
+    return (points[1] - points[0]) * (3.0 * s * s) +
+           (points[2] - points[1]) * (6.0 * s * t) +
+           (points[3] - points[2]) * (3.0 * t * t);
 }
 
 /**
@@ -120,10 +125,10 @@ inline T quarticBezier(const T *points, double t) {
 template <class T>
 inline T quarticBezierDot(const T *points, double t) {
     double s = 1.0 - t;
-    return 4.0 * s * s * s * (points[1] - points[0]) +
-           12.0 * s * s * t * (points[2] - points[1]) +
-           12.0 * s * t * t * (points[3] - points[2]) +
-           4.0 * t * t * t * (points[4] - points[3]);
+    return (points[1] - points[0]) * (4.0 * s * s * s) +
+           (points[2] - points[1]) * (12.0 * s * s * t) +
+           (points[3] - points[2]) * (12.0 * s * t * t) +
+           (points[4] - points[3]) * (4.0 * t * t * t);
 }
 
 /**

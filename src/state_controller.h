@@ -1,11 +1,13 @@
 #ifndef STATE_CONTROLLER_H
 #define STATE_CONTROLLER_H
 
+class LocomotionSystem;
+
 #include "HexaModel.h"
+#include "walk_controller.h"
 #include "admittance_controller.h"
 #include "locomotion_system.h"
 #include "pose_controller.h"
-#include "walk_controller.h"
 #include <Arduino.h>
 #include <ArduinoEigen.h>
 #include <memory>
@@ -36,39 +38,6 @@ enum RobotState {
     ROBOT_STATE_COUNT,  ///< Misc enum defining number of Robot States
     ROBOT_UNKNOWN = -1, ///< The robot is in an initial 'unknown' state, controller will estimate an actual state from it
     ROBOT_OFF = -2,     ///< The robot is in 'off' state. Only used as alternative to 'running' state for direct start up
-};
-
-////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-/// Designation for potential walk controller walk cycle states.
-////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-enum WalkState {
-    WALK_STARTING,    ///< The walk controller cycle is in 'starting' state (transitioning from 'stopped' to 'moving')
-    WALK_MOVING,      ///< The walk controller cycle is in a 'moving' state (the primary walking state)
-    WALK_STOPPING,    ///< The walk controller cycle is in a 'stopping' state (transitioning from 'moving' to 'stopped')
-    WALK_STOPPED,     ///< The walk controller cycle is in a 'stopped' state (state whilst velocity input is zero)
-    WALK_STATE_COUNT, ///< Misc enum defining number of Walk States
-};
-
-////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-/// Designation for potential individual leg step cycle states.
-////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-enum StepState {
-    STEP_SWING,        ///< The leg step cycle is in 'swing' state, the forward 'in air' progression of the step cycle
-    STEP_STANCE,       ///< The leg step cycle is in 'stance' state, the backward 'on ground' regression of the step cycle
-    STEP_FORCE_STANCE, ///< State used to force a 'stance' state in non-standard instances
-    STEP_FORCE_STOP,   ///< State used to force the step cycle to stop iterating
-    STEP_STATE_COUNT,  ///< Misc enum defining number of Step States
-};
-
-////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-/// Designation for potential leg states.
-////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-enum AdvancedLegState {
-    LEG_WALKING,                ///< The leg is in a 'walking' state - participates in walking cycle
-    LEG_MANUAL,                 ///< The leg is in a 'manual' state - able to move via manual manipulation inputs
-    LEG_STATE_COUNT,            ///< Misc enum defining number of LegStates
-    LEG_WALKING_TO_MANUAL = -1, ///< The leg is in 'walking to manual' state - transitioning from 'walking' to 'manual' state
-    LEG_MANUAL_TO_WALKING = -2, ///< The leg is in 'manual to walking' state - transitioning from 'manual' to 'walking' state
 };
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -324,15 +293,15 @@ class StateController {
     /**
      * @brief Set the cruise control mode.
      * @param mode Desired cruise control mode
-     * @param velocity Cruise velocity (for CRUISE_CONTROL_ON mode)
+     * @param velocity Initial velocity for cruise control
      * @return True if mode change successful
      */
     bool setCruiseControlMode(CruiseControlMode mode, const Eigen::Vector3d &velocity = Eigen::Vector3d::Zero());
 
     /**
-     * @brief Set pose reset mode.
+     * @brief Set the pose reset mode.
      * @param mode Desired pose reset mode
-     * @return True if mode was set successfully
+     * @return True if mode change successful
      */
     bool setPoseResetMode(PoseResetMode mode);
 
@@ -341,25 +310,25 @@ class StateController {
     // ==============================
 
     /**
-     * @brief Set the state of a specific leg.
-     * @param leg_index Index of the leg (0-5)
-     * @param state Desired leg state
-     * @return True if leg state change successful
-     */
-    bool setLegState(int leg_index, AdvancedLegState state);
-
-    /**
      * @brief Get the state of a specific leg.
      * @param leg_index Index of the leg (0-5)
      * @return Current leg state
      */
-    AdvancedLegState getLegState(int leg_index) const;
+    LegState getLegState(int leg_index) const;
 
     /**
      * @brief Get the number of legs currently in manual mode.
      * @return Number of manually controlled legs
      */
     int getManualLegCount() const;
+
+    /**
+     * @brief Set the state of a specific leg.
+     * @param leg_index Index of the leg (0-5)
+     * @param state Desired leg state
+     * @return True if leg state change successful
+     */
+    bool setLegState(int leg_index, LegState state);
 
     // ==============================
     // VELOCITY AND POSE CONTROL
@@ -499,7 +468,7 @@ class StateController {
     RobotState desired_robot_state_;
 
     // Leg states
-    AdvancedLegState leg_states_[NUM_LEGS];
+    LegState leg_states_[NUM_LEGS];
     int manual_leg_count_;
 
     // Transition management

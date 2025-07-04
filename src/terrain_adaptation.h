@@ -206,13 +206,13 @@ class TerrainAdaptation {
     /**
      * @brief Adapt foot trajectory for terrain-aware stepping
      * @param leg_index Leg index (0-5)
-     * @param base_trajectory Base trajectory from gait controller
+     * @param trajectory Base trajectory from gait controller
      * @param leg_state Current leg state
      * @param swing_progress Swing phase progress (0-1)
      * @return Terrain-adapted trajectory
      */
-    Point3D adaptTrajectoryForTerrain(int leg_index, const Point3D &base_trajectory,
-                                      LegState leg_state, double swing_progress);
+    Point3D adaptTrajectoryForTerrain(int leg_index, const Point3D &trajectory,
+                                     StepPhase leg_state, double swing_progress);
 
     /**
      * @brief Check if target position is reachable within terrain constraints

@@ -147,7 +147,7 @@ class AdmittanceController {
      * @param leg_positions Current leg positions
      * @param step_clearance Current step clearance
      */
-    void updateStiffness(const LegState leg_states[NUM_LEGS],
+    void updateStiffness(const StepPhase leg_states[NUM_LEGS],
                          const Point3D leg_positions[NUM_LEGS],
                          double step_clearance);
 
@@ -198,7 +198,7 @@ class AdmittanceController {
      * @param leg_states Leg state for each leg.
      * @return True if the robot is considered stable.
      */
-    bool checkStability(const Point3D leg_pos[NUM_LEGS], const LegState leg_states[NUM_LEGS]);
+    bool checkStability(const Point3D leg_pos[NUM_LEGS], const StepPhase leg_states[NUM_LEGS]);
 
   private:
     void selectIntegrationMethod();
@@ -222,7 +222,7 @@ class AdmittanceController {
     double current_time_;
 
     // Dynamic stiffness calculation
-    double calculateStiffnessScale(int leg_index, LegState leg_state,
+    double calculateStiffnessScale(int leg_index, StepPhase leg_state,
                                   const Point3D &leg_position);
     void updateAdjacentLegStiffness(int swing_leg_index, double load_scaling);
 };

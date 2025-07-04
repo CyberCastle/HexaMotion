@@ -88,7 +88,7 @@ static void printAngles(int step, LocomotionSystem &sys, double phase) {
 
     // Show which legs are in stance/swing
     for (int leg = 0; leg < NUM_LEGS; ++leg) {
-        LegState state = sys.getLegState(leg);
+        StepPhase state = sys.getLegState(leg);
         char symbol = (state == STANCE_PHASE) ? 'S' : 'W';
         std::cout << symbol;
     }
@@ -103,7 +103,7 @@ static void printLegStateVisualization(LocomotionSystem &sys) {
     std::cout << "  ";
 
     for (int leg = 0; leg < NUM_LEGS; ++leg) {
-        LegState state = sys.getLegState(leg);
+        StepPhase state = sys.getLegState(leg);
         if (state == STANCE_PHASE) {
             std::cout << "[S]  "; // Stance - supporting ground
         } else {
@@ -146,7 +146,7 @@ static void printServoAngleGraph(LocomotionSystem &sys, int step) {
 
     for (int leg = 0; leg < NUM_LEGS; ++leg) {
         JointAngles q = sys.getJointAngles(leg);
-        LegState state = sys.getLegState(leg);
+        StepPhase state = sys.getLegState(leg);
         char leg_symbol = (state == STANCE_PHASE) ? 'S' : 'W';
 
         // Coxa angle visualization
@@ -192,7 +192,7 @@ static void printTripodGaitPattern(LocomotionSystem &sys, double phase) {
 
     // Group A legs (1, 3, 5) - first tripod
     for (int leg : {0, 2, 4}) {
-        LegState state = sys.getLegState(leg);
+        StepPhase state = sys.getLegState(leg);
         if (state == STANCE_PHASE) {
             std::cout << "▓▓"; // Stance phase - on ground
         } else {
@@ -205,7 +205,7 @@ static void printTripodGaitPattern(LocomotionSystem &sys, double phase) {
 
     // Group B legs (2, 4, 6) - second tripod
     for (int leg : {1, 3, 5}) {
-        LegState state = sys.getLegState(leg);
+        StepPhase state = sys.getLegState(leg);
         if (state == STANCE_PHASE) {
             std::cout << "▓▓"; // Stance phase - on ground
         } else {
@@ -248,7 +248,7 @@ static void printDetailedRobotStatus(LocomotionSystem &sys, double distance_cove
     // Show active servo count
     int active_servos = 0;
     for (int leg = 0; leg < NUM_LEGS; ++leg) {
-        LegState state = sys.getLegState(leg);
+        StepPhase state = sys.getLegState(leg);
         if (state == SWING_PHASE)
             active_servos += 3; // 3 servos per leg in swing
     }

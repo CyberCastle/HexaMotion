@@ -1,4 +1,5 @@
 #include "state_controller.h"
+#include "locomotion_system.h"
 #include "hexamotion_constants.h"
 #include "pose_config_factory.h"
 
@@ -98,15 +99,15 @@ std::string toString(CruiseControlMode mode) {
     }
 }
 
-std::string toString(AdvancedLegState state) {
+std::string toString(LegState state) {
     switch (state) {
-    case AdvancedLegState::LEG_WALKING:
+    case LegState::LEG_WALKING:
         return "LEG_WALKING";
-    case AdvancedLegState::LEG_MANUAL:
+    case LegState::LEG_MANUAL:
         return "LEG_MANUAL";
-    case AdvancedLegState::LEG_WALKING_TO_MANUAL:
+    case LegState::LEG_WALKING_TO_MANUAL:
         return "LEG_WALKING_TO_MANUAL";
-    case AdvancedLegState::LEG_MANUAL_TO_WALKING:
+    case LegState::LEG_MANUAL_TO_WALKING:
         return "LEG_MANUAL_TO_WALKING";
     default:
         return "UNKNOWN";
@@ -140,7 +141,7 @@ StateController::StateController(LocomotionSystem &locomotion, const StateMachin
 
     // Initialize leg states
     for (int i = 0; i < NUM_LEGS; i++) {
-        leg_states_[i] = AdvancedLegState::LEG_WALKING;
+        leg_states_[i] = LegState::LEG_WALKING;
         leg_tip_velocities_[i] = Eigen::Vector3d::Zero();
     }
 
@@ -370,7 +371,7 @@ bool StateController::setPoseResetMode(PoseResetMode mode) {
 // LEG CONTROL
 // ==============================
 
-bool StateController::setLegState(int leg_index, AdvancedLegState state) {
+bool StateController::setLegState(int leg_index, LegState state) {
     if (leg_index < 0 || leg_index >= NUM_LEGS) {
         setError("Invalid leg index: " + toArduinoString(toString(leg_index)));
         return false;
@@ -382,7 +383,7 @@ bool StateController::setLegState(int leg_index, AdvancedLegState state) {
     }
 
     // Check manual leg limit
-    if (state == AdvancedLegState::LEG_MANUAL && leg_states_[leg_index] != AdvancedLegState::LEG_MANUAL) {
+    if (state == LegState::LEG_MANUAL && leg_states_[leg_index] != LegState::LEG_MANUAL) {
         if (manual_leg_count_ >= config_.max_manual_legs) {
             setError("Maximum number of manual legs (" + toArduinoString(toString(config_.max_manual_legs)) + ") already reached");
             return false;
@@ -390,9 +391,9 @@ bool StateController::setLegState(int leg_index, AdvancedLegState state) {
     }
 
     // Update manual leg count
-    if (leg_states_[leg_index] == AdvancedLegState::LEG_MANUAL && state != AdvancedLegState::LEG_MANUAL) {
+    if (leg_states_[leg_index] == LegState::LEG_MANUAL && state != LegState::LEG_MANUAL) {
         manual_leg_count_--;
-    } else if (leg_states_[leg_index] != AdvancedLegState::LEG_MANUAL && state == AdvancedLegState::LEG_MANUAL) {
+    } else if (leg_states_[leg_index] != LegState::LEG_MANUAL && state == LegState::LEG_MANUAL) {
         manual_leg_count_++;
     }
 
@@ -401,9 +402,9 @@ bool StateController::setLegState(int leg_index, AdvancedLegState state) {
     return true;
 }
 
-AdvancedLegState StateController::getLegState(int leg_index) const {
+LegState StateController::getLegState(int leg_index) const {
     if (leg_index < 0 || leg_index >= NUM_LEGS) {
-        return AdvancedLegState::LEG_WALKING; // Default safe state
+        return LegState::LEG_WALKING; // Default safe state
     }
     return leg_states_[leg_index];
 }
@@ -572,7 +573,7 @@ void StateController::reset() {
 
     // Reset leg states
     for (int i = 0; i < NUM_LEGS; i++) {
-        leg_states_[i] = AdvancedLegState::LEG_WALKING;
+        leg_states_[i] = LegState::LEG_WALKING;
         leg_tip_velocities_[i] = Eigen::Vector3d::Zero();
     }
     manual_leg_count_ = 0;
@@ -782,17 +783,17 @@ void StateController::updateWalkState() {
 void StateController::handleLegStateTransitions() {
     for (int i = 0; i < NUM_LEGS; i++) {
         switch (leg_states_[i]) {
-        case AdvancedLegState::LEG_WALKING_TO_MANUAL:
+        case LegState::LEG_WALKING_TO_MANUAL:
             // Transition logic for walking to manual
             if (current_walk_state_ == WalkState::WALK_STOPPED) {
-                leg_states_[i] = AdvancedLegState::LEG_MANUAL;
+                leg_states_[i] = LegState::LEG_MANUAL;
                 logDebug("Leg " + toArduinoString(toString(i)) + " transitioned to MANUAL");
             }
             break;
 
-        case AdvancedLegState::LEG_MANUAL_TO_WALKING:
+        case LegState::LEG_MANUAL_TO_WALKING:
             // Transition logic for manual to walking
-            leg_states_[i] = AdvancedLegState::LEG_WALKING;
+            leg_states_[i] = LegState::LEG_WALKING;
             manual_leg_count_--;
             logDebug("Leg " + toArduinoString(toString(i)) + " transitioned to WALKING");
             break;

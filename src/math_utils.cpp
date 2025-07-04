@@ -201,21 +201,39 @@ double pointToLineDistance(const Point3D &point, const Point3D &line_start, cons
         return distance(point, line_start);
     }
 
-    // Calculate the projection of point_vec onto line_vec
-    double dot_product = point_vec.x * line_vec.x + point_vec.y * line_vec.y + point_vec.z * line_vec.z;
-    double t = dot_product / line_length_sq;
+    // Calculate the projection parameter t
+    double t = (point_vec.x * line_vec.x + point_vec.y * line_vec.y + point_vec.z * line_vec.z) / line_length_sq;
 
-    // Clamp t to [0, 1] to ensure we're on the line segment
-    t = std::max(0.0, std::min(DEFAULT_ANGULAR_SCALING, t));
+    // Clamp t to [0, 1] to get the closest point on the line segment
+    t = std::max(0.0, std::min(1.0, t));
 
     // Calculate the closest point on the line segment
-    Point3D closest_point = Point3D(
-        line_start.x + t * line_vec.x,
-        line_start.y + t * line_vec.y,
-        line_start.z + t * line_vec.z);
+    Point3D closest_point = Point3D(line_start.x + t * line_vec.x,
+                                   line_start.y + t * line_vec.y,
+                                   line_start.z + t * line_vec.z);
 
-    // Return the distance from the point to the closest point on the line
+    // Return the distance from the point to the closest point on the line segment
     return distance(point, closest_point);
+}
+
+Point3D crossProduct(const Point3D &a, const Point3D &b) {
+    return Point3D(a.y * b.z - a.z * b.y,
+                   a.z * b.x - a.x * b.z,
+                   a.x * b.y - a.y * b.x);
+}
+
+Point3D projectVector(const Point3D &vector, const Point3D &onto) {
+    double onto_magnitude_sq = onto.x * onto.x + onto.y * onto.y + onto.z * onto.z;
+
+    // Handle degenerate case where onto vector is zero
+    if (onto_magnitude_sq < 1e-6) {
+        return Point3D(0, 0, 0);
+    }
+
+    double dot_product = vector.x * onto.x + vector.y * onto.y + vector.z * onto.z;
+    double scale = dot_product / onto_magnitude_sq;
+
+    return Point3D(onto.x * scale, onto.y * scale, onto.z * scale);
 }
 
 } // namespace math_utils
