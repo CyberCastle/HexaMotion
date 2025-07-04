@@ -15,6 +15,7 @@ This library provides locomotion control for a hexapod robot based on the Arduin
 
 ## Development
 
+-   Don't create arduino examples.
 -   Clone the repository with all submodules.
 -   Implementation files live exclusively in the `src` and `include` directories.
 -   The `tests` folder only contains code for validating fixes.
