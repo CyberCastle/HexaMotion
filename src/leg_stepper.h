@@ -81,10 +81,10 @@ public:
     void updatePhase();
     void iteratePhase();
     void updateStepState();
-    void updateStride();
+    void updateStride(double step_length);
     Point3D calculateStanceSpanChange();
     void updateDefaultTipPosition();
-    void updateTipPosition();
+    void updateTipPosition(double step_length);
     void updateTipRotation();
     void generatePrimarySwingControlNodes();
     void generateSecondarySwingControlNodes(bool ground_contact);

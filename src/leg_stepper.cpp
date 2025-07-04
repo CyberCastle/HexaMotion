@@ -62,28 +62,9 @@ void LegStepper::updateStepState() {
     }
 }
 
-void LegStepper::updateStride() {
-    walk_plane_ = walker_->getWalkPlane();
-    walk_plane_normal_ = walker_->getWalkPlaneNormal();
-
-    // Vector de stride lineal
-    Point3D velocity = walker_->getDesiredLinearVelocity();
-    Point3D stride_vector_linear(velocity.x, velocity.y, 0.0);
-
-    // Vector de stride angular
-    Point3D radius = current_tip_pose_; // Distancia desde el centro del robot hasta la posición del pie
-    double angular_velocity = walker_->getDesiredAngularVelocity();
-    Point3D angular_velocity_vec(0.0, 0.0, angular_velocity);
-    Point3D stride_vector_angular = math_utils::crossProduct(angular_velocity_vec, radius);
-
-    // Combinación y escalado
-    stride_vector_ = stride_vector_linear + stride_vector_angular;
-    StepCycle step = walker_->getStepCycle();
-    double on_ground_ratio = double(step.stance_period_) / step.period_;
-    stride_vector_ = stride_vector_ * (on_ground_ratio / step.frequency_);
-
-    // Swing clearance
-    swing_clearance_ = Point3D(0.0, 0.0, walker_->getStepClearance());
+void LegStepper::updateStride(double step_length) {
+    // Stride global en dirección X (avance del robot), igual para todas las piernas
+    stride_vector_ = Point3D(step_length, 0.0, 0.0);
 }
 
 Point3D LegStepper::calculateStanceSpanChange() {
@@ -123,7 +104,12 @@ void LegStepper::updateDefaultTipPosition() {
     default_tip_pose_ = new_default_tip_pose;
 }
 
-void LegStepper::updateTipPosition() {
+void LegStepper::updateTipPosition(double step_length) {
+    static StepState last_step_state = step_state_;
+    // Detectar transición de estado
+    bool state_transition = (step_state_ != last_step_state);
+    last_step_state = step_state_;
+
     bool rough_terrain_mode = false; // TODO: obtener del parámetro
     bool force_normal_touchdown = false; // TODO: obtener del parámetro
     double time_delta = walker_->getTimeDelta();
@@ -148,9 +134,21 @@ void LegStepper::updateTipPosition() {
     // Generar target por defecto
     target_tip_pose_ = default_tip_pose_ + stride_vector_ * 0.5;
 
+    // Sincronizar posición y progreso al inicio de cada transición de estado
+    if (state_transition) {
+        if (step_state_ == STEP_SWING) {
+            swing_origin_tip_position_ = current_tip_pose_;
+            swing_origin_tip_velocity_ = current_tip_velocity_;
+            swing_progress_ = 0.0;
+        } else if (step_state_ == STEP_STANCE || step_state_ == STEP_FORCE_STANCE) {
+            stance_origin_tip_position_ = current_tip_pose_;
+            stance_progress_ = 0.0;
+        }
+    }
+
     // Período de Swing
     if (step_state_ == STEP_SWING) {
-        updateStride();
+        updateStride(step_length);
         int iteration = phase_ - step.swing_start_ + 1;
         bool first_half = iteration <= swing_iterations / 2;
 
@@ -188,7 +186,7 @@ void LegStepper::updateTipPosition() {
     }
     // Período de Stance
     else if (step_state_ == STEP_STANCE || step_state_ == STEP_FORCE_STANCE) {
-        updateStride();
+        updateStride(step_length);
 
         int iteration = (phase_ + (step.period_ - modified_stance_start)) % step.period_ + 1;
 

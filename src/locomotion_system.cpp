@@ -17,8 +17,8 @@
 #include "hexamotion_constants.h"
 #include "math_utils.h"
 #include "pose_config_factory.h"
-#include "workspace_validator.h" // Add unified validator
 #include "walk_controller.h"
+#include "workspace_validator.h" // Add unified validator
 #include <algorithm>
 #include <cmath>
 #include <vector>
@@ -251,8 +251,8 @@ bool LocomotionSystem::setLegJointAngles(int leg, const JointAngles &q) {
 
     // Check if clamping was needed
     bool was_clamped = (clamped_angles.coxa != q.coxa) ||
-                      (clamped_angles.femur != q.femur) ||
-                      (clamped_angles.tibia != q.tibia);
+                       (clamped_angles.femur != q.femur) ||
+                       (clamped_angles.tibia != q.tibia);
 
     if (was_clamped) {
         // Debug output for joint limit clamping
@@ -1059,27 +1059,25 @@ bool LocomotionSystem::update() {
     // Update gait phase
     updateGaitPhase();
 
-    // Update advanced gait patterns
-    // TODO: Implement advanced gait patterns
-    // updateMetachronalPattern();
-    // updateAdaptivePattern();
+    // Primero actualiza el estado de cada LegStepper (SWING/STANCE)
+    if (walk_ctrl) {
+        for (int i = 0; i < NUM_LEGS; i++) {
+            auto stepper = walk_ctrl->getLegStepper(i);
+            if (stepper) {
+                stepper->updateStepState();
+            }
+        }
+    }
 
-    // Calculate new leg positions
+    // Luego genera la trayectoria y aplica los ángulos
     for (int i = 0; i < NUM_LEGS; i++) {
-        Point3D target_position = calculateFootTrajectory(i, gait_phase);
+        // Calcular la fase individual de cada pata basada en los offsets del trípode
+        double leg_phase = gait_phase + leg_phase_offsets[i];
+        if (leg_phase >= 1.0f)
+            leg_phase -= 1.0f;
 
-        // Debug output for target positions
-        // std::cout << "[update] Leg " << i << " target position: (" << target_position.x << ", " << target_position.y << ", " << target_position.z << ")" << std::endl;
-
-        // Compute inverse kinematics
+        Point3D target_position = calculateFootTrajectory(i, leg_phase);
         JointAngles target_angles = calculateInverseKinematics(i, target_position);
-
-        // Debug output for calculated angles
-        // std::cout << "[update] Leg " << i << " calculated angles: coxa=" << target_angles.coxa << " femur=" << target_angles.femur << " tibia=" << target_angles.tibia << std::endl;
-
-        // Use setLegJointAngles to enforce constraints at servo level
-        // This implements the CSIRO syropod approach of joint position clamping
-        // setLegJointAngles will update both joint_angles and leg_positions internally
         if (!setLegJointAngles(i, target_angles)) {
             last_error = KINEMATICS_ERROR;
         }

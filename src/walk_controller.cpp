@@ -1,11 +1,11 @@
 #include "walk_controller.h"
 #include "hexamotion_constants.h"
 #include "workspace_validator.h" // Use unified validator instead
-#include <iostream>
-#include <vector>
-#include <memory>
-#include <cmath>
 #include <algorithm>
+#include <cmath>
+#include <iostream>
+#include <memory>
+#include <vector>
 
 // LegStepper implementation moved to header file
 
@@ -13,11 +13,10 @@ WalkController::WalkController(RobotModel &m)
     : model(m), current_gait(TRIPOD_GAIT), gait_phase(0.0f),
       terrain_adaptation_(m), velocity_limits_(m),
       step_clearance_(30.0), step_depth_(10.0), body_clearance_(100.0),
-      desired_linear_velocity_(0,0,0), desired_angular_velocity_(0.0),
+      desired_linear_velocity_(0, 0, 0), desired_angular_velocity_(0.0),
       walk_state_(WALK_STOPPED), pose_state_(0),
       regenerate_walkspace_(false), legs_at_correct_phase_(0), legs_completed_first_step_(0),
-      return_to_default_attempted_(false)
-{
+      return_to_default_attempted_(false) {
     // Inicializar leg_steppers_ con posiciones reales del modelo
     leg_steppers_.clear();
     // Definir offsets de fase para trípode (y reutilizable para otros patrones)
@@ -30,19 +29,19 @@ WalkController::WalkController(RobotModel &m)
         0.5f  // Leg 5 (Anterior Left) - Group B (odd)
     };
     for (int i = 0; i < NUM_LEGS; ++i) {
-        // Calcular posición por defecto de cada pierna basada en el modelo
-        const Parameters &p = model.getParams();
-        double base_angle = p.dh_parameters[i][0][3]; // theta DH de la base de la pierna
-        double base_x = p.hexagon_radius * cos(math_utils::degreesToRadians(base_angle));
-        double base_y = p.hexagon_radius * sin(math_utils::degreesToRadians(base_angle));
-        double leg_reach = p.coxa_length + p.femur_length + p.tibia_length;
+        // Usar las mismas posiciones base que el modelo principal (DH parameters)
+        // BASE_THETA_OFFSETS: {-30.0f, -90.0f, -150.0f, 30.0f, 90.0f, 150.0f}
+        double base_angle_deg = m.getParams().dh_parameters[i][0][3];
+        double base_angle = base_angle_deg * M_PI / 180.0; // Convert to radians
+        double base_x = m.getParams().hexagon_radius * cos(base_angle);
+        double base_y = m.getParams().hexagon_radius * sin(base_angle);
+        double leg_reach = m.getParams().coxa_length + m.getParams().femur_length + m.getParams().tibia_length;
         double safe_reach = leg_reach * 0.65f; // 65% de seguridad
-        double default_foot_x = base_x + safe_reach * cos(math_utils::degreesToRadians(base_angle));
-        double default_foot_y = base_y + safe_reach * sin(math_utils::degreesToRadians(base_angle));
+        double default_foot_x = base_x + safe_reach * cos(base_angle);
+        double default_foot_y = base_y + safe_reach * sin(base_angle);
         Point3D identity_tip(default_foot_x, default_foot_y, 0);
         auto stepper = std::make_shared<LegStepper>(this, i, identity_tip);
         stepper->setPhaseOffset(tripod_phase_offsets[i]);
-        // Si phase_offset_ es double, usar: stepper->phase_offset_ = tripod_phase_offsets[i] * periodo_de_pasos;
         leg_steppers_.push_back(stepper);
     }
 
@@ -108,7 +107,7 @@ void WalkController::updateGaitPhase(double dt) {
 
         // Calculate step frequency based on velocity magnitude
         double velocity_magnitude = sqrt(current_velocities_.linear_x * current_velocities_.linear_x +
-                                        current_velocities_.linear_y * current_velocities_.linear_y);
+                                         current_velocities_.linear_y * current_velocities_.linear_y);
 
         // Base frequency on velocity - typical range 0.5 to 2.0 Hz
         // Use a more reasonable divisor to prevent excessive stride lengths
@@ -146,7 +145,7 @@ Point3D WalkController::footTrajectory(int leg_index, double phase, double step_
     leg_stepper->setPhase(step_phase);
 
     // Update the leg stepper's trajectory
-    leg_stepper->updateTipPosition();
+    leg_stepper->updateTipPosition(step_length);
 
     // Get the calculated trajectory from the leg stepper
     Point3D trajectory = leg_stepper->getCurrentTipPose();
@@ -290,7 +289,7 @@ void WalkController::init() {
     odometry_ideal_ = Point3D(0, 0, 0);
 
     // Set default stance tip positions from parameters
-    for (auto& leg_stepper : leg_steppers_) {
+    for (auto &leg_stepper : leg_steppers_) {
         // TODO: Get stance positions from parameters
         Point3D identity_tip_pose(0, 0, 0); // Default position
         leg_stepper->setDefaultTipPose(identity_tip_pose);
@@ -308,8 +307,8 @@ StepCycle WalkController::generateStepCycle(bool set_step_cycle) {
     StepCycle step;
 
     // Default parameters (TODO: get from configuration)
-    int stance_phase = 60;  // iterations
-    int swing_phase = 40;   // iterations
+    int stance_phase = 60;       // iterations
+    int swing_phase = 40;        // iterations
     double step_frequency = 1.0; // Hz
 
     step.stance_end_ = stance_phase / 2;
@@ -336,14 +335,16 @@ StepCycle WalkController::generateStepCycle(bool set_step_cycle) {
     step.swing_period_ = step.swing_end_ - step.swing_start_;
 
     // Ensure stance and swing periods are divisible by two
-    if (step.stance_period_ % 2 != 0) step.stance_period_++;
-    if (step.swing_period_ % 2 != 0) step.swing_period_++;
+    if (step.stance_period_ % 2 != 0)
+        step.stance_period_++;
+    if (step.swing_period_ % 2 != 0)
+        step.swing_period_++;
 
     // Set step cycle in walk controller and update phase in leg steppers
     if (set_step_cycle) {
         step_ = step;
         if (walk_state_ == WALK_MOVING) {
-            for (auto& leg_stepper : leg_steppers_) {
+            for (auto &leg_stepper : leg_steppers_) {
                 leg_stepper->updatePhase();
             }
         }
@@ -352,7 +353,7 @@ StepCycle WalkController::generateStepCycle(bool set_step_cycle) {
     return step;
 }
 
-void WalkController::updateWalk(const Point3D& linear_velocity_input, double angular_velocity_input) {
+void WalkController::updateWalk(const Point3D &linear_velocity_input, double angular_velocity_input) {
     Point3D new_linear_velocity;
     double new_angular_velocity;
 
@@ -370,7 +371,7 @@ void WalkController::updateWalk(const Point3D& linear_velocity_input, double ang
 
         // Clamp to limits
         double linear_magnitude = sqrt(new_linear_velocity.x * new_linear_velocity.x +
-                                     new_linear_velocity.y * new_linear_velocity.y);
+                                       new_linear_velocity.y * new_linear_velocity.y);
         if (linear_magnitude > max_linear_speed) {
             new_linear_velocity = new_linear_velocity * (max_linear_speed / linear_magnitude);
         }
@@ -391,7 +392,7 @@ void WalkController::updateWalk(const Point3D& linear_velocity_input, double ang
     // Update velocities according to acceleration limits
     Point3D linear_acceleration = new_linear_velocity - desired_linear_velocity_;
     double linear_acc_magnitude = sqrt(linear_acceleration.x * linear_acceleration.x +
-                                     linear_acceleration.y * linear_acceleration.y);
+                                       linear_acceleration.y * linear_acceleration.y);
 
     if (linear_acc_magnitude < max_linear_acceleration * time_delta_) {
         desired_linear_velocity_ = desired_linear_velocity_ + linear_acceleration;
@@ -413,7 +414,7 @@ void WalkController::updateWalk(const Point3D& linear_velocity_input, double ang
     // State transition: STOPPED->STARTING
     if (walk_state_ == WALK_STOPPED && has_velocity_command) {
         walk_state_ = WALK_STARTING;
-        for (auto& leg_stepper : leg_steppers_) {
+        for (auto &leg_stepper : leg_steppers_) {
             leg_stepper->setAtCorrectPhase(false);
             leg_stepper->setCompletedFirstStep(false);
             leg_stepper->setStepState(STEP_STANCE);
@@ -439,7 +440,7 @@ void WalkController::updateWalk(const Point3D& linear_velocity_input, double ang
     }
 
     // Update walk/step state and tip position along trajectory for each leg
-    for (auto& leg_stepper : leg_steppers_) {
+    for (auto &leg_stepper : leg_steppers_) {
         // Walk State Machine
         if (walk_state_ == WALK_STARTING) {
             // Check if all legs have completed one step
@@ -465,12 +466,12 @@ void WalkController::updateWalk(const Point3D& linear_velocity_input, double ang
         } else if (walk_state_ == WALK_STOPPING) {
             // All legs must attempt at least one step to achieve default tip position
             bool zero_body_velocity = leg_stepper->getStrideVector().x == 0 &&
-                                    leg_stepper->getStrideVector().y == 0 &&
-                                    leg_stepper->getStrideVector().z == 0;
+                                      leg_stepper->getStrideVector().y == 0 &&
+                                      leg_stepper->getStrideVector().z == 0;
             Point3D walk_plane_normal = leg_stepper->getWalkPlaneNormal();
             Point3D error = leg_stepper->getCurrentTipPose() - leg_stepper->getTargetTipPose();
             Point3D error_projection = math_utils::projectVector(error, walk_plane_normal);
-            bool at_target_tip_position = (math_utils::distance(error_projection, Point3D(0,0,0)) < 1.0); // 1mm tolerance
+            bool at_target_tip_position = (math_utils::distance(error_projection, Point3D(0, 0, 0)) < 1.0); // 1mm tolerance
 
             if (zero_body_velocity && !leg_stepper->isAtCorrectPhase() && leg_stepper->getPhase() == step_.swing_end_) {
                 if (at_target_tip_position || return_to_default_attempted_) {
@@ -490,7 +491,8 @@ void WalkController::updateWalk(const Point3D& linear_velocity_input, double ang
 
         // Update tip positions
         // TODO: Check leg state properly
-        leg_stepper->updateTipPosition();
+        double step_length = step_depth_; // O el valor adecuado según la lógica de paso
+        leg_stepper->updateTipPosition(step_length);
         leg_stepper->updateTipRotation();
         leg_stepper->iteratePhase();
     }
@@ -507,7 +509,7 @@ void WalkController::updateWalkPlane() {
     std::vector<double> raw_B;
 
     if (NUM_LEGS >= 3) { // Minimum for plane estimation
-        for (auto& leg_stepper : leg_steppers_) {
+        for (auto &leg_stepper : leg_steppers_) {
             Point3D default_tip_pose = leg_stepper->getDefaultTipPose();
             raw_A.push_back(default_tip_pose.x);
             raw_A.push_back(default_tip_pose.y);
@@ -562,14 +564,14 @@ void WalkController::generateLimits(StepCycle step) {
     max_linear_acceleration_.clear();
     max_angular_acceleration_.clear();
 
-    for (auto& walkspace_entry : walkspace_) {
+    for (auto &walkspace_entry : walkspace_) {
         double walkspace_radius = walkspace_entry.second;
         double on_ground_ratio = double(step.stance_period_) / step.period_;
 
         // Basic limit calculations
         double max_linear_speed = (walkspace_radius * 2.0) / (on_ground_ratio / step.frequency_);
         double max_linear_acceleration = max_linear_speed / 2.0; // 2 second time to max
-        double max_angular_speed = max_linear_speed / 100.0; // 100mm stance radius
+        double max_angular_speed = max_linear_speed / 100.0;     // 100mm stance radius
         double max_angular_acceleration = max_angular_speed / 2.0;
 
         max_linear_speed_[walkspace_entry.first] = max_linear_speed;
@@ -579,11 +581,11 @@ void WalkController::generateLimits(StepCycle step) {
     }
 }
 
-double WalkController::getLimit(const Point3D& linear_velocity_input, double angular_velocity_input,
-                               const std::map<int, double>& limit) {
+double WalkController::getLimit(const Point3D &linear_velocity_input, double angular_velocity_input,
+                                const std::map<int, double> &limit) {
     double min_limit = 1e6; // Large value
 
-    for (auto& leg_stepper : leg_steppers_) {
+    for (auto &leg_stepper : leg_steppers_) {
         Point3D tip_position = leg_stepper->getCurrentTipPose();
         Point3D rotation_normal(-tip_position.y, tip_position.x, 0);
         Point3D stride_vector = linear_velocity_input + rotation_normal * angular_velocity_input;

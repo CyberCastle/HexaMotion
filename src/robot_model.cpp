@@ -432,3 +432,19 @@ Pose RobotModel::getTipPoseLegFrame(int leg_index, const JointAngles &joint_angl
     // Transform the robot frame pose to tip frame (inverse transform)
     return robot_frame_pose.transform(transform.inverse());
 }
+
+JointAngles RobotModel::calculateTargetFromCurrentPosition(int leg, const JointAngles &current_angles,
+                                                          const Pose &current_pose, const Point3D &target_in_current_frame) const {
+    // OpenSHC logic: transform target from current pose frame to robot frame
+    // This matches OpenSHC's: target_tip_position = model_->getCurrentPose().inverseTransformVector(default_tip_position);
+    Point3D target_in_robot_frame = current_pose.inverseTransformVector(target_in_current_frame);
+
+    // Use inverseKinematicsCurrent to calculate joint angles from current position to target
+    return inverseKinematicsCurrent(leg, current_angles, target_in_robot_frame);
+}
+
+JointAngles RobotModel::calculateTargetFromDefaultStance(int leg, const JointAngles &current_angles,
+                                                        const Pose &current_pose, const Pose &default_stance_pose) const {
+    // La pose por defecto ya está en el frame del robot, pasar directamente
+    return inverseKinematicsCurrent(leg, current_angles, default_stance_pose.position);
+}

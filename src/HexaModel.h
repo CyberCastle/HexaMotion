@@ -226,6 +226,60 @@ struct Pose {
                             transformed_pos.z()),
                     result_rot.cast<double>());
     }
+
+    /**
+     * Transform a vector into this pose's reference frame (equivalent to OpenSHC's transformVector)
+     */
+    Point3D transformVector(const Point3D &vec) const {
+        Eigen::Vector3d eigen_vec(vec.x, vec.y, vec.z);
+        Eigen::Vector3d eigen_pos(position.x, position.y, position.z);
+        Eigen::Vector3d transformed = eigen_pos + rotation.cast<double>()._transformVector(eigen_vec);
+        return Point3D(transformed.x(), transformed.y(), transformed.z());
+    }
+
+    /**
+     * Transform a vector from this pose's reference frame (equivalent to OpenSHC's inverseTransformVector)
+     */
+    Point3D inverseTransformVector(const Point3D &vec) const {
+        return inverse().transformVector(vec);
+    }
+
+    /**
+     * Get the inverse of this pose (equivalent to OpenSHC's ~ operator)
+     */
+    Pose inverse() const {
+        Eigen::Quaterniond inv_rotation = rotation.cast<double>().conjugate();
+        Eigen::Vector3d eigen_pos(position.x, position.y, position.z);
+        Eigen::Vector3d inv_position = inv_rotation._transformVector(-eigen_pos);
+        return Pose(Point3D(inv_position.x(), inv_position.y(), inv_position.z()), inv_rotation.cast<double>());
+    }
+
+    /**
+     * Add another pose to this pose (equivalent to OpenSHC's addPose)
+     */
+    Pose addPose(const Pose &other) const {
+        Point3D new_position = transformVector(other.position);
+        Eigen::Quaterniond new_rotation = rotation.cast<double>() * other.rotation.cast<double>();
+        return Pose(new_position, new_rotation.cast<double>());
+    }
+
+    /**
+     * Remove another pose from this pose (equivalent to OpenSHC's removePose)
+     */
+    Pose removePose(const Pose &other) const {
+        Point3D new_position = transformVector(Point3D(-other.position.x, -other.position.y, -other.position.z));
+        Eigen::Quaterniond new_rotation = rotation.cast<double>() * other.rotation.cast<double>().inverse();
+        return Pose(new_position, new_rotation.cast<double>());
+    }
+
+    /**
+     * Interpolate between this pose and target pose (equivalent to OpenSHC's interpolate)
+     */
+    Pose interpolate(double control_input, const Pose &target_pose) const {
+        Point3D new_position = position * (1.0 - control_input) + target_pose.position * control_input;
+        Eigen::Quaterniond new_rotation = rotation.cast<double>().slerp(control_input, target_pose.rotation.cast<double>());
+        return Pose(new_position, new_rotation.cast<double>());
+    }
 };
 
 /**
@@ -470,6 +524,34 @@ class RobotModel {
 
     /** Get the DH position of the leg base (without joint transformations) */
     Point3D getDHLegBasePosition(int leg_index) const;
+
+    /**
+     * Calculate target position based on current position (OpenSHC-style)
+     * This method transforms a target position from the current pose's reference frame
+     * and uses inverseKinematicsCurrent to calculate the required joint angles.
+     *
+     * @param leg The leg index (0-5)
+     * @param current_angles Current joint angles for the leg
+     * @param current_pose Current robot pose
+     * @param target_in_current_frame Target position in current pose's reference frame
+     * @return Joint angles to reach the target position
+     */
+    JointAngles calculateTargetFromCurrentPosition(int leg, const JointAngles &current_angles,
+                                                  const Pose &current_pose, const Point3D &target_in_current_frame) const;
+
+    /**
+     * Calculate target position based on current position with default stance pose (OpenSHC-style)
+     * This method calculates the target position by transforming the default stance pose
+     * from the current pose's reference frame, similar to OpenSHC's pose controller.
+     *
+     * @param leg The leg index (0-5)
+     * @param current_angles Current joint angles for the leg
+     * @param current_pose Current robot pose
+     * @param default_stance_pose Default stance pose in world frame
+     * @return Joint angles to reach the transformed default stance position
+     */
+    JointAngles calculateTargetFromDefaultStance(int leg, const JointAngles &current_angles,
+                                                const Pose &current_pose, const Pose &default_stance_pose) const;
 
   private:
     const Parameters &params;

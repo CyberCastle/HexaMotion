@@ -1,3 +1,0 @@
-[submodule "OpenSHC"]
-	path = OpenSHC
-	url = https://github.com/csiro-robotics/syropod_highlevel_controller
