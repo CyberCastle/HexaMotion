@@ -13,7 +13,7 @@ const double BASE_THETA_OFFSETS[NUM_LEGS] = {
 
 Leg::Leg(int leg_id, const Parameters &params)
     : leg_id_(leg_id)
-    , leg_name_("Leg_" + String(leg_id))
+    , leg_name_("Leg_" + std::to_string(leg_id))
     , joint_angles_(0.0, 0.0, 0.0)
     , tip_position_(0.0, 0.0, 0.0)
     , base_position_(0.0, 0.0, 0.0)

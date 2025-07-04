@@ -117,7 +117,7 @@ void LegStepper::updateTipPosition(double step_length) {
     StepCycle step = walker_->getStepCycle();
 
     bool standard_stance_period = (step_state_ == STEP_SWING || completed_first_step_);
-    int modified_stance_start = standard_stance_period ? step.stance_start_ : phase_offset_;
+    int modified_stance_start = standard_stance_period ? step.stance_start_ : (int)(leg_.getPhaseOffset() * step.period_);
     int modified_stance_period = (step.stance_end_ - modified_stance_start + step.period_) % step.period_;
     if (step.stance_end_ == modified_stance_start) {
         modified_stance_period = step.period_;

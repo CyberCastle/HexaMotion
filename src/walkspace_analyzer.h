@@ -45,6 +45,25 @@ class WalkspaceAnalyzer {
         double max_angle;  ///< Maximum angular range (degrees)
     };
 
+    /**
+     * @brief Comprehensive analysis information for external systems
+     */
+    struct AnalysisInfo {
+        WalkspaceResult current_result;        ///< Current walkspace analysis result
+        std::map<int, WorkspaceBounds> leg_bounds; ///< Workspace bounds for each leg
+        std::map<int, double> leg_reachability;    ///< Reachability scores (0-1) for each leg
+        double overall_stability_score;            ///< Overall stability score (0-1)
+        bool analysis_enabled;                     ///< Whether analysis is currently enabled
+        unsigned long last_analysis_time;          ///< Timestamp of last analysis
+        int analysis_count;                        ///< Number of analyses performed
+        double average_analysis_time_ms;           ///< Average analysis time in milliseconds
+        double total_analysis_time_ms;             ///< Total time spent in analysis
+        double min_analysis_time_ms;               ///< Minimum analysis time
+        double max_analysis_time_ms;               ///< Maximum analysis time
+        std::map<int, double> walkspace_radii;     ///< Current walkspace radii by bearing
+        bool walkspace_map_generated;              ///< Whether walkspace map has been generated
+    };
+
   private:
     RobotModel &model_;
     ComputeConfig config_;
@@ -60,6 +79,12 @@ class WalkspaceAnalyzer {
     static constexpr int BEARING_STEP = 5;                // Degrees
     static constexpr double MAX_WORKSPACE_RADIUS = 500.0f; // mm
     static constexpr double STABILITY_THRESHOLD = 10.0f;   // mm
+
+    // Runtime control flags
+    bool analysis_enabled_;                    ///< Flag to enable/disable real-time analysis
+    AnalysisInfo analysis_info_;               ///< Comprehensive analysis information
+    unsigned long last_analysis_timestamp_;    ///< Timestamp of last analysis
+    double total_analysis_time_;               ///< Total time spent in analysis
 
   public:
     explicit WalkspaceAnalyzer(RobotModel &model, ComputeConfig config = ComputeConfig::medium());
@@ -143,6 +168,50 @@ class WalkspaceAnalyzer {
      */
     bool isPositionReachableWithWorkplane(int leg_index, const Point3D &position) const;
 
+    /**
+     * @brief Enable or disable real-time walkspace analysis
+     * @param enabled True to enable analysis, false to disable
+     */
+    void enableAnalysis(bool enabled) {
+        analysis_enabled_ = enabled;
+        analysis_info_.analysis_enabled = enabled;
+    }
+
+    /**
+     * @brief Check if analysis is currently enabled
+     * @return True if analysis is enabled
+     */
+    bool isAnalysisEnabled() const { return analysis_enabled_; }
+
+    /**
+     * @brief Get comprehensive analysis information for external systems
+     * @return Complete analysis information structure
+     */
+    const AnalysisInfo& getAnalysisInfo() const { return analysis_info_; }
+
+    /**
+     * @brief Get analysis information as a formatted string for debugging
+     * @return Formatted string with analysis information
+     */
+    std::string getAnalysisInfoString() const;
+
+    /**
+     * @brief Reset analysis statistics
+     */
+    void resetAnalysisStats();
+
+    /**
+     * @brief Get current walkspace map for external use
+     * @return Map of bearing to radius values
+     */
+    const std::map<int, double>& getCurrentWalkspaceMap() const { return walkspace_map_; }
+
+    /**
+     * @brief Check if walkspace map has been generated
+     * @return True if walkspace map is available
+     */
+    bool isWalkspaceMapGenerated() const { return analysis_info_.walkspace_map_generated; }
+
   private:
     void calculateLegWorkspaceBounds(int leg_index);
     void generateWalkspaceForLeg(int leg_index);
@@ -162,6 +231,11 @@ class WalkspaceAnalyzer {
     bool advancedStepOptimization(const Point3D &movement,
                                   const Point3D current[NUM_LEGS],
                                   Point3D optimal[NUM_LEGS]);
+
+    // Analysis tracking methods
+    void updateAnalysisInfo(const WalkspaceResult &result, unsigned long analysis_time_ms);
+    double calculateLegReachability(int leg_index, const Point3D leg_positions[NUM_LEGS]) const;
+    double calculateOverallStabilityScore(const WalkspaceResult &result) const;
 };
 
 #endif // WALKSPACE_ANALYZER_H

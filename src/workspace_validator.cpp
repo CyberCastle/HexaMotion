@@ -135,10 +135,19 @@ WorkspaceValidator::getWorkspaceBounds(int leg_index) const {
 
     // Calculate theoretical reach limits
     double total_leg_length = params.coxa_length + params.femur_length + params.tibia_length;
+    double theoretical_min = std::abs(params.femur_length - params.tibia_length);
 
     // Apply safety factors from configuration
     bounds.max_radius = total_leg_length * config_.safety_margin_factor;
     bounds.min_radius = params.coxa_length * config_.minimum_reach_factor;
+
+    // Set reach values (same as radius values for compatibility)
+    bounds.max_reach = bounds.max_radius;
+    bounds.min_reach = bounds.min_radius;
+
+    // Set preferred reach values (using the theoretical minimum calculation)
+    bounds.preferred_max_reach = total_leg_length * config_.safety_margin_factor;
+    bounds.preferred_min_reach = theoretical_min * config_.minimum_reach_factor;
 
     // Height bounds (assuming ground level operation)
     bounds.min_height = leg_base.z - total_leg_length;

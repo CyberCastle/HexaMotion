@@ -5,6 +5,7 @@
 #include "terrain_adaptation.h"
 #include "velocity_limits.h"
 #include "workspace_validator.h"
+#include "walkspace_analyzer.h"
 #include "math_utils.h"
 #include "leg_stepper.h"
 #include <memory>
@@ -153,6 +154,24 @@ public:
     const TerrainAdaptation& getTerrainAdaptation() const { return terrain_adaptation_; }
     RobotModel& getModel() { return model; }
 
+    // Walkspace analysis control methods (OpenSHC equivalent)
+    void enableWalkspaceAnalysis(bool enabled);
+    bool isWalkspaceAnalysisEnabled() const;
+    const WalkspaceAnalyzer::AnalysisInfo& getWalkspaceAnalysisInfo() const;
+    std::string getWalkspaceAnalysisInfoString() const;
+    void resetWalkspaceAnalysisStats();
+    WalkspaceAnalyzer::WalkspaceResult analyzeCurrentWalkspace();
+    bool generateWalkspaceMap();
+    double getWalkspaceRadius(double bearing_degrees) const;
+
+    // Enhanced walkspace analysis methods
+    const std::map<int, double>& getCurrentWalkspaceMap() const;
+    bool isWalkspaceMapGenerated() const;
+    double getStabilityMargin() const;
+    double getOverallStabilityScore() const;
+    std::map<int, double> getLegReachabilityScores() const;
+    bool isCurrentlyStable() const;
+
 private:
     RobotModel &model;
 
@@ -200,6 +219,9 @@ private:
 
     // Workspace validation
     std::unique_ptr<WorkspaceValidator> workspace_validator_;
+
+    // Walkspace analysis (OpenSHC equivalent)
+    std::unique_ptr<WalkspaceAnalyzer> walkspace_analyzer_;
 
     // Collision avoidance: track current leg positions
     Point3D current_leg_positions_[NUM_LEGS];
