@@ -1020,9 +1020,16 @@ bool LocomotionSystem::update() {
     }
 
     // Adapt gait and step parameters depending on terrain
-    adaptGaitToTerrain();
-    updateStepParameters();
-    adjustStepParameters();
+    // TODO: Implement terrain adaptation logic
+    // adaptGaitToTerrain();
+
+    // Update step parameters based on current gait and terrain
+    // TODO: Implement terrain adaptation logic
+    // updateStepParameters();
+
+    // Adjust step parameters based on current gait
+    // TODO: Implement step parameter adjustment logic
+    // adjustStepParameters();
 
     // TODO: Implement slope compensation
     // This would adjust leg positions based on terrain slope
