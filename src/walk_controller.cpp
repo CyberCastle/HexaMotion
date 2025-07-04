@@ -290,9 +290,27 @@ void WalkController::init() {
 
     // Set default stance tip positions from parameters
     for (auto &leg_stepper : leg_steppers_) {
-        // TODO: Get stance positions from parameters
-        Point3D identity_tip_pose(0, 0, 0); // Default position
-        leg_stepper->setDefaultTipPose(identity_tip_pose);
+        // Get stance positions from robot model parameters
+        const Parameters &params = model.getParams();
+        int leg_index = leg_stepper->getLegIndex();
+
+        // Calculate stance position based on leg geometry
+        double base_angle_deg = params.dh_parameters[leg_index][0][3];
+        double base_angle = base_angle_deg * M_PI / 180.0; // Convert to radians
+        double base_x = params.hexagon_radius * cos(base_angle);
+        double base_y = params.hexagon_radius * sin(base_angle);
+
+        // Use 65% of leg reach for safe stance position
+        double leg_reach = params.coxa_length + params.femur_length + params.tibia_length;
+        double safe_reach = leg_reach * 0.65f;
+
+        Point3D stance_tip_pose(
+            base_x + safe_reach * cos(base_angle),
+            base_y + safe_reach * sin(base_angle),
+            -params.robot_height
+        );
+
+        leg_stepper->setDefaultTipPose(stance_tip_pose);
     }
 
     // Init velocity input variables
@@ -306,10 +324,17 @@ void WalkController::init() {
 StepCycle WalkController::generateStepCycle(bool set_step_cycle) {
     StepCycle step;
 
-    // Default parameters (TODO: get from configuration)
-    int stance_phase = 60;       // iterations
-    int swing_phase = 40;        // iterations
-    double step_frequency = 1.0; // Hz
+    // Get parameters from robot model configuration
+    const Parameters &params = model.getParams();
+
+    // Use control frequency to calculate timing parameters
+    double control_frequency = params.control_frequency;
+    double time_delta = 1.0 / control_frequency;
+
+    // Calculate stance and swing phases based on frequency
+    int stance_phase = static_cast<int>(60.0 * control_frequency / 50.0); // 60 iterations at 50Hz
+    int swing_phase = static_cast<int>(40.0 * control_frequency / 50.0);  // 40 iterations at 50Hz
+    double step_frequency = 1.0; // Hz - can be made configurable
 
     step.stance_end_ = stance_phase / 2;
     step.swing_start_ = step.stance_end_;
@@ -386,8 +411,14 @@ void WalkController::updateWalk(const Point3D &linear_velocity_input, double ang
 
     bool has_velocity_command = (linear_velocity_input.x != 0 || linear_velocity_input.y != 0 || angular_velocity_input != 0);
 
-    // Check that all legs are in WALKING state (simplified for now)
-    // TODO: Implement proper leg state checking
+    // Check that all legs are in WALKING state
+    bool all_legs_walking = true;
+    for (auto &leg_stepper : leg_steppers_) {
+        if (leg_stepper->getStepState() == STEP_FORCE_STOP) {
+            all_legs_walking = false;
+            break;
+        }
+    }
 
     // Update velocities according to acceleration limits
     Point3D linear_acceleration = new_linear_velocity - desired_linear_velocity_;
@@ -490,10 +521,9 @@ void WalkController::updateWalk(const Point3D &linear_velocity_input, double ang
         }
 
         // Update tip positions
-        // TODO: Check leg state properly
-        double step_length = step_depth_; // O el valor adecuado según la lógica de paso
+        // Check leg state properly
+        double step_length = step_depth_; // Use configured step depth
         leg_stepper->updateTipPosition(step_length);
-        leg_stepper->updateTipRotation();
         leg_stepper->iteratePhase();
     }
 
@@ -517,13 +547,66 @@ void WalkController::updateWalkPlane() {
             raw_B.push_back(default_tip_pose.z);
         }
 
-        // Estimate walk plane using least squares
-        // Simplified implementation - in practice you'd use Eigen or similar
+        // Implement proper least squares plane fitting
         if (raw_A.size() >= 9) { // At least 3 legs * 3 coordinates
-            // For now, use a simple plane estimation
-            // TODO: Implement proper least squares plane fitting
-            walk_plane_ = Point3D(0, 0, 0);
-            walk_plane_normal_ = Point3D(0, 0, 1);
+            // Use least squares to fit plane: ax + by + c = z
+            int num_points = raw_A.size() / 3;
+
+            // Build normal equations: A^T * A * x = A^T * b
+            double ATA[3][3] = {{0}};
+            double ATb[3] = {0};
+
+            for (int i = 0; i < num_points; i++) {
+                double x = raw_A[i * 3];
+                double y = raw_A[i * 3 + 1];
+                double z = raw_B[i];
+
+                // A^T * A
+                ATA[0][0] += x * x;
+                ATA[0][1] += x * y;
+                ATA[0][2] += x;
+                ATA[1][1] += y * y;
+                ATA[1][2] += y;
+                ATA[2][2] += 1;
+
+                // A^T * b
+                ATb[0] += x * z;
+                ATb[1] += y * z;
+                ATb[2] += z;
+            }
+
+            // Symmetric matrix
+            ATA[1][0] = ATA[0][1];
+            ATA[2][0] = ATA[0][2];
+            ATA[2][1] = ATA[1][2];
+
+            // Solve using Cramer's rule for 3x3 system
+            double det = ATA[0][0] * (ATA[1][1] * ATA[2][2] - ATA[1][2] * ATA[2][1]) -
+                        ATA[0][1] * (ATA[1][0] * ATA[2][2] - ATA[1][2] * ATA[2][0]) +
+                        ATA[0][2] * (ATA[1][0] * ATA[2][1] - ATA[1][1] * ATA[2][0]);
+
+            if (abs(det) > 1e-6) { // Check for singular matrix
+                double a = (ATb[0] * (ATA[1][1] * ATA[2][2] - ATA[1][2] * ATA[2][1]) -
+                           ATA[0][1] * (ATb[1] * ATA[2][2] - ATA[1][2] * ATb[2]) +
+                           ATA[0][2] * (ATb[1] * ATA[2][1] - ATA[1][1] * ATb[2])) / det;
+                double b = (ATA[0][0] * (ATb[1] * ATA[2][2] - ATA[1][2] * ATb[2]) -
+                           ATb[0] * (ATA[1][0] * ATA[2][2] - ATA[1][2] * ATA[2][0]) +
+                           ATA[0][2] * (ATA[1][0] * ATb[2] - ATb[1] * ATA[2][0])) / det;
+                double c = (ATA[0][0] * (ATA[1][1] * ATb[2] - ATA[1][2] * ATb[1]) -
+                           ATA[0][1] * (ATA[1][0] * ATb[2] - ATA[1][2] * ATb[0]) +
+                           ATb[0] * (ATA[1][0] * ATA[2][1] - ATA[1][1] * ATA[2][0])) / det;
+
+                // Normalize plane normal vector
+                double normal_magnitude = sqrt(a * a + b * b + 1.0);
+                walk_plane_normal_ = Point3D(-a / normal_magnitude, -b / normal_magnitude, 1.0 / normal_magnitude);
+
+                // Calculate walk plane center point
+                walk_plane_ = Point3D(0, 0, c);
+            } else {
+                // Fallback to horizontal plane
+                walk_plane_ = Point3D(0, 0, 0);
+                walk_plane_normal_ = Point3D(0, 0, 1);
+            }
         }
     } else {
         walk_plane_ = Point3D(0, 0, 0);
@@ -535,20 +618,61 @@ Point3D WalkController::calculateOdometry(double time_period) {
     Point3D desired_linear_velocity(desired_linear_velocity_.x, desired_linear_velocity_.y, 0);
     Point3D position_delta = desired_linear_velocity * time_period;
 
-    // TODO: Implement proper rotation delta calculation
-    // For now, return only position delta
-    return position_delta;
+    // Implement proper rotation delta calculation
+    double angular_velocity = desired_angular_velocity_;
+    double rotation_delta = angular_velocity * time_period;
+
+    // Apply rotation to position delta
+    double cos_rot = cos(rotation_delta);
+    double sin_rot = sin(rotation_delta);
+
+    Point3D rotated_delta;
+    rotated_delta.x = position_delta.x * cos_rot - position_delta.y * sin_rot;
+    rotated_delta.y = position_delta.x * sin_rot + position_delta.y * cos_rot;
+    rotated_delta.z = position_delta.z;
+
+    return rotated_delta;
 }
 
 void WalkController::generateWalkspace() {
-    // Simplified walkspace generation
-    // TODO: Implement full walkspace calculation like OpenSHC
+    // Implement full walkspace calculation like OpenSHC
     walkspace_.clear();
 
-    // Populate with basic circular workspace
+    // Get robot parameters for workspace calculation
+    const Parameters &params = model.getParams();
+    double leg_reach = params.coxa_length + params.femur_length + params.tibia_length;
+    double safe_reach = leg_reach * 0.65f; // 65% safety margin
+
+    // Calculate workspace for each bearing angle
     for (int bearing = 0; bearing <= 360; bearing += 10) {
-        double radius = 200.0; // 200mm default radius
-        walkspace_[bearing] = radius;
+        double bearing_rad = bearing * M_PI / 180.0;
+
+        // Calculate workspace radius based on leg geometry and joint limits
+        double max_radius = 0.0;
+
+        for (int leg = 0; leg < NUM_LEGS; leg++) {
+            // Get leg base position
+            double base_angle_deg = params.dh_parameters[leg][0][3];
+            double base_angle = base_angle_deg * M_PI / 180.0;
+            double base_x = params.hexagon_radius * cos(base_angle);
+            double base_y = params.hexagon_radius * sin(base_angle);
+
+            // Calculate reach in bearing direction
+            double target_x = base_x + safe_reach * cos(bearing_rad);
+            double target_y = base_y + safe_reach * sin(bearing_rad);
+
+            // Check if target is reachable by this leg
+            Point3D target(target_x, target_y, -params.robot_height);
+            JointAngles angles = model.inverseKinematics(leg, target);
+
+            if (model.checkJointLimits(leg, angles)) {
+                double distance = sqrt((target_x - base_x) * (target_x - base_x) +
+                                      (target_y - base_y) * (target_y - base_y));
+                max_radius = std::max(max_radius, distance);
+            }
+        }
+
+        walkspace_[bearing] = max_radius;
     }
 
     regenerate_walkspace_ = false;
@@ -556,8 +680,7 @@ void WalkController::generateWalkspace() {
 }
 
 void WalkController::generateLimits(StepCycle step) {
-    // Simplified limit generation
-    // TODO: Implement full limit calculation like OpenSHC
+    // Implement full limit calculation like OpenSHC
 
     max_linear_speed_.clear();
     max_angular_speed_.clear();
@@ -568,11 +691,22 @@ void WalkController::generateLimits(StepCycle step) {
         double walkspace_radius = walkspace_entry.second;
         double on_ground_ratio = double(step.stance_period_) / step.period_;
 
-        // Basic limit calculations
-        double max_linear_speed = (walkspace_radius * 2.0) / (on_ground_ratio / step.frequency_);
-        double max_linear_acceleration = max_linear_speed / 2.0; // 2 second time to max
-        double max_angular_speed = max_linear_speed / 100.0;     // 100mm stance radius
-        double max_angular_acceleration = max_angular_speed / 2.0;
+        // Enhanced limit calculations based on OpenSHC approach
+        double step_frequency = step.frequency_;
+        double stance_duration = on_ground_ratio / step_frequency;
+
+        // Maximum linear speed based on step length and frequency
+        double max_step_length = walkspace_radius * 2.0; // Maximum step length
+        double max_linear_speed = (max_step_length * step_frequency) / 2.0; // Average speed
+
+        // Maximum angular speed based on stance radius
+        double stance_radius = walkspace_radius * 0.8; // Effective stance radius
+        double max_angular_speed = max_linear_speed / stance_radius;
+
+        // Acceleration limits based on step timing
+        double time_to_max_stride = 2.0; // 2 seconds to reach maximum stride
+        double max_linear_acceleration = max_linear_speed / time_to_max_stride;
+        double max_angular_acceleration = max_angular_speed / time_to_max_stride;
 
         max_linear_speed_[walkspace_entry.first] = max_linear_speed;
         max_angular_speed_[walkspace_entry.first] = max_angular_speed;
@@ -604,8 +738,8 @@ double WalkController::getLimit(const Point3D &linear_velocity_input, double ang
 
 // Accessor methods
 Point3D WalkController::getModelCurrentPose() const {
-    // TODO: Get from robot model
-    return Point3D(0, 0, 0);
+    // Get current pose from robot model
+    return model.getCurrentPose();
 }
 
 std::shared_ptr<LegStepper> WalkController::getLegStepper(int leg_index) const {

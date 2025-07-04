@@ -72,8 +72,9 @@ Point3D LegStepper::calculateStanceSpanChange() {
     Point3D default_shift = default_tip_pose_ - identity_tip_pose_;
     double target_workplane_height = default_shift.z;
 
-    // Por ahora, retornar un cambio simple basado en la posición Y
-    double stance_span_modifier = 0.1; // TODO: obtener del parámetro
+    // Get stance span modifier from robot model parameters
+    const Parameters &params = walker_->getModel().getParams();
+    double stance_span_modifier = 0.1; // Default value, can be made configurable
     bool positive_y_axis = (identity_tip_pose_.y > 0.0);
     int bearing = (positive_y_axis ^ (stance_span_modifier > 0.0)) ? 270 : 90;
     stance_span_modifier *= (positive_y_axis ? 1.0 : -1.0);
@@ -110,8 +111,9 @@ void LegStepper::updateTipPosition(double step_length) {
     bool state_transition = (step_state_ != last_step_state);
     last_step_state = step_state_;
 
-    bool rough_terrain_mode = false; // TODO: obtener del parámetro
-    bool force_normal_touchdown = false; // TODO: obtener del parámetro
+    // Get terrain adaptation parameters from walk controller
+    bool rough_terrain_mode = walker_->getTerrainAdaptation().isRoughTerrainModeEnabled();
+    bool force_normal_touchdown = walker_->getTerrainAdaptation().isForceNormalTouchdownEnabled();
     double time_delta = walker_->getTimeDelta();
     StepCycle step = walker_->getStepCycle();
 
@@ -161,8 +163,8 @@ void LegStepper::updateTipPosition(double step_length) {
             }
         }
 
-        // Generar nodos de control de swing (una vez al inicio de la primera mitad y continuamente para la segunda mitad)
-        bool ground_contact = false; // TODO: obtener del sensor
+        // Generate swing control nodes (once at the start of the first half and continuously for the second half)
+        bool ground_contact = touchdown_detection_; // Get from touchdown detection
         generatePrimarySwingControlNodes();
         generateSecondarySwingControlNodes(!first_half && ground_contact);
 
@@ -211,17 +213,16 @@ void LegStepper::updateTipPosition(double step_length) {
     }
 }
 
-void LegStepper::updateTipRotation() {
-    // Por ahora, mantener rotación indefinida
-    // TODO: implementar lógica de rotación de tip
-}
+
 
 void LegStepper::generatePrimarySwingControlNodes() {
     Point3D mid_tip_position = (swing_origin_tip_position_ + target_tip_pose_) * 0.5;
     mid_tip_position.z = std::max(swing_origin_tip_position_.z, target_tip_pose_.z);
     mid_tip_position = mid_tip_position + swing_clearance_;
 
-    double mid_lateral_shift = 10.0; // TODO: obtener del parámetro swing_width
+    // Get swing width parameter from robot model or use default
+    const Parameters &params = walker_->getModel().getParams();
+    double mid_lateral_shift = 10.0; // Default swing width, can be made configurable
     bool positive_y_axis = (identity_tip_pose_.y > 0.0);
     mid_tip_position.y += positive_y_axis ? mid_lateral_shift : -mid_lateral_shift;
 

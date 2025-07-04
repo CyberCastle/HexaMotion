@@ -149,6 +149,10 @@ public:
     bool hasTouchdownDetection(int leg_index) const;
     const VelocityLimits::LimitValues &getCurrentVelocities() const;
 
+    // Terrain adaptation accessors for LegStepper
+    const TerrainAdaptation& getTerrainAdaptation() const { return terrain_adaptation_; }
+    RobotModel& getModel() { return model; }
+
 private:
     RobotModel &model;
 

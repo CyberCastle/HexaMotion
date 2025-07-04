@@ -121,6 +121,18 @@ class TerrainAdaptation {
     void setGravityAlignedTips(bool enabled) { gravity_aligned_tips_ = enabled; }
 
     /**
+     * @brief Check if rough terrain mode is enabled
+     * @return True if rough terrain mode is active
+     */
+    bool isRoughTerrainModeEnabled() const { return rough_terrain_mode_; }
+
+    /**
+     * @brief Check if force normal touchdown is enabled
+     * @return True if force normal touchdown is active
+     */
+    bool isForceNormalTouchdownEnabled() const { return force_normal_touchdown_; }
+
+    /**
      * @brief Set FSR touchdown threshold
      * @param threshold FSR threshold for touchdown detection (N or ADC units)
      */

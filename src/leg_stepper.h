@@ -41,6 +41,7 @@ public:
     LegStepper(WalkController* walker, int leg_index, const Point3D& identity_tip_pose);
 
     // Accessors
+    int getLegIndex() const { return leg_index_; }
     Point3D getCurrentTipPose() const { return current_tip_pose_; }
     Point3D getDefaultTipPose() const { return default_tip_pose_; }
     Point3D getIdentityTipPose() const { return identity_tip_pose_; }
@@ -85,7 +86,6 @@ public:
     Point3D calculateStanceSpanChange();
     void updateDefaultTipPosition();
     void updateTipPosition(double step_length);
-    void updateTipRotation();
     void generatePrimarySwingControlNodes();
     void generateSecondarySwingControlNodes(bool ground_contact);
     void generateStanceControlNodes(double stride_scaler);
