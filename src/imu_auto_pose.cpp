@@ -8,9 +8,9 @@
 #include <algorithm>
 #include <cmath>
 
-IMUAutoPose::IMUAutoPose(RobotModel &model, IIMUInterface *imu, ManualPoseController &pose_controller,
+IMUAutoPose::IMUAutoPose(RobotModel &model, IIMUInterface *imu, ManualBodyPoseController &body_pose_controller,
                          ComputeConfig config)
-    : model_(model), imu_(imu), pose_controller_(pose_controller), config_(config),
+    : model_(model), imu_(imu), body_pose_controller_(body_pose_controller), config_(config),
       current_mode_(AUTO_POSE_OFF), filter_alpha_(0.1f), last_update_time_(0),
       terrain_roughness_estimate_(0.0f), walking_detected_(false) {
 
@@ -247,7 +247,7 @@ void IMUAutoPose::applyAutoPose() {
     auto_pose_state.pose_blend_factor = current_state_.confidence;
 
     // Apply pose through manual pose controller
-    pose_controller_.setTargetPose(auto_pose_state);
+            body_pose_controller_.setTargetBodyPose(auto_pose_state);
 }
 
 void IMUAutoPose::updateLevelMode() {

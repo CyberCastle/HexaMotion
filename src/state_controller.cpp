@@ -154,7 +154,7 @@ StateController::StateController(LocomotionSystem &locomotion, const StateMachin
     transition_progress_.error_message = "";
 
     // Initialize pose controller
-    pose_controller_ = nullptr;
+    body_pose_controller_ = nullptr;
 }
 
 StateController::~StateController() {
@@ -164,8 +164,8 @@ StateController::~StateController() {
     }
 
     // Clean up pose controller
-    if (pose_controller_) {
-        pose_controller_.reset();
+    if (body_pose_controller_) {
+        body_pose_controller_.reset();
     }
 }
 
@@ -209,13 +209,13 @@ bool StateController::initialize(const PoseConfiguration &pose_config) {
 
     // Initialize pose controller (equivalent to OpenSHC poser_)
     try {
-        pose_controller_ = std::make_unique<PoseController>(locomotion_system_.getRobotModel(),
-                                                            pose_config);
+                body_pose_controller_ = std::make_unique<BodyPoseController>(locomotion_system_.getRobotModel(),
+                                                           body_pose_config);
         logDebug("PoseController initialized successfully");
     } catch (const std::exception &e) {
-        pose_controller_.reset();
-        logError("Failed to initialize PoseController: " + String(e.what()));
-        setError("PoseController initialization failed");
+        body_pose_controller_.reset();
+        logError("Failed to initialize BodyPoseController: " + String(e.what()));
+        setError("BodyPoseController initialization failed");
         return false;
     }
 
@@ -594,7 +594,7 @@ void StateController::reset() {
     transition_progress_.error_message = "";
 
     // Initialize pose controller
-    pose_controller_ = nullptr;
+    body_pose_controller_ = nullptr;
 }
 
 // ==============================

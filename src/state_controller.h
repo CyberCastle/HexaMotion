@@ -7,7 +7,7 @@ class LocomotionSystem;
 #include "walk_controller.h"
 #include "admittance_controller.h"
 #include "locomotion_system.h"
-#include "pose_controller.h"
+#include "body_pose_controller.h"
 #include <Arduino.h>
 #include <ArduinoEigen.h>
 #include <memory>
@@ -163,7 +163,7 @@ class StateController {
      * @param pose_config Pose configuration for the robot.
      * @return True if initialization successful
      */
-    bool initialize(const PoseConfiguration &pose_config);
+    bool initialize(const BodyPoseConfiguration &body_pose_config);
 
     /**
      * @brief Main update loop for the state machine.
@@ -509,7 +509,7 @@ class StateController {
     bool is_initialized_;
 
     // Pose control
-    std::unique_ptr<PoseController> pose_controller_;
+    std::unique_ptr<BodyPoseController> body_pose_controller_;
     // Precomputed joint angle targets for packed and ready states
     JointAngles packed_target_angles_[NUM_LEGS];
     JointAngles ready_target_angles_[NUM_LEGS];

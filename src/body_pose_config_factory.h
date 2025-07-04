@@ -1,12 +1,12 @@
-#ifndef POSE_CONFIG_FACTORY_H
-#define POSE_CONFIG_FACTORY_H
+#ifndef BODY_POSE_CONFIG_FACTORY_H
+#define BODY_POSE_CONFIG_FACTORY_H
 
 #include "HexaModel.h"
-#include "pose_config.h"
+#include "body_pose_config.h"
 
 /**
- * @file pose_config_factory.h
- * @brief Factory functions for creating pose configurations
+ * @file body_pose_config_factory.h
+ * @brief Factory functions for creating body pose configurations
  *
  * This module separates the pose configuration creation logic from the data structures,
  * allowing pose_controller to only depend on data structures defined in pose_config.h
@@ -30,24 +30,24 @@ std::array<LegStancePosition, NUM_LEGS> calculateHexagonalStancePositions(const 
 std::array<StandingPoseJoints, NUM_LEGS> getDefaultStandingPoseJoints(const Parameters &params);
 
 /**
- * @brief Get default pose configuration using robot parameters (OpenSHC equivalent)
+ * @brief Get default body pose configuration using robot parameters (OpenSHC equivalent)
  * @param params Robot parameters from HexaModel
- * @return Default pose configuration calculated from robot specifications
+ * @return Default body pose configuration calculated from robot specifications
  */
-PoseConfiguration getDefaultPoseConfig(const Parameters &params);
+BodyPoseConfiguration getDefaultBodyPoseConfig(const Parameters &params);
 
 /**
- * @brief Get conservative pose configuration using robot parameters
+ * @brief Get conservative body pose configuration using robot parameters
  * @param params Robot parameters from HexaModel
- * @return Conservative pose configuration with reduced limits for safety
+ * @return Conservative body pose configuration with reduced limits for safety
  */
-PoseConfiguration getConservativePoseConfig(const Parameters &params);
+BodyPoseConfiguration getConservativeBodyPoseConfig(const Parameters &params);
 
 /**
- * @brief Get high-speed pose configuration using robot parameters
+ * @brief Get high-speed body pose configuration using robot parameters
  * @param params Robot parameters from HexaModel
- * @return High-speed pose configuration optimized for faster locomotion
+ * @return High-speed body pose configuration optimized for faster locomotion
  */
-PoseConfiguration getHighSpeedPoseConfig(const Parameters &params);
+BodyPoseConfiguration getHighSpeedBodyPoseConfig(const Parameters &params);
 
-#endif // POSE_CONFIG_FACTORY_H
+#endif // BODY_POSE_CONFIG_FACTORY_H

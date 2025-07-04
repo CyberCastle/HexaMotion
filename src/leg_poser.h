@@ -2,13 +2,13 @@
 #define LEG_POSER_H
 
 #include "HexaModel.h"
-#include "pose_controller.h"
+#include "body_pose_controller.h"
 #include "leg.h"
 #include <vector>
 #include <memory>
 
 // Forward declarations
-class PoseController;
+class BodyPoseController;
 class LocomotionSystem;
 
 /**
@@ -55,12 +55,12 @@ class LegPoser {
 public:
     /**
      * @brief Constructor
-     * @param pose_controller Pointer to the Pose Controller object
+     * @param body_pose_controller Pointer to the Body Pose Controller object
      * @param locomotion_system Pointer to the locomotion system
      * @param leg_index Index of the leg this poser controls
      * @param leg Reference to the Leg object this poser controls
      */
-    LegPoser(PoseController* pose_controller, LocomotionSystem* locomotion_system, int leg_index, Leg& leg);
+    LegPoser(BodyPoseController* body_pose_controller, LocomotionSystem* locomotion_system, int leg_index, Leg& leg);
 
     /**
      * @brief Copy constructor
@@ -142,7 +142,7 @@ public:
     void updateAutoPose(int phase);
 
 private:
-    PoseController* pose_controller_;        ///< Pointer to pose controller object
+    BodyPoseController* body_pose_controller_; ///< Pointer to body pose controller object
     LocomotionSystem* locomotion_system_;    ///< Pointer to locomotion system
     int leg_index_;                          ///< Index of the leg this poser controls
     Leg& leg_;                               ///< Reference to the Leg object this poser controls

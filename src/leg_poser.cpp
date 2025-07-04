@@ -13,8 +13,8 @@
  * It provides smooth transitions for leg positioning using Bezier curves and manages auto-posing.
  */
 
-LegPoser::LegPoser(PoseController* pose_controller, LocomotionSystem* locomotion_system, int leg_index, Leg& leg)
-    : pose_controller_(pose_controller)
+LegPoser::LegPoser(BodyPoseController* body_pose_controller, LocomotionSystem* locomotion_system, int leg_index, Leg& leg)
+    : body_pose_controller_(body_pose_controller)
     , locomotion_system_(locomotion_system)
     , leg_index_(leg_index)
     , leg_(leg)
@@ -23,7 +23,7 @@ LegPoser::LegPoser(PoseController* pose_controller, LocomotionSystem* locomotion
 }
 
 LegPoser::LegPoser(const LegPoser* leg_poser)
-    : pose_controller_(leg_poser->pose_controller_)
+    : body_pose_controller_(leg_poser->body_pose_controller_)
     , locomotion_system_(leg_poser->locomotion_system_)
     , leg_index_(leg_poser->leg_index_)
     , leg_(leg_poser->leg_)

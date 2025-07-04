@@ -1,8 +1,8 @@
-#include "manual_pose_controller.h"
+#include "manual_body_pose_controller.h"
 #include "hexamotion_constants.h"
 
 /**
- * @file manual_pose_controller.cpp
+ * @file manual_body_pose_controller.cpp
  * @brief Implements manual pose control utilities.
  */
 #include "math_utils.h"

@@ -1,24 +1,24 @@
-#ifndef POSE_CONTROLLER_H
-#define POSE_CONTROLLER_H
+#ifndef BODY_POSE_CONTROLLER_H
+#define BODY_POSE_CONTROLLER_H
 
 #include "HexaModel.h"
-#include "pose_config.h"
+#include "body_pose_config.h"
 #include "leg.h"
 
 // Forward declaration
 class IServoInterface;
 
 /**
- * @brief Kinematic pose controller for body and legs.
+ * @brief Kinematic body pose controller for robot body pose management.
  */
-class PoseController {
+class BodyPoseController {
   public:
     /**
-     * @brief Construct a pose controller.
+     * @brief Construct a body pose controller.
      * @param model  Reference to the robot model.
-     * @param config Initial pose configuration (use pose_config_factory.h to create)
+     * @param config Initial body pose configuration (use body_pose_config_factory.h to create)
      */
-    PoseController(RobotModel &model, const PoseConfiguration &config);
+    BodyPoseController(RobotModel &model, const BodyPoseConfiguration &config);
 
     /**
      * @brief Set the robot body pose.
@@ -128,17 +128,17 @@ class PoseController {
     void configureSmoothTrajectory(bool use_current_positions, double interpolation_speed = 0.1f, uint8_t max_steps = 20);
 
     /**
-     * @brief Get current pose configuration
-     * @return Reference to current pose configuration
+     * @brief Get current body pose configuration
+     * @return Reference to current body pose configuration
      */
-    const PoseConfiguration &getPoseConfig() const { return pose_config; }
+    const BodyPoseConfiguration &getBodyPoseConfig() const { return body_pose_config; }
 
     /**
-     * @brief Set pose configuration directly (decoupled approach)
-     * @param config Pre-configured pose configuration structure
+     * @brief Set body pose configuration directly (decoupled approach)
+     * @param config Pre-configured body pose configuration structure
      */
-    void setPoseConfig(const PoseConfiguration &config) {
-        pose_config = config;
+    void setBodyPoseConfig(const BodyPoseConfiguration &config) {
+        body_pose_config = config;
     }
 
     /**
@@ -173,16 +173,16 @@ class PoseController {
     }
 
   private:
-    // OpenSHC-style pose calculation using dynamic configuration
-    bool calculatePoseFromConfig(double height_offset, Leg legs[NUM_LEGS]);
+    // OpenSHC-style body pose calculation using dynamic configuration
+    bool calculateBodyPoseFromConfig(double height_offset, Leg legs[NUM_LEGS]);
 
-    // OpenSHC-style pose limit validation
-    bool checkPoseLimits(const Eigen::Vector3d &position, const Eigen::Vector3d &orientation);
+    // OpenSHC-style body pose limit validation
+    bool checkBodyPoseLimits(const Eigen::Vector3d &position, const Eigen::Vector3d &orientation);
 
     RobotModel &model;
 
-    // OpenSHC-style pose configuration
-    PoseConfiguration pose_config;
+    // OpenSHC-style body pose configuration
+    BodyPoseConfiguration body_pose_config;
 
     // Smooth trajectory state variables
     bool trajectory_in_progress;
@@ -204,4 +204,4 @@ class PoseController {
     Eigen::Vector4d quaternionSlerp(const Eigen::Vector4d &q1, const Eigen::Vector4d &q2, double t);
 };
 
-#endif // POSE_CONTROLLER_H
+#endif // BODY_POSE_CONTROLLER_H

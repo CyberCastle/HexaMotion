@@ -1,5 +1,5 @@
-#ifndef POSE_CONFIG_H
-#define POSE_CONFIG_H
+#ifndef BODY_POSE_CONFIG_H
+#define BODY_POSE_CONFIG_H
 
 #include "HexaModel.h"
 #include <array>
@@ -7,8 +7,8 @@
 #include <string>
 
 /**
- * @file pose_config.h
- * @brief OpenSHC-equivalent pose configuration data structures
+ * @file body_pose_config.h
+ * @brief OpenSHC-equivalent body pose configuration data structures
  *
  * This implementation follows OpenSHC's stance positioning system where:
  * - Standing pose joint angles are pre-configured, not calculated
@@ -35,12 +35,12 @@ struct StandingPoseJoints {
 };
 
 /**
- * @brief Complete pose configuration for the hexapod robot
- * Equivalent to OpenSHC's stance positioning and pose control system
+ * @brief Complete body pose configuration for the hexapod robot
+ * Equivalent to OpenSHC's stance positioning and body pose control system
  */
-struct PoseConfiguration {
+struct BodyPoseConfiguration {
     Parameters params;
-    PoseConfiguration(const Parameters& p) : params(p) {}
+    BodyPoseConfiguration(const Parameters& p) : params(p) {}
     // OpenSHC equivalent stance positions
     std::array<LegStancePosition, NUM_LEGS> leg_stance_positions;
 
@@ -79,4 +79,4 @@ struct PoseConfiguration {
     std::string leg_manipulation_mode; ///< String denoting the type of leg manipulation
 };
 
-#endif // POSE_CONFIG_H
+#endif // BODY_POSE_CONFIG_H

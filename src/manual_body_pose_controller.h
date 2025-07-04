@@ -1,38 +1,38 @@
-#ifndef MANUAL_POSE_CONTROLLER_H
-#define MANUAL_POSE_CONTROLLER_H
+#ifndef MANUAL_BODY_POSE_CONTROLLER_H
+#define MANUAL_BODY_POSE_CONTROLLER_H
 
 #include "HexaModel.h"
 #include <map>
 
 /**
- * @brief Manual posing modes equivalent to OpenSHC implementation
+ * @brief Manual body posing modes equivalent to OpenSHC implementation
  *
- * Supports multiple manual posing modes:
+ * Supports multiple manual body posing modes:
  * - Body translation (X, Y, Z)
  * - Body rotation (Roll, Pitch, Yaw)
  * - Individual leg manipulation
  * - Height adjustment
- * - Combined pose control
+ * - Combined body pose control
  */
-class ManualPoseController {
+class ManualBodyPoseController {
   public:
     /**
-     * @brief Available pose control modes
+     * @brief Available body pose control modes
      */
-    enum PoseMode {
-        POSE_TRANSLATION,    ///< Move body in X,Y,Z
-        POSE_ROTATION,       ///< Rotate body around X,Y,Z axes
-        POSE_LEG_INDIVIDUAL, ///< Control individual legs
-        POSE_BODY_HEIGHT,    ///< Adjust overall height
-        POSE_COMBINED,       ///< Combined translation and rotation
-        POSE_MANUAL_BODY,    ///< Manual body pose mode
-        POSE_CUSTOM          ///< Custom pose sequences
+    enum BodyPoseMode {
+        BODY_POSE_TRANSLATION,    ///< Move body in X,Y,Z
+        BODY_POSE_ROTATION,       ///< Rotate body around X,Y,Z axes
+        BODY_POSE_LEG_INDIVIDUAL, ///< Control individual legs
+        BODY_POSE_BODY_HEIGHT,    ///< Adjust overall height
+        BODY_POSE_COMBINED,       ///< Combined translation and rotation
+        BODY_POSE_MANUAL_BODY,    ///< Manual body pose mode
+        BODY_POSE_CUSTOM          ///< Custom pose sequences
     };
 
     /**
-     * @brief Pose state structure
+     * @brief Body pose state structure
      */
-    struct PoseState {
+    struct BodyPoseState {
         Point3D body_position;           ///< Body position offset
         Point3D body_rotation;           ///< Body rotation (roll, pitch, yaw) in radians
         Eigen::Vector4d body_quaternion; ///< Body orientation as quaternion [w, x, y, z]
@@ -53,9 +53,9 @@ class ManualPoseController {
     };
 
     /**
-     * @brief Input scaling configuration
+     * @brief Body pose input scaling configuration
      */
-    struct InputScaling {
+    struct BodyPoseInputScaling {
         double translation_scale; ///< Translation input scaling
         double rotation_scale;    ///< Rotation input scaling
         double height_scale;      ///< Height input scaling
@@ -72,40 +72,40 @@ class ManualPoseController {
     PoseState target_pose_;
     InputScaling input_scaling_;
 
-    // Pose limits
-    struct PoseLimits {
+    // Body pose limits
+    struct BodyPoseLimits {
         Point3D translation_limits; // ±X, ±Y, ±Z limits
         Point3D rotation_limits;    // ±Roll, ±Pitch, ±Yaw limits
         double height_min, height_max;
         double leg_reach_limit;
-    } pose_limits_;
+    } body_pose_limits_;
 
-    // Pose interpolation
+    // Body pose interpolation
     double interpolation_speed_;
     bool smooth_transitions_;
 
-    // Pose presets
-    std::map<std::string, PoseState> pose_presets_;
+    // Body pose presets
+    std::map<std::string, BodyPoseState> body_pose_presets_;
 
   public:
-    explicit ManualPoseController(RobotModel &model);
+    explicit ManualBodyPoseController(RobotModel &model);
 
     /**
-     * @brief Initialize pose controller with default settings
+     * @brief Initialize body pose controller with default settings
      */
     void initialize();
 
     /**
-     * @brief Set active pose control mode
-     * @param mode Desired pose mode
+     * @brief Set active body pose control mode
+     * @param mode Desired body pose mode
      */
-    void setPoseMode(PoseMode mode);
+    void setBodyPoseMode(BodyPoseMode mode);
 
     /**
-     * @brief Get current pose mode
+     * @brief Get current body pose mode
      * @return Current active mode
      */
-    PoseMode getPoseMode() const { return current_mode_; }
+    BodyPoseMode getBodyPoseMode() const { return current_mode_; }
 
     /**
      * @brief Process input commands based on current mode
@@ -116,20 +116,20 @@ class ManualPoseController {
     void processInput(double x, double y, double z);
 
     /**
-     * @brief Set pose using quaternion for orientation
+     * @brief Set body pose using quaternion for orientation
      * @param position Body position offset
      * @param quaternion Body orientation as quaternion [w, x, y, z]
      * @param blend_factor Blending factor for smooth transitions
      */
-    void setPoseQuaternion(const Point3D &position, const Eigen::Vector4d &quaternion, double blend_factor = 1.0f);
+    void setBodyPoseQuaternion(const Point3D &position, const Eigen::Vector4d &quaternion, double blend_factor = 1.0f);
 
     /**
-     * @brief Interpolate to target pose using quaternions
+     * @brief Interpolate to target body pose using quaternions
      * @param target_pos Target position
      * @param target_quat Target quaternion
      * @param speed Interpolation speed (0.0 to 1.0)
      */
-    void interpolateToQuaternionPose(const Point3D &target_pos, const Eigen::Vector4d &target_quat, double speed);
+    void interpolateToQuaternionBodyPose(const Point3D &target_pos, const Eigen::Vector4d &target_quat, double speed);
 
     /**
      * @brief Convert current Euler rotation to quaternion
@@ -153,67 +153,67 @@ class ManualPoseController {
     void processInputExtended(double x, double y, double z, double aux);
 
     /**
-     * @brief Get current pose state
-     * @return Current pose state
+     * @brief Get current body pose state
+     * @return Current body pose state
      */
-    const PoseState &getCurrentPose() const { return current_pose_; }
+    const BodyPoseState &getCurrentBodyPose() const { return current_pose_; }
 
     /**
-     * @brief Set target pose state (for smooth transitions)
-     * @param target Target pose state
+     * @brief Set target body pose state (for smooth transitions)
+     * @param target Target body pose state
      */
-    void setTargetPose(const PoseState &target);
+    void setTargetBodyPose(const BodyPoseState &target);
 
     /**
-     * @brief Update pose interpolation (call at regular intervals)
+     * @brief Update body pose interpolation (call at regular intervals)
      * @param dt Delta time in seconds
      */
-    void updatePoseInterpolation(double dt);
+    void updateBodyPoseInterpolation(double dt);
 
     /**
-     * @brief Reset to neutral/default pose
+     * @brief Reset to neutral/default body pose
      */
-    void resetPose();
+    void resetBodyPose();
 
     /**
-     * @brief Enable/disable smooth pose transitions
+     * @brief Enable/disable smooth body pose transitions
      * @param enable Whether to enable smooth transitions
      * @param speed Interpolation speed (0-1)
      */
-    void setSmoothTransitions(bool enable, double speed = 0.1f);
+    void setSmoothBodyPoseTransitions(bool enable, double speed = 0.1f);
 
     /**
-     * @brief Save current pose as preset
+     * @brief Save current body pose as preset
      * @param name Preset name
      */
-    void savePosePreset(const std::string &name);
+    void saveBodyPosePreset(const std::string &name);
 
     /**
-     * @brief Load pose preset
+     * @brief Load body pose preset
      * @param name Preset name
      * @return True if preset was found and loaded
      */
-    bool loadPosePreset(const std::string &name);
+    bool loadBodyPosePreset(const std::string &name);
 
     /**
-     * @brief Get list of available pose presets
+     * @brief Get list of available body pose presets
      * @return Vector of preset names
      */
-    std::vector<std::string> getPosePresetNames() const;
+    std::vector<std::string> getBodyPosePresetNames() const;
 
     /**
-     * @brief Apply pose to robot model (calculate leg positions)
-     * @param pose Pose to apply
+     * @brief Apply body pose to robot model (calculate leg positions)
+     * @param pose Body pose to apply
      * @param leg_positions Output leg positions
      * @param joint_angles Output joint angles
-     * @return True if pose application succeeded
+     * @return True if body pose application succeeded
      */
-    bool applyPose(const PoseState &pose, Point3D leg_positions[NUM_LEGS],
+    bool applyBodyPose(const BodyPoseState &pose, Point3D leg_positions[NUM_LEGS],
                    JointAngles joint_angles[NUM_LEGS]);
 
   private:
-    void initializePoseLimits();
-    void initializeDefaultPresets();
+    void initializeBodyPoseLimits();
+    void initializeDefaultBodyPosePresets();
 
     // Mode-specific input handlers
     void handleTranslationInput(double x, double y, double z);
@@ -222,7 +222,7 @@ class ManualPoseController {
     void handleHeightInput(double delta_height);
     void handleCombinedInput(double x, double y, double z);
 
-    // Pose validation and constraints
+    // Body pose validation and constraints
     void constrainTranslation(Point3D &translation) const;
     void constrainRotation(Point3D &rotation) const;
     void constrainHeight(double &height) const;
@@ -237,4 +237,4 @@ class ManualPoseController {
     Point3D calculateDefaultLegPosition(int leg_index, double height);
 };
 
-#endif // MANUAL_POSE_CONTROLLER_H
+#endif // MANUAL_BODY_POSE_CONTROLLER_H

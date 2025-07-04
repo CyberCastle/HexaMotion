@@ -1,13 +1,13 @@
-#include "pose_controller.h"
+#include "body_pose_controller.h"
 #include "hexamotion_constants.h"
 #include <cmath>
 /**
- * @file pose_controller.cpp
- * @brief Implementation of the kinematic pose controller.
+ * @file body_pose_controller.cpp
+ * @brief Implementation of the kinematic body pose controller.
  */
 
-PoseController::PoseController(RobotModel &m, const PoseConfiguration &config)
-    : model(m), pose_config(config), trajectory_in_progress(false), trajectory_progress(0.0f), trajectory_step_count(0) {
+BodyPoseController::BodyPoseController(RobotModel &m, const BodyPoseConfiguration &config)
+    : model(m), body_pose_config(config), trajectory_in_progress(false), trajectory_progress(0.0f), trajectory_step_count(0) {
     // Initialize trajectory arrays
     for (int i = 0; i < NUM_LEGS; i++) {
         trajectory_start_positions[i] = Point3D(0, 0, 0);
@@ -17,11 +17,11 @@ PoseController::PoseController(RobotModel &m, const PoseConfiguration &config)
     }
 }
 
-bool PoseController::setBodyPose(const Eigen::Vector3d &position, const Eigen::Vector3d &orientation,
+bool BodyPoseController::setBodyPose(const Eigen::Vector3d &position, const Eigen::Vector3d &orientation,
                                  Leg legs[NUM_LEGS]) {
-    // OpenSHC-style: Check pose limits before applying
-    if (!checkPoseLimits(position, orientation)) {
-        return false; // Pose exceeds configured limits
+    // OpenSHC-style: Check body pose limits before applying
+    if (!checkBodyPoseLimits(position, orientation)) {
+        return false; // Body pose exceeds configured limits
     }
 
     // Use smooth trajectory as default behavior if enabled

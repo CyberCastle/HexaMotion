@@ -2,7 +2,7 @@
 #define IMU_AUTO_POSE_H
 
 #include "HexaModel.h"
-#include "manual_pose_controller.h"
+#include "manual_body_pose_controller.h"
 #include "precision_config.h"
 
 /**
@@ -71,7 +71,7 @@ class IMUAutoPose {
   private:
     RobotModel &model_;
     IIMUInterface *imu_;
-    ManualPoseController &pose_controller_;
+    ManualBodyPoseController &body_pose_controller_;
     ComputeConfig config_;
 
     AutoPoseMode current_mode_;
@@ -97,10 +97,10 @@ class IMUAutoPose {
      * @brief Construct IMU auto-pose controller
      * @param model Reference to robot model
      * @param imu IMU interface
-     * @param pose_controller Reference to manual pose controller
+     * @param body_pose_controller Reference to manual body pose controller
      * @param config Computational configuration
      */
-    IMUAutoPose(RobotModel &model, IIMUInterface *imu, ManualPoseController &pose_controller,
+    IMUAutoPose(RobotModel &model, IIMUInterface *imu, ManualBodyPoseController &body_pose_controller,
                 ComputeConfig config = ComputeConfig::medium());
 
     /**

@@ -47,7 +47,7 @@
 #include "HexaModel.h"
 #include "admittance_controller.h"
 #include "cartesian_velocity_controller.h"
-#include "pose_controller.h"
+#include "body_pose_controller.h"
 #include "walk_controller.h"
 #include "leg.h"
 #include <Arduino.h>
@@ -110,7 +110,7 @@ class LocomotionSystem {
     ErrorCode last_error;
 
     RobotModel model;
-    PoseController *pose_ctrl;
+    BodyPoseController *body_pose_ctrl;
     WalkController *walk_ctrl;
     AdmittanceController *admittance_ctrl;
     // Last log time for sensor update profiling
@@ -140,7 +140,7 @@ class LocomotionSystem {
      * @param pose_config Pose configuration for the robot.
      * @return True on successful initialization.
      */
-    bool initialize(IIMUInterface *imu, IFSRInterface *fsr, IServoInterface *servo, const PoseConfiguration &pose_config);
+    bool initialize(IIMUInterface *imu, IFSRInterface *fsr, IServoInterface *servo, const BodyPoseConfiguration &body_pose_config);
 
     /**
      * @brief Run calibration sequence for sensors and servos.
