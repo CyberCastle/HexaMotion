@@ -1,4 +1,4 @@
-#include "../src/HexaModel.h" // for StepPhase enum
+#include "robot_model.h" // for StepPhase enum
 #include "../src/admittance_controller.h"
 #include "test_stubs.h"
 #include <cassert>

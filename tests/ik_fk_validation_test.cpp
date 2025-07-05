@@ -13,7 +13,7 @@
  * 8. Performance benchmarking
  */
 
-#include "HexaModel.h"
+#include "robot_model.h"
 #include "math_utils.h"
 #include <chrono>
 #include <cmath>

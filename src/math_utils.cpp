@@ -1,5 +1,5 @@
 #include "math_utils.h"
-#include "HexaModel.h"
+#include "robot_model.h"
 #include "hexamotion_constants.h"
 #include <cmath>
 

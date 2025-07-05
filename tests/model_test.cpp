@@ -1,4 +1,4 @@
-#include "../src/HexaModel.h"
+#include "robot_model.h"
 #include <cassert>
 #include <iostream>
 

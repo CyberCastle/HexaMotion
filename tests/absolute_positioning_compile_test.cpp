@@ -1,4 +1,4 @@
-#include "../src/HexaModel.h"
+#include "robot_model.h"
 #include "../src/imu_auto_pose.h"
 #include "../tests/test_stubs.h"
 

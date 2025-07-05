@@ -1,5 +1,5 @@
 #include "Arduino.h"
-#include "HexaModel.h"
+#include "robot_model.h"
 #include <iostream>
 
 int main() {

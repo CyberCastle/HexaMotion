@@ -1,7 +1,7 @@
 #ifndef WORKSPACE_VALIDATOR_H
 #define WORKSPACE_VALIDATOR_H
 
-#include "HexaModel.h"
+#include "robot_model.h"
 #include "hexamotion_constants.h"
 #include <cmath>
 

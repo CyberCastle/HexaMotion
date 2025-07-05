@@ -44,7 +44,7 @@
 #ifndef LOCOMOTION_SYSTEM_H
 #define LOCOMOTION_SYSTEM_H
 
-#include "HexaModel.h"
+#include "robot_model.h"
 #include "admittance_controller.h"
 #include "cartesian_velocity_controller.h"
 #include "body_pose_controller.h"

@@ -1,7 +1,7 @@
 #ifndef IMU_AUTO_POSE_H
 #define IMU_AUTO_POSE_H
 
-#include "HexaModel.h"
+#include "robot_model.h"
 #include "manual_body_pose_controller.h"
 #include "precision_config.h"
 

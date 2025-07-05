@@ -1,7 +1,7 @@
 #ifndef LEG_STEPPER_H
 #define LEG_STEPPER_H
 
-#include "HexaModel.h"
+#include "robot_model.h"
 #include "leg.h"
 
 // Forward declarations - REMOVED WalkController dependency

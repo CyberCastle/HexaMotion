@@ -1,5 +1,5 @@
 #include "workspace_validator.h"
-#include "HexaModel.h"
+#include "robot_model.h"
 #include "math_utils.h"
 #include <algorithm>
 #include <cmath>

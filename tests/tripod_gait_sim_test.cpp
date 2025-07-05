@@ -10,7 +10,7 @@
  * @date 2024
  */
 
-#include "../src/HexaModel.h"
+#include "robot_model.h"
 #include "../src/locomotion_system.h"
 #include "../src/body_pose_config_factory.h"
 #include "test_stubs.h"

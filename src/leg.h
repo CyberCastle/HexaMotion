@@ -1,7 +1,7 @@
 #ifndef LEG_H
 #define LEG_H
 
-#include "HexaModel.h"
+#include "robot_model.h"
 #include "math_utils.h"
 #include <Arduino.h>
 #include <ArduinoEigen.h>

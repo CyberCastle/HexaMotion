@@ -1,7 +1,7 @@
 #ifndef WALK_CONTROLLER_H
 #define WALK_CONTROLLER_H
 
-#include "HexaModel.h"
+#include "robot_model.h"
 #include "terrain_adaptation.h"
 #include "leg_stepper.h"  // ✅ Include for StepCycle definition
 #include "velocity_limits.h"

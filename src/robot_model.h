@@ -1,5 +1,5 @@
-#ifndef MODEL_H
-#define MODEL_H
+#ifndef ROBOT_MODEL_H
+#define ROBOT_MODEL_H
 
 #include "hexamotion_constants.h"
 #include "math_utils.h"
@@ -563,4 +563,4 @@ class RobotModel {
     JointAngles solveIK(int leg, const Point3D &local_target, JointAngles current) const;
 };
 
-#endif // MODEL_H
+#endif // ROBOT_MODEL_H

@@ -3,7 +3,7 @@
  * @brief Test demonstrating OpenSHC-style target position calculation based on current position
  */
 
-#include "HexaModel.h"
+#include "robot_model.h"
 #include "math_utils.h"
 #include <iostream>
 #include <iomanip>

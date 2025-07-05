@@ -1,7 +1,7 @@
 #ifndef BODY_POSE_H
 #define BODY_POSE_H
 
-#include "HexaModel.h"
+#include "robot_model.h"
 #include <Eigen/Dense>
 
 /**

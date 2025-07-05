@@ -3,7 +3,7 @@
 
 class LocomotionSystem;
 
-#include "HexaModel.h"
+#include "robot_model.h"
 #include "walk_controller.h"
 #include "admittance_controller.h"
 #include "locomotion_system.h"

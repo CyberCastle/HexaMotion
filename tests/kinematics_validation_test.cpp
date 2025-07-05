@@ -9,7 +9,7 @@
  * con la lógica geométrica precisa de angle_calculus.cpp
  */
 
-#include "HexaModel.h"
+#include "robot_model.h"
 #include <cmath>
 #include <iomanip>
 #include <iostream>

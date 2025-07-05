@@ -1,7 +1,7 @@
 #ifndef CARTESIAN_VELOCITY_CONTROLLER_H
 #define CARTESIAN_VELOCITY_CONTROLLER_H
 
-#include "HexaModel.h"
+#include "robot_model.h"
 #include "hexamotion_constants.h"
 #include <algorithm>
 #include "velocity_limits.h"

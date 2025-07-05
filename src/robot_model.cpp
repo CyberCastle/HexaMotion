@@ -1,4 +1,4 @@
-#include "HexaModel.h"
+#include "robot_model.h"
 #include "hexamotion_constants.h"
 
 /**
