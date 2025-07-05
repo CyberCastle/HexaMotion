@@ -9,6 +9,25 @@
 /**
  * @brief Represents a single leg of the hexapod robot with all associated data and functionality.
  *
+ * ---
+ * \b Tip Position API: setTipPosition vs setDesiredTipPose
+ *
+ * - setTipPosition(const Point3D&):
+ *   - Directly sets the tip position (tip_position_) of the leg, without updating joint angles or performing inverse kinematics (IK).
+ *   - Does NOT guarantee that the position is physically reachable or consistent with the current joint configuration.
+ *   - Use only for initialization, simulation, or forced state (not for real kinematic control).
+ *
+ * - setDesiredTipPose(const Point3D&):
+ *   - Sets the desired tip pose (desired_tip_pose_) as a target for the leg.
+ *   - To actually move the leg to this position, you must call applyIK(), which will compute the necessary joint angles and update the real tip position accordingly.
+ *   - This is the recommended way to command leg movement in a physically consistent and realistic manner.
+ *
+ * Typical usage for kinematic control:
+ *   1. leg.setDesiredTipPose(target_position);
+ *   2. leg.applyIK(robot_model);
+ *
+ * ---
+ *
  * This class encapsulates all information related to a leg including:
  * - Identification and configuration
  * - Joint angles and positions

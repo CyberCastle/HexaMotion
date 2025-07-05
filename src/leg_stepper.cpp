@@ -118,10 +118,11 @@ void LegStepper::updateTipPosition(double step_length, double time_delta, bool r
         Point3D delta_pos = math_utils::quarticBezierDot(swing_1_nodes_, time_input);
         Point3D new_tip_position = swing_origin_tip_position_ + delta_pos;
 
-        // ✅ CORRECTED: Only update the desired tip position, don't call IK/FK here
-        // The Model will handle IK/FK synchronization in updateModel()
+        // Update both internal state and leg position using proper IK architecture
         current_tip_pose_ = new_tip_position;
         current_tip_velocity_ = delta_pos / time_delta;
+        leg_.setDesiredTipPose(new_tip_position);
+        leg_.applyIK(robot_model_);
     }
     // Período de Stance
     else if (step_state_ == STEP_STANCE || step_state_ == STEP_FORCE_STANCE) {
@@ -132,10 +133,11 @@ void LegStepper::updateTipPosition(double step_length, double time_delta, bool r
         Point3D delta_pos = math_utils::quarticBezierDot(stance_nodes_, time_input);
         Point3D new_tip_position = stance_origin_tip_position_ + delta_pos;
 
-        // ✅ CORRECTED: Only update the desired tip position, don't call IK/FK here
-        // The Model will handle IK/FK synchronization in updateModel()
+        // Update both internal state and leg position using proper IK architecture
         current_tip_pose_ = new_tip_position;
         current_tip_velocity_ = delta_pos / time_delta;
+        leg_.setDesiredTipPose(new_tip_position);
+        leg_.applyIK(robot_model_);
     }
 }
 

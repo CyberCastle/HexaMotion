@@ -76,6 +76,7 @@ public:
     Point3D getSwingClearance() const { return swing_clearance_; }
     double getSwingProgress() const { return swing_progress_; }
     double getStanceProgress() const { return stance_progress_; }
+    double getStepProgress() const { return step_progress_; }
     bool hasCompletedFirstStep() const { return completed_first_step_; }
     bool isAtCorrectPhase() const { return at_correct_phase_; }
     Point3D getSwing1ControlNode(int i) const { return swing_1_nodes_[i]; }
@@ -89,9 +90,11 @@ public:
     void setDefaultTipPose(const Point3D& pose) { default_tip_pose_ = pose; }
     void setStepState(StepState state) { step_state_ = state; }
     void setPhase(int phase) { phase_ = phase; }
-    void setSwingProgress(int progress) { swing_progress_ = progress; }
-    void setStanceProgress(int progress) { stance_progress_ = progress; }
+    void setSwingProgress(double progress) { swing_progress_ = progress; }
+    void setStanceProgress(double progress) { stance_progress_ = progress; }
+    void setStepProgress(double progress) { step_progress_ = progress; }
     void setPhaseOffset(double offset) { leg_.setPhaseOffset(offset); }
+    void setSwingOriginTipVelocity(const Point3D& velocity) { swing_origin_tip_velocity_ = velocity; }
     void setCompletedFirstStep(bool completed) { completed_first_step_ = completed; }
     void setAtCorrectPhase(bool at_correct) { at_correct_phase_ = at_correct; }
     void setTouchdownDetection(bool detection) { touchdown_detection_ = detection; }
