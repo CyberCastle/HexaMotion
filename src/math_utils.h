@@ -202,7 +202,7 @@ struct StateVector {
  * @return Derivative of the state vector
  */
 template <typename T>
-using DerivativeFunction = T (*)(const StateVector<T> &state, double t);
+using DerivativeFunction = StateVector<T> (*)(const StateVector<T> &state, double t, void *params);
 
 /**
  * @brief Solve least squares for plane equation z = ax + by + c
@@ -215,12 +215,6 @@ using DerivativeFunction = T (*)(const StateVector<T> &state, double t);
  * @return true if solution found, false if matrix is singular
  */
 bool solveLeastSquaresPlane(const double* raw_A, const double* raw_B, int num_points, double& a, double& b, double& c);
- * @param t Current time
- * @param params User-defined parameters
- * @return Derivative vector [velocity, acceleration]
- */
-template <typename T>
-using DerivativeFunction = StateVector<T> (*)(const StateVector<T> &state, double t, void *params);
 
 /**
  * @brief Runge-Kutta 4th order integration for differential equations
