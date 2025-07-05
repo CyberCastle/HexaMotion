@@ -34,7 +34,7 @@ bool BodyPoseController::setBodyPose(const Eigen::Vector3d &position, const Eige
     return setBodyPoseImmediate(position, orientation, legs);
 }
 
-bool PoseController::setLegPosition(int leg_index, const Point3D &position, Leg legs[NUM_LEGS]) {
+bool BodyPoseController::setLegPosition(int leg_index, const Point3D &position, Leg legs[NUM_LEGS]) {
     JointAngles angles = model.inverseKinematics(leg_index, position);
 
     angles.coxa = model.constrainAngle(angles.coxa, model.getParams().coxa_angle_limits[0],
@@ -55,15 +55,15 @@ bool PoseController::setLegPosition(int leg_index, const Point3D &position, Leg 
 
 // OpenSHC-style pose calculation using dynamic configuration
 // Calculates leg positions based on pose configuration and desired body height
-bool PoseController::calculatePoseFromConfig(double height_offset, Leg legs[NUM_LEGS]) {
+bool BodyPoseController::calculateBodyPoseFromConfig(double height_offset, Leg legs[NUM_LEGS]) {
     // Calculate Z position based on body clearance and height offset
-    double target_z = -(pose_config.body_clearance * 1000.0f + height_offset); // Convert to mm and apply offset
+    double target_z = -(body_pose_config.body_clearance * 1000.0f + height_offset); // Convert to mm and apply offset
 
     // Use configured stance positions for each leg
     for (int i = 0; i < NUM_LEGS; i++) {
         // Get stance position from configuration (convert from meters to mm)
-        double stance_x_mm = pose_config.leg_stance_positions[i].x * 1000.0f;
-        double stance_y_mm = pose_config.leg_stance_positions[i].y * 1000.0f;
+        double stance_x_mm = body_pose_config.leg_stance_positions[i].x * 1000.0f;
+        double stance_y_mm = body_pose_config.leg_stance_positions[i].y * 1000.0f;
 
         Point3D target_pos;
         target_pos.x = stance_x_mm;
@@ -85,21 +85,21 @@ bool PoseController::calculatePoseFromConfig(double height_offset, Leg legs[NUM_
     return true;
 }
 
-void PoseController::initializeDefaultPose(Leg legs[NUM_LEGS]) {
+void BodyPoseController::initializeDefaultPose(Leg legs[NUM_LEGS]) {
     // OpenSHC-style: Use configuration-based calculation instead of direct geometry
-    calculatePoseFromConfig(0.0f, legs); // No height offset for default pose
+    calculateBodyPoseFromConfig(0.0f, legs); // No height offset for default pose
 }
 
-bool PoseController::setStandingPose(Leg legs[NUM_LEGS]) {
+bool BodyPoseController::setStandingPose(Leg legs[NUM_LEGS]) {
     // OpenSHC-style: Standing pose uses pre-configured joint angles, not calculated positions
     // This ensures coxa ≈ 0° and femur/tibia equal for all legs (symmetric posture)
 
     for (int i = 0; i < NUM_LEGS; i++) {
         // Use configured standing pose joint angles
         JointAngles angles;
-        angles.coxa = pose_config.standing_pose_joints[i].coxa;
-        angles.femur = pose_config.standing_pose_joints[i].femur;
-        angles.tibia = pose_config.standing_pose_joints[i].tibia;
+        angles.coxa = body_pose_config.standing_pose_joints[i].coxa;
+        angles.femur = body_pose_config.standing_pose_joints[i].femur;
+        angles.tibia = body_pose_config.standing_pose_joints[i].tibia;
 
         // Check joint limits
         angles.coxa = model.constrainAngle(angles.coxa, model.getParams().coxa_angle_limits[0],
@@ -120,7 +120,7 @@ bool PoseController::setStandingPose(Leg legs[NUM_LEGS]) {
     return true;
 }
 
-bool PoseController::setBodyPoseQuaternion(const Eigen::Vector3d &position, const Eigen::Vector4d &quaternion,
+bool BodyPoseController::setBodyPoseQuaternion(const Eigen::Vector3d &position, const Eigen::Vector4d &quaternion,
                                            Leg legs[NUM_LEGS]) {
     // Use smooth trajectory with quaternion if enabled
     if (model.getParams().smooth_trajectory.use_current_servo_positions &&
@@ -138,7 +138,7 @@ bool PoseController::setBodyPoseQuaternion(const Eigen::Vector3d &position, cons
     return setBodyPose(position, orientation, legs);
 }
 
-bool PoseController::interpolatePose(const Eigen::Vector3d &start_pos, const Eigen::Vector4d &start_quat,
+bool BodyPoseController::interpolatePose(const Eigen::Vector3d &start_pos, const Eigen::Vector4d &start_quat,
                                      const Eigen::Vector3d &end_pos, const Eigen::Vector4d &end_quat,
                                      double t, Leg legs[NUM_LEGS]) {
     // Clamp interpolation parameter
@@ -154,7 +154,7 @@ bool PoseController::interpolatePose(const Eigen::Vector3d &start_pos, const Eig
 }
 
 // Quaternion spherical linear interpolation (SLERP)
-Eigen::Vector4d PoseController::quaternionSlerp(const Eigen::Vector4d &q1, const Eigen::Vector4d &q2, double t) {
+Eigen::Vector4d BodyPoseController::quaternionSlerp(const Eigen::Vector4d &q1, const Eigen::Vector4d &q2, double t) {
     // Compute dot product
     double dot = q1[0] * q2[0] + q1[1] * q2[1] + q1[2] * q2[2] + q1[3] * q2[3];
 
@@ -189,7 +189,7 @@ Eigen::Vector4d PoseController::quaternionSlerp(const Eigen::Vector4d &q1, const
     return s0 * q1 + s1 * q2_adj;
 }
 
-bool PoseController::setBodyPoseSmooth(const Eigen::Vector3d &position, const Eigen::Vector3d &orientation,
+bool BodyPoseController::setBodyPoseSmooth(const Eigen::Vector3d &position, const Eigen::Vector3d &orientation,
                                        Leg legs[NUM_LEGS], IServoInterface *servos) {
     // Check if smooth trajectory is enabled
     if (!model.getParams().smooth_trajectory.use_current_servo_positions) {
@@ -206,7 +206,7 @@ bool PoseController::setBodyPoseSmooth(const Eigen::Vector3d &position, const Ei
     }
 }
 
-bool PoseController::setBodyPoseSmoothQuaternion(const Eigen::Vector3d &position, const Eigen::Vector4d &quaternion,
+bool BodyPoseController::setBodyPoseSmoothQuaternion(const Eigen::Vector3d &position, const Eigen::Vector4d &quaternion,
                                                  Leg legs[NUM_LEGS]) {
     // Convert quaternion to Euler angles and use smooth method
     Point3D euler_rad = math_utils::quaternionToEulerPoint3D(quaternion);

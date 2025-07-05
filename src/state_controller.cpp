@@ -1,7 +1,7 @@
 #include "state_controller.h"
 #include "locomotion_system.h"
 #include "hexamotion_constants.h"
-#include "pose_config_factory.h"
+#include "body_pose_config_factory.h"
 
 /**
  * @file state_controller.cpp
@@ -173,7 +173,7 @@ StateController::~StateController() {
 // INITIALIZATION
 // ==============================
 
-bool StateController::initialize(const PoseConfiguration &pose_config) {
+bool StateController::initialize(const BodyPoseConfiguration &pose_config) {
     logDebug("Initializing StateController...");
 
     // Check if locomotion system is available

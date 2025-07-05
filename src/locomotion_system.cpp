@@ -16,7 +16,7 @@
 #include "locomotion_system.h"
 #include "hexamotion_constants.h"
 #include "math_utils.h"
-#include "pose_config_factory.h"
+#include "body_pose_config_factory.h"
 #include "walk_controller.h"
 #include "workspace_validator.h" // Add unified validator
 #include <algorithm>
@@ -72,7 +72,7 @@ LocomotionSystem::~LocomotionSystem() {
 }
 
 // System initialization
-bool LocomotionSystem::initialize(IIMUInterface *imu, IFSRInterface *fsr, IServoInterface *servo, const PoseConfiguration &pose_config) {
+bool LocomotionSystem::initialize(IIMUInterface *imu, IFSRInterface *fsr, IServoInterface *servo, const BodyPoseConfiguration &pose_config) {
     if (!imu || !fsr || !servo) {
         last_error = PARAMETER_ERROR;
         return false;
@@ -98,7 +98,7 @@ bool LocomotionSystem::initialize(IIMUInterface *imu, IFSRInterface *fsr, IServo
         return false;
     }
 
-    pose_ctrl = new PoseController(model, pose_config);
+    pose_ctrl = new BodyPoseController(model, pose_config);
     walk_ctrl = new WalkController(model);
     admittance_ctrl = new AdmittanceController(model, imu_interface, fsr_interface);
     velocity_controller = new CartesianVelocityController(model);

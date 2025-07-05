@@ -146,7 +146,7 @@ class BodyPoseController {
      * @return Array of standing pose joint configurations
      */
     const std::array<StandingPoseJoints, NUM_LEGS> &getStandingPoseJoints() const {
-        return pose_config.standing_pose_joints;
+        return body_pose_config.standing_pose_joints;
     }
 
     /**
@@ -154,7 +154,7 @@ class BodyPoseController {
      * @param joints Array of standing pose joint configurations
      */
     void setStandingPoseJoints(const std::array<StandingPoseJoints, NUM_LEGS> &joints) {
-        pose_config.standing_pose_joints = joints;
+        body_pose_config.standing_pose_joints = joints;
     }
 
     /**

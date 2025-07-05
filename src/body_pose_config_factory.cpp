@@ -1,4 +1,4 @@
-#include "pose_config_factory.h"
+#include "body_pose_config_factory.h"
 #include "hexamotion_constants.h"
 #include "math_utils.h"
 #include <cmath>
