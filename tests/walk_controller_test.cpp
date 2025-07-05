@@ -14,7 +14,14 @@ int main() {
     p.control_frequency = 50;
 
     RobotModel model(p);
-    WalkController wc(model);
+
+    // Create leg objects for testing (similar to LocomotionSystem)
+    Leg test_legs[NUM_LEGS] = {
+        Leg(0, p), Leg(1, p), Leg(2, p),
+        Leg(3, p), Leg(4, p), Leg(5, p)
+    };
+
+    WalkController wc(model, test_legs);
     assert(wc.setGaitType(TRIPOD_GAIT));
     wc.updateGaitPhase(0.5f);
     LegState states[NUM_LEGS]{};

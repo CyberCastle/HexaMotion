@@ -217,7 +217,7 @@ bool BodyPoseController::setBodyPoseSmoothQuaternion(const Eigen::Vector3d &posi
     return setBodyPoseSmooth(position, orientation, legs);
 }
 
-bool PoseController::getCurrentServoPositions(IServoInterface *servos, Leg legs[NUM_LEGS]) {
+bool BodyPoseController::getCurrentServoPositions(IServoInterface *servos, Leg legs[NUM_LEGS]) {
     if (!servos) {
         return false;
     }
@@ -237,11 +237,11 @@ bool PoseController::getCurrentServoPositions(IServoInterface *servos, Leg legs[
     return true;
 }
 
-bool PoseController::initializeTrajectoryFromCurrent(const Eigen::Vector3d &target_position,
+bool BodyPoseController::initializeTrajectoryFromCurrent(const Eigen::Vector3d &target_position,
                                                      const Eigen::Vector3d &target_orientation,
                                                      Leg legs[NUM_LEGS], IServoInterface *servos) {
     // OpenSHC-style: Check pose limits before starting trajectory
-    if (!checkPoseLimits(target_position, target_orientation)) {
+    if (!checkBodyPoseLimits(target_position, target_orientation)) {
         return false; // Target pose exceeds configured limits
     }
 
@@ -261,22 +261,22 @@ bool PoseController::initializeTrajectoryFromCurrent(const Eigen::Vector3d &targ
     }
 
     // Calculate target leg positions using OpenSHC-style configuration-based calculation
-    // Create temporary leg objects for target calculation
-    Leg temp_legs[NUM_LEGS];
+    // Use the passed legs array directly for target calculation
+    // Store current positions as starting point
     for (int i = 0; i < NUM_LEGS; i++) {
-        temp_legs[i].setTipPosition(trajectory_start_positions[i]);
-        temp_legs[i].setJointAngles(trajectory_start_angles[i]);
+        trajectory_start_positions[i] = legs[i].getTipPosition();
+        trajectory_start_angles[i] = legs[i].getJointAngles();
     }
 
-    // Calculate target pose using OpenSHC-style method (bypassing smooth trajectory to avoid recursion)
-    if (!setBodyPoseImmediate(target_position, target_orientation, temp_legs)) {
+    // Calculate target pose using OpenSHC-style method
+    if (!setBodyPoseImmediate(target_position, target_orientation, legs)) {
         return false;
     }
 
     // Store target positions
     for (int i = 0; i < NUM_LEGS; i++) {
-        trajectory_target_positions[i] = temp_legs[i].getTipPosition();
-        trajectory_target_angles[i] = temp_legs[i].getJointAngles();
+        trajectory_target_positions[i] = legs[i].getTipPosition();
+        trajectory_target_angles[i] = legs[i].getJointAngles();
     }
 
     // Initialize trajectory state
@@ -287,7 +287,7 @@ bool PoseController::initializeTrajectoryFromCurrent(const Eigen::Vector3d &targ
     return updateTrajectoryStep(legs);
 }
 
-bool PoseController::updateTrajectoryStep(Leg legs[NUM_LEGS]) {
+bool BodyPoseController::updateTrajectoryStep(Leg legs[NUM_LEGS]) {
     const auto &config = model.getParams().smooth_trajectory;
 
     // Calculate interpolation progress
@@ -347,7 +347,7 @@ bool PoseController::updateTrajectoryStep(Leg legs[NUM_LEGS]) {
     return true;
 }
 
-bool PoseController::isTrajectoryComplete() const {
+bool BodyPoseController::isTrajectoryComplete() const {
     const auto &config = model.getParams().smooth_trajectory;
 
     // Check if we've reached maximum steps or full progress
@@ -361,15 +361,15 @@ bool PoseController::isTrajectoryComplete() const {
     return true;
 }
 
-bool PoseController::setBodyPoseImmediate(const Eigen::Vector3d &position, const Eigen::Vector3d &orientation,
+bool BodyPoseController::setBodyPoseImmediate(const Eigen::Vector3d &position, const Eigen::Vector3d &orientation,
                                           Leg legs[NUM_LEGS]) {
     // OpenSHC-style: Transform stance positions based on body pose
     for (int i = 0; i < NUM_LEGS; ++i) {
         // Start with configured stance position (convert from meters to mm)
         Point3D stance_pos;
-        stance_pos.x = pose_config.leg_stance_positions[i].x * 1000.0f;
-        stance_pos.y = pose_config.leg_stance_positions[i].y * 1000.0f;
-        stance_pos.z = -(pose_config.body_clearance * 1000.0f); // Body clearance
+        stance_pos.x = body_pose_config.leg_stance_positions[i].x * 1000.0f;
+        stance_pos.y = body_pose_config.leg_stance_positions[i].y * 1000.0f;
+        stance_pos.z = -(body_pose_config.body_clearance * 1000.0f); // Body clearance
 
         // Apply body transformation: translate relative to body position, then rotate
         Point3D leg_body_relative(stance_pos.x - position[0], stance_pos.y - position[1], stance_pos.z - position[2]);
@@ -394,16 +394,16 @@ bool PoseController::setBodyPoseImmediate(const Eigen::Vector3d &position, const
 }
 
 // OpenSHC-style pose limit validation
-bool PoseController::checkPoseLimits(const Eigen::Vector3d &position, const Eigen::Vector3d &orientation) {
+bool BodyPoseController::checkBodyPoseLimits(const Eigen::Vector3d &position, const Eigen::Vector3d &orientation) {
     // Convert position to meters for comparison with config limits
     double pos_x_m = position[0] / 1000.0f;
     double pos_y_m = position[1] / 1000.0f;
     double pos_z_m = position[2] / 1000.0f;
 
     // Check translation limits
-    if (std::abs(pos_x_m) > pose_config.max_translation.x ||
-        std::abs(pos_y_m) > pose_config.max_translation.y ||
-        std::abs(pos_z_m) > pose_config.max_translation.z) {
+    if (std::abs(pos_x_m) > body_pose_config.max_translation.x ||
+        std::abs(pos_y_m) > body_pose_config.max_translation.y ||
+        std::abs(pos_z_m) > body_pose_config.max_translation.z) {
         return false;
     }
 
@@ -413,16 +413,16 @@ bool PoseController::checkPoseLimits(const Eigen::Vector3d &position, const Eige
     double yaw_rad = math_utils::degreesToRadians(orientation[2]);
 
     // Check rotation limits
-    if (std::abs(roll_rad) > pose_config.max_rotation.roll ||
-        std::abs(pitch_rad) > pose_config.max_rotation.pitch ||
-        std::abs(yaw_rad) > pose_config.max_rotation.yaw) {
+    if (std::abs(roll_rad) > body_pose_config.max_rotation.roll ||
+        std::abs(pitch_rad) > body_pose_config.max_rotation.pitch ||
+        std::abs(yaw_rad) > body_pose_config.max_rotation.yaw) {
         return false;
     }
 
     return true;
 }
 
-void PoseController::configureSmoothTrajectory(bool use_current_positions, double interpolation_speed, uint8_t max_steps) {
+void BodyPoseController::configureSmoothTrajectory(bool use_current_positions, double interpolation_speed, uint8_t max_steps) {
     // Configure smooth trajectory parameters (OpenSHC-equivalent global parameter modification)
     auto &config = const_cast<Parameters &>(model.getParams()).smooth_trajectory;
     config.use_current_servo_positions = use_current_positions;

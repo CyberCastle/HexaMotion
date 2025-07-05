@@ -321,6 +321,9 @@ class LocomotionSystem {
     /** Execute a basic hardware self-test. */
     bool performSelfTest();
 
+    // Getter for WalkController
+    WalkController* getWalkController() { return walk_ctrl; }
+
   private:
     // Helper methods
     double constrainAngle(double angle, double min_angle, double max_angle);

@@ -9,7 +9,7 @@
 
 // LegStepper implementation moved to header file
 
-WalkController::WalkController(RobotModel &m)
+WalkController::WalkController(RobotModel &m, Leg legs[NUM_LEGS])
     : model(m), current_gait(TRIPOD_GAIT), gait_phase(0.0f),
       terrain_adaptation_(m), velocity_limits_(m),
       step_clearance_(30.0), step_depth_(10.0), body_clearance_(100.0),
@@ -17,9 +17,11 @@ WalkController::WalkController(RobotModel &m)
       walk_state_(WALK_STOPPED), pose_state_(0),
       regenerate_walkspace_(false), legs_at_correct_phase_(0), legs_completed_first_step_(0),
       return_to_default_attempted_(false) {
-    // Inicializar leg_steppers_ con posiciones reales del modelo
+
+    // Initialize leg_steppers_ with references to actual legs from LocomotionSystem
     leg_steppers_.clear();
-    // Definir offsets de fase para trípode (y reutilizable para otros patrones)
+
+    // Define phase offsets for tripod gait (reusable for other patterns)
     static const double tripod_phase_offsets[NUM_LEGS] = {
         0.0f, // Leg 0 (Anterior Right) - Group A (even)
         0.5f, // Leg 1 (Middle Right) - Group B (odd)
@@ -29,31 +31,22 @@ WalkController::WalkController(RobotModel &m)
         0.5f  // Leg 5 (Anterior Left) - Group B (odd)
     };
 
-    // Create dummy legs for LegStepper initialization
-    // Note: In a real implementation, these would be actual Leg objects
-    static Leg dummy_legs[NUM_LEGS] = {
-        Leg(0, m.getParams()), Leg(1, m.getParams()), Leg(2, m.getParams()),
-        Leg(3, m.getParams()), Leg(4, m.getParams()), Leg(5, m.getParams())
-    };
-
     for (int i = 0; i < NUM_LEGS; ++i) {
-        // Usar las mismas posiciones base que el modelo principal (DH parameters)
+        // Use the same base positions as the main model (DH parameters)
         // BASE_THETA_OFFSETS: {-30.0f, -90.0f, -150.0f, 30.0f, 90.0f, 150.0f}
         double base_angle_deg = m.getParams().dh_parameters[i][0][3];
         double base_angle = base_angle_deg * M_PI / 180.0; // Convert to radians
         double base_x = m.getParams().hexagon_radius * cos(base_angle);
         double base_y = m.getParams().hexagon_radius * sin(base_angle);
         double leg_reach = m.getParams().coxa_length + m.getParams().femur_length + m.getParams().tibia_length;
-        double safe_reach = leg_reach * 0.65f; // 65% de seguridad
+        double safe_reach = leg_reach * 0.65f; // 65% safety margin
         double default_foot_x = base_x + safe_reach * cos(base_angle);
         double default_foot_y = base_y + safe_reach * sin(base_angle);
         Point3D identity_tip(default_foot_x, default_foot_y, 0);
 
-        // Initialize dummy leg
-        dummy_legs[i].initialize(m, Pose(identity_tip, Eigen::Vector3d(0, 0, 0)));
-        dummy_legs[i].setPhaseOffset(tripod_phase_offsets[i]);
-
-        auto stepper = std::make_shared<LegStepper>(this, i, identity_tip, dummy_legs[i]);
+        // Use the actual leg from LocomotionSystem (not a dummy)
+        // The leg is already initialized with proper phase offsets in LocomotionSystem
+        auto stepper = std::make_shared<LegStepper>(this, i, identity_tip, legs[i]);
         leg_steppers_.push_back(stepper);
     }
 
@@ -324,8 +317,7 @@ void WalkController::init() {
         Point3D stance_tip_pose(
             base_x + safe_reach * cos(base_angle),
             base_y + safe_reach * sin(base_angle),
-            -params.robot_height
-        );
+            -params.robot_height);
 
         leg_stepper->setDefaultTipPose(stance_tip_pose);
     }
@@ -351,7 +343,7 @@ StepCycle WalkController::generateStepCycle(bool set_step_cycle) {
     // Calculate stance and swing phases based on frequency
     int stance_phase = static_cast<int>(60.0 * control_frequency / 50.0); // 60 iterations at 50Hz
     int swing_phase = static_cast<int>(40.0 * control_frequency / 50.0);  // 40 iterations at 50Hz
-    double step_frequency = 1.0; // Hz - can be made configurable
+    double step_frequency = 1.0;                                          // Hz - can be made configurable
 
     step.stance_end_ = stance_phase / 2;
     step.swing_start_ = step.stance_end_;
@@ -396,6 +388,10 @@ StepCycle WalkController::generateStepCycle(bool set_step_cycle) {
 }
 
 void WalkController::updateWalk(const Point3D &linear_velocity_input, double angular_velocity_input) {
+    // Update global gait phase based on control frequency interval
+    time_delta_ = 1.0 / model.getParams().control_frequency;
+    updateGaitPhase(time_delta_);
+
     Point3D new_linear_velocity;
     double new_angular_velocity;
 
@@ -489,59 +485,12 @@ void WalkController::updateWalk(const Point3D &linear_velocity_input, double ang
 
     // Update walk/step state and tip position along trajectory for each leg
     for (auto &leg_stepper : leg_steppers_) {
-        // Walk State Machine
-        if (walk_state_ == WALK_STARTING) {
-            // Check if all legs have completed one step
-            if (legs_at_correct_phase_ == leg_count) {
-                if (leg_stepper->getPhase() == step_.swing_end_ && !leg_stepper->hasCompletedFirstStep()) {
-                    leg_stepper->setCompletedFirstStep(true);
-                    legs_completed_first_step_++;
-                }
-            }
-            // Force any leg state into STANCE if it starts offset in a mid-swing state
-            if (!leg_stepper->isAtCorrectPhase()) {
-                if (leg_stepper->getPhaseOffset() > step_.swing_start_ &&
-                    leg_stepper->getPhaseOffset() < step_.swing_end_ &&
-                    leg_stepper->getPhase() != step_.swing_end_) {
-                    leg_stepper->setStepState(STEP_FORCE_STANCE);
-                } else {
-                    legs_at_correct_phase_++;
-                    leg_stepper->setAtCorrectPhase(true);
-                }
-            }
-        } else if (walk_state_ == WALK_MOVING) {
-            leg_stepper->setAtCorrectPhase(false);
-        } else if (walk_state_ == WALK_STOPPING) {
-            // All legs must attempt at least one step to achieve default tip position
-            bool zero_body_velocity = leg_stepper->getStrideVector().x == 0 &&
-                                      leg_stepper->getStrideVector().y == 0 &&
-                                      leg_stepper->getStrideVector().z == 0;
-            Point3D walk_plane_normal = leg_stepper->getWalkPlaneNormal();
-            Point3D error = leg_stepper->getCurrentTipPose() - leg_stepper->getTargetTipPose();
-            Point3D error_projection = math_utils::projectVector(error, walk_plane_normal);
-            bool at_target_tip_position = (math_utils::distance(error_projection, Point3D(0, 0, 0)) < 1.0); // 1mm tolerance
-
-            if (zero_body_velocity && !leg_stepper->isAtCorrectPhase() && leg_stepper->getPhase() == step_.swing_end_) {
-                if (at_target_tip_position || return_to_default_attempted_) {
-                    return_to_default_attempted_ = false;
-                    leg_stepper->updateDefaultTipPosition();
-                    leg_stepper->setStepState(STEP_FORCE_STOP);
-                    leg_stepper->setAtCorrectPhase(true);
-                    legs_at_correct_phase_++;
-                } else {
-                    return_to_default_attempted_ = true;
-                }
-            }
-        } else if (walk_state_ == WALK_STOPPED) {
-            leg_stepper->setStepState(STEP_FORCE_STOP);
-            leg_stepper->setPhase(0);
-        }
-
-        // Update tip positions
-        // Check leg state properly
-        double step_length = step_depth_; // Use configured step depth
-        leg_stepper->updateTipPosition(step_length);
-        leg_stepper->iteratePhase();
+        // Calcular la fase local continua usando la fase global y el offset de la pierna
+        double local_phase = std::fmod(gait_phase + leg_stepper->getPhaseOffset(), 1.0);
+        if (local_phase < 0)
+            local_phase += 1.0;
+        // Llamar a la nueva función de actualización continua
+        leg_stepper->updateWithPhase(local_phase, step_depth_);
     }
 
     updateWalkPlane();
@@ -633,19 +582,22 @@ void WalkController::updateWalkPlane() {
 
             // Solve using Cramer's rule for 3x3 system
             double det = ATA[0][0] * (ATA[1][1] * ATA[2][2] - ATA[1][2] * ATA[2][1]) -
-                        ATA[0][1] * (ATA[1][0] * ATA[2][2] - ATA[1][2] * ATA[2][0]) +
-                        ATA[0][2] * (ATA[1][0] * ATA[2][1] - ATA[1][1] * ATA[2][0]);
+                         ATA[0][1] * (ATA[1][0] * ATA[2][2] - ATA[1][2] * ATA[2][0]) +
+                         ATA[0][2] * (ATA[1][0] * ATA[2][1] - ATA[1][1] * ATA[2][0]);
 
             if (abs(det) > 1e-6) { // Check for singular matrix
                 double a = (ATb[0] * (ATA[1][1] * ATA[2][2] - ATA[1][2] * ATA[2][1]) -
-                           ATA[0][1] * (ATb[1] * ATA[2][2] - ATA[1][2] * ATb[2]) +
-                           ATA[0][2] * (ATb[1] * ATA[2][1] - ATA[1][1] * ATb[2])) / det;
+                            ATA[0][1] * (ATb[1] * ATA[2][2] - ATA[1][2] * ATb[2]) +
+                            ATA[0][2] * (ATb[1] * ATA[2][1] - ATA[1][1] * ATb[2])) /
+                           det;
                 double b = (ATA[0][0] * (ATb[1] * ATA[2][2] - ATA[1][2] * ATb[2]) -
-                           ATb[0] * (ATA[1][0] * ATA[2][2] - ATA[1][2] * ATA[2][0]) +
-                           ATA[0][2] * (ATA[1][0] * ATb[2] - ATb[1] * ATA[2][0])) / det;
+                            ATb[0] * (ATA[1][0] * ATA[2][2] - ATA[1][2] * ATA[2][0]) +
+                            ATA[0][2] * (ATA[1][0] * ATb[2] - ATb[1] * ATA[2][0])) /
+                           det;
                 double c = (ATA[0][0] * (ATA[1][1] * ATb[2] - ATA[1][2] * ATb[1]) -
-                           ATA[0][1] * (ATA[1][0] * ATb[2] - ATA[1][2] * ATb[0]) +
-                           ATb[0] * (ATA[1][0] * ATA[2][1] - ATA[1][1] * ATA[2][0])) / det;
+                            ATA[0][1] * (ATA[1][0] * ATb[2] - ATA[1][2] * ATb[0]) +
+                            ATb[0] * (ATA[1][0] * ATA[2][1] - ATA[1][1] * ATA[2][0])) /
+                           det;
 
                 // Normalize plane normal vector
                 double normal_magnitude = sqrt(a * a + b * b + 1.0);
@@ -718,7 +670,7 @@ void WalkController::generateWalkspace() {
 
             if (model.checkJointLimits(leg, angles)) {
                 double distance = sqrt((target_x - base_x) * (target_x - base_x) +
-                                      (target_y - base_y) * (target_y - base_y));
+                                       (target_y - base_y) * (target_y - base_y));
                 max_radius = std::max(max_radius, distance);
             }
         }
@@ -747,7 +699,7 @@ void WalkController::generateLimits(StepCycle step) {
         double stance_duration = on_ground_ratio / step_frequency;
 
         // Maximum linear speed based on step length and frequency
-        double max_step_length = walkspace_radius * 2.0; // Maximum step length
+        double max_step_length = walkspace_radius * 2.0;                    // Maximum step length
         double max_linear_speed = (max_step_length * step_frequency) / 2.0; // Average speed
 
         // Maximum angular speed based on stance radius
@@ -812,7 +764,7 @@ bool WalkController::isWalkspaceAnalysisEnabled() const {
     return walkspace_analyzer_ ? walkspace_analyzer_->isAnalysisEnabled() : false;
 }
 
-const WalkspaceAnalyzer::AnalysisInfo& WalkController::getWalkspaceAnalysisInfo() const {
+const WalkspaceAnalyzer::AnalysisInfo &WalkController::getWalkspaceAnalysisInfo() const {
     static WalkspaceAnalyzer::AnalysisInfo empty_info;
     return walkspace_analyzer_ ? walkspace_analyzer_->getAnalysisInfo() : empty_info;
 }
@@ -864,7 +816,7 @@ double WalkController::getWalkspaceRadius(double bearing_degrees) const {
 
 // ===== ENHANCED WALKSPACE ANALYSIS METHODS =====
 
-const std::map<int, double>& WalkController::getCurrentWalkspaceMap() const {
+const std::map<int, double> &WalkController::getCurrentWalkspaceMap() const {
     static std::map<int, double> empty_map;
     return walkspace_analyzer_ ? walkspace_analyzer_->getCurrentWalkspaceMap() : empty_map;
 }
@@ -877,7 +829,7 @@ double WalkController::getStabilityMargin() const {
     if (!walkspace_analyzer_) {
         return 0.0;
     }
-    const auto& analysis_info = walkspace_analyzer_->getAnalysisInfo();
+    const auto &analysis_info = walkspace_analyzer_->getAnalysisInfo();
     return analysis_info.current_result.stability_margin;
 }
 
@@ -885,7 +837,7 @@ double WalkController::getOverallStabilityScore() const {
     if (!walkspace_analyzer_) {
         return 0.0;
     }
-    const auto& analysis_info = walkspace_analyzer_->getAnalysisInfo();
+    const auto &analysis_info = walkspace_analyzer_->getAnalysisInfo();
     return analysis_info.overall_stability_score;
 }
 
@@ -893,7 +845,7 @@ std::map<int, double> WalkController::getLegReachabilityScores() const {
     if (!walkspace_analyzer_) {
         return std::map<int, double>();
     }
-    const auto& analysis_info = walkspace_analyzer_->getAnalysisInfo();
+    const auto &analysis_info = walkspace_analyzer_->getAnalysisInfo();
     return analysis_info.leg_reachability;
 }
 
@@ -901,6 +853,6 @@ bool WalkController::isCurrentlyStable() const {
     if (!walkspace_analyzer_) {
         return false;
     }
-    const auto& analysis_info = walkspace_analyzer_->getAnalysisInfo();
+    const auto &analysis_info = walkspace_analyzer_->getAnalysisInfo();
     return analysis_info.current_result.is_stable;
 }

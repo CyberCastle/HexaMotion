@@ -20,7 +20,7 @@ model_test: model_test.cpp ../src/math_utils.cpp ../src/robot_model.cpp
 pose_controller_test: pose_controller_test.cpp ../src/pose_controller.cpp ../src/robot_model.cpp ../src/math_utils.cpp ../src/pose_config_factory.cpp
 	$(CXX) $(CXXFLAGS) $^ -o $@
 
-walk_controller_test: walk_controller_test.cpp ../src/walk_controller.cpp ../src/leg_stepper.cpp ../src/terrain_adaptation.cpp ../src/robot_model.cpp ../src/velocity_limits.cpp ../src/math_utils.cpp ../src/workspace_validator.cpp
+walk_controller_test: walk_controller_test.cpp ../src/walk_controller.cpp ../src/leg_stepper.cpp ../src/terrain_adaptation.cpp ../src/robot_model.cpp ../src/velocity_limits.cpp ../src/math_utils.cpp ../src/workspace_validator.cpp ../src/leg.cpp ../src/walkspace_analyzer.cpp
 	$(CXX) $(CXXFLAGS) $^ -o $@
 
 admittance_controller_test: admittance_controller_test.cpp ../src/admittance_controller.cpp ../src/robot_model.cpp ../src/math_utils.cpp ../src/workspace_validator.cpp
@@ -32,7 +32,7 @@ locomotion_system_test: locomotion_system_test.cpp ../src/locomotion_system.cpp 
 state_controller_test: state_controller_test.cpp ../src/state_controller.cpp ../src/locomotion_system.cpp ../src/robot_model.cpp ../src/pose_controller.cpp ../src/walk_controller.cpp ../src/leg_stepper.cpp ../src/terrain_adaptation.cpp ../src/admittance_controller.cpp ../src/velocity_limits.cpp ../src/cartesian_velocity_controller.cpp ../src/math_utils.cpp ../src/workspace_validator.cpp
 	$(CXX) $(CXXFLAGS) $^ -o $@
 
-tripod_gait_sim_test: tripod_gait_sim_test.cpp ../src/walk_controller.cpp ../src/robot_model.cpp ../src/math_utils.cpp ../src/leg_stepper.cpp ../src/terrain_adaptation.cpp ../src/velocity_limits.cpp ../src/workspace_validator.cpp ../src/walkspace_analyzer.cpp ../src/leg.cpp
+tripod_gait_sim_test: tripod_gait_sim_test.cpp ../src/locomotion_system.cpp ../src/robot_model.cpp ../src/body_pose_controller.cpp ../src/walk_controller.cpp ../src/leg_stepper.cpp ../src/terrain_adaptation.cpp ../src/admittance_controller.cpp ../src/velocity_limits.cpp ../src/cartesian_velocity_controller.cpp ../src/math_utils.cpp ../src/workspace_validator.cpp ../src/body_pose_config_factory.cpp ../src/body_pose.cpp ../src/leg.cpp ../src/walkspace_analyzer.cpp
 	$(CXX) $(CXXFLAGS) $^ -o $@
 
 height_range_test: height_range_test.cpp ../src/robot_model.cpp ../src/math_utils.cpp

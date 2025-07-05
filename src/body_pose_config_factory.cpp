@@ -166,8 +166,8 @@ std::array<StandingPoseJoints, NUM_LEGS> getDefaultStandingPoseJoints(const Para
  * @param config_type Type of configuration ("default", "conservative", "high_speed")
  * @return Complete pose configuration following OpenSHC structure
  */
-PoseConfiguration createPoseConfiguration(const Parameters &params, const std::string &config_type) {
-    PoseConfiguration config(params);
+BodyPoseConfiguration createPoseConfiguration(const Parameters &params, const std::string &config_type) {
+    BodyPoseConfiguration config(params);
     config.leg_stance_positions = calculateHexagonalStancePositions(params);
     config.standing_pose_joints = getDefaultStandingPoseJoints(params);
 
@@ -227,7 +227,7 @@ PoseConfiguration createPoseConfiguration(const Parameters &params, const std::s
  * @param params Robot parameters from HexaModel
  * @return Default pose configuration calculated from robot specifications
  */
-PoseConfiguration getDefaultPoseConfig(const Parameters &params) {
+BodyPoseConfiguration getDefaultPoseConfig(const Parameters &params) {
     return createPoseConfiguration(params, "default");
 }
 
@@ -236,7 +236,7 @@ PoseConfiguration getDefaultPoseConfig(const Parameters &params) {
  * @param params Robot parameters from HexaModel
  * @return Conservative pose configuration with reduced limits for safety
  */
-PoseConfiguration getConservativePoseConfig(const Parameters &params) {
+BodyPoseConfiguration getConservativePoseConfig(const Parameters &params) {
     return createPoseConfiguration(params, "conservative");
 }
 
@@ -245,6 +245,11 @@ PoseConfiguration getConservativePoseConfig(const Parameters &params) {
  * @param params Robot parameters from HexaModel
  * @return High-speed pose configuration optimized for faster locomotion
  */
-PoseConfiguration getHighSpeedPoseConfig(const Parameters &params) {
+BodyPoseConfiguration getHighSpeedPoseConfig(const Parameters &params) {
     return createPoseConfiguration(params, "high_speed");
+}
+
+// Implementación para el linker
+BodyPoseConfiguration getDefaultBodyPoseConfig(const Parameters &params) {
+    return createPoseConfiguration(params, "default");
 }

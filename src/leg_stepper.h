@@ -44,6 +44,7 @@ public:
     // Accessors
     int getLegIndex() const { return leg_index_; }
     Point3D getCurrentTipPose() const { return leg_.getTipPosition(); }
+    JointAngles getJointAngles() const { return leg_.getJointAngles(); }
     Point3D getDefaultTipPose() const { return default_tip_pose_; }
     Point3D getIdentityTipPose() const { return identity_tip_pose_; }
     Point3D getTargetTipPose() const { return target_tip_pose_; }
@@ -91,6 +92,9 @@ public:
     void generateSecondarySwingControlNodes(bool ground_contact);
     void generateStanceControlNodes(double stride_scaler);
     void forceNormalTouchdown();
+
+    // Nueva API OpenSHC-like
+    void updateWithPhase(double local_phase, double step_length);
 
 private:
     WalkController* walker_;

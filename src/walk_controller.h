@@ -44,10 +44,16 @@ struct StepCycle {
 class WalkController {
 public:
     /**
-     * @brief Construct a walk controller.
-     * @param model Reference to the robot model used for kinematics.
+     * @brief Constructor with robot model and leg references
+     * @param m Robot model for kinematics and parameters
+     * @param legs Array of references to the actual Leg objects from LocomotionSystem
      */
-    explicit WalkController(RobotModel &model);
+    WalkController(RobotModel &m, Leg legs[NUM_LEGS]);
+
+    /**
+     * @brief Destructor
+     */
+    ~WalkController() = default;
 
     /**
      * @brief Initialize the walk controller with default parameters
