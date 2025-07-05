@@ -317,6 +317,10 @@ bool LocomotionSystem::planGaitSequence(double velocity_x, double velocity_y, do
     if (!walk_ctrl)
         return false;
 
+    // Guardar el comando de velocidad para uso en update()
+    commanded_linear_velocity_ = velocity_x;
+    commanded_angular_velocity_ = angular_velocity;
+
     // Delegate to WalkController for gait planning
     bool success = walk_ctrl->planGaitSequence(velocity_x, velocity_y, angular_velocity);
 
@@ -769,6 +773,14 @@ bool LocomotionSystem::update() {
         return true;
     }
 
+    // Actualizar la planificación de la marcha con el último comando de velocidad
+    planGaitSequence(commanded_linear_velocity_, 0.0, commanded_angular_velocity_);
+
+    // Actualizar el walk controller con el último comando de velocidad
+    if (walk_ctrl) {
+        walk_ctrl->updateWalk(Point3D(commanded_linear_velocity_, 0.0, 0.0), commanded_angular_velocity_);
+    }
+
     // Update gait phase (delegated to WalkController)
     updateGaitPhase();
 
@@ -804,6 +816,9 @@ bool LocomotionSystem::update() {
             }
         }
     }
+
+    // Actualizar el modelo para sincronizar datos (arquitectura OpenSHC)
+    updateModel();
 
     return true;
 }
@@ -1352,13 +1367,16 @@ bool LocomotionSystem::executeStartupSequence() {
     // Check if sequence is complete
     if (startup_progress == PROGRESS_COMPLETE) {
         startup_in_progress = false;
-        system_state = SYSTEM_RUNNING;
 
-        // Initialize walk controller for running state
+        // Inicializar walk controller para estado RUNNING
         if (walk_ctrl) {
             walk_ctrl->init();
+            walk_ctrl->generateWalkspace();
         }
+        // Sincronizar modelo (IK y pose)
+        updateModel();
 
+        system_state = SYSTEM_RUNNING;
         return true;
     }
 
@@ -1456,15 +1474,6 @@ void LocomotionSystem::updateModel() {
         // Aplicar IK para sincronizar ángulos articulares y posición del tip
         legs[i].applyIK(model);
     }
-}
-
-void LocomotionSystem::update(double linear_velocity, double angular_velocity) {
-    // Actualizar el walk controller con los inputs de velocidad
-    if (walk_ctrl) {
-        walk_ctrl->updateWalk(Point3D(linear_velocity, 0.0, 0.0), angular_velocity);
-    }
-    // Actualizar el modelo para sincronizar datos (arquitectura OpenSHC)
-    updateModel();
 }
 
 

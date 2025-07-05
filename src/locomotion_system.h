@@ -113,6 +113,10 @@ class LocomotionSystem {
     int startup_progress;
     int shutdown_progress;
 
+    // Último comando de velocidad deseado
+    double commanded_linear_velocity_ = 0.0;
+    double commanded_angular_velocity_ = 0.0;
+
     Point3D transformWorldToBody(const Point3D &p_world) const;
     bool setLegJointAngles(int leg_index, const JointAngles &q);
 
@@ -336,13 +340,6 @@ class LocomotionSystem {
     bool startWalking(GaitType gait_type, double velocity_x, double velocity_y, double angular_velocity);
     /** Stop walking and return to standing pose. */
     bool stopWalking();
-
-    /**
-     * @brief Update the locomotion system state.
-     * @param linear_velocity Linear velocity input
-     * @param angular_velocity Angular velocity input
-     */
-    void update(double linear_velocity, double angular_velocity);
 
     // ✅ NEW: Update model (OpenSHC architecture)
     void updateModel();
