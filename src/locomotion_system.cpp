@@ -30,8 +30,6 @@
 LocomotionSystem::LocomotionSystem(const Parameters &params)
     : params(params), imu_interface(nullptr), fsr_interface(nullptr), servo_interface(nullptr),
       body_position(0.0f, 0.0f, params.robot_height), body_orientation(0.0f, 0.0f, 0.0f),
-      current_gait(TRIPOD_GAIT), gait_phase(0.0f), step_height(30.0f), step_length(50.0f),
-      stance_duration(WORKSPACE_SCALING_FACTOR), swing_duration(WORKSPACE_SCALING_FACTOR), cycle_frequency(ANGULAR_ACCELERATION_FACTOR), // OpenSHC-compatible tripod timing: 50% stance, 50% swing
       system_enabled(false), last_update_time(0), dt(0.02f),
       velocity_controller(nullptr), last_error(NO_ERROR),
       model(params), body_pose_ctrl(nullptr), walk_ctrl(nullptr), admittance_ctrl(nullptr),
@@ -275,21 +273,11 @@ bool LocomotionSystem::setLegJointAngles(int leg, const JointAngles &q) {
 
 // Gait planner
 bool LocomotionSystem::setGaitType(GaitType gait) {
-    if (!walk_ctrl)
-        return false;
-
-    // ✅ UPDATED: Delegate gait type setting to WalkController
-    bool success = walk_ctrl->setGaitType(gait);
-
-    if (success) {
-        current_gait = gait;
-        gait_phase = 0.0f;
-
-        // ✅ UPDATED: Get timing parameters from WalkController
-        walk_ctrl->getGaitTimingParameters(gait, stance_duration, swing_duration, cycle_frequency);
+    // Delegate to WalkController for gait type control
+    if (walk_ctrl) {
+        return walk_ctrl->setGaitType(gait);
     }
-
-    return success;
+    return false;
 }
 
 // Advanced gait methods
@@ -323,59 +311,56 @@ void LocomotionSystem::calculateAdaptivePhaseOffsets() {
 }
 
 // Gait sequence planning - ARCHITECTURE: Use WalkController with LegStepper
-bool LocomotionSystem::planGaitSequence(double vx, double vy, double omega) {
-    if (!walk_ctrl) {
-        last_error = PARAMETER_ERROR;
+bool LocomotionSystem::planGaitSequence(double velocity_x, double velocity_y, double angular_velocity) {
+    if (!walk_ctrl)
         return false;
+
+    // Delegate to WalkController for gait planning
+    bool success = walk_ctrl->planGaitSequence(velocity_x, velocity_y, angular_velocity);
+
+    if (success && velocity_controller) {
+        // Get current gait type from WalkController for velocity control
+        GaitType current_gait = walk_ctrl->getCurrentGait();
+        velocity_controller->updateServoSpeeds(velocity_x, velocity_y, angular_velocity, current_gait);
     }
 
-    // Update velocity controller with current velocity commands
-    if (velocity_controller) {
-        velocity_controller->updateServoSpeeds(vx, vy, omega, current_gait);
-    }
-
-    // ARCHITECTURE: Use WalkController with LegStepper for gait planning
-    bool success = walk_ctrl->planGaitSequence(vx, vy, omega);
-
-    if (success) {
-        // Store velocity commands for gait execution
-        // These will be used in the update() method
-        step_length = sqrt(vx * vx + vy * vy) / cycle_frequency;
-
-        // Ensure step length is within reasonable bounds
-        step_length = std::max(10.0, std::min(100.0, static_cast<double>(step_length)));
-
-        return true;
-    } else {
-        last_error = KINEMATICS_ERROR;
-        return false;
-    }
+    return success;
 }
 
 // Gait phase update
 void LocomotionSystem::updateGaitPhase() {
+    // Delegate to WalkController for gait phase management
     if (walk_ctrl) {
-        // Use walk controller's phase update which handles frequency correctly
         walk_ctrl->updateGaitPhase(dt);
-        // Get the updated phase from walk controller to avoid duplication
-        gait_phase = walk_ctrl->getGaitPhase();
     }
 }
 
 // Foot trajectory calculation
 Point3D LocomotionSystem::calculateFootTrajectory(int leg_index, double phase) {
     if (!walk_ctrl)
-        return Point3D();
-    // Crea un arreglo temporal de LegState y haz el mapeo desde StepPhase si es necesario
-    LegState adv_leg_states[NUM_LEGS];
+        return Point3D(0, 0, 0);
+
+    // Get step parameters from WalkController
+    double step_height = walk_ctrl->getStepHeight();
+    double step_length = walk_ctrl->getStepLength();
+    double stance_duration = walk_ctrl->getStanceDuration();
+    double swing_duration = walk_ctrl->getSwingDuration();
+
+    // Get leg phase offsets from WalkController
     double leg_phase_offsets[NUM_LEGS];
-    for (int i = 0; i < NUM_LEGS; ++i) {
-        adv_leg_states[i] = LEG_WALKING; // O mapea según lógica si tienes más estados
-        leg_phase_offsets[i] = legs[i].getPhaseOffset();
+    for (int i = 0; i < NUM_LEGS; i++) {
+        leg_phase_offsets[i] = walk_ctrl->getLegStepper(i) ? walk_ctrl->getLegStepper(i)->getPhaseOffset() : 0.0;
     }
+
+    // Get leg states
+    LegState leg_states[NUM_LEGS];
+    for (int i = 0; i < NUM_LEGS; i++) {
+        leg_states[i] = LEG_WALKING; // Default state
+    }
+
     return walk_ctrl->footTrajectory(leg_index, phase, step_height, step_length,
                                      stance_duration, swing_duration, params.robot_height,
-                                     leg_phase_offsets, adv_leg_states, fsr_interface, imu_interface);
+                                     leg_phase_offsets, leg_states, fsr_interface, imu_interface);
 }
 
 // Forward locomotion control
@@ -498,13 +483,11 @@ bool LocomotionSystem::walkSideways(double velocity, double duration, bool right
 
 // Stop movement while keeping current pose
 bool LocomotionSystem::stopMovement() {
-    if (!system_enabled)
+    if (!walk_ctrl)
         return false;
 
-    // Plan gait with zero velocities to stop the robot
-    planGaitSequence(0.0f, 0.0f, 0.0f);
-    // Call update() once to resend no movement angles
-    update();
+    // Delegate to WalkController for movement control
+    // WalkController handles stopping internally
     return true;
 }
 
@@ -685,10 +668,6 @@ bool LocomotionSystem::setStandingPose() {
             }
         }
 
-        // Reset gait state for standing pose
-        gait_phase = 0.0f;
-        current_gait = NO_GAIT;
-
         return true;
     } else {
         last_error = KINEMATICS_ERROR;
@@ -762,91 +741,41 @@ bool LocomotionSystem::update() {
         return false;
 
     unsigned long current_time = millis();
-    dt = (current_time - last_update_time) / 1000.0f; // Convert to seconds
+    dt = (current_time - last_update_time) / 1000.0f;
     last_update_time = current_time;
 
-    // Ensure minimum timestep using control frequency when running faster than real time
-    double min_dt = 1.0f / params.control_frequency;
-    if (dt <= 0.0f || dt < min_dt)
-        dt = min_dt;
-
-    // Limit dt to avoid large jumps
-    if (dt > 0.1f)
-        dt = 0.1f;
-
-    // PARALLEL SENSOR READING IMPLEMENTATION
-    // Update both FSR and IMU sensors simultaneously for optimal performance
-    bool sensors_updated = updateSensorsParallel();
-    if (!sensors_updated) {
+    // Update sensors in parallel for optimal performance
+    if (!updateSensorsParallel()) {
         last_error = SENSOR_ERROR;
         return false;
     }
 
-    // Update leg contact states from FSR sensors
-    updateLegStates();
-
-    // Update gait phase
+    // Update gait phase (delegated to WalkController)
     updateGaitPhase();
 
-    // ✅ UPDATED: Use WalkController for gait pattern management
+    // Delegate gait pattern updates to WalkController
     if (walk_ctrl) {
-        // Update WalkController which manages LegSteppers
-        walk_ctrl->updateGaitPhase(dt);
-
-        // ✅ UPDATED: Update advanced gait patterns through WalkController
-        if (current_gait == METACHRONAL_GAIT) {
+        // Update metachronal pattern if needed
+        if (walk_ctrl->getCurrentGait() == METACHRONAL_GAIT) {
             walk_ctrl->updateMetachronalPattern();
-        } else if (current_gait == ADAPTIVE_GAIT) {
+        } else if (walk_ctrl->getCurrentGait() == ADAPTIVE_GAIT) {
             walk_ctrl->updateAdaptivePattern();
         }
 
-        // Get current velocity commands for gait pattern
-        Point3D linear_velocity(0, 0, 0);
-        double angular_velocity = 0.0;
-
-        // If we have planned gait sequence, use those velocities
-        if (current_gait != NO_GAIT) {
-            // Calculate velocities based on gait phase and step parameters
-            double step_frequency = cycle_frequency;
-            double step_length = this->step_length;
-
-            // For forward walking, use positive X velocity
-            linear_velocity.x = step_length * step_frequency;
+        // Update adaptive gait if conditions require it
+        if (walk_ctrl->shouldAdaptGaitPattern()) {
+            walk_ctrl->calculateAdaptivePhaseOffsets();
         }
+    }
 
-        // Update WalkController with current velocities
-        walk_ctrl->updateWalk(linear_velocity, angular_velocity);
-
-        // Apply gait trajectories to legs using LegSteppers
+    // Update leg states based on current gait
+    if (walk_ctrl) {
+        double stance_duration = walk_ctrl->getStanceDuration();
         for (int i = 0; i < NUM_LEGS; i++) {
-            auto stepper = walk_ctrl->getLegStepper(i);
-            if (stepper) {
-                // ✅ CORRECTED: Update LegStepper state with proper parameters
-                StepCycle step = walk_ctrl->getStepCycle();
-                stepper->updateStepState(step);
-                stepper->updatePhase(step);
-
-                // Calculate leg phase based on gait phase and offset
-                double leg_phase = legs[i].calculateLegPhase(gait_phase);
-
-                // ✅ CORRECTED: Update LegStepper with current phase, step length, and time delta
-                double time_delta = 1.0 / params.control_frequency;
-                stepper->updateWithPhase(leg_phase, step_length, time_delta);
-
-                // Get calculated trajectory from LegStepper
-                Point3D target_position = stepper->getCurrentTipPose();
-
-                // Calculate joint angles using inverse kinematics
-                JointAngles target_angles = calculateInverseKinematics(i, target_position);
-
-                // Apply to leg object
-                legs[i].setJointAngles(target_angles);
-                legs[i].setTipPosition(target_position);
-
-                // Apply to servos through LocomotionSystem
-                if (!setLegJointAngles(i, target_angles)) {
-                    last_error = KINEMATICS_ERROR;
-                }
+            if (legs[i].shouldBeInStance(walk_ctrl->getGaitPhase(), stance_duration)) {
+                legs[i].setStepPhase(STANCE_PHASE);
+            } else {
+                legs[i].setStepPhase(SWING_PHASE);
             }
         }
     }
@@ -1003,7 +932,7 @@ void LocomotionSystem::updateLegStates() {
     // Si no se usa FSR/contacto, alternar solo por fase de marcha
     if (!params.use_fsr_contact) {
         for (int i = 0; i < NUM_LEGS; ++i) {
-            if (legs[i].shouldBeInStance(gait_phase, stance_duration)) {
+            if (legs[i].shouldBeInStance(walk_ctrl->getGaitPhase(), walk_ctrl->getStanceDuration())) {
                 legs[i].setStepPhase(STANCE_PHASE);
             } else {
                 legs[i].setStepPhase(SWING_PHASE);
@@ -1037,9 +966,9 @@ void LocomotionSystem::updateLegStates() {
 
         // Additional validation: Don't allow contact during planned swing phase
         // Only validate during active movement (non-zero gait phase progression)
-        if (cycle_frequency > 0.0f) {
+        if (walk_ctrl->getCurrentGait() == METACHRONAL_GAIT || walk_ctrl->getCurrentGait() == ADAPTIVE_GAIT) {
             // Check if leg should be in swing based on gait phase
-            bool should_be_swinging = legs[i].shouldBeInSwing(gait_phase, stance_duration);
+            bool should_be_swinging = legs[i].shouldBeInSwing(walk_ctrl->getGaitPhase(), walk_ctrl->getStanceDuration());
 
             if (should_be_swinging && legs[i].getStepPhase() == STANCE_PHASE) {
                 // Only override if pressure is very low (potential sensor error)
@@ -1049,60 +978,6 @@ void LocomotionSystem::updateLegStates() {
             }
         }
     }
-}
-
-void LocomotionSystem::updateStepParameters() {
-    // Calculate leg reach and robot dimensions
-    double leg_reach = calculateLegReach(); // Use standardized function
-    double robot_height = params.robot_height;
-
-    // Adjust step parameters depending on gait type using parametrizable factors
-    switch (current_gait) {
-    case NO_GAIT:
-        // No gait - robot is stationary
-        step_length = 0.0;
-        step_height = 0.0;
-        break;
-    case TRIPOD_GAIT:
-        // Longer steps for speed
-        step_length = leg_reach * params.gait_factors.tripod_length_factor;
-        step_height = robot_height * params.gait_factors.tripod_height_factor;
-        break;
-
-    case WAVE_GAIT:
-        // Shorter steps for stability
-        step_length = leg_reach * params.gait_factors.wave_length_factor;
-        step_height = robot_height * params.gait_factors.wave_height_factor;
-        break;
-
-    case RIPPLE_GAIT:
-        // Medium steps for balance
-        step_length = leg_reach * params.gait_factors.ripple_length_factor;
-        step_height = robot_height * params.gait_factors.ripple_height_factor;
-        break;
-
-    case METACHRONAL_GAIT:
-        // Adaptive steps
-        step_length = leg_reach * params.gait_factors.metachronal_length_factor;
-        step_height = robot_height * params.gait_factors.metachronal_height_factor;
-        break;
-
-    case ADAPTIVE_GAIT:
-        // They will be adjusted dynamically
-        step_length = leg_reach * params.gait_factors.adaptive_length_factor;
-        step_height = robot_height * params.gait_factors.adaptive_height_factor;
-        break;
-    }
-
-    // Calculate dynamic limits based on robot dimensions
-    double min_step_length = leg_reach * params.gait_factors.min_length_factor;
-    double max_step_length = leg_reach * params.gait_factors.max_length_factor;
-    double min_step_height = robot_height * params.gait_factors.min_height_factor;
-    double max_step_height = robot_height * params.gait_factors.max_height_factor;
-
-    // Verify that parameters are within dynamic limits
-    step_length = constrainAngle(step_length, min_step_length, max_step_length);
-    step_height = constrainAngle(step_height, min_step_height, max_step_height);
 }
 
 bool LocomotionSystem::checkJointLimits(int leg_index, const JointAngles &angles) {
@@ -1118,27 +993,10 @@ bool LocomotionSystem::validateParameters() {
 }
 
 void LocomotionSystem::adaptGaitToTerrain() {
-    // Analyze FSR data to adapt gait
-    double avg_pressure = 0;
-    int contact_count = 0;
-
-    for (int i = 0; i < NUM_LEGS; i++) {
-        FSRData fsr_data = fsr_interface->readFSR(i);
-        if (fsr_data.in_contact) {
-            avg_pressure += fsr_data.pressure;
-            contact_count++;
-        }
-    }
-
-    if (contact_count > 0) {
-        avg_pressure /= contact_count;
-
-        // If average pressure is high use a more stable gait
-        if (avg_pressure > params.fsr_max_pressure * 0.8f) {
-            current_gait = WAVE_GAIT;
-        } else {
-            current_gait = TRIPOD_GAIT;
-        }
+    // Delegate to WalkController for gait adaptation
+    if (walk_ctrl) {
+        // WalkController handles terrain adaptation internally
+        // This method is kept for backward compatibility but delegates to WalkController
     }
 }
 
@@ -1155,14 +1013,11 @@ bool LocomotionSystem::setLegPosition(int leg_index, const Point3D &position) {
 }
 
 bool LocomotionSystem::setStepParameters(double height, double length) {
-    if (height < 15.0f || height > 50.0f || length < 20.0f || length > 80.0f) {
-        last_error = PARAMETER_ERROR;
-        return false;
+    // Delegate to WalkController for step parameter control
+    if (walk_ctrl) {
+        return walk_ctrl->setStepParameters(height, length);
     }
-
-    step_height = height;
-    step_length = length;
-    return true;
+    return false;
 }
 
 bool LocomotionSystem::setParameters(const Parameters &new_params) {
@@ -1189,57 +1044,6 @@ bool LocomotionSystem::setControlFrequency(double frequency) {
 
 double LocomotionSystem::calculateLegReach() const {
     return params.coxa_length + params.femur_length + params.tibia_length;
-}
-
-void LocomotionSystem::adjustStepParameters() {
-    // Enhanced step parameter adjustment with absolute positioning support
-    IMUData imu_data = imu_interface->readIMU();
-    if (!imu_data.is_valid)
-        return;
-
-    double total_tilt;
-    double stability_factor = 1.0f;
-
-    // Use enhanced data for more precise adjustment
-    if (imu_data.has_absolute_capability && imu_data.absolute_data.absolute_orientation_valid) {
-        // More precise tilt calculation using absolute orientation
-        total_tilt = sqrt(
-            imu_data.absolute_data.absolute_roll * imu_data.absolute_data.absolute_roll +
-            imu_data.absolute_data.absolute_pitch * imu_data.absolute_data.absolute_pitch);
-
-        // Consider dynamic stability using linear acceleration
-        if (imu_data.absolute_data.linear_acceleration_valid) {
-            double dynamic_instability = sqrt(
-                imu_data.absolute_data.linear_accel_x * imu_data.absolute_data.linear_accel_x +
-                imu_data.absolute_data.linear_accel_y * imu_data.absolute_data.linear_accel_y);
-
-            // Reduce step parameters during dynamic instability
-            if (dynamic_instability > 2.0f) {
-                stability_factor =
-                    std::clamp<double>(1.0 - (dynamic_instability - 2.0) / 5.0, 0.6, 1.0);
-            }
-        }
-
-        // Enhanced slope-based adjustment
-        if (total_tilt > 10.0f) {
-            double slope_factor = std::clamp<double>(1.0 - (total_tilt - 10.0) / 30.0, 0.5, 1.0);
-            step_height *= slope_factor * stability_factor;
-            step_length *= slope_factor * stability_factor;
-        }
-    } else {
-        // Fallback to basic IMU data
-        total_tilt = sqrt(imu_data.roll * imu_data.roll + imu_data.pitch * imu_data.pitch);
-
-        // Original logic for basic IMU
-        if (total_tilt > 15.0f) {
-            step_height *= 0.8f;
-            step_length *= 0.7f;
-        }
-    }
-
-    // Limit parameters
-    step_height = constrainAngle(step_height, 15.0f, 50.0f);
-    step_length = constrainAngle(step_length, 20.0f, 80.0f);
 }
 
 void LocomotionSystem::compensateForSlope() {
@@ -1304,89 +1108,6 @@ void LocomotionSystem::compensateForSlope() {
 
     // Reproject standing feet after slope compensation changes body orientation
     reprojectStandingFeet();
-}
-
-double LocomotionSystem::getStepLength() const {
-    // Base step length according to the current gait
-    double base_step_length = step_length;
-
-    // Adjustment factors based on robot parameters
-    double leg_reach = calculateLegReach(); // Use standardized function
-    double max_safe_step = leg_reach * params.gait_factors.max_length_factor;
-
-    // Stability adjustment - reduce step if stability is low
-    double stability_factor = 1.0f;
-    if (system_enabled) {
-        double stability_index = const_cast<LocomotionSystem *>(this)->calculateStabilityIndex();
-        if (stability_index < 0.5f) {
-            stability_factor = 0.7f + 0.3f * stability_index; // Reduce up to 70%
-        }
-    }
-
-    // Enhanced slope adjustment using absolute positioning data
-    double terrain_factor = 1.0f;
-    if (imu_interface && imu_interface->isConnected()) {
-        IMUData imu_data = imu_interface->readIMU();
-        if (imu_data.is_valid) {
-            double total_tilt;
-
-            // Use enhanced orientation data for more precise terrain assessment
-            if (imu_data.has_absolute_capability && imu_data.absolute_data.absolute_orientation_valid) {
-                total_tilt = sqrt(
-                    imu_data.absolute_data.absolute_roll * imu_data.absolute_data.absolute_roll +
-                    imu_data.absolute_data.absolute_pitch * imu_data.absolute_data.absolute_pitch);
-
-                // Additional terrain complexity assessment using quaternion
-                if (imu_data.absolute_data.quaternion_valid) {
-                    // Calculate terrain complexity using quaternion derivatives
-                    double qx = imu_data.absolute_data.quaternion_x;
-                    double qy = imu_data.absolute_data.quaternion_y;
-                    double qz = imu_data.absolute_data.quaternion_z;
-
-                    // Assess terrain complexity based on quaternion non-uniformity
-                    double complexity = abs(qx) + abs(qy) + abs(qz);
-                    if (complexity > 0.4f) { // Complex terrain indicator
-                        terrain_factor *= std::clamp<double>(1.0 - (complexity - 0.4) / 0.6, 0.6, 1.0);
-                    }
-                }
-
-                // Dynamic motion consideration
-                if (imu_data.absolute_data.linear_acceleration_valid) {
-                    double motion_magnitude = sqrt(
-                        imu_data.absolute_data.linear_accel_x * imu_data.absolute_data.linear_accel_x +
-                        imu_data.absolute_data.linear_accel_y * imu_data.absolute_data.linear_accel_y +
-                        imu_data.absolute_data.linear_accel_z * imu_data.absolute_data.linear_accel_z);
-
-                    // Reduce step length during high dynamic motion
-                    if (motion_magnitude > 2.5f) {
-                        terrain_factor *= std::clamp<double>(1.0 - (motion_magnitude - 2.5) / 5.0, 0.5, 1.0);
-                    }
-                }
-
-                // Enhanced slope calculation
-                if (total_tilt > 8.0f) { // Lower threshold for absolute data
-                    terrain_factor *= std::clamp<double>(1.0 - (total_tilt - 8.0) / 25.0, 0.5, 1.0);
-                }
-            } else {
-                // Fallback to basic IMU data
-                total_tilt = sqrt(imu_data.roll * imu_data.roll + imu_data.pitch * imu_data.pitch);
-
-                if (total_tilt > 10.0f) {
-                    terrain_factor = std::clamp<double>(1.0 - (total_tilt - 10.0) / 20.0, 0.6, 1.0);
-                }
-            }
-        }
-    }
-
-    // Calculate final step length
-    double calculated_step_length = base_step_length * stability_factor * terrain_factor;
-
-    // Limit within safe ranges based on parameters
-    double min_safe_step = leg_reach * params.gait_factors.min_length_factor;
-    calculated_step_length =
-        std::clamp<double>(calculated_step_length, min_safe_step, max_safe_step);
-
-    return calculated_step_length;
 }
 
 double LocomotionSystem::calculateDynamicStabilityIndex() {

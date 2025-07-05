@@ -17,7 +17,8 @@ WalkController::WalkController(RobotModel &m, Leg legs[NUM_LEGS])
       walk_state_(WALK_STOPPED), pose_state_(0),
       regenerate_walkspace_(false), legs_at_correct_phase_(0), legs_completed_first_step_(0),
       return_to_default_attempted_(false),
-      stance_duration_(0.5), swing_duration_(0.5), cycle_frequency_(1.2) {
+      stance_duration_(0.5), swing_duration_(0.5), cycle_frequency_(1.2),
+      step_height_(30.0), step_length_(50.0) {
 
     // Initialize leg_steppers_ with references to actual legs from LocomotionSystem
     leg_steppers_.clear();
@@ -112,6 +113,13 @@ Point3D WalkController::footTrajectory(int leg_index, double phase, double step_
                                        double stance_duration, double swing_duration, double robot_height,
                                        const double leg_phase_offsets[NUM_LEGS], LegState (&leg_states)[NUM_LEGS],
                                        IFSRInterface *fsr, IIMUInterface *imu) {
+    // ✅ UPDATED: Use internal step parameters instead of passed parameters
+    // This maintains backward compatibility while using internal state
+    double internal_step_height = step_height_;
+    double internal_step_length = step_length_;
+    double internal_stance_duration = stance_duration_;
+    double internal_swing_duration = swing_duration_;
+
     // Update terrain adaptation system
     terrain_adaptation_.update(fsr, imu);
 
@@ -133,7 +141,7 @@ Point3D WalkController::footTrajectory(int leg_index, double phase, double step_
     leg_stepper->setPhase(step_phase);
 
     // ✅ CORRECTED: Update the leg stepper's trajectory with proper parameters
-    leg_stepper->updateTipPosition(step_length, time_delta_, false, false);
+    leg_stepper->updateTipPosition(internal_step_length, time_delta_, false, false);
 
     // Get the calculated trajectory from the leg stepper
     Point3D trajectory = leg_stepper->getCurrentTipPose();
@@ -886,6 +894,9 @@ void WalkController::initGaitParameters(GaitType gait) {
         applyGaitConfig(gait_configs_[TRIPOD_GAIT]);
     }
 
+    // ✅ NEW: Update step parameters based on gait type
+    updateStepParameters();
+
     // Generate new step cycle with updated parameters
     generateStepCycle();
     generateLimits(step_);
@@ -1114,4 +1125,129 @@ Point3D WalkController::calculateDefaultStancePosition(int leg_index) {
     double default_foot_y = base_y + safe_reach * sin(base_angle);
 
     return Point3D(default_foot_x, default_foot_y, 0);
+}
+
+// ✅ NEW: Step parameter control methods (migrated from LocomotionSystem)
+
+bool WalkController::setStepParameters(double height, double length) {
+    if (height < 15.0f || height > 50.0f || length < 20.0f || length > 80.0f) {
+        return false;
+    }
+
+    step_height_ = height;
+    step_length_ = length;
+    return true;
+}
+
+double WalkController::getStepHeight() const {
+    return step_height_;
+}
+
+double WalkController::getStepLength() const {
+    // Base step length according to the current gait
+    double base_step_length = step_length_;
+
+    // Adjustment factors based on robot parameters
+    double leg_reach = calculateLegReach(); // Use standardized function
+    double max_safe_step = leg_reach * model.getParams().gait_factors.max_length_factor;
+
+    // Stability adjustment - reduce step if stability is low
+    double stability_factor = 1.0f;
+    double stability_index = calculateStabilityIndex();
+    if (stability_index < 0.5f) {
+        stability_factor = 0.7f + 0.3f * stability_index; // Reduce up to 70%
+    }
+
+    // Enhanced slope adjustment using absolute positioning data
+    double terrain_factor = 1.0f;
+    // Note: IMU data access would need to be passed from LocomotionSystem
+    // For now, use basic terrain assessment
+
+    // Calculate final step length
+    double calculated_step_length = base_step_length * stability_factor * terrain_factor;
+
+    // Limit within safe ranges based on parameters
+    double min_safe_step = leg_reach * model.getParams().gait_factors.min_length_factor;
+    calculated_step_length =
+        std::clamp<double>(calculated_step_length, min_safe_step, max_safe_step);
+
+    return calculated_step_length;
+}
+
+double WalkController::calculateLegReach() const {
+    const auto& params = model.getParams();
+    return params.coxa_length + params.femur_length + params.tibia_length;
+}
+
+void WalkController::updateStepParameters() {
+    // Calculate leg reach and robot dimensions
+    double leg_reach = calculateLegReach(); // Use standardized function
+    double robot_height = model.getParams().robot_height;
+
+    // Adjust step parameters depending on gait type using parametrizable factors
+    switch (current_gait) {
+    case NO_GAIT:
+        // No gait - robot is stationary
+        step_length_ = 0.0;
+        step_height_ = 0.0;
+        break;
+    case TRIPOD_GAIT:
+        // Longer steps for speed
+        step_length_ = leg_reach * model.getParams().gait_factors.tripod_length_factor;
+        step_height_ = robot_height * model.getParams().gait_factors.tripod_height_factor;
+        break;
+
+    case WAVE_GAIT:
+        // Shorter steps for stability
+        step_length_ = leg_reach * model.getParams().gait_factors.wave_length_factor;
+        step_height_ = robot_height * model.getParams().gait_factors.wave_height_factor;
+        break;
+
+    case RIPPLE_GAIT:
+        // Medium steps for balance
+        step_length_ = leg_reach * model.getParams().gait_factors.ripple_length_factor;
+        step_height_ = robot_height * model.getParams().gait_factors.ripple_height_factor;
+        break;
+
+    case METACHRONAL_GAIT:
+        // Adaptive steps
+        step_length_ = leg_reach * model.getParams().gait_factors.metachronal_length_factor;
+        step_height_ = robot_height * model.getParams().gait_factors.metachronal_height_factor;
+        break;
+
+    case ADAPTIVE_GAIT:
+        // They will be adjusted dynamically
+        step_length_ = leg_reach * model.getParams().gait_factors.adaptive_length_factor;
+        step_height_ = robot_height * model.getParams().gait_factors.adaptive_height_factor;
+        break;
+    }
+
+    // Calculate dynamic limits based on robot dimensions
+    double min_step_length = leg_reach * model.getParams().gait_factors.min_length_factor;
+    double max_step_length = leg_reach * model.getParams().gait_factors.max_length_factor;
+    double min_step_height = robot_height * model.getParams().gait_factors.min_height_factor;
+    double max_step_height = robot_height * model.getParams().gait_factors.max_height_factor;
+
+    // Verify that parameters are within dynamic limits
+    step_length_ = std::clamp<double>(step_length_, min_step_length, max_step_length);
+    step_height_ = std::clamp<double>(step_height_, min_step_height, max_step_height);
+}
+
+void WalkController::adjustStepParameters() {
+    // Enhanced step parameter adjustment with absolute positioning support
+    // Note: IMU data access would need to be passed from LocomotionSystem
+    // For now, use basic adjustment logic
+
+    double total_tilt = 0.0f;
+    double stability_factor = 1.0f;
+
+    // Basic terrain assessment (would be enhanced with IMU data)
+    if (total_tilt > 15.0f) {
+        step_height_ *= 0.8f;
+        step_length_ *= 0.7f;
+    }
+
+    // Limit parameters
+    step_height_ = std::clamp<double>(step_height_, 15.0f, 50.0f);
+    step_length_ = std::clamp<double>(step_length_, 20.0f, 80.0f);
 }

@@ -222,6 +222,45 @@ public:
      */
     void getGaitTimingParameters(GaitType gait, double& stance_duration, double& swing_duration, double& cycle_frequency) const;
 
+    // ✅ NEW: Step parameter control (migrated from LocomotionSystem)
+    /**
+     * @brief Configure step height and length
+     * @param height Step height in mm
+     * @param length Step length in mm
+     * @return true if parameters are valid, false otherwise
+     */
+    bool setStepParameters(double height, double length);
+
+    /**
+     * @brief Get current step height
+     * @return Step height in mm
+     */
+    double getStepHeight() const;
+
+    /**
+     * @brief Get current step length (with terrain and stability adjustments)
+     * @return Step length in mm
+     */
+    double getStepLength() const;
+
+    /**
+     * @brief Get current stance duration
+     * @return Stance duration (0-1)
+     */
+    double getStanceDuration() const { return stance_duration_; }
+
+    /**
+     * @brief Get current swing duration
+     * @return Swing duration (0-1)
+     */
+    double getSwingDuration() const { return swing_duration_; }
+
+    /**
+     * @brief Get current cycle frequency
+     * @return Cycle frequency in Hz
+     */
+    double getCycleFrequency() const { return cycle_frequency_; }
+
 private:
     RobotModel &model;
 
@@ -264,6 +303,10 @@ private:
     double swing_duration_;              // Swing phase duration (0-1)
     double cycle_frequency_;             // Gait cycle frequency (Hz)
 
+    // ✅ NEW: Step parameters (migrated from LocomotionSystem)
+    double step_height_;                 // Step height in mm
+    double step_length_;                 // Step length in mm
+
     // ✅ NEW: Gait pattern configuration (OpenSHC-style)
     struct GaitConfig {
         double phase_offsets[NUM_LEGS];  // Phase offsets for each leg
@@ -298,6 +341,11 @@ private:
     void applyGaitConfig(const GaitConfig& config);
     double calculateStabilityIndex() const;
     bool checkTerrainConditions() const;
+
+    // ✅ NEW: Helper methods for step parameter management (migrated from LocomotionSystem)
+    void updateStepParameters();
+    void adjustStepParameters();
+    double calculateLegReach() const;
 
     // Declaración del método auxiliar para la posición de apoyo por defecto
     Point3D calculateDefaultStancePosition(int leg_index);

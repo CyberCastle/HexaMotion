@@ -87,17 +87,6 @@ class LocomotionSystem {
     Eigen::Vector3d body_orientation;   // Body orientation [roll,pitch,yaw]
     Leg legs[NUM_LEGS];                 // Leg objects containing all leg data
 
-    // Gait control
-    GaitType current_gait;
-    double gait_phase;
-    double step_height;
-    double step_length;
-
-    // Gait-specific parameters
-    double stance_duration;             // Stance phase duration (0-1)
-    double swing_duration;              // Swing phase duration (0-1)
-    double cycle_frequency;             // Gait cycle frequency (Hz)
-
     // Control variables
     bool system_enabled;
     unsigned long last_update_time;
@@ -268,8 +257,6 @@ class LocomotionSystem {
     StepPhase getLegState(int leg_index) const { return legs[leg_index].getStepPhase(); }
     JointAngles getJointAngles(int leg_index) const { return legs[leg_index].getJointAngles(); }
     Point3D getLegPosition(int leg_index) const { return legs[leg_index].getTipPosition(); }
-    double getStepHeight() const { return step_height; }
-    double getStepLength() const;
 
     // Leg access methods
     /** Get leg object by index. */
@@ -282,7 +269,7 @@ class LocomotionSystem {
     bool setParameters(const Parameters &new_params);
     /** Set the control loop frequency. */
     bool setControlFrequency(double frequency);
-    /** Configure step height and length. */
+    /** Configure step height and length (delegated to WalkController). */
     bool setStepParameters(double height, double length);
 
     // Smooth trajectory configuration (OpenSHC-style movement)
@@ -328,13 +315,11 @@ class LocomotionSystem {
     // Helper methods
     double constrainAngle(double angle, double min_angle, double max_angle);
     bool validateParameters();
-    void updateStepParameters();
     bool checkJointLimits(int leg_index, const JointAngles &angles);
     double calculateLegReach() const;
 
     // Adaptive control
     void adaptGaitToTerrain();
-    void adjustStepParameters();
     void compensateForSlope();
 
     // Advanced gait methods
