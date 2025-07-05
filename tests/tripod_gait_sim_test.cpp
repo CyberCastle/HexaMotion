@@ -197,6 +197,11 @@ int main() {
         return 1;
     }
 
+    // Ejecutar secuencia de startup (transición READY -> RUNNING)
+    while (!sys.executeStartupSequence()) {
+        // Simula el ciclo de control durante la transición
+    }
+
     // Setup gait
     assert(sys.setGaitType(TRIPOD_GAIT));
     assert(sys.planGaitSequence(velocity, 0.0, 0.0));
@@ -238,8 +243,8 @@ int main() {
 
         // Print angles and gait pattern
         printAngles(s, sys, phase);
-        printTripodGaitPattern(sys, phase);
-        printProgress(distance_covered, distance);
+        //printTripodGaitPattern(sys, phase);
+        //printProgress(distance_covered, distance);
     }
 
     // Final status
