@@ -1444,24 +1444,26 @@ bool LocomotionSystem::stopWalking() {
 
 // ✅ NEW: Update model (OpenSHC architecture)
 void LocomotionSystem::updateModel() {
-    // Set desired tip poses from leg steppers and apply IK for each leg
+    // Set desired tip poses from leg steppers y aplica IK para cada pierna
     for (int i = 0; i < NUM_LEGS; ++i) {
-        // Get current tip pose from leg stepper
-        Point3D desired_tip_pose = leg_steppers_[i]->getCurrentTipPose();
-
-        // Set desired tip pose in leg
-        legs_[i].setDesiredTipPose(desired_tip_pose);
-
-        // Apply IK to synchronize joint angles and current tip position
-        legs_[i].applyIK(robot_model_);
+        // Obtener el LegStepper desde el WalkController
+        auto leg_stepper = walk_ctrl ? walk_ctrl->getLegStepper(i) : nullptr;
+        if (!leg_stepper) continue;
+        // Obtener la pose objetivo actual del tip
+        Point3D desired_tip_pose = leg_stepper->getCurrentTipPose();
+        // Establecer la pose objetivo en la pierna
+        legs[i].setDesiredTipPose(desired_tip_pose);
+        // Aplicar IK para sincronizar ángulos articulares y posición del tip
+        legs[i].applyIK(model);
     }
 }
 
 void LocomotionSystem::update(double linear_velocity, double angular_velocity) {
-    // Update walk controller with velocity inputs
-    walk_controller_.update(linear_velocity, angular_velocity);
-
-    // Update model to synchronize data (OpenSHC architecture)
+    // Actualizar el walk controller con los inputs de velocidad
+    if (walk_ctrl) {
+        walk_ctrl->updateWalk(Point3D(linear_velocity, 0.0, 0.0), angular_velocity);
+    }
+    // Actualizar el modelo para sincronizar datos (arquitectura OpenSHC)
     updateModel();
 }
 
