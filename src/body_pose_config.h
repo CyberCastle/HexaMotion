@@ -5,6 +5,7 @@
 #include <array>
 #include <map>
 #include <string>
+#include <vector>
 
 /**
  * @file body_pose_config.h
@@ -77,6 +78,31 @@ struct BodyPoseConfiguration {
     bool gravity_aligned_tips;         ///< Flag denoting if tip should align with gravity direction
     bool force_symmetric_pose;         ///< Force hexagonal symmetry if true
     std::string leg_manipulation_mode; ///< String denoting the type of leg manipulation
+};
+
+/**
+ * @brief Auto-pose configuration for tripod gait (OpenSHC equivalent)
+ * Based on OpenSHC's auto_pose.yaml configuration structure
+ */
+struct AutoPoseConfiguration {
+    bool enabled;                    ///< Enable/disable auto-pose during gait
+    double pose_frequency;           ///< Pose frequency (-1.0 = sync with gait cycle)
+
+    // Phase configuration for tripod gait
+    std::vector<int> pose_phase_starts;  ///< Phase starts for compensation
+    std::vector<int> pose_phase_ends;    ///< Phase ends for compensation
+
+    // Auto-pose amplitudes (OpenSHC auto_pose.yaml equivalent)
+    std::vector<double> roll_amplitudes;   ///< Roll compensation amplitudes (radians)
+    std::vector<double> pitch_amplitudes;  ///< Pitch compensation amplitudes (radians)
+    std::vector<double> yaw_amplitudes;    ///< Yaw compensation amplitudes (radians)
+    std::vector<double> x_amplitudes;      ///< X translation amplitudes (meters)
+    std::vector<double> y_amplitudes;      ///< Y translation amplitudes (meters)
+    std::vector<double> z_amplitudes;      ///< Z translation amplitudes (meters)
+
+    // Tripod group configuration
+    std::vector<int> tripod_group_a_legs;  ///< Group A legs (AR, CR, BL)
+    std::vector<int> tripod_group_b_legs;  ///< Group B legs (BR, CL, AL)
 };
 
 #endif // BODY_POSE_CONFIG_H

@@ -33,7 +33,9 @@ LocomotionSystem::LocomotionSystem(const Parameters &params)
       system_enabled(false), last_update_time(0), dt(0.02f),
       velocity_controller(nullptr), last_error(NO_ERROR),
       model(params), body_pose_ctrl(nullptr), walk_ctrl(nullptr), admittance_ctrl(nullptr),
-      legs{Leg(0, params), Leg(1, params), Leg(2, params), Leg(3, params), Leg(4, params), Leg(5, params)} {
+      legs{Leg(0, params), Leg(1, params), Leg(2, params), Leg(3, params), Leg(4, params), Leg(5, params)},
+      system_state(SYSTEM_UNKNOWN), startup_in_progress(false), shutdown_in_progress(false),
+      startup_progress(0), shutdown_progress(0) {
 
     // Initialize sensor log timestamp to avoid static local in updateSensorsParallel
     last_sensor_log_time = 0;
@@ -668,6 +670,11 @@ bool LocomotionSystem::setStandingPose() {
             }
         }
 
+        // Set system state to READY (OpenSHC equivalent)
+        system_state = SYSTEM_READY;
+        startup_in_progress = false;
+        shutdown_in_progress = false;
+
         return true;
     } else {
         last_error = KINEMATICS_ERROR;
@@ -750,6 +757,18 @@ bool LocomotionSystem::update() {
         return false;
     }
 
+    // Handle startup sequence if in progress
+    if (startup_in_progress) {
+        executeStartupSequence();
+        return true;
+    }
+
+    // Handle shutdown sequence if in progress
+    if (shutdown_in_progress) {
+        executeShutdownSequence();
+        return true;
+    }
+
     // Update gait phase (delegated to WalkController)
     updateGaitPhase();
 
@@ -765,6 +784,12 @@ bool LocomotionSystem::update() {
         // Update adaptive gait if conditions require it
         if (walk_ctrl->shouldAdaptGaitPattern()) {
             walk_ctrl->calculateAdaptivePhaseOffsets();
+        }
+
+        // Update auto-pose during gait execution
+        if (system_state == SYSTEM_RUNNING && body_pose_ctrl) {
+            double gait_phase = walk_ctrl->getGaitPhase();
+            body_pose_ctrl->updateAutoPose(gait_phase, legs);
         }
     }
 
@@ -1306,6 +1331,115 @@ void LocomotionSystem::configureGaitPhaseOffsets(GaitType gait) {
     if (walk_ctrl) {
         walk_ctrl->configureGaitPhaseOffsets(gait);
     }
+}
+
+// Execute startup sequence (READY -> RUNNING transition)
+bool LocomotionSystem::executeStartupSequence() {
+    if (!system_enabled || !body_pose_ctrl) {
+        return false;
+    }
+
+    // Start sequence if not already in progress
+    if (!startup_in_progress) {
+        startup_in_progress = true;
+        startup_progress = 0;
+        system_state = SYSTEM_READY;
+    }
+
+    // Execute startup sequence using BodyPoseController
+    startup_progress = body_pose_ctrl->executeStartupSequence(legs);
+
+    // Check if sequence is complete
+    if (startup_progress == PROGRESS_COMPLETE) {
+        startup_in_progress = false;
+        system_state = SYSTEM_RUNNING;
+
+        // Initialize walk controller for running state
+        if (walk_ctrl) {
+            walk_ctrl->init();
+        }
+
+        return true;
+    }
+
+    return false;
+}
+
+// Execute shutdown sequence (RUNNING -> READY transition)
+bool LocomotionSystem::executeShutdownSequence() {
+    if (!system_enabled || !body_pose_ctrl) {
+        return false;
+    }
+
+    // Start sequence if not already in progress
+    if (!shutdown_in_progress) {
+        shutdown_in_progress = true;
+        shutdown_progress = 0;
+    }
+
+    // Execute shutdown sequence using BodyPoseController
+    shutdown_progress = body_pose_ctrl->executeShutdownSequence(legs);
+
+    // Check if sequence is complete
+    if (shutdown_progress == PROGRESS_COMPLETE) {
+        shutdown_in_progress = false;
+        system_state = SYSTEM_READY;
+        return true;
+    }
+
+    return false;
+}
+
+// Start walking with specified gait type
+bool LocomotionSystem::startWalking(GaitType gait_type, double velocity_x, double velocity_y, double angular_velocity) {
+    if (!system_enabled || !walk_ctrl) {
+        last_error = PARAMETER_ERROR;
+        return false;
+    }
+
+    // Check if system is in READY state (OpenSHC equivalent)
+    if (system_state != SYSTEM_READY) {
+        last_error = STATE_ERROR;
+        return false;
+    }
+
+    // Set gait type
+    if (!setGaitType(gait_type)) {
+        last_error = PARAMETER_ERROR;
+        return false;
+    }
+
+    // Plan gait sequence
+    if (!planGaitSequence(velocity_x, velocity_y, angular_velocity)) {
+        last_error = KINEMATICS_ERROR;
+        return false;
+    }
+
+    // Execute startup sequence to transition from READY to RUNNING
+    startup_in_progress = true;
+    system_state = SYSTEM_READY; // Will transition to RUNNING when sequence completes
+
+    return true;
+}
+
+// Stop walking and return to standing pose
+bool LocomotionSystem::stopWalking() {
+    if (!system_enabled) {
+        last_error = PARAMETER_ERROR;
+        return false;
+    }
+
+    // Check if system is in RUNNING state
+    if (system_state != SYSTEM_RUNNING) {
+        last_error = STATE_ERROR;
+        return false;
+    }
+
+    // Execute shutdown sequence to transition from RUNNING to READY
+    shutdown_in_progress = true;
+    system_state = SYSTEM_RUNNING; // Will transition to READY when sequence completes
+
+    return true;
 }
 
 

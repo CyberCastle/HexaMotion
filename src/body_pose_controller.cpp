@@ -1,7 +1,10 @@
 #include "body_pose_controller.h"
+#include "body_pose_config_factory.h"
+#include "math_utils.h"
 #include "leg_poser.h"
 #include "hexamotion_constants.h"
 #include <cmath>
+#include <algorithm>
 /**
  * @file body_pose_controller.cpp
  * @brief Implementation of the kinematic body pose controller.
@@ -21,7 +24,7 @@ private:
 };
 
 BodyPoseController::BodyPoseController(RobotModel &m, const BodyPoseConfiguration &config)
-    : model(m), body_pose_config(config), trajectory_in_progress(false), trajectory_progress(0.0f), trajectory_step_count(0) {
+    : model(m), body_pose_config(config), trajectory_in_progress(false), trajectory_progress(0.0f), trajectory_step_count(0), auto_pose_enabled(true) {
     // Initialize trajectory arrays
     for (int i = 0; i < NUM_LEGS; i++) {
         trajectory_start_positions[i] = Point3D(0, 0, 0);
@@ -30,6 +33,9 @@ BodyPoseController::BodyPoseController(RobotModel &m, const BodyPoseConfiguratio
         trajectory_target_angles[i] = JointAngles(0, 0, 0);
         leg_posers_[i] = nullptr; // Initialize to nullptr
     }
+
+    // Initialize auto-pose configuration from factory
+    auto_pose_config = createAutoPoseConfiguration(model.getParams());
 }
 
 BodyPoseController::~BodyPoseController() {
@@ -418,6 +424,200 @@ bool BodyPoseController::updateTrajectoryStep(Leg legs[NUM_LEGS]) {
         // Update leg
         legs[i].setTipPosition(interp_pos);
         legs[i].setJointAngles(interp_angles);
+    }
+
+    return true;
+}
+
+// OpenSHC-style tripod leg coordination for stance transition
+int BodyPoseController::stepToNewStance(Leg legs[NUM_LEGS], double step_height, double step_time) {
+    static int current_group = 0;  // 0 = Group A (AR, CR, BL), 1 = Group B (BR, CL, AL)
+    static int legs_completed_step = 0;
+    static bool sequence_generated = false;
+
+    // Define tripod groups (OpenSHC equivalent)
+    const int group_a_legs[] = {0, 2, 4};  // AR, CR, BL
+    const int group_b_legs[] = {1, 3, 5};  // BR, CL, AL
+    const int* current_group_legs = (current_group == 0) ? group_a_legs : group_b_legs;
+    const int legs_in_group = 3;
+
+    // Generate sequence if not already done
+    if (!sequence_generated) {
+        // Calculate stance positions for each leg based on body pose configuration
+        for (int i = 0; i < NUM_LEGS; i++) {
+            const auto& stance_pos = body_pose_config.leg_stance_positions[i];
+            Point3D stance_position(stance_pos.x * 1000.0, stance_pos.y * 1000.0, -model.getParams().robot_height);
+
+            // Store target stance position for each leg
+            if (leg_posers_[i]) {
+                leg_posers_[i]->get()->setTargetPosition(stance_position);
+            }
+        }
+        sequence_generated = true;
+        legs_completed_step = 0;
+        current_group = 0;
+    }
+
+    // Move legs in current group to stance positions
+    int progress = 0;
+    for (int i = 0; i < legs_in_group; i++) {
+        int leg_index = current_group_legs[i];
+        if (leg_posers_[leg_index]) {
+            Point3D target_position = leg_posers_[leg_index]->get()->getTargetPosition();
+            int leg_progress = leg_posers_[leg_index]->get()->stepToPosition(target_position, step_height, step_time);
+
+            // Update leg with current position from LegPoser
+            legs[leg_index].setTipPosition(leg_posers_[leg_index]->get()->getCurrentPosition());
+            legs[leg_index].setJointAngles(model.inverseKinematics(leg_index, legs[leg_index].getTipPosition()));
+
+            if (leg_progress == 100) {  // PROGRESS_COMPLETE equivalent
+                legs_completed_step++;
+            }
+            progress = std::max(progress, leg_progress);
+        }
+    }
+
+    // Normalize progress in terms of total procedure (OpenSHC style)
+    progress = progress / 2 + current_group * 50;
+
+    // Check if current group is complete
+    if (legs_completed_step >= legs_in_group) {
+        current_group = (current_group + 1) % 2;  // Switch between groups A and B
+        legs_completed_step = 0;
+
+        // Check if all legs have completed
+        if (current_group == 0) {
+            // Reset for next cycle
+            sequence_generated = false;
+            return 100;  // PROGRESS_COMPLETE
+        }
+    }
+
+    return progress;
+}
+
+// Execute startup sequence (READY -> RUNNING transition)
+int BodyPoseController::executeStartupSequence(Leg legs[NUM_LEGS]) {
+    static int sequence_step = 0;
+    static bool sequence_initialized = false;
+
+    // Initialize sequence if not done
+    if (!sequence_initialized) {
+        sequence_step = 0;
+        sequence_initialized = true;
+    }
+
+    // Execute stepToNewStance for stance transition
+    int progress = stepToNewStance(legs, 30.0, 0.5);
+
+    if (progress == 100) {  // Sequence complete
+        sequence_initialized = false;
+        return 100;  // PROGRESS_COMPLETE
+    }
+
+    return progress;
+}
+
+// Execute shutdown sequence (RUNNING -> READY transition)
+int BodyPoseController::executeShutdownSequence(Leg legs[NUM_LEGS]) {
+    static int sequence_step = 0;
+    static bool sequence_initialized = false;
+
+    // Initialize sequence if not done
+    if (!sequence_initialized) {
+        sequence_step = 0;
+        sequence_initialized = true;
+    }
+
+    // Move legs back to standing pose positions
+    int progress = 0;
+    for (int i = 0; i < NUM_LEGS; i++) {
+        if (leg_posers_[i]) {
+            // Get standing pose joint angles
+            const auto& standing_joints = body_pose_config.standing_pose_joints[i];
+            JointAngles target_angles;
+            target_angles.coxa = standing_joints.coxa;
+            target_angles.femur = standing_joints.femur;
+            target_angles.tibia = standing_joints.tibia;
+
+            // Calculate target position from joint angles
+            Point3D target_position = model.forwardKinematics(i, target_angles);
+
+            int leg_progress = leg_posers_[i]->get()->stepToPosition(target_position, 30.0, 0.5);
+
+            // Update leg with current position
+            legs[i].setTipPosition(leg_posers_[i]->get()->getCurrentPosition());
+            legs[i].setJointAngles(model.inverseKinematics(i, legs[i].getTipPosition()));
+
+            progress = std::max(progress, leg_progress);
+        }
+    }
+
+    if (progress == 100) {  // Sequence complete
+        sequence_initialized = false;
+        return 100;  // PROGRESS_COMPLETE
+    }
+
+    return progress;
+}
+
+// Update auto-pose during gait execution (OpenSHC equivalent)
+bool BodyPoseController::updateAutoPose(double gait_phase, Leg legs[NUM_LEGS]) {
+    if (!auto_pose_enabled || !auto_pose_config.enabled) {
+        return true; // Auto-pose disabled, but not an error
+    }
+
+    // OpenSHC-style auto-pose for tripod gait
+    // Use configuration from factory instead of hardcoded values
+
+    // Get tripod groups from configuration
+    const auto& group_a_legs = auto_pose_config.tripod_group_a_legs;
+    const auto& group_b_legs = auto_pose_config.tripod_group_b_legs;
+
+    // Calculate which group is in stance phase
+    bool group_a_stance = (gait_phase < 0.5);
+    bool group_b_stance = (gait_phase >= 0.5);
+
+    // Get amplitudes from configuration
+    const auto& roll_amplitudes = auto_pose_config.roll_amplitudes;
+    const auto& z_amplitudes = auto_pose_config.z_amplitudes;
+
+    // Calculate compensation based on stance group
+    double roll_compensation = 0.0;
+    double z_compensation = 0.0;
+
+    if (group_a_stance && roll_amplitudes.size() >= 2 && z_amplitudes.size() >= 2) {
+        // Group A in stance (AR, CR, BL) - compensate for Group B in swing
+        roll_compensation = roll_amplitudes[0];  // First amplitude value
+        z_compensation = z_amplitudes[0];        // First amplitude value
+    } else if (group_b_stance && roll_amplitudes.size() >= 2 && z_amplitudes.size() >= 2) {
+        // Group B in stance (BR, CL, AL) - compensate for Group A in swing
+        roll_compensation = roll_amplitudes[1];  // Second amplitude value
+        z_compensation = z_amplitudes[1];        // Second amplitude value
+    }
+
+    // Apply auto-pose compensation to all legs
+    for (int i = 0; i < NUM_LEGS; i++) {
+        if (leg_posers_[i]) {
+            // Get current tip position
+            Point3D current_pos = legs[i].getTipPosition();
+
+            // Apply roll compensation (simplified - in practice this would be more complex)
+            // For now, we'll adjust the Z position based on Y position to simulate roll
+            double y_offset = current_pos.y;
+            double roll_z_offset = roll_compensation * y_offset * 1000.0; // Scale factor
+
+            // Apply Z compensation
+            Point3D compensated_pos = current_pos;
+            compensated_pos.z += z_compensation * 1000.0 + roll_z_offset; // Convert to mm
+
+            // Update leg position with compensation
+            legs[i].setTipPosition(compensated_pos);
+
+            // Recalculate joint angles for compensated position
+            JointAngles compensated_angles = model.inverseKinematics(i, compensated_pos);
+            legs[i].setJointAngles(compensated_angles);
+        }
     }
 
     return true;

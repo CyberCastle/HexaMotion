@@ -141,6 +141,42 @@ public:
      */
     void updateAutoPose(int phase);
 
+    /**
+     * @brief Set target position for leg movement
+     * @param target_position Target position in world coordinates
+     */
+    void setTargetPosition(const Point3D& target_position) {
+        target_tip_pose_ = Pose(target_position, Eigen::Vector3d(0, 0, 0));
+    }
+
+    /**
+     * @brief Get target position for leg movement
+     * @return Target position in world coordinates
+     */
+    Point3D getTargetPosition() const {
+        return target_tip_pose_.position;
+    }
+
+    /**
+     * @brief Get current position of the leg
+     * @return Current position in world coordinates
+     */
+    Point3D getCurrentPosition() const {
+        return current_tip_pose_.position;
+    }
+
+    /**
+     * @brief Simplified stepToPosition method for stance transitions
+     * @param target_position Target position in world coordinates
+     * @param step_height Height for leg lifting during transition
+     * @param step_time Time for the step transition
+     * @return Progress percentage (0-100)
+     */
+    int stepToPosition(const Point3D& target_position, double step_height, double step_time) {
+        Pose target_pose(target_position, Eigen::Vector3d(0, 0, 0));
+        return stepToPosition(target_pose, Pose::Identity(), step_height, step_time, false);
+    }
+
 private:
     BodyPoseController* body_pose_controller_; ///< Pointer to body pose controller object
     LocomotionSystem* locomotion_system_;    ///< Pointer to locomotion system
@@ -169,7 +205,6 @@ private:
     bool leg_completed_step_ = false;        ///< Flag denoting if leg has completed its required step in a sequence
 
     // Constants
-    static constexpr int PROGRESS_COMPLETE = 100;
     static constexpr double JOINT_TOLERANCE = 0.01;  // rad
     static constexpr double TIP_TOLERANCE = 0.01;    // m
     static constexpr double UNDEFINED_VALUE = 1e6;

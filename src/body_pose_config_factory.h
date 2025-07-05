@@ -50,4 +50,26 @@ BodyPoseConfiguration getConservativeBodyPoseConfig(const Parameters &params);
  */
 BodyPoseConfiguration getHighSpeedBodyPoseConfig(const Parameters &params);
 
+/**
+ * @brief Create auto-pose configuration for tripod gait (OpenSHC equivalent)
+ * Based on OpenSHC's auto_pose.yaml configuration
+ * @param params Robot parameters
+ * @return Auto-pose configuration structure
+ */
+AutoPoseConfiguration createAutoPoseConfiguration(const Parameters &params);
+
+/**
+ * @brief Create conservative auto-pose configuration
+ * @param params Robot parameters
+ * @return Conservative auto-pose configuration with reduced amplitudes
+ */
+AutoPoseConfiguration createConservativeAutoPoseConfiguration(const Parameters &params);
+
+/**
+ * @brief Create high-speed auto-pose configuration
+ * @param params Robot parameters
+ * @return High-speed auto-pose configuration with increased amplitudes
+ */
+AutoPoseConfiguration createHighSpeedAutoPoseConfiguration(const Parameters &params);
+
 #endif // BODY_POSE_CONFIG_FACTORY_H

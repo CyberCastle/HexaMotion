@@ -187,6 +187,63 @@ class BodyPoseController {
      */
     void initializeLegPosers(Leg legs[NUM_LEGS]);
 
+    /**
+     * @brief Step to new stance positions with tripod leg coordination (OpenSHC equivalent)
+     * This method implements the transition from standing pose to walking stance
+     * using coordinated tripod groups (A: AR, CR, BL | B: BR, CL, AL)
+     * @param legs Array of Leg objects to update
+     * @param step_height Height for leg lifting during transition
+     * @param step_time Time for each step transition
+     * @return Progress percentage (0-100), or -1 if generating sequence
+     */
+    int stepToNewStance(Leg legs[NUM_LEGS], double step_height = 30.0, double step_time = 0.5);
+
+    /**
+     * @brief Execute startup sequence to transition from READY to RUNNING state
+     * @param legs Array of Leg objects to update
+     * @return Progress percentage (0-100), or -1 if generating sequence
+     */
+    int executeStartupSequence(Leg legs[NUM_LEGS]);
+
+    /**
+     * @brief Execute shutdown sequence to transition from RUNNING to READY state
+     * @param legs Array of Leg objects to update
+     * @return Progress percentage (0-100), or -1 if generating sequence
+     */
+    int executeShutdownSequence(Leg legs[NUM_LEGS]);
+
+    /**
+     * @brief Update auto-pose during gait execution (OpenSHC equivalent)
+     * @param gait_phase Current gait phase (0.0 to 1.0)
+     * @param legs Array of Leg objects to update
+     * @return True if auto-pose was applied successfully
+     */
+    bool updateAutoPose(double gait_phase, Leg legs[NUM_LEGS]);
+
+    /**
+     * @brief Enable/disable auto-pose during gait
+     * @param enable True to enable auto-pose, false to disable
+     */
+    void setAutoPoseEnabled(bool enable) { auto_pose_enabled = enable; }
+
+    /**
+     * @brief Check if auto-pose is enabled
+     * @return True if auto-pose is enabled
+     */
+    bool isAutoPoseEnabled() const { return auto_pose_enabled; }
+
+    /**
+     * @brief Set auto-pose configuration
+     * @param config Auto-pose configuration from factory
+     */
+    void setAutoPoseConfiguration(const AutoPoseConfiguration &config) { auto_pose_config = config; }
+
+    /**
+     * @brief Get current auto-pose configuration
+     * @return Current auto-pose configuration
+     */
+    const AutoPoseConfiguration &getAutoPoseConfiguration() const { return auto_pose_config; }
+
   private:
     // OpenSHC-style body pose calculation using dynamic configuration
     bool calculateBodyPoseFromConfig(double height_offset, Leg legs[NUM_LEGS]);
@@ -220,6 +277,11 @@ class BodyPoseController {
                                          const Eigen::Vector3d &target_orientation,
                                          Leg legs[NUM_LEGS], IServoInterface *servos = nullptr);
     bool updateTrajectoryStep(Leg legs[NUM_LEGS]);
+
+    bool auto_pose_enabled;
+
+    // Auto-pose configuration
+    AutoPoseConfiguration auto_pose_config;
 };
 
 #endif // BODY_POSE_CONTROLLER_H

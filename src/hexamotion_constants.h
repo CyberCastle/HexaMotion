@@ -155,4 +155,26 @@
 #define POSITION_TOLERANCE 1.0f   // Position tolerance (mm)
 #define VELOCITY_THRESHOLD 0.001f // Minimum velocity to consider as moving
 
+// ========================================================================
+// SYSTEM STATE CONSTANTS
+// ========================================================================
+
+// System states (OpenSHC equivalent)
+enum SystemState {
+    SYSTEM_UNKNOWN = 0,  // Unknown state
+    SYSTEM_PACKED = 1,   // Robot is packed/disabled
+    SYSTEM_READY = 2,    // Robot is ready but not walking
+    SYSTEM_RUNNING = 3   // Robot is running/walking
+};
+
+// Startup sequence constants
+#define STARTUP_SEQUENCE_TIME 6.0f      // Time for startup sequence (seconds)
+#define SHUTDOWN_SEQUENCE_TIME 4.0f     // Time for shutdown sequence (seconds)
+#define STANCE_TRANSITION_HEIGHT 30.0f  // Height for stance transition (mm)
+#define STANCE_TRANSITION_TIME 0.5f     // Time for stance transition (seconds)
+
+// Progress constants
+#define PROGRESS_COMPLETE 100    // Sequence completed
+#define PROGRESS_GENERATING -1   // Sequence is being generated
+
 #endif // HEXAMOTION_CONSTANTS_H

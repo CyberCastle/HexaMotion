@@ -253,3 +253,65 @@ BodyPoseConfiguration getHighSpeedPoseConfig(const Parameters &params) {
 BodyPoseConfiguration getDefaultBodyPoseConfig(const Parameters &params) {
     return createPoseConfiguration(params, "default");
 }
+
+/**
+ * @brief Create auto-pose configuration for tripod gait (OpenSHC equivalent)
+ * Based on OpenSHC's auto_pose.yaml configuration
+ * @param params Robot parameters
+ * @return Auto-pose configuration structure
+ */
+AutoPoseConfiguration createAutoPoseConfiguration(const Parameters &params) {
+    AutoPoseConfiguration config;
+
+    // OpenSHC auto_pose.yaml equivalent settings
+    config.enabled = true;
+    config.pose_frequency = -1.0;  // Synchronize with gait cycle
+
+    // Tripod gait phase configuration (OpenSHC equivalent)
+    config.pose_phase_starts = {1, 3};  // Phase starts for compensation
+    config.pose_phase_ends = {3, 1};    // Phase ends for compensation
+
+    // Auto-pose amplitudes (from OpenSHC auto_pose.yaml)
+    config.roll_amplitudes = {-0.015, 0.015};    // Roll compensation (radians)
+    config.pitch_amplitudes = {0.000, 0.000};    // Pitch compensation (radians)
+    config.yaw_amplitudes = {0.000, 0.000};      // Yaw compensation (radians)
+    config.x_amplitudes = {0.000, 0.000};        // X translation (meters)
+    config.y_amplitudes = {0.000, 0.000};        // Y translation (meters)
+    config.z_amplitudes = {0.020, 0.020};        // Z translation (meters)
+
+    // Tripod group configuration
+    config.tripod_group_a_legs = {0, 2, 4};  // AR, CR, BL
+    config.tripod_group_b_legs = {1, 3, 5};  // BR, CL, AL
+
+    return config;
+}
+
+/**
+ * @brief Create conservative auto-pose configuration
+ * @param params Robot parameters
+ * @return Conservative auto-pose configuration
+ */
+AutoPoseConfiguration createConservativeAutoPoseConfiguration(const Parameters &params) {
+    AutoPoseConfiguration config = createAutoPoseConfiguration(params);
+
+    // Reduced amplitudes for conservative operation
+    config.roll_amplitudes = {-0.010, 0.010};    // Reduced roll compensation
+    config.z_amplitudes = {0.015, 0.015};        // Reduced Z compensation
+
+    return config;
+}
+
+/**
+ * @brief Create high-speed auto-pose configuration
+ * @param params Robot parameters
+ * @return High-speed auto-pose configuration
+ */
+AutoPoseConfiguration createHighSpeedAutoPoseConfiguration(const Parameters &params) {
+    AutoPoseConfiguration config = createAutoPoseConfiguration(params);
+
+    // Increased amplitudes for high-speed operation
+    config.roll_amplitudes = {-0.020, 0.020};    // Increased roll compensation
+    config.z_amplitudes = {0.025, 0.025};        // Increased Z compensation
+
+    return config;
+}

@@ -70,7 +70,8 @@ class LocomotionSystem {
         STABILITY_ERROR = 5,
         PARAMETER_ERROR = 6,
         SENSOR_ERROR = 7,       // General sensor communication error
-        SERVO_BLOCKED_ERROR = 8 // Servo blocked by status flags
+        SERVO_BLOCKED_ERROR = 8, // Servo blocked by status flags
+        STATE_ERROR = 9         // System state error
     };
 
   private:
@@ -104,6 +105,13 @@ class LocomotionSystem {
     AdmittanceController *admittance_ctrl;
     // Last log time for sensor update profiling
     unsigned long last_sensor_log_time;
+
+    // System state management
+    SystemState system_state;
+    bool startup_in_progress;
+    bool shutdown_in_progress;
+    int startup_progress;
+    int shutdown_progress;
 
     Point3D transformWorldToBody(const Point3D &p_world) const;
     bool setLegJointAngles(int leg_index, const JointAngles &q);
@@ -179,6 +187,18 @@ class LocomotionSystem {
     void updateGaitPhase();
     /** Compute foot trajectory for a leg at given phase. */
     Point3D calculateFootTrajectory(int leg_index, double phase);
+
+    // State management (OpenSHC equivalent)
+    /** Execute startup sequence to transition from READY to RUNNING state */
+    bool executeStartupSequence();
+    /** Execute shutdown sequence to transition from RUNNING to READY state */
+    bool executeShutdownSequence();
+    /** Check if startup sequence is in progress */
+    bool isStartupInProgress() const { return startup_in_progress; }
+    /** Check if shutdown sequence is in progress */
+    bool isShutdownInProgress() const { return shutdown_in_progress; }
+    /** Get current system state */
+    SystemState getSystemState() const { return system_state; }
 
     // Phase offset management
     /** Set phase offset for a specific leg. */
@@ -310,6 +330,12 @@ class LocomotionSystem {
 
     // Getter for WalkController
     WalkController* getWalkController() { return walk_ctrl; }
+
+    // Gait control
+    /** Start walking with specified gait type and velocities. */
+    bool startWalking(GaitType gait_type, double velocity_x, double velocity_y, double angular_velocity);
+    /** Stop walking and return to standing pose. */
+    bool stopWalking();
 
   private:
     // Helper methods
