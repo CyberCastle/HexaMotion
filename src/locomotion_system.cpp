@@ -1442,4 +1442,27 @@ bool LocomotionSystem::stopWalking() {
     return true;
 }
 
+// ✅ NEW: Update model (OpenSHC architecture)
+void LocomotionSystem::updateModel() {
+    // Set desired tip poses from leg steppers and apply IK for each leg
+    for (int i = 0; i < NUM_LEGS; ++i) {
+        // Get current tip pose from leg stepper
+        Point3D desired_tip_pose = leg_steppers_[i]->getCurrentTipPose();
+
+        // Set desired tip pose in leg
+        legs_[i].setDesiredTipPose(desired_tip_pose);
+
+        // Apply IK to synchronize joint angles and current tip position
+        legs_[i].applyIK(robot_model_);
+    }
+}
+
+void LocomotionSystem::update(double linear_velocity, double angular_velocity) {
+    // Update walk controller with velocity inputs
+    walk_controller_.update(linear_velocity, angular_velocity);
+
+    // Update model to synchronize data (OpenSHC architecture)
+    updateModel();
+}
+
 

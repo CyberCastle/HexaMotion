@@ -337,6 +337,16 @@ class LocomotionSystem {
     /** Stop walking and return to standing pose. */
     bool stopWalking();
 
+    /**
+     * @brief Update the locomotion system state.
+     * @param linear_velocity Linear velocity input
+     * @param angular_velocity Angular velocity input
+     */
+    void update(double linear_velocity, double angular_velocity);
+
+    // ✅ NEW: Update model (OpenSHC architecture)
+    void updateModel();
+
   private:
     // Helper methods
     double constrainAngle(double angle, double min_angle, double max_angle);

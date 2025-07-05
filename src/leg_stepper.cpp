@@ -12,7 +12,7 @@ LegStepper::LegStepper(int leg_index, const Point3D& identity_tip_pose, Leg& leg
           swing_origin_tip_velocity_(Point3D(0, 0, 0)), stance_origin_tip_position_(identity_tip_pose),
           swing_clearance_(Point3D(0, 0, 30.0)), at_correct_phase_(false), completed_first_step_(false), phase_(0),
           stance_progress_(0.0), swing_progress_(0.0), step_progress_(0.0), step_state_(STEP_STANCE),
-          current_walk_state_(WALK_STOPPED), swing_delta_t_(0.0), stance_delta_t_(0.0), touchdown_detection_(false)
+          current_walk_state_(WALK_STOPPED), swing_delta_t_(0.02), stance_delta_t_(0.02), touchdown_detection_(false)
 {
     for (int i = 0; i < 5; ++i) {
         swing_1_nodes_[i] = identity_tip_pose_;
@@ -117,10 +117,10 @@ void LegStepper::updateTipPosition(double step_length, double time_delta, bool r
         // Interpolación Bézier para swing
         Point3D delta_pos = math_utils::quarticBezierDot(swing_1_nodes_, time_input);
         Point3D new_tip_position = swing_origin_tip_position_ + delta_pos;
-        leg_.setTipPosition(new_tip_position);
-        // ✅ CORRECTED: Use robot model for inverse kinematics
-        JointAngles new_angles = robot_model_.inverseKinematics(leg_index_, new_tip_position);
-        leg_.setJointAngles(new_angles);
+
+        // ✅ CORRECTED: Only update the desired tip position, don't call IK/FK here
+        // The Model will handle IK/FK synchronization in updateModel()
+        current_tip_pose_ = new_tip_position;
         current_tip_velocity_ = delta_pos / time_delta;
     }
     // Período de Stance
@@ -131,10 +131,10 @@ void LegStepper::updateTipPosition(double step_length, double time_delta, bool r
         // Interpolación Bézier para stance
         Point3D delta_pos = math_utils::quarticBezierDot(stance_nodes_, time_input);
         Point3D new_tip_position = stance_origin_tip_position_ + delta_pos;
-        leg_.setTipPosition(new_tip_position);
-        // ✅ CORRECTED: Use robot model for inverse kinematics
-        JointAngles new_angles = robot_model_.inverseKinematics(leg_index_, new_tip_position);
-        leg_.setJointAngles(new_angles);
+
+        // ✅ CORRECTED: Only update the desired tip position, don't call IK/FK here
+        // The Model will handle IK/FK synchronization in updateModel()
+        current_tip_pose_ = new_tip_position;
         current_tip_velocity_ = delta_pos / time_delta;
     }
 }
@@ -149,7 +149,14 @@ void LegStepper::generatePrimarySwingControlNodes() {
     bool positive_y_axis = (identity_tip_pose_.y > 0.0);
     mid_tip_position.y += positive_y_axis ? mid_lateral_shift : -mid_lateral_shift;
 
-    Point3D stance_node_separation = swing_origin_tip_velocity_ * (1.0 / swing_delta_t_) * 0.25;
+    // ✅ CORRECTED: Avoid division by zero and use reasonable defaults
+    Point3D stance_node_separation;
+    if (swing_delta_t_ > 1e-6) {  // Check for very small values
+        stance_node_separation = swing_origin_tip_velocity_ * (1.0 / swing_delta_t_) * 0.25;
+    } else {
+        // Use default separation based on stride vector
+        stance_node_separation = stride_vector_ * 0.1;  // 10% of stride as default
+    }
 
     // Nodos de control para curvas Bézier cuárticas de swing primario
     swing_1_nodes_[0] = swing_origin_tip_position_;
@@ -161,8 +168,18 @@ void LegStepper::generatePrimarySwingControlNodes() {
 }
 
 void LegStepper::generateSecondarySwingControlNodes(bool ground_contact) {
-    Point3D final_tip_velocity = stride_vector_ * (stance_delta_t_ / 1.0) * -1.0;
-    Point3D stance_node_separation = final_tip_velocity * (1.0 / swing_delta_t_) * 0.25;
+    // ✅ CORRECTED: Avoid division by zero and use reasonable defaults
+    Point3D final_tip_velocity;
+    Point3D stance_node_separation;
+
+    if (stance_delta_t_ > 1e-6 && swing_delta_t_ > 1e-6) {
+        final_tip_velocity = stride_vector_ * (stance_delta_t_ / 1.0) * -1.0;
+        stance_node_separation = final_tip_velocity * (1.0 / swing_delta_t_) * 0.25;
+    } else {
+        // Use default values when timing parameters are not properly initialized
+        final_tip_velocity = stride_vector_ * -0.5;  // Default velocity
+        stance_node_separation = stride_vector_ * 0.1;  // 10% of stride as default
+    }
 
     // Nodos de control para curvas Bézier cuárticas de swing secundario
     swing_2_nodes_[0] = swing_1_nodes_[4];
@@ -194,8 +211,18 @@ void LegStepper::generateStanceControlNodes(double stride_scaler) {
 }
 
 void LegStepper::forceNormalTouchdown() {
-    Point3D final_tip_velocity = stride_vector_ * (stance_delta_t_ / 1.0) * -1.0;
-    Point3D stance_node_separation = final_tip_velocity * (1.0 / swing_delta_t_) * 0.25;
+    // ✅ CORRECTED: Avoid division by zero and use reasonable defaults
+    Point3D final_tip_velocity;
+    Point3D stance_node_separation;
+
+    if (stance_delta_t_ > 1e-6 && swing_delta_t_ > 1e-6) {
+        final_tip_velocity = stride_vector_ * (stance_delta_t_ / 1.0) * -1.0;
+        stance_node_separation = final_tip_velocity * (1.0 / swing_delta_t_) * 0.25;
+    } else {
+        // Use default values when timing parameters are not properly initialized
+        final_tip_velocity = stride_vector_ * -0.5;  // Default velocity
+        stance_node_separation = stride_vector_ * 0.1;  // 10% of stride as default
+    }
 
     Point3D bezier_target = target_tip_pose_;
     Point3D bezier_origin = target_tip_pose_ - stance_node_separation * 4.0;

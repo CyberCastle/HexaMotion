@@ -352,10 +352,17 @@ public:
 
     /**
      * @brief Check if leg is in default stance position.
-     * @param tolerance Position tolerance in mm
+     * @param tolerance Tolerance for position comparison in mm
      * @return True if leg is in default stance
      */
     bool isInDefaultStance(double tolerance = 5.0) const;
+
+    // ✅ NEW: Set desired tip pose (OpenSHC architecture)
+    void setDesiredTipPose(const Point3D& desired_position);
+    Point3D getDesiredTipPose() const { return desired_tip_pose_; }
+
+    // ✅ NEW: Apply inverse kinematics (OpenSHC architecture)
+    bool applyIK(const RobotModel& model);
 
 private:
     // ===== IDENTIFICATION =====
@@ -386,6 +393,9 @@ private:
     // ===== DEFAULT CONFIGURATION =====
     JointAngles default_angles_;    ///< Default joint angles
     Point3D default_tip_position_;  ///< Default tip position
+
+    // ✅ NEW: Desired tip pose
+    Point3D desired_tip_pose_;       ///< Desired tip position
 
     /**
      * @brief Initialize DH parameters for this leg.

@@ -232,8 +232,28 @@ Eigen::Vector3d Leg::getLegDirection() const {
 }
 
 bool Leg::isInDefaultStance(double tolerance) const {
-    double distance = getDistanceToTarget(default_tip_position_);
-    return distance <= tolerance;
+    return math_utils::distance(tip_position_, default_tip_position_) <= tolerance;
+}
+
+// ✅ NEW: Set desired tip pose (OpenSHC architecture)
+void Leg::setDesiredTipPose(const Point3D& desired_position) {
+    desired_tip_pose_ = desired_position;
+}
+
+// ✅ NEW: Apply inverse kinematics (OpenSHC architecture)
+bool Leg::applyIK(const RobotModel& model) {
+    // Calculate IK from desired tip pose to get new joint angles
+    JointAngles new_angles = model.inverseKinematics(leg_id_, desired_tip_pose_);
+
+    // Update joint angles
+    setJointAngles(new_angles);
+
+    // Update forward kinematics to synchronize current tip position
+    updateForwardKinematics(model);
+
+    // Check if IK was successful (tip position matches desired)
+    double ik_error = math_utils::distance(tip_position_, desired_tip_pose_);
+    return ik_error < IK_TOLERANCE; // 1mm tolerance
 }
 
 void Leg::initializeDHParameters(const Parameters &params) {

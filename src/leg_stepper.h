@@ -60,7 +60,8 @@ public:
 
     // Accessors
     int getLegIndex() const { return leg_index_; }
-    Point3D getCurrentTipPose() const { return leg_.getTipPosition(); }
+    Point3D getCurrentTipPose() const { return current_tip_pose_; }
+    Point3D getCurrentTipVelocity() const { return current_tip_velocity_; }
     JointAngles getJointAngles() const { return leg_.getJointAngles(); }
     Point3D getDefaultTipPose() const { return default_tip_pose_; }
     Point3D getIdentityTipPose() const { return identity_tip_pose_; }
@@ -123,6 +124,7 @@ private:
     Point3D default_tip_pose_;
     Point3D origin_tip_pose_;
     Point3D target_tip_pose_;
+    Point3D current_tip_pose_;       ///< Current tip pose calculated by stepper
 
     // Walking state
     Point3D walk_plane_;
