@@ -5,8 +5,9 @@
 #include "body_pose_config.h"
 #include "leg.h"
 
-// Forward declaration
+// Forward declarations
 class IServoInterface;
+class LegPoser;
 
 /**
  * @brief Kinematic body pose controller for robot body pose management.
@@ -19,6 +20,7 @@ class BodyPoseController {
      * @param config Initial body pose configuration (use body_pose_config_factory.h to create)
      */
     BodyPoseController(RobotModel &model, const BodyPoseConfiguration &config);
+    ~BodyPoseController();
 
     /**
      * @brief Set the robot body pose.
@@ -55,7 +57,7 @@ class BodyPoseController {
                          double t, Leg legs[NUM_LEGS]);
 
     /**
-     * @brief Move a single leg to a target position.
+     * @brief Move a single leg to a target position using LegPoser.
      * @param leg_index Index of the leg to move (0-5).
      * @param position  Target tip position in world frame.
      * @param legs Array of Leg objects, updated in place.
@@ -64,13 +66,13 @@ class BodyPoseController {
     bool setLegPosition(int leg_index, const Point3D &position, Leg legs[NUM_LEGS]);
 
     /**
-     * @brief Initialize default leg pose around the body.
+     * @brief Initialize default leg pose around the body using LegPoser.
      * @param legs Array of Leg objects to initialize.
      */
     void initializeDefaultPose(Leg legs[NUM_LEGS]);
 
     /**
-     * @brief Set the robot to a standing pose.
+     * @brief Set the robot to a standing pose using LegPoser.
      * @param legs Array of Leg objects to update.
      * @return True on success.
      */
@@ -172,6 +174,19 @@ class BodyPoseController {
         trajectory_step_count = 0;
     }
 
+    /**
+     * @brief Get LegPoser for a specific leg
+     * @param leg_index Index of the leg (0-5)
+     * @return Pointer to LegPoser, or nullptr if not available
+     */
+    LegPoser* getLegPoser(int leg_index) const;
+
+    /**
+     * @brief Initialize LegPoser instances for all legs
+     * @param legs Array of Leg objects to associate with LegPosers
+     */
+    void initializeLegPosers(Leg legs[NUM_LEGS]);
+
   private:
     // OpenSHC-style body pose calculation using dynamic configuration
     bool calculateBodyPoseFromConfig(double height_offset, Leg legs[NUM_LEGS]);
@@ -179,10 +194,17 @@ class BodyPoseController {
     // OpenSHC-style body pose limit validation
     bool checkBodyPoseLimits(const Eigen::Vector3d &position, const Eigen::Vector3d &orientation);
 
+    // Quaternion spherical linear interpolation (SLERP)
+    Eigen::Vector4d quaternionSlerp(const Eigen::Vector4d &q1, const Eigen::Vector4d &q2, double t);
+
     RobotModel &model;
 
     // OpenSHC-style body pose configuration
     BodyPoseConfiguration body_pose_config;
+
+    // LegPoser instances for each leg (forward declaration)
+    class LegPoserImpl;
+    std::array<LegPoserImpl*, NUM_LEGS> leg_posers_;
 
     // Smooth trajectory state variables
     bool trajectory_in_progress;
@@ -198,10 +220,6 @@ class BodyPoseController {
                                          const Eigen::Vector3d &target_orientation,
                                          Leg legs[NUM_LEGS], IServoInterface *servos = nullptr);
     bool updateTrajectoryStep(Leg legs[NUM_LEGS]);
-    bool isTrajectoryComplete() const;
-
-    // Quaternion utility functions
-    Eigen::Vector4d quaternionSlerp(const Eigen::Vector4d &q1, const Eigen::Vector4d &q2, double t);
 };
 
 #endif // BODY_POSE_CONTROLLER_H

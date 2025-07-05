@@ -1,16 +1,18 @@
 #include "leg_stepper.h"
-#include "walk_controller.h"
 #include "math_utils.h"
 #include <algorithm>
 #include <cmath>
 
-// Constructor implementation
-LegStepper::LegStepper(WalkController* walker, int leg_index, const Point3D& identity_tip_pose, Leg& leg)
-            : walker_(walker), leg_index_(leg_index), leg_(leg), identity_tip_pose_(identity_tip_pose),
+// ✅ CORRECTED: Constructor without WalkController dependency
+LegStepper::LegStepper(int leg_index, const Point3D& identity_tip_pose, Leg& leg, RobotModel& robot_model)
+            : leg_index_(leg_index), leg_(leg), robot_model_(robot_model), identity_tip_pose_(identity_tip_pose),
           default_tip_pose_(identity_tip_pose), origin_tip_pose_(identity_tip_pose), target_tip_pose_(identity_tip_pose),
-          at_correct_phase_(false), completed_first_step_(false), phase_(0),
+          walk_plane_(Point3D(0, 0, 0)), walk_plane_normal_(Point3D(0, 0, 1)), stride_vector_(Point3D(0, 0, 0)),
+          current_tip_velocity_(Point3D(0, 0, 0)), swing_origin_tip_position_(identity_tip_pose),
+          swing_origin_tip_velocity_(Point3D(0, 0, 0)), stance_origin_tip_position_(identity_tip_pose),
+          swing_clearance_(Point3D(0, 0, 30.0)), at_correct_phase_(false), completed_first_step_(false), phase_(0),
           stance_progress_(0.0), swing_progress_(0.0), step_progress_(0.0), step_state_(STEP_STANCE),
-          swing_delta_t_(0.0), stance_delta_t_(0.0), touchdown_detection_(false)
+          current_walk_state_(WALK_STOPPED), swing_delta_t_(0.0), stance_delta_t_(0.0), touchdown_detection_(false)
 {
     for (int i = 0; i < 5; ++i) {
         swing_1_nodes_[i] = identity_tip_pose_;
@@ -20,40 +22,37 @@ LegStepper::LegStepper(WalkController* walker, int leg_index, const Point3D& ide
 }
 
 // Core functionality implementations
-void LegStepper::updatePhase() {
-    StepCycle step = walker_->getStepCycle();
+void LegStepper::updatePhase(const StepCycle& step) {
     phase_ = static_cast<int>(step_progress_ * step.period_);
-    updateStepState();
+    updateStepState(step);
 }
 
-void LegStepper::iteratePhase() {
-    StepCycle step = walker_->getStepCycle();
+void LegStepper::iteratePhase(const StepCycle& step) {
     phase_ = (phase_ + 1) % step.period_;
-    updateStepState();
+    updateStepState(step);
 
     // Calcular progreso de stance/swing periods (0.0->1.0 o -1.0 si no está en estado específico)
     step_progress_ = double(phase_) / step.period_;
-            if (step_state_ == STEP_SWING) {
-            swing_progress_ = double(phase_ - step.swing_start_ + 1) / double(step.swing_end_ - step.swing_start_);
-            swing_progress_ = std::max(0.0, std::min(1.0, swing_progress_));
-            stance_progress_ = -1.0;
-        } else if (step_state_ == STEP_STANCE) {
-            stance_progress_ = double((phase_ + (step.period_ - step.stance_start_)) % step.period_ + 1) /
-                              double((step.stance_end_ - step.stance_start_ + step.period_) % step.period_);
-            stance_progress_ = std::max(0.0, std::min(1.0, stance_progress_));
-            swing_progress_ = -1.0;
-        } else if (step_state_ == STEP_FORCE_STOP) {
-            stance_progress_ = 0.0;
-            swing_progress_ = -1.0;
-        }
+    if (step_state_ == STEP_SWING) {
+        swing_progress_ = double(phase_ - step.swing_start_ + 1) / double(step.swing_end_ - step.swing_start_);
+        swing_progress_ = std::max(0.0, std::min(1.0, swing_progress_));
+        stance_progress_ = -1.0;
+    } else if (step_state_ == STEP_STANCE) {
+        stance_progress_ = double((phase_ + (step.period_ - step.stance_start_)) % step.period_ + 1) /
+                          double((step.stance_end_ - step.stance_start_ + step.period_) % step.period_);
+        stance_progress_ = std::max(0.0, std::min(1.0, stance_progress_));
+        swing_progress_ = -1.0;
+    } else if (step_state_ == STEP_FORCE_STOP) {
+        stance_progress_ = 0.0;
+        swing_progress_ = -1.0;
+    }
 }
 
-void LegStepper::updateStepState() {
+void LegStepper::updateStepState(const StepCycle& step) {
     // Actualizar estado de paso desde la fase a menos que esté forzado a parar
     if (step_state_ == STEP_FORCE_STOP) {
         return;
     }
-    StepCycle step = walker_->getStepCycle();
     if (phase_ >= step.swing_start_ && phase_ < step.swing_end_ && step_state_ != STEP_FORCE_STANCE) {
         step_state_ = STEP_SWING;
     } else if (phase_ < step.stance_end_ || phase_ >= step.stance_start_) {
@@ -72,7 +71,6 @@ Point3D LegStepper::calculateStanceSpanChange() {
     double target_workplane_height = default_shift.z;
 
     // Get stance span modifier from robot model parameters
-    const Parameters &params = walker_->getModel().getParams();
     double stance_span_modifier = 0.1; // Default value, can be made configurable
     bool positive_y_axis = (identity_tip_pose_.y > 0.0);
     int bearing = (positive_y_axis ^ (stance_span_modifier > 0.0)) ? 270 : 90;
@@ -104,13 +102,7 @@ void LegStepper::updateDefaultTipPosition() {
     default_tip_pose_ = new_default_tip_pose;
 }
 
-void LegStepper::updateTipPosition(double step_length) {
-    // Get terrain adaptation parameters from walk controller
-    bool rough_terrain_mode = walker_->getTerrainAdaptation().isRoughTerrainModeEnabled();
-    bool force_normal_touchdown = walker_->getTerrainAdaptation().isForceNormalTouchdownEnabled();
-    double time_delta = walker_->getTimeDelta();
-    StepCycle step = walker_->getStepCycle();
-
+void LegStepper::updateTipPosition(double step_length, double time_delta, bool rough_terrain_mode, bool force_normal_touchdown) {
     // Generar target por defecto
     target_tip_pose_ = default_tip_pose_ + stride_vector_ * 0.5;
 
@@ -126,10 +118,10 @@ void LegStepper::updateTipPosition(double step_length) {
         Point3D delta_pos = math_utils::quarticBezierDot(swing_1_nodes_, time_input);
         Point3D new_tip_position = swing_origin_tip_position_ + delta_pos;
         leg_.setTipPosition(new_tip_position);
-        // Ejecutar cinemática inversa para actualizar ángulos
-        JointAngles new_angles = walker_->getModel().inverseKinematics(leg_index_, new_tip_position);
+        // ✅ CORRECTED: Use robot model for inverse kinematics
+        JointAngles new_angles = robot_model_.inverseKinematics(leg_index_, new_tip_position);
         leg_.setJointAngles(new_angles);
-        current_tip_velocity_ = delta_pos / walker_->getTimeDelta();
+        current_tip_velocity_ = delta_pos / time_delta;
     }
     // Período de Stance
     else if (step_state_ == STEP_STANCE || step_state_ == STEP_FORCE_STANCE) {
@@ -140,10 +132,10 @@ void LegStepper::updateTipPosition(double step_length) {
         Point3D delta_pos = math_utils::quarticBezierDot(stance_nodes_, time_input);
         Point3D new_tip_position = stance_origin_tip_position_ + delta_pos;
         leg_.setTipPosition(new_tip_position);
-        // Ejecutar cinemática inversa para actualizar ángulos
-        JointAngles new_angles = walker_->getModel().inverseKinematics(leg_index_, new_tip_position);
+        // ✅ CORRECTED: Use robot model for inverse kinematics
+        JointAngles new_angles = robot_model_.inverseKinematics(leg_index_, new_tip_position);
         leg_.setJointAngles(new_angles);
-        current_tip_velocity_ = delta_pos / walker_->getTimeDelta();
+        current_tip_velocity_ = delta_pos / time_delta;
     }
 }
 
@@ -153,12 +145,11 @@ void LegStepper::generatePrimarySwingControlNodes() {
     mid_tip_position = mid_tip_position + swing_clearance_;
 
     // Get swing width parameter from robot model or use default
-    const Parameters &params = walker_->getModel().getParams();
     double mid_lateral_shift = 10.0; // Default swing width, can be made configurable
     bool positive_y_axis = (identity_tip_pose_.y > 0.0);
     mid_tip_position.y += positive_y_axis ? mid_lateral_shift : -mid_lateral_shift;
 
-    Point3D stance_node_separation = swing_origin_tip_velocity_ * (walker_->getTimeDelta() / swing_delta_t_) * 0.25;
+    Point3D stance_node_separation = swing_origin_tip_velocity_ * (1.0 / swing_delta_t_) * 0.25;
 
     // Nodos de control para curvas Bézier cuárticas de swing primario
     swing_1_nodes_[0] = swing_origin_tip_position_;
@@ -170,8 +161,8 @@ void LegStepper::generatePrimarySwingControlNodes() {
 }
 
 void LegStepper::generateSecondarySwingControlNodes(bool ground_contact) {
-    Point3D final_tip_velocity = stride_vector_ * (stance_delta_t_ / walker_->getTimeDelta()) * -1.0;
-    Point3D stance_node_separation = final_tip_velocity * (walker_->getTimeDelta() / swing_delta_t_) * 0.25;
+    Point3D final_tip_velocity = stride_vector_ * (stance_delta_t_ / 1.0) * -1.0;
+    Point3D stance_node_separation = final_tip_velocity * (1.0 / swing_delta_t_) * 0.25;
 
     // Nodos de control para curvas Bézier cuárticas de swing secundario
     swing_2_nodes_[0] = swing_1_nodes_[4];
@@ -203,8 +194,8 @@ void LegStepper::generateStanceControlNodes(double stride_scaler) {
 }
 
 void LegStepper::forceNormalTouchdown() {
-    Point3D final_tip_velocity = stride_vector_ * (stance_delta_t_ / walker_->getTimeDelta()) * -1.0;
-    Point3D stance_node_separation = final_tip_velocity * (walker_->getTimeDelta() / swing_delta_t_) * 0.25;
+    Point3D final_tip_velocity = stride_vector_ * (stance_delta_t_ / 1.0) * -1.0;
+    Point3D stance_node_separation = final_tip_velocity * (1.0 / swing_delta_t_) * 0.25;
 
     Point3D bezier_target = target_tip_pose_;
     Point3D bezier_origin = target_tip_pose_ - stance_node_separation * 4.0;
@@ -218,36 +209,39 @@ void LegStepper::forceNormalTouchdown() {
     swing_2_nodes_[1] = swing_2_nodes_[0] + (swing_2_nodes_[2] - bezier_origin) * 0.5;
 }
 
-Point3D LegStepper::getWalkPlaneNormal() const {
-    return walk_plane_normal_;
-}
-
-Point3D LegStepper::getWalkPlane() const {
-    return walk_plane_;
-}
+// These methods are now inline in the header file
 
 // Nueva API OpenSHC-like
-void LegStepper::updateWithPhase(double local_phase, double step_length) {
+void LegStepper::updateWithPhase(double local_phase, double step_length, double time_delta) {
     // Duty factor para trípode (0.5: mitad del ciclo en stance, mitad en swing)
     constexpr double duty_factor = 0.5;
+
+    // Actualizar posiciones de origen si es necesario
+    if (step_state_ == STEP_STANCE && local_phase < duty_factor) {
+        // Estamos en stance, actualizar posición de origen de stance
+        stance_origin_tip_position_ = leg_.getTipPosition();
+    } else if (step_state_ == STEP_SWING && local_phase >= duty_factor) {
+        // Estamos en swing, actualizar posición de origen de swing
+        swing_origin_tip_position_ = leg_.getTipPosition();
+    }
+
     // Determinar estado y progreso
     if (local_phase < duty_factor) {
         // STANCE
         step_state_ = STEP_STANCE;
         double stance_progress = local_phase / duty_factor;
-        // Interpolar trayectoria de stance usando stance_progress
-        // (Puedes usar stance_progress para calcular la posición del tip y ángulos)
-        // Aquí puedes llamar a una función como updateStanceTrajectory(stance_progress, step_length);
-        // Por simplicidad, reutilizamos updateTipPosition pero con el progreso adecuado
         step_progress_ = stance_progress;
+        stance_progress_ = stance_progress;
+        swing_progress_ = -1.0;
     } else {
         // SWING
         step_state_ = STEP_SWING;
         double swing_progress = (local_phase - duty_factor) / (1.0 - duty_factor);
-        // Interpolar trayectoria de swing usando swing_progress
-        // Aquí puedes llamar a una función como updateSwingTrajectory(swing_progress, step_length);
         step_progress_ = swing_progress;
+        swing_progress_ = swing_progress;
+        stance_progress_ = -1.0;
     }
+
     // Actualizar la trayectoria y ángulos usando el progreso
-    updateTipPosition(step_length);
+    updateTipPosition(step_length, time_delta, false, false);  // Default terrain adaptation values
 }

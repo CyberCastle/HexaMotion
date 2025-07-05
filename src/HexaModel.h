@@ -121,6 +121,7 @@ struct Parameters {
 };
 
 enum GaitType {
+    NO_GAIT,
     TRIPOD_GAIT,
     WAVE_GAIT,
     RIPPLE_GAIT,

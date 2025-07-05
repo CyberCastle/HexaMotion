@@ -101,7 +101,7 @@ public:
 
     // Transition pose management
     inline Pose getTransitionPose(int index) const {
-        return (index < static_cast<int>(transition_poses_.size())) ? transition_poses_[index] : Pose::Undefined();
+        return (index < static_cast<int>(transition_poses_.size())) ? transition_poses_[index] : Pose();
     }
     inline bool hasTransitionPose(int index) const { return static_cast<int>(transition_poses_.size()) > index; }
     inline void addTransitionPose(const Pose& transition) { transition_poses_.push_back(transition); }
@@ -160,6 +160,7 @@ private:
     JointConfiguration origin_configuration_;  ///< Configuration origin for transitionConfiguration function
 
     Pose origin_tip_pose_;                   ///< Origin tip pose used in bezier curve equations
+    Pose current_tip_pose_;                  ///< Current tip pose
     Pose target_tip_pose_;                   ///< Target tip pose used in bezier curve equations
     ExternalTarget external_target_;         ///< Externally set target tip pose object
 

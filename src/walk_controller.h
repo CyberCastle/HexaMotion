@@ -3,6 +3,7 @@
 
 #include "HexaModel.h"
 #include "terrain_adaptation.h"
+#include "leg_stepper.h"  // ✅ Include for StepCycle definition
 #include "velocity_limits.h"
 #include "workspace_validator.h"
 #include "walkspace_analyzer.h"
@@ -22,19 +23,7 @@ enum LegState {
     LEG_MANUAL_TO_WALKING = -2, ///< The leg is in 'manual to walking' state - transitioning from 'manual' to 'walking' state
 };
 
-/**
- * @brief Step cycle timing parameters (OpenSHC equivalent)
- */
-struct StepCycle {
-    double frequency_;      ///< Step frequency in Hz
-    int period_;           ///< Total step cycle length in iterations
-    int swing_period_;     ///< Swing period length in iterations
-    int stance_period_;    ///< Stance period length in iterations
-    int stance_end_;       ///< Iteration when stance period ends
-    int swing_start_;      ///< Iteration when swing period starts
-    int swing_end_;        ///< Iteration when swing period ends
-    int stance_start_;     ///< Iteration when stance period starts
-};
+// StepCycle is now defined in leg_stepper.h to avoid duplication
 
 // WalkState and StepState are defined above
 
@@ -126,7 +115,6 @@ public:
     void setRegenerateWalkspace() { regenerate_walkspace_ = true; }
 
     // Legacy interface compatibility
-    bool setGaitType(GaitType gait);
     bool planGaitSequence(double vx, double vy, double omega);
     void updateGaitPhase(double dt);
     double getGaitPhase() const { return gait_phase; }
@@ -178,6 +166,62 @@ public:
     std::map<int, double> getLegReachabilityScores() const;
     bool isCurrentlyStable() const;
 
+    // ✅ NEW: Gait pattern management methods (migrated from LocomotionSystem)
+    /**
+     * @brief Initialize gait parameters for a specific gait type
+     * @param gait The gait type to initialize
+     */
+    void initGaitParameters(GaitType gait);
+
+    /**
+     * @brief Set gait type and configure all related parameters
+     * @param gait The gait type to set
+     * @return true if successful, false otherwise
+     */
+    bool setGaitType(GaitType gait);
+
+    /**
+     * @brief Get current gait type
+     * @return Current gait type
+     */
+    GaitType getCurrentGait() const { return current_gait; }
+
+    /**
+     * @brief Configure phase offsets for a specific gait type
+     * @param gait The gait type to configure
+     */
+    void configureGaitPhaseOffsets(GaitType gait);
+
+    /**
+     * @brief Update metachronal gait pattern based on movement direction
+     */
+    void updateMetachronalPattern();
+
+    /**
+     * @brief Update adaptive gait pattern based on terrain and stability
+     */
+    void updateAdaptivePattern();
+
+    /**
+     * @brief Check if gait pattern should be adapted
+     * @return true if adaptation is needed, false otherwise
+     */
+    bool shouldAdaptGaitPattern();
+
+    /**
+     * @brief Calculate adaptive phase offsets based on current conditions
+     */
+    void calculateAdaptivePhaseOffsets();
+
+    /**
+     * @brief Get gait-specific timing parameters
+     * @param gait The gait type
+     * @param stance_duration Output stance duration (0-1)
+     * @param swing_duration Output swing duration (0-1)
+     * @param cycle_frequency Output cycle frequency (Hz)
+     */
+    void getGaitTimingParameters(GaitType gait, double& stance_duration, double& swing_duration, double& cycle_frequency) const;
+
 private:
     RobotModel &model;
 
@@ -211,9 +255,26 @@ private:
     // Leg steppers
     std::vector<std::shared_ptr<LegStepper>> leg_steppers_;
 
-    // Legacy compatibility
+    // ✅ NEW: Gait pattern management (migrated from LocomotionSystem)
     GaitType current_gait;
     double gait_phase;
+
+    // ✅ NEW: Gait-specific parameters (migrated from LocomotionSystem)
+    double stance_duration_;             // Stance phase duration (0-1)
+    double swing_duration_;              // Swing phase duration (0-1)
+    double cycle_frequency_;             // Gait cycle frequency (Hz)
+
+    // ✅ NEW: Gait pattern configuration (OpenSHC-style)
+    struct GaitConfig {
+        double phase_offsets[NUM_LEGS];  // Phase offsets for each leg
+        double stance_duration;          // Stance duration (0-1)
+        double swing_duration;           // Swing duration (0-1)
+        double cycle_frequency;          // Cycle frequency (Hz)
+        std::string description;         // Gait description
+    };
+
+    // ✅ NEW: Gait configurations (OpenSHC-style)
+    std::map<GaitType, GaitConfig> gait_configs_;
 
     // Terrain adaptation system
     TerrainAdaptation terrain_adaptation_;
@@ -231,6 +292,15 @@ private:
 
     // Collision avoidance: track current leg positions
     Point3D current_leg_positions_[NUM_LEGS];
+
+    // ✅ NEW: Helper methods for gait pattern management
+    void initializeGaitConfigs();
+    void applyGaitConfig(const GaitConfig& config);
+    double calculateStabilityIndex() const;
+    bool checkTerrainConditions() const;
+
+    // Declaración del método auxiliar para la posición de apoyo por defecto
+    Point3D calculateDefaultStancePosition(int leg_index);
 };
 
 #endif // WALK_CONTROLLER_H
