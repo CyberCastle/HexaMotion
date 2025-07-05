@@ -236,4 +236,58 @@ Point3D projectVector(const Point3D &vector, const Point3D &onto) {
     return Point3D(onto.x * scale, onto.y * scale, onto.z * scale);
 }
 
+bool solveLeastSquaresPlane(const double* raw_A, const double* raw_B, int num_points, double& a, double& b, double& c) {
+
+    // Build normal equations: A^T * A * x = A^T * b
+    double ATA[3][3] = {{0}};
+    double ATb[3] = {0};
+
+    for (int i = 0; i < num_points; i++) {
+        double x = raw_A[i * 3];
+        double y = raw_A[i * 3 + 1];
+        double z = raw_B[i];
+
+        // A^T * A
+        ATA[0][0] += x * x;
+        ATA[0][1] += x * y;
+        ATA[0][2] += x;
+        ATA[1][1] += y * y;
+        ATA[1][2] += y;
+        ATA[2][2] += 1;
+
+        // A^T * b
+        ATb[0] += x * z;
+        ATb[1] += y * z;
+        ATb[2] += z;
+    }
+
+    // Symmetric matrix
+    ATA[1][0] = ATA[0][1];
+    ATA[2][0] = ATA[0][2];
+    ATA[2][1] = ATA[1][2];
+
+    // Solve using Cramer's rule for 3x3 system
+    double det = ATA[0][0] * (ATA[1][1] * ATA[2][2] - ATA[1][2] * ATA[2][1]) -
+                 ATA[0][1] * (ATA[1][0] * ATA[2][2] - ATA[1][2] * ATA[2][0]) +
+                 ATA[0][2] * (ATA[1][0] * ATA[2][1] - ATA[1][1] * ATA[2][0]);
+
+    if (abs(det) > 1e-6) { // Check for singular matrix
+        a = (ATb[0] * (ATA[1][1] * ATA[2][2] - ATA[1][2] * ATA[2][1]) -
+                ATA[0][1] * (ATb[1] * ATA[2][2] - ATA[1][2] * ATb[2]) +
+                ATA[0][2] * (ATb[1] * ATA[2][1] - ATA[1][1] * ATb[2])) /
+               det;
+        b = (ATA[0][0] * (ATb[1] * ATA[2][2] - ATA[1][2] * ATb[2]) -
+                ATb[0] * (ATA[1][0] * ATA[2][2] - ATA[1][2] * ATA[2][0]) +
+                ATA[0][2] * (ATA[1][0] * ATb[2] - ATb[1] * ATA[2][0])) /
+               det;
+        c = (ATA[0][0] * (ATA[1][1] * ATb[2] - ATA[1][2] * ATb[1]) -
+                ATA[0][1] * (ATA[1][0] * ATb[2] - ATA[1][2] * ATb[0]) +
+                ATb[0] * (ATA[1][0] * ATA[2][1] - ATA[1][1] * ATA[2][0])) /
+               det;
+        return true;
+    }
+
+    return false; // Matrix is singular
+}
+
 } // namespace math_utils

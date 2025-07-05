@@ -199,6 +199,23 @@ struct StateVector {
  * @tparam T Vector type (Point3D, Eigen::Vector3d, etc.)
  * @param state Current state vector [position, velocity]
  * @param t Current time
+ * @return Derivative of the state vector
+ */
+template <typename T>
+using DerivativeFunction = T (*)(const StateVector<T> &state, double t);
+
+/**
+ * @brief Solve least squares for plane equation z = ax + by + c
+ * @param raw_A Array of x,y coordinates [x1,y1,x2,y2,...]
+ * @param raw_B Array of z coordinates [z1,z2,...]
+ * @param num_points Number of points (length of raw_B array)
+ * @param a Output coefficient for x
+ * @param b Output coefficient for y
+ * @param c Output constant term
+ * @return true if solution found, false if matrix is singular
+ */
+bool solveLeastSquaresPlane(const double* raw_A, const double* raw_B, int num_points, double& a, double& b, double& c);
+ * @param t Current time
  * @param params User-defined parameters
  * @return Derivative vector [velocity, acceleration]
  */
