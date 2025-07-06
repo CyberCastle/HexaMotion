@@ -455,7 +455,7 @@ void TerrainAdaptation::updateAdvancedTerrainAnalysis(const IMUData &imu_data) {
         double motion_magnitude = linear_accel.norm();
 
         // Detect significant dynamic motion that affects terrain analysis
-        if (motion_magnitude > ANGULAR_ACCELERATION_FACTOR) { // m/s² threshold for significant motion
+        if (motion_magnitude > ANGULAR_ACCELERATION_FACTOR) { // mm/s² threshold for significant motion
             // Reduce confidence in terrain detection during high acceleration
             for (int i = 0; i < NUM_LEGS; i++) {
                 step_planes_[i].confidence *= 0.8;

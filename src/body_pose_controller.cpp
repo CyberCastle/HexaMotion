@@ -446,7 +446,7 @@ int BodyPoseController::stepToNewStance(Leg legs[NUM_LEGS], double step_height, 
         // Calculate stance positions for each leg based on body pose configuration
         for (int i = 0; i < NUM_LEGS; i++) {
             const auto& stance_pos = body_pose_config.leg_stance_positions[i];
-            Point3D stance_position(stance_pos.x * 1000.0, stance_pos.y * 1000.0, -model.getParams().robot_height);
+            Point3D stance_position(stance_pos.x, stance_pos.y, -model.getParams().robot_height);
 
             // Store target stance position for each leg
             if (leg_posers_[i]) {
@@ -605,11 +605,11 @@ bool BodyPoseController::updateAutoPose(double gait_phase, Leg legs[NUM_LEGS]) {
             // Apply roll compensation (simplified - in practice this would be more complex)
             // For now, we'll adjust the Z position based on Y position to simulate roll
             double y_offset = current_pos.y;
-            double roll_z_offset = roll_compensation * y_offset * 1000.0; // Scale factor
+            double roll_z_offset = roll_compensation * y_offset; // Keep in mm
 
             // Apply Z compensation
             Point3D compensated_pos = current_pos;
-            compensated_pos.z += z_compensation * 1000.0 + roll_z_offset; // Convert to mm
+            compensated_pos.z += z_compensation + roll_z_offset; // Keep in mm
 
             // Update leg position with compensation
             legs[i].setCurrentTipPositionGlobal(compensated_pos);

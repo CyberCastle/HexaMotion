@@ -172,7 +172,7 @@ double CartesianVelocityController::getCurrentVelocityMagnitude() const {
     // Combine linear and angular velocities with appropriate weighting
     // Angular velocity is weighted by typical robot radius for dimensional consistency
     const Parameters &params = model_.getParams();
-    double angular_linear_equiv = angular_magnitude * (params.hexagon_radius / 1000.0f); // Convert mm to m
+    double angular_linear_equiv = angular_magnitude * params.hexagon_radius; // Keep in mm
 
     return linear_magnitude + angular_linear_equiv * 0.5f; // Angular contributes 50% to total
 }
@@ -201,14 +201,14 @@ double CartesianVelocityController::calculateLinearVelocityScale(double velocity
 
     // Map velocity magnitude to speed scaling using the robot's maximum velocity as reference
     const Parameters &params = model_.getParams();
-    double max_velocity_ms = params.max_velocity / 1000.0f; // Convert mm/s to m/s
+    double max_velocity_mmps = params.max_velocity; // Keep in mm/s
 
-    if (max_velocity_ms < VELOCITY_THRESHOLD) {
+    if (max_velocity_mmps < VELOCITY_THRESHOLD) {
         return SERVO_SPEED_DEFAULT; // Default scaling if max velocity not properly set
     }
 
     // Calculate linear scaling: higher velocity = higher servo speed
-    double velocity_ratio = velocity_magnitude / max_velocity_ms;
+    double velocity_ratio = velocity_magnitude / max_velocity_mmps;
     velocity_ratio = std::clamp<double>(velocity_ratio, 0.0, SERVO_SPEED_DEFAULT);
 
     // Apply scaling with configured parameters
@@ -268,8 +268,8 @@ double CartesianVelocityController::calculateLegSpeedCompensation(int leg_index,
 
     // Get leg position in robot frame
     Point3D base_pos = model_.getAnalyticLegBasePosition(leg_index);
-    double leg_x = base_pos.x / 1000.0f; // Convert to meters
-    double leg_y = base_pos.y / 1000.0f;
+    double leg_x = base_pos.x; // Keep in mm
+    double leg_y = base_pos.y; // Keep in mm
 
     // Calculate the velocity of this leg due to body motion
     // Linear motion: all legs move at same speed
@@ -285,7 +285,7 @@ double CartesianVelocityController::calculateLegSpeedCompensation(int leg_index,
 
     // Scale servo speed based on leg velocity demand
     // Higher demand = higher servo speed
-    double max_expected_velocity = 0.5f; // m/s - typical maximum leg velocity
+    double max_expected_velocity = 500.0f; // mm/s - typical maximum leg velocity
     double velocity_ratio =
         std::clamp<double>(total_leg_velocity / max_expected_velocity, 0.0,
                            SERVO_SPEED_DEFAULT);

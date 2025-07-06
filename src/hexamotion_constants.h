@@ -91,7 +91,7 @@
 // Velocity scaling and coupling factors
 #define DEFAULT_ANGULAR_SCALING 1.0     // Default angular velocity scaling
 #define ANGULAR_LINEAR_COUPLING 0.3     // Coupling factor between angular and linear velocity
-#define ANGULAR_ACCELERATION_FACTOR 2.0 // Angular acceleration multiplier
+#define ANGULAR_ACCELERATION_FACTOR 2000.0 // Angular acceleration threshold (mm/s²)
 #define WORKSPACE_SCALING_FACTOR 0.5    // Workspace scaling factor
 #define WALKSPACE_SCALING_FACTOR 0.7    // Walkspace scaling factor
 #define MIN_SERVO_VELOCITY 0.1          // Minimum servo velocity (10% of max)
@@ -107,7 +107,7 @@
 #define RADIANS_TO_DEGREES_FACTOR (180.0f / M_PI) // Conversion factor radians to degrees
 
 // Physics constants
-#define GRAVITY_ACCELERATION 9.80665f // Standard gravity acceleration (m/s²) - BIPM definition
+#define GRAVITY_ACCELERATION 9806.65f // Standard gravity acceleration (mm/s²) - BIPM definition
                                       // Reference: https://en.wikipedia.org/wiki/Standard_gravity
 
 // Sampling and analysis constants
@@ -153,7 +153,7 @@
 #define FLOAT_TOLERANCE 1e-6f     // Standard floating point tolerance
 #define ANGLE_TOLERANCE 0.1f      // Angular tolerance (degrees)
 #define POSITION_TOLERANCE 1.0f   // Position tolerance (mm)
-#define VELOCITY_THRESHOLD 0.001f // Minimum velocity to consider as moving
+#define VELOCITY_THRESHOLD 1.0f // Minimum velocity to consider as moving (mm/s)
 
 // ========================================================================
 // SYSTEM STATE CONSTANTS

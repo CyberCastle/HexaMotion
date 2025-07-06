@@ -287,7 +287,7 @@ double VelocityLimits::calculateMaxLinearSpeed(double walkspace_radius,
     max_speed *= scaling_factors.velocity_scale;
 
     // Apply reasonable limits to prevent extreme values
-    return std::min(max_speed, 5.0); // Cap at 5 m/s for safety
+    return std::min(max_speed, 5000.0); // Cap at 5000 mm/s for safety
 }
 
 double VelocityLimits::calculateMaxAngularSpeed(double max_linear_speed, double stance_radius) const {
@@ -319,7 +319,7 @@ double VelocityLimits::calculateMaxAcceleration(double max_speed, double time_to
     max_accel *= scaling_factors.acceleration_scale;
 
     // Apply reasonable limits to prevent extreme values
-    return std::min(max_accel, 10.0); // Cap at 10 m/s² for safety
+    return std::min(max_accel, 10000.0); // Cap at 10000 mm/s² for safety
 }
 
 VelocityLimits::LimitValues VelocityLimits::calculateLimitsForBearing(

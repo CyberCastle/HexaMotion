@@ -525,7 +525,7 @@ double RobotModel::setDesiredTipPoseAndApplyIK(int leg, const Point3D &global_de
     Point3D local_position_delta = local_desired_pose - local_current_pose;
 
     // Check if delta is reasonable (OpenSHC validation)
-    if (local_position_delta.norm() > 1000.0) { // 1 meter sanity check
+    if (local_position_delta.norm() > 1000.0) { // 1000mm sanity check
         return 0.0; // Failure
     }
 
