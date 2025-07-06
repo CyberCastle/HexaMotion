@@ -9,8 +9,9 @@
 #include <math.h>
 #include <vector>
 
-// Per-leg base orientation offsets (degrees) - now symmetric for opposite leg pairs
-// Pairs: (0,3)=(-30°,150°), (1,4)=(-90°,90°), (2,5)=(-150°,30°)
+// Per-leg base orientation offsets (degrees) - symmetric for opposite leg pairs
+// Pairs: (0,3)=(-30°,30°), (1,4)=(-90°,90°), (2,5)=(-150°,150°)
+// This is the same as the main model (DH parameters)
 static const double BASE_THETA_OFFSETS[NUM_LEGS] = {-30.0f, -90.0f, -150.0f, 150.0f, 90.0f, 30.0f};
 
 RobotModel::RobotModel(const Parameters &p) : params(p) {
