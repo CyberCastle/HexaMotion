@@ -21,7 +21,7 @@ int main() {
     p.tibia_angle_limits[1] = 45;
 
     RobotModel model(p);
-    Leg legs[NUM_LEGS] = {Leg(0, p), Leg(1, p), Leg(2, p), Leg(3, p), Leg(4, p), Leg(5, p)};
+    Leg legs[NUM_LEGS] = {Leg(0, model), Leg(1, model), Leg(2, model), Leg(3, model), Leg(4, model), Leg(5, model)};
     for (int i = 0; i < NUM_LEGS; ++i) {
         legs[i].initialize(model, Pose::Identity());
     }

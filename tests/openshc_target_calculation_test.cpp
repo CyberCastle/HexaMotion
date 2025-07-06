@@ -27,9 +27,9 @@ void printPoint3D(const std::string& label, const Point3D& point) {
 
 void printJointAngles(const std::string& label, const JointAngles& angles) {
     std::cout << std::fixed << std::setprecision(2);
-    std::cout << "  " << label << ": coxa=" << angles.coxa
-              << "°, femur=" << angles.femur
-              << "°, tibia=" << angles.tibia << "°" << std::endl;
+    std::cout << "  " << label << ": coxa=" << math_utils::radiansToDegrees(angles.coxa)
+              << "°, femur=" << math_utils::radiansToDegrees(angles.femur)
+              << "°, tibia=" << math_utils::radiansToDegrees(angles.tibia) << "°" << std::endl;
 }
 
 void printPose(const std::string& label, const Pose& pose) {

@@ -105,7 +105,7 @@ private:
                          tibia <= model.getParams().tibia_angle_limits[1];
                          tibia += step_tibia) {
 
-                        JointAngles original_angles(coxa, femur, tibia);
+                        JointAngles original_angles(math_utils::degreesToRadians(coxa), math_utils::degreesToRadians(femur), math_utils::degreesToRadians(tibia));
 
                         if (!model.checkJointLimits(leg, original_angles)) {
                             continue;
@@ -148,13 +148,13 @@ private:
         for (int leg = 0; leg < NUM_LEGS; ++leg) {
             std::cout << "Testing coordinate transformations for leg " << leg << "..." << std::endl;
 
-            // Test with various joint configurations
+            // Test with various joint configurations (convert degrees to radians)
             std::vector<JointAngles> test_configs = {
                 JointAngles(0, 0, 0),
-                JointAngles(30, -30, 20),
-                JointAngles(-30, 30, -20),
-                JointAngles(45, -45, 30),
-                JointAngles(-45, 45, -30)
+                JointAngles(math_utils::degreesToRadians(30), math_utils::degreesToRadians(-30), math_utils::degreesToRadians(20)),
+                JointAngles(math_utils::degreesToRadians(-30), math_utils::degreesToRadians(30), math_utils::degreesToRadians(-20)),
+                JointAngles(math_utils::degreesToRadians(45), math_utils::degreesToRadians(-45), math_utils::degreesToRadians(30)),
+                JointAngles(math_utils::degreesToRadians(-45), math_utils::degreesToRadians(45), math_utils::degreesToRadians(-30))
             };
 
             for (const auto& angles : test_configs) {
@@ -177,8 +177,8 @@ private:
                                    " Global->Local->Global error: " + std::to_string(error) + "mm");
                 }
 
-                // Test with different reference angles
-                JointAngles ref_angles(15, -15, 10);
+                // Test with different reference angles (convert degrees to radians)
+                JointAngles ref_angles(math_utils::degreesToRadians(15), math_utils::degreesToRadians(-15), math_utils::degreesToRadians(10));
                 Point3D local_ref = model.transformGlobalToLocalCoordinates(leg, global_pos, ref_angles);
                 Point3D global_ref = model.transformLocalToGlobalCoordinates(leg, local_ref, ref_angles);
 
@@ -197,7 +197,7 @@ private:
         for (int leg = 0; leg < NUM_LEGS; ++leg) {
             std::cout << "Testing pose transformations for leg " << leg << "..." << std::endl;
 
-            JointAngles test_angles(20, -20, 15);
+            JointAngles test_angles(math_utils::degreesToRadians(20), math_utils::degreesToRadians(-20), math_utils::degreesToRadians(15));
             if (!model.checkJointLimits(leg, test_angles)) {
                 continue;
             }
@@ -245,7 +245,7 @@ private:
         for (int leg = 0; leg < NUM_LEGS; ++leg) {
             std::cout << "Testing Jacobian for leg " << leg << "..." << std::endl;
 
-            JointAngles test_angles(15, -15, 10);
+            JointAngles test_angles(math_utils::degreesToRadians(15), math_utils::degreesToRadians(-15), math_utils::degreesToRadians(10));
             if (!model.checkJointLimits(leg, test_angles)) {
                 continue;
             }
@@ -320,7 +320,7 @@ private:
                          tibia <= model.getParams().tibia_angle_limits[1];
                          tibia += step_tibia) {
 
-                        JointAngles angles(coxa, femur, tibia);
+                        JointAngles angles(math_utils::degreesToRadians(coxa), math_utils::degreesToRadians(femur), math_utils::degreesToRadians(tibia));
                         if (!model.checkJointLimits(leg, angles)) {
                             continue;
                         }
@@ -432,15 +432,19 @@ private:
             }
 
             // Test angle normalization
-            double normalized = model.normalizeAngle(370.0); // Should normalize to 10 degrees
-            if (std::abs(normalized - 10.0) > angle_tolerance) {
-                results.addError("Angle normalization error: expected 10°, got " + std::to_string(normalized) + "°");
+            double normalized_rad = model.normalizeAngle(math_utils::degreesToRadians(370.0)); // Should normalize to 10 degrees
+            double normalized_deg = math_utils::radiansToDegrees(normalized_rad);
+            if (std::abs(normalized_deg - 10.0) > angle_tolerance) {
+                results.addError("Angle normalization error: expected 10°, got " + std::to_string(normalized_deg) + "°");
             }
 
             // Test angle constraining
-            double constrained = model.constrainAngle(100.0, -45.0, 45.0); // Should constrain to 45 degrees
-            if (std::abs(constrained - 45.0) > angle_tolerance) {
-                results.addError("Angle constraining error: expected 45°, got " + std::to_string(constrained) + "°");
+            double constrained_rad = model.constrainAngle(math_utils::degreesToRadians(100.0),
+                                                        math_utils::degreesToRadians(-45.0),
+                                                        math_utils::degreesToRadians(45.0)); // Should constrain to 45 degrees
+            double constrained_deg = math_utils::radiansToDegrees(constrained_rad);
+            if (std::abs(constrained_deg - 45.0) > angle_tolerance) {
+                results.addError("Angle constraining error: expected 45°, got " + std::to_string(constrained_deg) + "°");
             }
         }
     }

@@ -1,7 +1,7 @@
 #include "manual_pose_controller.h"
 #include "math_utils.h"
-#include "pose_controller.h"
-#include "pose_config_factory.h"
+#include "../src/body_pose_controller.h"
+#include "../src/body_pose_config_factory.h"
 #include "test_stubs.h"
 #include <cmath>
 #include <iostream>

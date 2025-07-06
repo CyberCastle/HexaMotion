@@ -149,8 +149,8 @@ class IKFKValidator {
                   << " | Time: " << duration.count() << "μs" << std::endl;
 
         if (!test_passed) {
-            std::cout << "    Target:   (" << target_angles.coxa << "°, " << target_angles.femur << "°, " << target_angles.tibia << "°)" << std::endl;
-            std::cout << "    Computed: (" << computed_angles.coxa << "°, " << computed_angles.femur << "°, " << computed_angles.tibia << "°)" << std::endl;
+            std::cout << "    Target:   (" << math_utils::radiansToDegrees(target_angles.coxa) << "°, " << math_utils::radiansToDegrees(target_angles.femur) << "°, " << math_utils::radiansToDegrees(target_angles.tibia) << "°)" << std::endl;
+            std::cout << "    Computed: (" << math_utils::radiansToDegrees(computed_angles.coxa) << "°, " << math_utils::radiansToDegrees(computed_angles.femur) << "°, " << math_utils::radiansToDegrees(computed_angles.tibia) << "°)" << std::endl;
             std::cout << "    Position: (" << computed_pos.x << ", " << computed_pos.y << ", " << computed_pos.z << ")" << std::endl;
         }
 
@@ -178,15 +178,15 @@ class IKFKValidator {
         // Test 2: Realistic joint configurations for all legs
         std::cout << "\n2. TESTING REALISTIC JOINT CONFIGURATIONS:" << std::endl;
         std::vector<JointAngles> realistic_configs = {
-            JointAngles(0.0f, -30.0f, 60.0f),   // Mild bend
-            JointAngles(0.0f, -45.0f, 90.0f),   // Standard bend
-            JointAngles(0.0f, -60.0f, 120.0f),  // Deep bend
-            JointAngles(30.0f, -30.0f, 60.0f),  // Side + mild bend
-            JointAngles(45.0f, -45.0f, 90.0f),  // Side + standard bend
-            JointAngles(-30.0f, -30.0f, 60.0f), // Other side + mild bend
-            JointAngles(-45.0f, -45.0f, 90.0f), // Other side + standard bend
-            JointAngles(0.0f, -15.0f, 30.0f),   // Extended pose
-            JointAngles(0.0f, -75.0f, 150.0f),  // High pose
+            JointAngles(0.0f, math_utils::degreesToRadians(-30.0f), math_utils::degreesToRadians(60.0f)),   // Mild bend
+            JointAngles(0.0f, math_utils::degreesToRadians(-45.0f), math_utils::degreesToRadians(90.0f)),   // Standard bend
+            JointAngles(0.0f, math_utils::degreesToRadians(-60.0f), math_utils::degreesToRadians(120.0f)),  // Deep bend
+            JointAngles(math_utils::degreesToRadians(30.0f), math_utils::degreesToRadians(-30.0f), math_utils::degreesToRadians(60.0f)),  // Side + mild bend
+            JointAngles(math_utils::degreesToRadians(45.0f), math_utils::degreesToRadians(-45.0f), math_utils::degreesToRadians(90.0f)),  // Side + standard bend
+            JointAngles(math_utils::degreesToRadians(-30.0f), math_utils::degreesToRadians(-30.0f), math_utils::degreesToRadians(60.0f)), // Other side + mild bend
+            JointAngles(math_utils::degreesToRadians(-45.0f), math_utils::degreesToRadians(-45.0f), math_utils::degreesToRadians(90.0f)), // Other side + standard bend
+            JointAngles(0.0f, math_utils::degreesToRadians(-15.0f), math_utils::degreesToRadians(30.0f)),   // Extended pose
+            JointAngles(0.0f, math_utils::degreesToRadians(-75.0f), math_utils::degreesToRadians(150.0f)),  // High pose
         };
 
         for (int leg = 0; leg < NUM_LEGS; leg++) {
@@ -217,13 +217,13 @@ class IKFKValidator {
         std::cout << "\n4. TESTING JOINT LIMIT BOUNDARIES:" << std::endl;
         Parameters params = model.getParams();
         for (int leg = 0; leg < NUM_LEGS; leg++) {
-            // Test near joint limits
-            testFKIKConsistency(leg, JointAngles(params.coxa_angle_limits[0] + 5, -45, 90), "CoxaMin");
-            testFKIKConsistency(leg, JointAngles(params.coxa_angle_limits[1] - 5, -45, 90), "CoxaMax");
-            testFKIKConsistency(leg, JointAngles(0, params.femur_angle_limits[0] + 5, 90), "FemurMin");
-            testFKIKConsistency(leg, JointAngles(0, params.femur_angle_limits[1] - 5, 90), "FemurMax");
-            testFKIKConsistency(leg, JointAngles(0, -45, params.tibia_angle_limits[0] + 5), "TibiaMin");
-            testFKIKConsistency(leg, JointAngles(0, -45, params.tibia_angle_limits[1] - 5), "TibiaMax");
+            // Test near joint limits (convert degrees to radians)
+            testFKIKConsistency(leg, JointAngles(math_utils::degreesToRadians(params.coxa_angle_limits[0] + 5), math_utils::degreesToRadians(-45), math_utils::degreesToRadians(90)), "CoxaMin");
+            testFKIKConsistency(leg, JointAngles(math_utils::degreesToRadians(params.coxa_angle_limits[1] - 5), math_utils::degreesToRadians(-45), math_utils::degreesToRadians(90)), "CoxaMax");
+            testFKIKConsistency(leg, JointAngles(0, math_utils::degreesToRadians(params.femur_angle_limits[0] + 5), math_utils::degreesToRadians(90)), "FemurMin");
+            testFKIKConsistency(leg, JointAngles(0, math_utils::degreesToRadians(params.femur_angle_limits[1] - 5), math_utils::degreesToRadians(90)), "FemurMax");
+            testFKIKConsistency(leg, JointAngles(0, math_utils::degreesToRadians(-45), math_utils::degreesToRadians(params.tibia_angle_limits[0] + 5)), "TibiaMin");
+            testFKIKConsistency(leg, JointAngles(0, math_utils::degreesToRadians(-45), math_utils::degreesToRadians(params.tibia_angle_limits[1] - 5)), "TibiaMax");
         }
 
         // Test 5: High precision testing (smaller tolerance)
@@ -235,7 +235,7 @@ class IKFKValidator {
 
         for (int leg = 0; leg < NUM_LEGS; leg++) {
             testIKFKConsistency(leg, Point3D(200, 0, -150), "HighPrec");
-            testFKIKConsistency(leg, JointAngles(0, -45, 90), "HighPrec");
+            testFKIKConsistency(leg, JointAngles(0, math_utils::degreesToRadians(-45), math_utils::degreesToRadians(90)), "HighPrec");
         }
 
         // Restore original tolerances

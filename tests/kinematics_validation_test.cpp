@@ -230,8 +230,8 @@ class KinematicsValidator {
             // 3. PRUEBA DIRECTA: Usar los ángulos convertidos directamente en HexaMotion FK
             JointAngles test_angles;
             test_angles.coxa = 0.0f;       // Sin rotación horizontal
-            test_angles.femur = alpha_deg; // Ángulo femur absoluto
-            test_angles.tibia = beta_deg;  // Ángulo tibia absoluto
+            test_angles.femur = alpha;     // Ángulo femur absoluto en radianes
+            test_angles.tibia = beta;      // Ángulo tibia absoluto en radianes
 
             // 4. Calcular la posición de la punta con FK en frame global del robot
             Point3D tip_global = model->forwardKinematics(0, test_angles);
@@ -345,7 +345,7 @@ class KinematicsValidator {
             target_global.y = base_global.y;
             target_global.z = base_global.z - ref_height; // Altura hacia abajo
 
-            // HexaMotion IK -> FK
+            // HexaMotion IK -> FK (los ángulos se manejan internamente en radianes)
             JointAngles hexa_angles = model->inverseKinematics(0, target_global);
             Point3D hexa_tip_global = model->forwardKinematics(0, hexa_angles);
 

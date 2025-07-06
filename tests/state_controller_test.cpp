@@ -7,6 +7,7 @@
 
 #include "../src/locomotion_system.h"
 #include "../src/state_controller.h"
+#include "../src/body_pose_config_factory.h"
 #include "test_stubs.h"
 #include <cassert>
 #include <chrono>
@@ -23,10 +24,10 @@ class StateControllerTest {
     MockServo servo;
     int test_count = 0;
     int passed_tests = 0;
-    PoseConfiguration pose_config;
+    BodyPoseConfiguration pose_config;
 
   public:
-    StateControllerTest() : pose_config(createDefaultParameters()) {
+    StateControllerTest() : pose_config(getDefaultBodyPoseConfig(createDefaultParameters())) {
         setupParameters();
         locomotion = new LocomotionSystem(params);
         locomotion->initialize(&imu, &fsr, &servo, pose_config);
@@ -103,7 +104,7 @@ class StateControllerTest {
         assert_test(state_controller->isInitialized(), "StateController initialized flag");
 
         // Test initial states
-        assert_test(state_controller->getSystemState() == SYSTEM_OPERATIONAL, "Initial system state");
+        assert_test(state_controller->getSystemState() == SYSTEM_RUNNING, "Initial system state");
         assert_test(state_controller->getRobotState() != ROBOT_RUNNING, "Initial robot state not running");
         assert_test(state_controller->getWalkState() == WALK_STOPPED, "Initial walk state");
         assert_test(state_controller->getPosingMode() == POSING_NONE, "Initial posing mode");
@@ -115,13 +116,13 @@ class StateControllerTest {
         std::cout << "\n--- Testing Basic State Transitions ---" << std::endl;
 
         // Test system state transitions
-        assert_test(state_controller->requestSystemState(SYSTEM_SUSPENDED), "Request system suspended");
+        assert_test(state_controller->requestSystemState(SYSTEM_PACKED), "Request system packed");
         state_controller->update(0.02f);
-        assert_test(state_controller->getSystemState() == SYSTEM_SUSPENDED, "System suspended state");
+        assert_test(state_controller->getSystemState() == SYSTEM_PACKED, "System packed state");
 
-        assert_test(state_controller->requestSystemState(SYSTEM_OPERATIONAL), "Request system operational");
+        assert_test(state_controller->requestSystemState(SYSTEM_READY), "Request system ready");
         state_controller->update(0.02f);
-        assert_test(state_controller->getSystemState() == SYSTEM_OPERATIONAL, "System operational state");
+        assert_test(state_controller->getSystemState() == SYSTEM_READY, "System ready state");
 
         // Test robot state transitions
         RobotState initial_state = state_controller->getRobotState();
@@ -297,7 +298,7 @@ class StateControllerTest {
 
         // Ensure we start in a known good state
         state_controller->clearError();
-        state_controller->requestSystemState(SYSTEM_OPERATIONAL);
+        state_controller->requestSystemState(SYSTEM_READY);
         state_controller->update(0.02f);
 
         // Test error state - should be clear after clearError() call
@@ -478,7 +479,7 @@ class StateControllerTest {
         state_controller->initialize(pose_config);
 
         // Ensure robot is running
-        state_controller->requestSystemState(SYSTEM_OPERATIONAL);
+        state_controller->requestSystemState(SYSTEM_READY);
         state_controller->requestRobotState(ROBOT_RUNNING);
         for (int i = 0; i < 20 && state_controller->isTransitioning(); i++) {
             state_controller->update(0.02f);
@@ -516,8 +517,8 @@ class StateControllerTest {
 
         // Test multiple rapid state changes
         for (int i = 0; i < 5; i++) {
-            state_controller->requestSystemState(SYSTEM_SUSPENDED);
-            state_controller->requestSystemState(SYSTEM_OPERATIONAL);
+            state_controller->requestSystemState(SYSTEM_PACKED);
+            state_controller->requestSystemState(SYSTEM_READY);
             state_controller->update(0.02f);
         }
         assert_test(true, "Rapid state changes handled");
@@ -546,7 +547,7 @@ class StateControllerTest {
 
         // Reset to known state
         state_controller->reset();
-        state_controller->requestSystemState(SYSTEM_OPERATIONAL);
+        state_controller->requestSystemState(SYSTEM_READY);
 
         // Test complete startup sequence
         assert_test(state_controller->requestRobotState(ROBOT_PACKED), "Request PACKED state");

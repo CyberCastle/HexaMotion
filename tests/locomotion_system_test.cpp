@@ -1,4 +1,5 @@
 #include "../src/locomotion_system.h"
+#include "../src/body_pose_config_factory.h"
 #include "test_stubs.h"
 #include <cassert>
 #include <iostream>
@@ -22,16 +23,18 @@ int main() {
     DummyFSR fsr;
     DummyServo servos;
 
-    // Create a PoseConfiguration for testing
-    PoseConfiguration pose_config(p);
+    // Create a BodyPoseConfiguration for testing
+    BodyPoseConfiguration pose_config = getDefaultBodyPoseConfig(p);
 
     LocomotionSystem sys(p);
     assert(sys.initialize(&imu, &fsr, &servos, pose_config));
     assert(sys.calibrateSystem());
     assert(sys.setGaitType(TRIPOD_GAIT));
     assert(sys.update());
-    double len = sys.getStepLength();
-    double h = sys.getStepHeight();
+
+    // Get step parameters from walk controller
+    double len = sys.getWalkController()->getStepLength();
+    double h = sys.getWalkController()->getStepHeight();
     assert(len >= 20.0f && len <= 80.0f);
     assert(h >= 15.0f && h <= 50.0f);
 

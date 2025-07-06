@@ -15,23 +15,21 @@ Eigen::Matrix3d numericalJacobian(const RobotModel& model, int leg,
 
     // Test each joint using central differences for better accuracy
     for (int joint = 0; joint < 3; ++joint) {
-        double delta_deg = math_utils::radiansToDegrees(delta);
-
         JointAngles plus = angles;
         JointAngles minus = angles;
 
         switch (joint) {
             case 0:
-                plus.coxa += delta_deg * 0.5f;
-                minus.coxa -= delta_deg * 0.5f;
+                plus.coxa += delta * 0.5f;
+                minus.coxa -= delta * 0.5f;
                 break;
             case 1:
-                plus.femur += delta_deg * 0.5f;
-                minus.femur -= delta_deg * 0.5f;
+                plus.femur += delta * 0.5f;
+                minus.femur -= delta * 0.5f;
                 break;
             case 2:
-                plus.tibia += delta_deg * 0.5f;
-                minus.tibia -= delta_deg * 0.5f;
+                plus.tibia += delta * 0.5f;
+                minus.tibia -= delta * 0.5f;
                 break;
         }
 
@@ -126,9 +124,9 @@ int main() {
         std::cout << std::endl;
 
         std::cout << "🔧 Test Configuration:" << std::endl;
-        std::cout << "   • Joint angles: coxa=" << std::setw(6) << zero_angles.coxa
-                  << "°, femur=" << std::setw(6) << zero_angles.femur
-                  << "°, tibia=" << std::setw(6) << zero_angles.tibia << "°" << std::endl;
+        std::cout << "   • Joint angles: coxa=" << std::setw(6) << math_utils::radiansToDegrees(zero_angles.coxa)
+                  << "°, femur=" << std::setw(6) << math_utils::radiansToDegrees(zero_angles.femur)
+                  << "°, tibia=" << std::setw(6) << math_utils::radiansToDegrees(zero_angles.tibia) << "°" << std::endl;
 
         Point3D base_pos = model.forwardKinematics(leg, zero_angles);
         std::cout << "   • End-effector position: (" << std::setw(8) << base_pos.x
@@ -165,12 +163,11 @@ int main() {
 
         // Test coxa joint only
         double perturbation = JACOBIAN_DELTA; // 0.001 radians ≈ 0.057 degree
-        double perturbation_deg = math_utils::radiansToDegrees(perturbation);
 
         JointAngles plus = test_angles;
         JointAngles minus = test_angles;
-        plus.coxa += perturbation_deg * 0.5f;
-        minus.coxa -= perturbation_deg * 0.5f;
+        plus.coxa += perturbation * 0.5f;
+        minus.coxa -= perturbation * 0.5f;
         Point3D pos_plus = model.forwardKinematics(leg, plus);
         Point3D pos_minus = model.forwardKinematics(leg, minus);
         std::cout << "📍 Perturbed position (coxa +" << perturbation << " rad): ("

@@ -42,7 +42,7 @@ int main() {
         for (double coxa = p.coxa_angle_limits[0]; coxa <= p.coxa_angle_limits[1]; coxa += step_coxa) {
             for (double femur = p.femur_angle_limits[0]; femur <= p.femur_angle_limits[1]; femur += step_femur) {
                 for (double tibia = p.tibia_angle_limits[0]; tibia <= p.tibia_angle_limits[1]; tibia += step_tibia) {
-                    JointAngles angles(coxa, femur, tibia);
+                    JointAngles angles(math_utils::degreesToRadians(coxa), math_utils::degreesToRadians(femur), math_utils::degreesToRadians(tibia));
                     if (!model.checkJointLimits(leg, angles)) {
                         continue;
                     }
