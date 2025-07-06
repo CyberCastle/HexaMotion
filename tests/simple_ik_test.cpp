@@ -86,8 +86,8 @@ int main() {
     // Test 3: IK-FK coherence validation (enhanced)
     std::cout << "\n--- Test 3: Enhanced IK-FK Coherence Validation ---" << std::endl;
     for (int leg = 0; leg < NUM_LEGS; ++leg) {
-        // Use the same relative joint angles for every leg
-        JointAngles test_angles(0, 20, 20);
+        // Use the same relative joint angles for every leg (converted from degrees to radians)
+        JointAngles test_angles(0, 20 * M_PI / 180.0, 20 * M_PI / 180.0); // 0°, 20°, 20° -> 0, 0.349, 0.349 rad
         Point3D target = model.forwardKinematics(leg, test_angles);
 
         // Provide a neutral starting guess
