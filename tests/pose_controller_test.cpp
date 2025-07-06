@@ -74,25 +74,25 @@ int main() {
 
     // Test current default configuration
     const auto &current_default = pc.getPoseConfig();
-    std::cout << "Default config - Body clearance: " << current_default.body_clearance * 1000.0f << "mm, "
-              << "Swing height: " << current_default.swing_height * 1000.0f << "mm" << std::endl;
-    std::cout << "Max translation: X=" << current_default.max_translation.x * 1000.0f << "mm, "
-              << "Y=" << current_default.max_translation.y * 1000.0f << "mm, "
-              << "Z=" << current_default.max_translation.z * 1000.0f << "mm" << std::endl;
+    std::cout << "Default config - Body clearance: " << current_default.body_clearance << "mm, "
+              << "Swing height: " << current_default.swing_height << "mm" << std::endl;
+    std::cout << "Max translation: X=" << current_default.max_translation.x << "mm, "
+              << "Y=" << current_default.max_translation.y << "mm, "
+              << "Z=" << current_default.max_translation.z << "mm" << std::endl;
 
     // Test conservative configuration using factory
     PoseConfiguration conservative_config = getConservativePoseConfig(p);
     pc.setPoseConfig(conservative_config);
     const auto &current_conservative = pc.getPoseConfig();
-    std::cout << "Conservative config - Body clearance: " << current_conservative.body_clearance * 1000.0f << "mm, "
-              << "Swing height: " << current_conservative.swing_height * 1000.0f << "mm" << std::endl;
+    std::cout << "Conservative config - Body clearance: " << current_conservative.body_clearance << "mm, "
+              << "Swing height: " << current_conservative.swing_height << "mm" << std::endl;
 
     // Test high-speed configuration using factory
     PoseConfiguration high_speed_config = getHighSpeedPoseConfig(p);
     pc.setPoseConfig(high_speed_config);
     const auto &current_high_speed = pc.getPoseConfig();
-    std::cout << "High-speed config - Body clearance: " << current_high_speed.body_clearance * 1000.0f << "mm, "
-              << "Swing height: " << current_high_speed.swing_height * 1000.0f << "mm" << std::endl;
+    std::cout << "High-speed config - Body clearance: " << current_high_speed.body_clearance << "mm, "
+              << "Swing height: " << current_high_speed.swing_height << "mm" << std::endl;
 
     // Reset to default for pose tests using factory
     pc.setPoseConfig(getDefaultPoseConfig(p));

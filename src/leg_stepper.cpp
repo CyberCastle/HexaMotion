@@ -121,7 +121,7 @@ void LegStepper::updateTipPosition(double step_length, double time_delta, bool r
         // Update both internal state and leg position using proper IK architecture
         current_tip_pose_ = new_tip_position;
         current_tip_velocity_ = delta_pos / time_delta;
-        leg_.setDesiredTipPose(new_tip_position);
+        leg_.setDesiredTipPositionGlobal(new_tip_position);
         leg_.applyIK(robot_model_);
     }
     // Período de Stance
@@ -136,7 +136,7 @@ void LegStepper::updateTipPosition(double step_length, double time_delta, bool r
         // Update both internal state and leg position using proper IK architecture
         current_tip_pose_ = new_tip_position;
         current_tip_velocity_ = delta_pos / time_delta;
-        leg_.setDesiredTipPose(new_tip_position);
+        leg_.setDesiredTipPositionGlobal(new_tip_position);
         leg_.applyIK(robot_model_);
     }
 }
@@ -192,7 +192,7 @@ void LegStepper::generateSecondarySwingControlNodes(bool ground_contact) {
 
     // Detener movimiento adicional de la posición del tip en dirección normal al plano de marcha
     if (ground_contact) {
-        Point3D current_pos = leg_.getTipPosition();
+        Point3D current_pos = leg_.getCurrentTipPositionGlobal();
         swing_2_nodes_[0] = current_pos + stance_node_separation * 0.0;
         swing_2_nodes_[1] = current_pos + stance_node_separation * 1.0;
         swing_2_nodes_[2] = current_pos + stance_node_separation * 2.0;
@@ -248,10 +248,10 @@ void LegStepper::updateWithPhase(double local_phase, double step_length, double 
     // Actualizar posiciones de origen si es necesario
     if (step_state_ == STEP_STANCE && local_phase < duty_factor) {
         // Estamos en stance, actualizar posición de origen de stance
-        stance_origin_tip_position_ = leg_.getTipPosition();
+        stance_origin_tip_position_ = leg_.getCurrentTipPositionGlobal();
     } else if (step_state_ == STEP_SWING && local_phase >= duty_factor) {
         // Estamos en swing, actualizar posición de origen de swing
-        swing_origin_tip_position_ = leg_.getTipPosition();
+        swing_origin_tip_position_ = leg_.getCurrentTipPositionGlobal();
     }
 
     // Determinar estado y progreso

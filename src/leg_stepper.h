@@ -86,7 +86,7 @@ public:
     LegStepperExternalTarget getExternalDefault() const { return external_default_; }
 
     // Modifiers
-    void setCurrentTipPose(const Point3D& pose) { leg_.setTipPosition(pose); }
+    void setCurrentTipPose(const Point3D& pose) { leg_.setCurrentTipPositionGlobal(pose); }
     void setDefaultTipPose(const Point3D& pose) { default_tip_pose_ = pose; }
     void setStepState(StepState state) { step_state_ = state; }
     void setPhase(int phase) { phase_ = phase; }

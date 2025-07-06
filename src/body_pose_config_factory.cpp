@@ -26,17 +26,16 @@
  * @brief Calculate hexagonal leg stance positions based on robot parameters
  * Following OpenSHC's stance positioning approach from default.yaml
  * @param params Robot parameters containing dimensions and joint limits.
- * @return Array of calculated stance positions in meters
+ * @return Array of calculated stance positions in millimeters
  */
 std::array<LegStancePosition, NUM_LEGS> calculateHexagonalStancePositions(const Parameters &params) {
     std::array<LegStancePosition, NUM_LEGS> positions;
     double total_radius_mm = params.hexagon_radius + params.coxa_length;
-    double total_radius_m = total_radius_mm / 1000.0f;
     for (int i = 0; i < NUM_LEGS; i++) {
         double angle_deg = params.dh_parameters[i][0][3];
         double angle_rad = math_utils::degreesToRadians(angle_deg);
-        positions[i].x = total_radius_m * cos(angle_rad);
-        positions[i].y = total_radius_m * sin(angle_rad);
+        positions[i].x = total_radius_mm * cos(angle_rad);
+        positions[i].y = total_radius_mm * sin(angle_rad);
     }
     return positions;
 }
@@ -177,14 +176,14 @@ BodyPoseConfiguration createPoseConfiguration(const Parameters &params, const st
     config.time_to_start = 6.0f;      // Match OpenSHC default.yaml
 
     // OpenSHC equivalent body clearance and swing parameters
-    config.body_clearance = params.robot_height / 1000.0f; // Convert to meters
-    config.swing_height = 0.020f;                          // Default 20mm swing height (OpenSHC typical)
+    config.body_clearance = params.robot_height;        // Body clearance in millimeters
+    config.swing_height = 20.0f;                        // Default 20mm swing height (OpenSHC typical)
 
     // OpenSHC equivalent pose limits (from default.yaml)
-    config.max_translation = {0.025f, 0.025f, 0.025f}; // 25mm translation limits
+    config.max_translation = {25.0f, 25.0f, 25.0f};    // 25mm translation limits
     config.max_rotation = {0.250f, 0.250f, 0.250f};    // 0.25 radian rotation limits
-    config.max_translation_velocity = 0.050f;          // 50mm/s velocity limit
-    config.max_rotation_velocity = 0.200f;             // 0.2 rad/s rotation limit
+    config.max_translation_velocity = 50.0f;            // 50mm/s velocity limit
+    config.max_rotation_velocity = 0.200f;              // 0.2 rad/s rotation limit
 
     // OpenSHC equivalent pose control flags
     config.gravity_aligned_tips = false;          // Match OpenSHC default.yaml
@@ -275,9 +274,9 @@ AutoPoseConfiguration createAutoPoseConfiguration(const Parameters &params) {
     config.roll_amplitudes = {-0.015, 0.015};    // Roll compensation (radians)
     config.pitch_amplitudes = {0.000, 0.000};    // Pitch compensation (radians)
     config.yaw_amplitudes = {0.000, 0.000};      // Yaw compensation (radians)
-    config.x_amplitudes = {0.000, 0.000};        // X translation (meters)
-    config.y_amplitudes = {0.000, 0.000};        // Y translation (meters)
-    config.z_amplitudes = {0.020, 0.020};        // Z translation (meters)
+    config.x_amplitudes = {0.000, 0.000};        // X translation (millimeters)
+    config.y_amplitudes = {0.000, 0.000};        // Y translation (millimeters)
+    config.z_amplitudes = {20.0, 20.0};          // Z translation (millimeters)
 
     // Tripod group configuration
     config.tripod_group_a_legs = {0, 2, 4};  // AR, CR, BL
@@ -296,7 +295,7 @@ AutoPoseConfiguration createConservativeAutoPoseConfiguration(const Parameters &
 
     // Reduced amplitudes for conservative operation
     config.roll_amplitudes = {-0.010, 0.010};    // Reduced roll compensation
-    config.z_amplitudes = {0.015, 0.015};        // Reduced Z compensation
+    config.z_amplitudes = {15.0, 15.0};          // Reduced Z compensation (millimeters)
 
     return config;
 }
@@ -311,7 +310,7 @@ AutoPoseConfiguration createHighSpeedAutoPoseConfiguration(const Parameters &par
 
     // Increased amplitudes for high-speed operation
     config.roll_amplitudes = {-0.020, 0.020};    // Increased roll compensation
-    config.z_amplitudes = {0.025, 0.025};        // Increased Z compensation
+    config.z_amplitudes = {25.0, 25.0};          // Increased Z compensation (millimeters)
 
     return config;
 }

@@ -15,7 +15,7 @@
 /**
  * @brief Calculate hexagonal leg stance positions based on robot parameters
  * @param params Robot parameters containing dimensions and joint limits
- * @return Array of calculated stance positions in meters
+ * @return Array of calculated stance positions in millimeters
  */
 std::array<LegStancePosition, NUM_LEGS> calculateHexagonalStancePositions(const Parameters &params);
 

@@ -90,7 +90,7 @@ int LegPoser::stepToPosition(const Pose& target_tip_pose, const Pose& target_pos
     }
 
     // Update leg position
-    leg_.setTipPosition(target_position);
+    leg_.setCurrentTipPositionGlobal(target_position);
 
     // Mark step as completed
     leg_completed_step_ = true;

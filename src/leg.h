@@ -100,17 +100,14 @@ public:
     void setJointAngle(int joint_index, double angle);
 
     /**
-     * @brief Get current tip position in world coordinates.
-     * @return Current tip position
+     * @brief Get the current tip position in global coordinates
      */
-    Point3D getTipPosition() const { return tip_position_; }
+    Point3D getCurrentTipPositionGlobal() const { return tip_position_; }
 
     /**
-     * @brief Set tip position (will trigger IK calculation).
-     * @param position Desired tip position
-     * @return True if position is reachable and IK succeeds
+     * @brief Set the current tip position in global coordinates
      */
-    bool setTipPosition(const Point3D &position);
+    bool setCurrentTipPositionGlobal(const Point3D &position);
 
     /**
      * @brief Get leg base position in world coordinates.
@@ -376,9 +373,9 @@ public:
      */
     bool isInDefaultStance(double tolerance = 5.0) const;
 
-    // ✅ NEW: Set desired tip pose (OpenSHC architecture)
-    void setDesiredTipPose(const Point3D& desired_position);
-    Point3D getDesiredTipPose() const { return desired_tip_pose_; }
+    // ✅ NEW: Set desired tip position in global coordinates
+    void setDesiredTipPositionGlobal(const Point3D& desired_position);
+    Point3D getDesiredTipPositionGlobal() const { return desired_tip_position_; }
 
     // ✅ NEW: Apply inverse kinematics (OpenSHC architecture)
     bool applyIK(const RobotModel& model);
@@ -413,8 +410,8 @@ private:
     JointAngles default_angles_;    ///< Default joint angles
     Point3D default_tip_position_;  ///< Default tip position
 
-    // ✅ NEW: Desired tip pose
-    Point3D desired_tip_pose_;       ///< Desired tip position
+    // ✅ NEW: Desired tip position
+    Point3D desired_tip_position_;   ///< Desired tip position
 
     /**
      * @brief Initialize DH parameters for this leg.

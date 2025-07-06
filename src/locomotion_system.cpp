@@ -510,7 +510,7 @@ void LocomotionSystem::reprojectStandingFeet() {
             continue;
 
         // Current foot position world -> body
-        Point3D tip_body = transformWorldToBody(legs[leg].getTipPosition());
+        Point3D tip_body = transformWorldToBody(legs[leg].getCurrentTipPositionGlobal());
 
         // IK for the new body orientation
         JointAngles q_new = calculateInverseKinematics(leg, tip_body);
@@ -545,7 +545,7 @@ bool LocomotionSystem::checkStabilityMargin() {
     StepPhase temp_leg_states[NUM_LEGS];
 
     for (int i = 0; i < NUM_LEGS; i++) {
-        temp_leg_positions[i] = legs[i].getTipPosition();
+        temp_leg_positions[i] = legs[i].getCurrentTipPositionGlobal();
         temp_leg_states[i] = legs[i].getStepPhase();
     }
 
@@ -561,8 +561,8 @@ Eigen::Vector2d LocomotionSystem::calculateCenterOfPressure() {
         if (legs[i].getStepPhase() == STANCE_PHASE) {
             FSRData fsr_data = fsr_interface->readFSR(i);
             if (fsr_data.in_contact && fsr_data.pressure > 0) {
-                cop[0] += legs[i].getTipPosition().x * fsr_data.pressure;
-                cop[1] += legs[i].getTipPosition().y * fsr_data.pressure;
+                cop[0] += legs[i].getCurrentTipPositionGlobal().x * fsr_data.pressure;
+                cop[1] += legs[i].getCurrentTipPositionGlobal().y * fsr_data.pressure;
                 total_force += fsr_data.pressure;
             }
         }
@@ -591,8 +591,8 @@ double LocomotionSystem::calculateStabilityIndex() {
 
     for (int i = 0; i < NUM_LEGS; i++) {
         if (legs[i].getStepPhase() == STANCE_PHASE) {
-            stance_positions[stance_count] = legs[i].getTipPosition();
-            support_polygon.push_back(legs[i].getTipPosition());
+            stance_positions[stance_count] = legs[i].getCurrentTipPositionGlobal();
+            support_polygon.push_back(legs[i].getCurrentTipPositionGlobal());
             stance_count++;
         }
     }
@@ -1459,7 +1459,7 @@ void LocomotionSystem::updateModel() {
         // Obtener la pose objetivo actual del tip
         Point3D desired_tip_pose = leg_stepper->getCurrentTipPose();
         // Establecer la pose objetivo en la pierna
-        legs[i].setDesiredTipPose(desired_tip_pose);
+        legs[i].setDesiredTipPositionGlobal(desired_tip_pose);
         // Aplicar IK para sincronizar ángulos articulares y posición del tip
         legs[i].applyIK(model);
     }

@@ -279,7 +279,7 @@ class LocomotionSystem {
     Eigen::Vector3d getBodyOrientation() const { return body_orientation; }
     StepPhase getLegState(int leg_index) const { return legs[leg_index].getStepPhase(); }
     JointAngles getJointAngles(int leg_index) const { return legs[leg_index].getJointAngles(); }
-    Point3D getLegPosition(int leg_index) const { return legs[leg_index].getTipPosition(); }
+    Point3D getLegPosition(int leg_index) const { return legs[leg_index].getCurrentTipPositionGlobal(); }
 
     // Leg access methods
     /** Get leg object by index. */

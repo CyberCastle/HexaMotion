@@ -71,7 +71,7 @@ public:
     // Accessors
     inline int getLegIndex() const { return leg_index_; }
     inline Pose getCurrentTipPose() const {
-        Point3D tip_pos = leg_.getTipPosition();
+        Point3D tip_pos = leg_.getCurrentTipPositionGlobal();
         return Pose(tip_pos, Eigen::Vector3d(0, 0, 0));
     }
     inline Pose getTargetTipPose() const { return target_tip_pose_; }
@@ -87,7 +87,7 @@ public:
 
     // Modifiers
     inline void setCurrentTipPose(const Pose& current) {
-        leg_.setTipPosition(current.position);
+        leg_.setCurrentTipPositionGlobal(current.position);
         current_tip_pose_ = current;
     }
     inline void setTargetTipPose(const Pose& target) { target_tip_pose_ = target; }

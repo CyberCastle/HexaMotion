@@ -65,7 +65,7 @@ void Leg::setJointAngle(int joint_index, double angle) {
     }
 }
 
-bool Leg::setTipPosition(const Point3D &position) {
+bool Leg::setCurrentTipPositionGlobal(const Point3D &position) {
     // Store the target position
     Point3D target = position;
 
@@ -235,15 +235,15 @@ bool Leg::isInDefaultStance(double tolerance) const {
     return math_utils::distance(tip_position_, default_tip_position_) <= tolerance;
 }
 
-// ✅ NEW: Set desired tip pose (OpenSHC architecture)
-void Leg::setDesiredTipPose(const Point3D& desired_position) {
-    desired_tip_pose_ = desired_position;
+// ✅ NEW: Set desired tip position (OpenSHC architecture)
+void Leg::setDesiredTipPositionGlobal(const Point3D& desired_position) {
+    desired_tip_position_ = desired_position;
 }
 
 // ✅ NEW: Apply inverse kinematics (OpenSHC architecture)
 bool Leg::applyIK(const RobotModel& model) {
     // Calculate IK from desired tip pose to get new joint angles
-    JointAngles new_angles = model.inverseKinematics(leg_id_, desired_tip_pose_);
+    JointAngles new_angles = model.inverseKinematics(leg_id_, desired_tip_position_);
 
     // Update joint angles
     setJointAngles(new_angles);
@@ -252,7 +252,7 @@ bool Leg::applyIK(const RobotModel& model) {
     updateForwardKinematics(model);
 
     // Check if IK was successful (tip position matches desired)
-    double ik_error = math_utils::distance(tip_position_, desired_tip_pose_);
+    double ik_error = math_utils::distance(tip_position_, desired_tip_position_);
     return ik_error < IK_TOLERANCE; // 1mm tolerance
 }
 

@@ -257,7 +257,7 @@ void BodyPose::initializePoseLimits() {
     pose_limits_.rotation_limits = Eigen::Vector3d(0.3, 0.3, 0.5);  // ±17° roll/pitch, ±29° yaw
     pose_limits_.height_min = 80.0;   // 80mm minimum height
     pose_limits_.height_max = 150.0;  // 150mm maximum height
-    pose_limits_.max_translation_velocity = 0.1;  // 10cm/s
+    pose_limits_.max_translation_velocity = 100.0;  // 100mm/s
     pose_limits_.max_rotation_velocity = 0.5;     // 0.5 rad/s
 }
 

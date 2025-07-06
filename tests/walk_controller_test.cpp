@@ -32,7 +32,7 @@ void testLegStepperInitialization(const Leg& leg, const LegStepper& stepper, int
 
     // Verify identity pose matches leg's default position
     Point3D identity_pose = stepper.getIdentityTipPose();
-    Point3D leg_tip = leg.getTipPosition();
+    Point3D leg_tip = leg.getCurrentTipPositionGlobal();
     assert(isPointClose(identity_pose, leg_tip, 5.0));
 
     std::cout << "  ✅ LegStepper initialization passed" << std::endl;
@@ -196,7 +196,7 @@ void testTrajectoryGeneration(LegStepper& stepper, const RobotModel& model) {
 void testTipPositionUpdates(LegStepper& stepper, Leg& leg, const RobotModel& model) {
     std::cout << "Testing tip position updates" << std::endl;
 
-    Point3D initial_position = leg.getTipPosition();
+    Point3D initial_position = leg.getCurrentTipPositionGlobal();
     std::cout << "  Initial tip position: (" << initial_position.x << ", " << initial_position.y << ", " << initial_position.z << ")" << std::endl;
 
     // Test tip position update with different parameters
@@ -210,7 +210,7 @@ void testTipPositionUpdates(LegStepper& stepper, Leg& leg, const RobotModel& mod
     stepper.setStepProgress(0.5); // Set step progress to 50% for interpolation
         stepper.updateTipPosition(step_length, time_delta, false, false);
 
-    Point3D new_position = leg.getTipPosition();
+    Point3D new_position = leg.getCurrentTipPositionGlobal();
     std::cout << "  New tip position: (" << new_position.x << ", " << new_position.y << ", " << new_position.z << ")" << std::endl;
 
     // Calculate position change
@@ -231,9 +231,9 @@ void testTipPositionUpdates(LegStepper& stepper, Leg& leg, const RobotModel& mod
     stepper.setPhase(15); // Advance to middle of stance phase
     stepper.setStanceProgress(0.5); // Set stance progress to 50%
     stepper.setStepProgress(0.5); // Set step progress to 50% for interpolation
-    Point3D stance_initial = leg.getTipPosition();
+    Point3D stance_initial = leg.getCurrentTipPositionGlobal();
     stepper.updateTipPosition(step_length, time_delta, false, false);
-    Point3D stance_new = leg.getTipPosition();
+    Point3D stance_new = leg.getCurrentTipPositionGlobal();
 
     double stance_change = (stance_new - stance_initial).norm();
     std::cout << "  Stance position change: " << stance_change << " mm" << std::endl;
@@ -355,7 +355,7 @@ void testKinematicConsistency(LegStepper& stepper, Leg& leg, const RobotModel& m
 
     // Get current joint angles and tip position
     JointAngles angles = leg.getJointAngles();
-    Point3D tip_position = leg.getTipPosition();
+    Point3D tip_position = leg.getCurrentTipPositionGlobal();
 
     std::cout << "  Joint angles: coxa=" << angles.coxa << "°, femur=" << angles.femur << "°, tibia=" << angles.tibia << "°" << std::endl;
     std::cout << "  Tip position from Leg: (" << tip_position.x << ", " << tip_position.y << ", " << tip_position.z << ")" << std::endl;
@@ -417,7 +417,7 @@ int main() {
 
         // Debug: Print before FK update
         JointAngles before_angles = test_legs[i].getJointAngles();
-        Point3D before_tip = test_legs[i].getTipPosition();
+        Point3D before_tip = test_legs[i].getCurrentTipPositionGlobal();
         std::cout << "  [DEBUG] Leg " << i << " before FK update:" << std::endl;
         std::cout << "    Angles: coxa=" << before_angles.coxa << "°, femur=" << before_angles.femur << "°, tibia=" << before_angles.tibia << "°" << std::endl;
         std::cout << "    Tip: (" << before_tip.x << ", " << before_tip.y << ", " << before_tip.z << ")" << std::endl;
@@ -426,7 +426,7 @@ int main() {
         test_legs[i].updateForwardKinematics(model);
 
         // Debug: Print after FK update
-        Point3D after_tip = test_legs[i].getTipPosition();
+        Point3D after_tip = test_legs[i].getCurrentTipPositionGlobal();
         std::cout << "    Tip after FK: (" << after_tip.x << ", " << after_tip.y << ", " << after_tip.z << ")" << std::endl;
     }
 
@@ -448,7 +448,7 @@ int main() {
         Leg& leg = test_legs[leg_index];
 
         // Get leg's identity pose for LegStepper initialization
-        Point3D identity_pose = leg.getTipPosition();
+        Point3D identity_pose = leg.getCurrentTipPositionGlobal();
 
         // Create LegStepper
         LegStepper stepper(leg_index, identity_pose, leg, model);
@@ -490,7 +490,7 @@ int main() {
     // Create LegSteppers for all legs (using pointers due to reference members)
     LegStepper* steppers[NUM_LEGS];
     for (int i = 0; i < NUM_LEGS; ++i) {
-        Point3D identity_pose = test_legs[i].getTipPosition();
+        Point3D identity_pose = test_legs[i].getCurrentTipPositionGlobal();
         steppers[i] = new LegStepper(i, identity_pose, test_legs[i], model);
 
         // Set different phase offsets for tripod gait

@@ -21,8 +21,8 @@
  * @brief 2D position configuration for leg tip positions (OpenSHC equivalent)
  */
 struct LegStancePosition {
-    double x; ///< X position relative to body center (meters)
-    double y; ///< Y position relative to body center (meters)
+    double x; ///< X position relative to body center (millimeters)
+    double y; ///< Y position relative to body center (millimeters)
 };
 
 /**
@@ -54,14 +54,14 @@ struct BodyPoseConfiguration {
     double time_to_start;        ///< The time to complete a direct start up
 
     // OpenSHC equivalent body clearance and swing parameters
-    double body_clearance; ///< The requested height of the robot body above ground (m)
-    double swing_height;   ///< Vertical displacement of swing trajectory above default (m)
+    double body_clearance; ///< The requested height of the robot body above ground (mm)
+    double swing_height;   ///< Vertical displacement of swing trajectory above default (mm)
 
     // OpenSHC equivalent pose limits
     struct {
-        double x; ///< Maximum X translation (meters)
-        double y; ///< Maximum Y translation (meters)
-        double z; ///< Maximum Z translation (meters)
+        double x; ///< Maximum X translation (millimeters)
+        double y; ///< Maximum Y translation (millimeters)
+        double z; ///< Maximum Z translation (millimeters)
     } max_translation;
 
     struct {
@@ -71,7 +71,7 @@ struct BodyPoseConfiguration {
     } max_rotation;
 
     // OpenSHC equivalent velocity limits
-    double max_translation_velocity; ///< Maximum translation velocity (m/s)
+    double max_translation_velocity; ///< Maximum translation velocity (mm/s)
     double max_rotation_velocity;    ///< Maximum rotation velocity (rad/s)
 
     // OpenSHC equivalent pose control flags
@@ -96,9 +96,9 @@ struct AutoPoseConfiguration {
     std::vector<double> roll_amplitudes;   ///< Roll compensation amplitudes (radians)
     std::vector<double> pitch_amplitudes;  ///< Pitch compensation amplitudes (radians)
     std::vector<double> yaw_amplitudes;    ///< Yaw compensation amplitudes (radians)
-    std::vector<double> x_amplitudes;      ///< X translation amplitudes (meters)
-    std::vector<double> y_amplitudes;      ///< Y translation amplitudes (meters)
-    std::vector<double> z_amplitudes;      ///< Z translation amplitudes (meters)
+    std::vector<double> x_amplitudes;      ///< X translation amplitudes (millimeters)
+    std::vector<double> y_amplitudes;      ///< Y translation amplitudes (millimeters)
+    std::vector<double> z_amplitudes;      ///< Z translation amplitudes (millimeters)
 
     // Tripod group configuration
     std::vector<int> tripod_group_a_legs;  ///< Group A legs (AR, CR, BL)
