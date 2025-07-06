@@ -315,3 +315,11 @@ AutoPoseConfiguration createHighSpeedAutoPoseConfiguration(const Parameters &par
 
     return config;
 }
+
+BodyPoseConfiguration getConservativeBodyPoseConfig(const Parameters &params) {
+    return createPoseConfiguration(params, "conservative");
+}
+
+BodyPoseConfiguration getHighSpeedBodyPoseConfig(const Parameters &params) {
+    return createPoseConfiguration(params, "high_speed");
+}

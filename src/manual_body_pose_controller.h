@@ -42,7 +42,7 @@ class ManualBodyPoseController {
         bool pose_active;                ///< Whether pose is actively applied
         bool use_quaternion;             ///< Whether to use quaternion or Euler angles
 
-        PoseState() : body_position(0, 0, 0), body_rotation(0, 0, 0),
+        BodyPoseState() : body_position(0, 0, 0), body_rotation(0, 0, 0),
                       body_quaternion(1, 0, 0, 0), // Identity quaternion
                       body_height(120.0f), pose_blend_factor(1.0f),
                       pose_active(false), use_quaternion(false) {
@@ -61,16 +61,16 @@ class ManualBodyPoseController {
         double height_scale;      ///< Height input scaling
         double leg_scale;         ///< Individual leg scaling
 
-        InputScaling() : translation_scale(1.0f), rotation_scale(0.017453f),
+        BodyPoseInputScaling() : translation_scale(1.0f), rotation_scale(0.017453f),
                          height_scale(1.0f), leg_scale(1.0f) {}
     };
 
   private:
     RobotModel &model_;
-    PoseMode current_mode_;
-    PoseState current_pose_;
-    PoseState target_pose_;
-    InputScaling input_scaling_;
+    BodyPoseMode current_mode_;
+    BodyPoseState current_pose_;
+    BodyPoseState target_pose_;
+    BodyPoseInputScaling input_scaling_;
 
     // Body pose limits
     struct BodyPoseLimits {

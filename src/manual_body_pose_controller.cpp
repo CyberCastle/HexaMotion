@@ -9,46 +9,50 @@
 #include <algorithm>
 #include <cmath>
 
-ManualPoseController::ManualPoseController(RobotModel &model)
-    : model_(model), current_mode_(POSE_TRANSLATION),
-      pose_limits_{Point3D(200.0f, 200.0f, 100.0f), Point3D(0.5f, 0.5f, 0.5f), 50.0f, 200.0f, 300.0f},
+ManualBodyPoseController::ManualBodyPoseController(RobotModel &model)
+    : model_(model), current_mode_(BODY_POSE_TRANSLATION),
       interpolation_speed_(MIN_SERVO_VELOCITY), smooth_transitions_(true) {
+    body_pose_limits_.translation_limits = Point3D(200.0f, 200.0f, 100.0f);
+    body_pose_limits_.rotation_limits = Point3D(0.5f, 0.5f, 0.5f);
+    body_pose_limits_.height_min = 50.0f;
+    body_pose_limits_.height_max = 200.0f;
+    body_pose_limits_.leg_reach_limit = 300.0f;
 }
 
-void ManualPoseController::initialize() {
-    initializePoseLimits();
-    initializeDefaultPresets();
-    resetPose();
+void ManualBodyPoseController::initialize() {
+    initializeBodyPoseLimits();
+    initializeDefaultBodyPosePresets();
+    resetBodyPose();
 }
 
-void ManualPoseController::setPoseMode(PoseMode mode) {
+void ManualBodyPoseController::setBodyPoseMode(BodyPoseMode mode) {
     current_mode_ = mode;
 }
 
-void ManualPoseController::processInput(double x, double y, double z) {
+void ManualBodyPoseController::processInput(double x, double y, double z) {
     switch (current_mode_) {
-    case POSE_TRANSLATION:
+    case BODY_POSE_TRANSLATION:
         handleTranslationInput(x, y, z);
         break;
-    case POSE_ROTATION:
+    case BODY_POSE_ROTATION:
         handleRotationInput(x, y, z);
         break;
-    case POSE_LEG_INDIVIDUAL:
+    case BODY_POSE_LEG_INDIVIDUAL:
         // Use x as leg index, y and z as position adjustments
         handleIndividualLegInput(static_cast<int>(x), 0.0f, y, z);
         break;
-    case POSE_BODY_HEIGHT:
+    case BODY_POSE_BODY_HEIGHT:
         handleHeightInput(z);
         break;
-    case POSE_COMBINED:
+    case BODY_POSE_COMBINED:
         handleCombinedInput(x, y, z);
         break;
-    case POSE_MANUAL_BODY:
+    case BODY_POSE_MANUAL_BODY:
         // Manual body pose combines translation and rotation
         handleTranslationInput(x * 0.7f, y * 0.7f, 0);
         handleRotationInput(x * 0.3f, y * 0.3f, z);
         break;
-    case POSE_CUSTOM:
+    case BODY_POSE_CUSTOM:
         // Custom pose mode - implementation depends on specific requirements
         break;
     }
@@ -59,12 +63,12 @@ void ManualPoseController::processInput(double x, double y, double z) {
     constrainHeight(current_pose_.body_height);
 }
 
-void ManualPoseController::processInputExtended(double x, double y, double z, double aux) {
+void ManualBodyPoseController::processInputExtended(double x, double y, double z, double aux) {
     switch (current_mode_) {
-    case POSE_LEG_INDIVIDUAL:
+    case BODY_POSE_LEG_INDIVIDUAL:
         handleIndividualLegInput(static_cast<int>(aux), x, y, z);
         break;
-    case POSE_COMBINED:
+    case BODY_POSE_COMBINED:
         // Use aux as blend factor between translation and rotation
         handleTranslationInput(x * aux, y * aux, z * aux);
         handleRotationInput(x * (1.0f - aux), y * (1.0f - aux), z * (1.0f - aux));

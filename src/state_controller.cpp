@@ -13,10 +13,12 @@
 namespace {
 std::string toString(SystemState state) {
     switch (state) {
-    case SystemState::SYSTEM_SUSPENDED:
-        return "SYSTEM_SUSPENDED";
-    case SystemState::SYSTEM_OPERATIONAL:
-        return "SYSTEM_OPERATIONAL";
+    case SystemState::SYSTEM_PACKED:
+        return "SYSTEM_PACKED";
+    case SystemState::SYSTEM_READY:
+        return "SYSTEM_READY";
+    case SystemState::SYSTEM_RUNNING:
+        return "SYSTEM_RUNNING";
     default:
         return "UNKNOWN";
     }
@@ -137,7 +139,7 @@ String toArduinoString(const std::string &str) {
 // ==============================
 
 StateController::StateController(LocomotionSystem &locomotion, const StateMachineConfig &config)
-    : locomotion_system_(locomotion), config_(config), current_system_state_(SystemState::SYSTEM_SUSPENDED), current_robot_state_(RobotState::ROBOT_UNKNOWN), current_walk_state_(WalkState::WALK_STOPPED), current_posing_mode_(PosingMode::POSING_NONE), current_cruise_control_mode_(CruiseControlMode::CRUISE_CONTROL_OFF), current_pose_reset_mode_(PoseResetMode::POSE_RESET_NONE), desired_system_state_(SystemState::SYSTEM_SUSPENDED), desired_robot_state_(RobotState::ROBOT_UNKNOWN), manual_leg_count_(0), is_transitioning_(false), desired_linear_velocity_(Eigen::Vector2d::Zero()), desired_angular_velocity_(0.0f), desired_body_position_(Eigen::Vector3d::Zero()), desired_body_orientation_(Eigen::Vector3d::Zero()), cruise_velocity_(Eigen::Vector3d::Zero()), cruise_start_time_(0), cruise_end_time_(0), last_update_time_(0), dt_(0.02f), has_error_(false), is_initialized_(false), startup_step_(0), startup_transition_initialized_(false), startup_transition_step_count_(4), shutdown_step_(0), shutdown_transition_initialized_(false), shutdown_transition_step_count_(3), pack_step_(0), unpack_step_(0) {
+    : locomotion_system_(locomotion), config_(config), current_system_state_(SystemState::SYSTEM_PACKED), current_robot_state_(RobotState::ROBOT_UNKNOWN), current_walk_state_(WalkState::WALK_STOPPED), current_posing_mode_(PosingMode::POSING_NONE), current_cruise_control_mode_(CruiseControlMode::CRUISE_CONTROL_OFF), current_pose_reset_mode_(PoseResetMode::POSE_RESET_NONE), desired_system_state_(SystemState::SYSTEM_PACKED), desired_robot_state_(RobotState::ROBOT_UNKNOWN), manual_leg_count_(0), is_transitioning_(false), desired_linear_velocity_(Eigen::Vector2d::Zero()), desired_angular_velocity_(0.0f), desired_body_position_(Eigen::Vector3d::Zero()), desired_body_orientation_(Eigen::Vector3d::Zero()), cruise_velocity_(Eigen::Vector3d::Zero()), cruise_start_time_(0), cruise_end_time_(0), last_update_time_(0), dt_(0.02f), has_error_(false), is_initialized_(false), startup_step_(0), startup_transition_initialized_(false), startup_transition_step_count_(4), shutdown_step_(0), shutdown_transition_initialized_(false), shutdown_transition_step_count_(3), pack_step_(0), unpack_step_(0) {
 
     // Initialize leg states
     for (int i = 0; i < NUM_LEGS; i++) {
@@ -204,13 +206,13 @@ bool StateController::initialize(const BodyPoseConfiguration &pose_config) {
     desired_robot_state_ = current_robot_state_;
 
     // Initialize system state
-    current_system_state_ = SystemState::SYSTEM_OPERATIONAL;
-    desired_system_state_ = SystemState::SYSTEM_OPERATIONAL;
+    current_system_state_ = SystemState::SYSTEM_RUNNING;
+    desired_system_state_ = SystemState::SYSTEM_RUNNING;
 
     // Initialize pose controller (equivalent to OpenSHC poser_)
     try {
                 body_pose_controller_ = std::make_unique<BodyPoseController>(locomotion_system_.getRobotModel(),
-                                                           body_pose_config);
+                                                                                                                       pose_config);
         logDebug("PoseController initialized successfully");
     } catch (const std::exception &e) {
         body_pose_controller_.reset();
@@ -561,14 +563,14 @@ void StateController::reset() {
     logDebug("Resetting StateController");
 
     // Reset to initial states
-    current_system_state_ = SystemState::SYSTEM_SUSPENDED;
+    current_system_state_ = SystemState::SYSTEM_PACKED;
     current_robot_state_ = RobotState::ROBOT_UNKNOWN;
     current_walk_state_ = WalkState::WALK_STOPPED;
     current_posing_mode_ = PosingMode::POSING_NONE;
     current_cruise_control_mode_ = CruiseControlMode::CRUISE_CONTROL_OFF;
     current_pose_reset_mode_ = PoseResetMode::POSE_RESET_NONE;
 
-    desired_system_state_ = SystemState::SYSTEM_SUSPENDED;
+    desired_system_state_ = SystemState::SYSTEM_PACKED;
     desired_robot_state_ = RobotState::ROBOT_UNKNOWN;
 
     // Reset leg states
@@ -625,18 +627,23 @@ void StateController::handleSystemStateTransition() {
     }
 
     switch (desired_system_state_) {
-    case SystemState::SYSTEM_SUSPENDED:
-        // Stop all motion and suspend operations
+    case SystemState::SYSTEM_PACKED:
+        // Stop all motion and pack operations
         emergencyStop();
-        current_system_state_ = SystemState::SYSTEM_SUSPENDED;
-        logDebug("System suspended");
+        current_system_state_ = SystemState::SYSTEM_PACKED;
+        logDebug("System packed");
         break;
 
-    case SystemState::SYSTEM_OPERATIONAL:
+    case SystemState::SYSTEM_READY:
         // Resume normal operations
-        current_system_state_ = SystemState::SYSTEM_OPERATIONAL;
+        current_system_state_ = SystemState::SYSTEM_READY;
         clearError();
-        logDebug("System operational");
+        logDebug("System ready");
+        break;
+
+    case SystemState::SYSTEM_RUNNING:
+        // System is running - full operation
+        current_system_state_ = SystemState::SYSTEM_RUNNING;
         break;
 
     default:
@@ -905,8 +912,8 @@ void StateController::updatePoseControl() {
 }
 
 void StateController::applyBodyPositionControl(bool enable_x, bool enable_y, bool enable_z) {
-    if (!pose_controller_) {
-        logError("PoseController not initialized - cannot apply body position control");
+    if (!body_pose_controller_) {
+        logError("BodyPoseController not initialized - cannot apply body position control");
         return;
     }
 
@@ -939,8 +946,8 @@ void StateController::applyBodyPositionControl(bool enable_x, bool enable_y, boo
 }
 
 void StateController::applyBodyOrientationControl(bool enable_roll, bool enable_pitch, bool enable_yaw) {
-    if (!pose_controller_) {
-        logError("PoseController not initialized - cannot apply body orientation control");
+    if (!body_pose_controller_) {
+        logError("BodyPoseController not initialized - cannot apply body orientation control");
         return;
     }
 
@@ -973,8 +980,8 @@ void StateController::applyBodyOrientationControl(bool enable_roll, bool enable_
 }
 
 void StateController::applyPoseReset() {
-    if (!pose_controller_) {
-        logError("PoseController not initialized - cannot apply pose reset");
+    if (!body_pose_controller_) {
+        logError("BodyPoseController not initialized - cannot apply pose reset");
         return;
     }
 
