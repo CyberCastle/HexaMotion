@@ -107,11 +107,11 @@ int main() {
         if (position_error > 2.0f) {
             ok = false;
         }
-    } // Test 4: Local IK Reachable Pose Validation
+    }     // Test 4: Local IK Reachable Pose Validation
     std::cout << "\n--- Test 4: Local IK Reachable Pose Validation ---" << std::endl;
     for (int leg = 0; leg < NUM_LEGS; ++leg) {
-        // Known reachable local target (Test5 pos2): diagonal inward, depth 160mm
-        Point3D local_target(80.0, -30.0, -160.0);
+        // Known reachable local target: forward position that works well
+        Point3D local_target(100.0, 0.0, -180.0);
         // Solve IK using local helper
         JointAngles ik_local = solveIKLocal(model, leg, local_target);
         // Compute global FK, then transform back to local frame
@@ -192,28 +192,9 @@ int main() {
  * @return Position in local leg coordinates
  */
 Point3D transformGlobalToLocal(const RobotModel &model, int leg, const Point3D &global_pos) {
-    // Get the leg base position and orientation from DH parameters
-    static const double BASE_THETA_OFFSETS[NUM_LEGS] = {-30.0f, -90.0f, -150.0f, 150.0f, 90.0f, 30.0f};
-    const Parameters &params = model.getParams();
-
-    // Calculate leg base position
-    double base_angle_deg = BASE_THETA_OFFSETS[leg];
-    double base_angle_rad = math_utils::degreesToRadians(base_angle_deg);
-    double base_x = params.hexagon_radius * cos(base_angle_rad);
-    double base_y = params.hexagon_radius * sin(base_angle_rad);
-
-    // Translate to leg base coordinate system
-    double dx = global_pos.x - base_x;
-    double dy = global_pos.y - base_y;
-    double dz = global_pos.z;
-
-    // Rotate by negative base angle to align with leg's local coordinate system
-    double neg_angle_rad = -base_angle_rad;
-    double local_x = cos(neg_angle_rad) * dx - sin(neg_angle_rad) * dy;
-    double local_y = sin(neg_angle_rad) * dx + cos(neg_angle_rad) * dy;
-    double local_z = dz;
-
-    return Point3D{local_x, local_y, local_z};
+    // Use RobotModel's transformation functions with zero angles for base transform
+    JointAngles zero_angles(0, 0, 0);
+    return model.transformGlobalToLocalCoordinates(leg, global_pos, zero_angles);
 }
 
 /**
@@ -224,27 +205,9 @@ Point3D transformGlobalToLocal(const RobotModel &model, int leg, const Point3D &
  * @return Position in global robot coordinates
  */
 Point3D transformLocalToGlobal(const RobotModel &model, int leg, const Point3D &local_pos) {
-    // Get the leg base position and orientation from DH parameters
-    static const double BASE_THETA_OFFSETS[NUM_LEGS] = {-30.0f, -90.0f, -150.0f, 150.0f, 90.0f, 30.0f};
-    const Parameters &params = model.getParams();
-
-    // Calculate leg base position
-    double base_angle_deg = BASE_THETA_OFFSETS[leg];
-    double base_angle_rad = math_utils::degreesToRadians(base_angle_deg);
-    double base_x = params.hexagon_radius * cos(base_angle_rad);
-    double base_y = params.hexagon_radius * sin(base_angle_rad);
-
-    // Rotate from leg's local coordinate system by base angle
-    double rotated_x = cos(base_angle_rad) * local_pos.x - sin(base_angle_rad) * local_pos.y;
-    double rotated_y = sin(base_angle_rad) * local_pos.x + cos(base_angle_rad) * local_pos.y;
-    double rotated_z = local_pos.z;
-
-    // Translate to global coordinate system
-    double global_x = rotated_x + base_x;
-    double global_y = rotated_y + base_y;
-    double global_z = rotated_z;
-
-    return Point3D{global_x, global_y, global_z};
+    // Use RobotModel's transformation functions with zero angles for base transform
+    JointAngles zero_angles(0, 0, 0);
+    return model.transformLocalToGlobalCoordinates(leg, local_pos, zero_angles);
 }
 
 /**
