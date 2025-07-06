@@ -75,6 +75,58 @@ static void printGaitPattern(const LocomotionSystem& sys, int step, double phase
     std::cout << "]" << std::endl;
 }
 
+static void printJointAngleSymmetry(const LocomotionSystem& sys) {
+    std::cout << "\nJoint Angle Symmetry Analysis:" << std::endl;
+
+    // Define opposite leg pairs for symmetry validation
+    const int opposite_pairs[3][2] = {
+        {0, 3}, // Front Right (0°) <-> Back Left (180°)
+        {1, 4}, // Middle Right (60°) <-> Middle Left (240°)
+        {2, 5}  // Back Right (120°) <-> Front Left (300°)
+    };
+
+    const char* pair_names[3] = {"Front Right <-> Back Left", "Middle Right <-> Middle Left", "Back Right <-> Front Left"};
+    const double tolerance = 2.0;
+
+    for (int pair = 0; pair < 3; ++pair) {
+        int leg1 = opposite_pairs[pair][0];
+        int leg2 = opposite_pairs[pair][1];
+
+        const Leg& leg1_obj = sys.getLeg(leg1);
+        const Leg& leg2_obj = sys.getLeg(leg2);
+
+        JointAngles angles1 = leg1_obj.getJointAngles();
+        JointAngles angles2 = leg2_obj.getJointAngles();
+
+        std::cout << "  " << pair_names[pair] << " (Legs " << leg1 << " <-> " << leg2 << "):" << std::endl;
+        std::cout << "    Leg " << leg1 << ": coxa=" << angles1.coxa << "°, femur=" << angles1.femur << "°, tibia=" << angles1.tibia << "°" << std::endl;
+        std::cout << "    Leg " << leg2 << ": coxa=" << angles2.coxa << "°, femur=" << angles2.femur << "°, tibia=" << angles2.tibia << "°" << std::endl;
+
+        // Test coxa symmetry: opposite legs should have opposite signs (mirror symmetry)
+        double coxa_symmetry_error = std::abs(angles1.coxa + angles2.coxa);
+        bool coxa_symmetric = coxa_symmetry_error < tolerance;
+
+        std::cout << "    Coxa symmetry error: " << coxa_symmetry_error << "° (should be ~0°)" << std::endl;
+        std::cout << "    Coxa: " << (coxa_symmetric ? "✅ symmetrical" : "❌ not symmetrical") << std::endl;
+
+        // Test femur symmetry: opposite legs should have identical angles
+        double femur_symmetry_error = std::abs(angles1.femur - angles2.femur);
+        bool femur_symmetric = femur_symmetry_error < tolerance;
+
+        std::cout << "    Femur symmetry error: " << femur_symmetry_error << "° (should be ~0°)" << std::endl;
+        std::cout << "    Femur: " << (femur_symmetric ? "✅ symmetrical" : "❌ not symmetrical") << std::endl;
+
+        // Test tibia symmetry: opposite legs should have identical angles
+        double tibia_symmetry_error = std::abs(angles1.tibia - angles2.tibia);
+        bool tibia_symmetric = tibia_symmetry_error < tolerance;
+
+        std::cout << "    Tibia symmetry error: " << tibia_symmetry_error << "° (should be ~0°)" << std::endl;
+        std::cout << "    Tibia: " << (tibia_symmetric ? "✅ symmetrical" : "❌ not symmetrical") << std::endl;
+
+        std::cout << std::endl;
+    }
+}
+
 static bool validateCoherence(const TripodValidation& validation) {
     std::cout << "\n=== COHERENCE VALIDATION ===" << std::endl;
 
@@ -139,23 +191,63 @@ static bool validateSymmetry(const TripodValidation& validation) {
     bool passed = symmetry_percentage >= 95.0; // Allow 5% tolerance
     std::cout << "Symmetry: " << (passed ? "✓ PASS" : "✗ FAIL") << std::endl;
 
+    // Additional detailed symmetry analysis
+    std::cout << "\nDetailed Joint Angle Symmetry Analysis:" << std::endl;
+    std::cout << "Validating that opposite legs have symmetrical joint angles:" << std::endl;
+    std::cout << "- Coxa angles: opposite legs should have opposite signs (mirror symmetry)" << std::endl;
+    std::cout << "- Femur angles: opposite legs should have identical angles" << std::endl;
+    std::cout << "- Tibia angles: opposite legs should have identical angles" << std::endl;
+
     return passed;
 }
 
 static bool checkLegSymmetry(const LocomotionSystem& sys) {
-    // Check that opposite legs (L1-L4, L2-L5, L3-L6) have opposite phases
-    const Leg& leg1 = sys.getLeg(0); // L1
-    const Leg& leg4 = sys.getLeg(3); // L4
-    const Leg& leg2 = sys.getLeg(1); // L2
-    const Leg& leg5 = sys.getLeg(4); // L5
-    const Leg& leg3 = sys.getLeg(2); // L3
-    const Leg& leg6 = sys.getLeg(5); // L6
+    // Check that opposite legs have symmetrical joint angles
+    // Leg configuration: 0=Front Right, 1=Middle Right, 2=Back Right, 3=Back Left, 4=Middle Left, 5=Front Left
+    // Opposite pairs: 0-3, 1-4, 2-5
 
-    bool symmetry1 = (leg1.getStepPhase() != leg4.getStepPhase());
-    bool symmetry2 = (leg2.getStepPhase() != leg5.getStepPhase());
-    bool symmetry3 = (leg3.getStepPhase() != leg6.getStepPhase());
+    const double tolerance = 2.0; // 2 degrees tolerance for symmetry validation
 
-    return symmetry1 && symmetry2 && symmetry3;
+    // Define opposite leg pairs for symmetry validation
+    const int opposite_pairs[3][2] = {
+        {0, 3}, // Front Right (0°) <-> Back Left (180°)
+        {1, 4}, // Middle Right (60°) <-> Middle Left (240°)
+        {2, 5}  // Back Right (120°) <-> Front Left (300°)
+    };
+
+    bool all_symmetric = true;
+
+    for (int pair = 0; pair < 3; ++pair) {
+        int leg1 = opposite_pairs[pair][0];
+        int leg2 = opposite_pairs[pair][1];
+
+        const Leg& leg1_obj = sys.getLeg(leg1);
+        const Leg& leg2_obj = sys.getLeg(leg2);
+
+        JointAngles angles1 = leg1_obj.getJointAngles();
+        JointAngles angles2 = leg2_obj.getJointAngles();
+
+        // Test coxa symmetry: opposite legs should have opposite signs (mirror symmetry)
+        double coxa_symmetry_error = std::abs(angles1.coxa + angles2.coxa);
+        bool coxa_symmetric = coxa_symmetry_error < tolerance;
+
+        // Test femur symmetry: opposite legs should have identical angles
+        double femur_symmetry_error = std::abs(angles1.femur - angles2.femur);
+        bool femur_symmetric = femur_symmetry_error < tolerance;
+
+        // Test tibia symmetry: opposite legs should have identical angles
+        double tibia_symmetry_error = std::abs(angles1.tibia - angles2.tibia);
+        bool tibia_symmetric = tibia_symmetry_error < tolerance;
+
+        // All three joint types must be symmetrical for this pair
+        bool pair_symmetric = coxa_symmetric && femur_symmetric && tibia_symmetric;
+
+        if (!pair_symmetric) {
+            all_symmetric = false;
+        }
+    }
+
+    return all_symmetric;
 }
 
 int main() {
@@ -251,6 +343,9 @@ int main() {
     bool coherence_ok = validateCoherence(validation);
     bool sync_ok = validateSynchronization(validation);
     bool symmetry_ok = validateSymmetry(validation);
+
+    // Print detailed joint angle symmetry analysis
+    printJointAngleSymmetry(sys);
 
     // Final summary
     std::cout << "\n=========================================" << std::endl;
