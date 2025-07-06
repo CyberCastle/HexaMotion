@@ -311,23 +311,6 @@ public:
      */
     void constrainJointLimits(const Parameters &params);
 
-    // ===== DH PARAMETERS =====
-
-    /**
-     * @brief Get DH parameter for this leg.
-     * @param joint_index Joint index (0-3, where 0 is base)
-     * @param param_index Parameter index (0=a, 1=alpha, 2=d, 3=theta)
-     * @return DH parameter value
-     */
-    double getDHParameter(int joint_index, int param_index) const;
-
-    /**
-     * @brief Set DH parameter for this leg.
-     * @param joint_index Joint index (0-3, where 0 is base)
-     * @param param_index Parameter index (0=a, 1=alpha, 2=d, 3=theta)
-     * @param value DH parameter value
-     */
-    void setDHParameter(int joint_index, int param_index, double value);
 
     // ===== INITIALIZATION =====
 
@@ -403,9 +386,6 @@ private:
     // ===== GAIT PHASE OFFSET =====
     double leg_phase_offset_;       ///< Phase offset for this leg in gait cycle (0.0 to 1.0)
 
-    // ===== DH PARAMETERS =====
-    double dh_parameters_[DOF_PER_LEG + 1][4]; ///< DH parameters for this leg
-
     // ===== DEFAULT CONFIGURATION =====
     JointAngles default_angles_;    ///< Default joint angles
     Point3D default_tip_position_;  ///< Default tip position
@@ -413,11 +393,6 @@ private:
     // ✅ NEW: Desired tip position
     Point3D desired_tip_position_;   ///< Desired tip position
 
-    /**
-     * @brief Initialize DH parameters for this leg.
-     * @param params Robot parameters
-     */
-    void initializeDHParameters(const Parameters &params);
 
     /**
      * @brief Calculate base position from robot parameters.

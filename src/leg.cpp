@@ -37,9 +37,6 @@ Leg::Leg(int leg_id, const Parameters &params)
         return;
     }
 
-    // Initialize DH parameters
-    initializeDHParameters(params);
-
     // Calculate base position
     calculateBasePosition(params);
 }
@@ -164,20 +161,6 @@ void Leg::constrainJointLimits(const Parameters &params) {
                                   std::min(params.tibia_angle_limits[1], joint_angles_.tibia));
 }
 
-double Leg::getDHParameter(int joint_index, int param_index) const {
-    if (joint_index >= 0 && joint_index <= DOF_PER_LEG &&
-        param_index >= 0 && param_index < 4) {
-        return dh_parameters_[joint_index][param_index];
-    }
-    return 0.0;
-}
-
-void Leg::setDHParameter(int joint_index, int param_index, double value) {
-    if (joint_index >= 0 && joint_index <= DOF_PER_LEG &&
-        param_index >= 0 && param_index < 4) {
-        dh_parameters_[joint_index][param_index] = value;
-    }
-}
 
 void Leg::initialize(const RobotModel &model, const Pose &default_stance) {
     // Calculate default tip position from stance pose
@@ -254,33 +237,6 @@ bool Leg::applyIK(const RobotModel& model) {
     // Check if IK was successful (tip position matches desired)
     double ik_error = math_utils::distance(tip_position_, desired_tip_position_);
     return ik_error < IK_TOLERANCE; // 1mm tolerance
-}
-
-void Leg::initializeDHParameters(const Parameters &params) {
-    // Initialize DH parameters based on robot configuration
-    // Base transform (row 0)
-    dh_parameters_[0][0] = params.hexagon_radius; // a0 = hexagon radius
-    dh_parameters_[0][1] = 0.0;                   // alpha0
-    dh_parameters_[0][2] = 0.0;                   // d0
-    dh_parameters_[0][3] = BASE_THETA_OFFSETS[leg_id_]; // theta0 (fixed)
-
-    // Coxa joint (row 1)
-    dh_parameters_[1][0] = 0.0;                          // a1
-    dh_parameters_[1][1] = 90.0 * DEGREES_TO_RADIANS_FACTOR;  // alpha1 (+90°)
-    dh_parameters_[1][2] = 0.0;                          // d1
-    dh_parameters_[1][3] = 0.0;                          // theta1 offset
-
-    // Femur joint (row 2)
-    dh_parameters_[2][0] = params.coxa_length;                   // a2 = coxa length
-    dh_parameters_[2][1] = 90.0 * DEGREES_TO_RADIANS_FACTOR;     // alpha2 (+90°)
-    dh_parameters_[2][2] = 0.0;                                  // d2
-    dh_parameters_[2][3] = 0.0;                                  // theta2 offset
-
-    // Tibia joint (row 3)
-    dh_parameters_[3][0] = params.femur_length; // a3 = femur length
-    dh_parameters_[3][1] = 0.0;                 // alpha3
-    dh_parameters_[3][2] = params.tibia_length; // d3 = tibia length
-    dh_parameters_[3][3] = 0.0;                 // theta3 offset
 }
 
 void Leg::calculateBasePosition(const Parameters &params) {
