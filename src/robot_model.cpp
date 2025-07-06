@@ -9,8 +9,9 @@
 #include <math.h>
 #include <vector>
 
-// Per-leg base orientation offsets (degrees)
-static const double BASE_THETA_OFFSETS[NUM_LEGS] = {-30.0f, -90.0f, -150.0f, 30.0f, 90.0f, 150.0f};
+// Per-leg base orientation offsets (degrees) - now symmetric for opposite leg pairs
+// Pairs: (0,3)=(-30°,150°), (1,4)=(-90°,90°), (2,5)=(-150°,30°)
+static const double BASE_THETA_OFFSETS[NUM_LEGS] = {-30.0f, -90.0f, -150.0f, 150.0f, 90.0f, 30.0f};
 
 RobotModel::RobotModel(const Parameters &p) : params(p) {
     initializeDH();
@@ -434,7 +435,7 @@ Pose RobotModel::getTipPoseLegFrame(int leg_index, const JointAngles &joint_angl
 }
 
 JointAngles RobotModel::calculateTargetFromCurrentPosition(int leg, const JointAngles &current_angles,
-                                                          const Pose &current_pose, const Point3D &target_in_current_frame) const {
+                                                           const Pose &current_pose, const Point3D &target_in_current_frame) const {
     // OpenSHC logic: transform target from current pose frame to robot frame
     // This matches OpenSHC's: target_tip_position = model_->getCurrentPose().inverseTransformVector(default_tip_position);
     Point3D target_in_robot_frame = current_pose.inverseTransformVector(target_in_current_frame);
@@ -444,7 +445,7 @@ JointAngles RobotModel::calculateTargetFromCurrentPosition(int leg, const JointA
 }
 
 JointAngles RobotModel::calculateTargetFromDefaultStance(int leg, const JointAngles &current_angles,
-                                                        const Pose &current_pose, const Pose &default_stance_pose) const {
+                                                         const Pose &current_pose, const Pose &default_stance_pose) const {
     // La pose por defecto ya está en el frame del robot, pasar directamente
     return inverseKinematicsCurrent(leg, current_angles, default_stance_pose.position);
 }

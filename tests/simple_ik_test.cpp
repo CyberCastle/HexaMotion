@@ -21,7 +21,7 @@ int main() {
 
     std::cout << std::fixed << std::setprecision(3);
 
-    static const double BASE_THETA_OFFSETS[NUM_LEGS] = {-30.0f, -90.0f, -150.0f, 30.0f, 90.0f, 150.0f};
+    static const double BASE_THETA_OFFSETS[NUM_LEGS] = {-30.0f, -90.0f, -150.0f, 150.0f, 90.0f, 30.0f};
 
     std::cout << "=== Simple Horizontal Test ===" << std::endl;
 
