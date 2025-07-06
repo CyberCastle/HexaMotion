@@ -275,6 +275,12 @@ Point3D RobotModel::getDHLegBasePosition(int leg_index) const {
     return Point3D{base_transform(0, 3), base_transform(1, 3), base_transform(2, 3)};
 }
 
+double RobotModel::getLegBaseAngleOffset(int leg_index) const {
+    // Return the base angle offset for the specified leg
+    // This is the theta offset from the DH parameters (BASE_THETA_OFFSETS)
+    return dh_transforms[leg_index][0][3];
+}
+
 Eigen::Matrix4d RobotModel::legTransform(int leg_index, const JointAngles &q) const {
     // Base transform from DH parameters (body center to leg mount)
     Eigen::Matrix4d T = math_utils::dhTransform<double>(

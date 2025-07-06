@@ -544,6 +544,9 @@ class RobotModel {
     /** Get the DH position of the leg base (without joint transformations) */
     Point3D getDHLegBasePosition(int leg_index) const;
 
+    /** Get the base angle offset for a specific leg in radians */
+    double getLegBaseAngleOffset(int leg_index) const;
+
     /**
      * Calculate target position based on current position (OpenSHC-style)
      * This method transforms a target position from the current pose's reference frame

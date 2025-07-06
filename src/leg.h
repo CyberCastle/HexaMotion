@@ -42,9 +42,9 @@ public:
     /**
      * @brief Constructor for a leg with given parameters.
      * @param leg_id The leg identification number (0-5)
-     * @param params Robot parameters containing DH and joint limit information
+     * @param model Robot model containing DH parameters and base angle offsets
      */
-    explicit Leg(int leg_id, const Parameters &params);
+    explicit Leg(int leg_id, const RobotModel &model);
 
     /**
      * @brief Destructor.
@@ -398,7 +398,7 @@ private:
      * @brief Calculate base position from robot parameters.
      * @param params Robot parameters
      */
-    void calculateBasePosition(const Parameters &params);
+    void calculateBasePosition(const RobotModel &model);
 
     /**
      * @brief Update tip position from current joint angles.

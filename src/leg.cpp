@@ -1,17 +1,7 @@
 #include "leg.h"
 #include "hexamotion_constants.h"
 
-// Base angle offsets for each leg (60° apart, radians)
-const double BASE_THETA_OFFSETS[NUM_LEGS] = {
-    0.0 * DEGREES_TO_RADIANS_FACTOR,    // Leg 0: Front right
-    60.0 * DEGREES_TO_RADIANS_FACTOR,   // Leg 1: Middle right
-    120.0 * DEGREES_TO_RADIANS_FACTOR,  // Leg 2: Back right
-    180.0 * DEGREES_TO_RADIANS_FACTOR,  // Leg 3: Back left
-    240.0 * DEGREES_TO_RADIANS_FACTOR,  // Leg 4: Middle left
-    300.0 * DEGREES_TO_RADIANS_FACTOR   // Leg 5: Front left
-};
-
-Leg::Leg(int leg_id, const Parameters &params)
+Leg::Leg(int leg_id, const RobotModel &model)
     : leg_id_(leg_id)
     , leg_name_("Leg_" + std::to_string(leg_id))
     , joint_angles_(0.0, 0.0, 0.0)
@@ -38,7 +28,7 @@ Leg::Leg(int leg_id, const Parameters &params)
     }
 
     // Calculate base position
-    calculateBasePosition(params);
+    calculateBasePosition(model);
 }
 
 void Leg::setJointAngles(const JointAngles &angles) {
@@ -239,9 +229,10 @@ bool Leg::applyIK(const RobotModel& model) {
     return ik_error < IK_TOLERANCE; // 1mm tolerance
 }
 
-void Leg::calculateBasePosition(const Parameters &params) {
-    // Calculate leg base position in world coordinates
-    double angle_rad = BASE_THETA_OFFSETS[leg_id_];
+void Leg::calculateBasePosition(const RobotModel &model) {
+    // Calculate leg base position in world coordinates using RobotModel
+    double angle_rad = model.getLegBaseAngleOffset(leg_id_);
+    const Parameters &params = model.getParams();
     base_position_.x = params.hexagon_radius * cos(angle_rad);
     base_position_.y = params.hexagon_radius * sin(angle_rad);
     base_position_.z = 0.0; // Base is at ground level
