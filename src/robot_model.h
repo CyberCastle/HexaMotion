@@ -284,7 +284,7 @@ struct Pose {
 };
 
 /**
- * @brief Joint angles for a single leg in degrees.
+ * @brief Joint angles for a single leg in radians.
  */
 struct JointAngles {
     double coxa, femur, tibia;
@@ -491,8 +491,8 @@ class RobotModel {
     bool checkJointLimits(int leg, const JointAngles &q) const;
     /** Clamp angle within limits. */
     double constrainAngle(double angle, double min_angle, double max_angle) const;
-    /** Normalize angle to [-180,180] degrees. */
-    double normalizeAngle(double angle_deg) const;
+    /** Normalize angle to [-pi, pi] radians. */
+    double normalizeAngle(double angle_rad) const;
     /** Validate parameter consistency. */
     bool validate() const;
     /**
@@ -690,7 +690,7 @@ class RobotModel {
     std::array<Point3D, NUM_LEGS> getSymmetricStancePositionsGlobalCoordinates(double stance_radius, double stance_height) const;
 
   private:
-    const Parameters &params;
+    Parameters params;
     // DH parameter table: [leg][joint][param] where param = [a, alpha, d, theta_offset]
     // The first entry stores the fixed base transform for the leg
     double dh_transforms[NUM_LEGS][DOF_PER_LEG + 1][4];

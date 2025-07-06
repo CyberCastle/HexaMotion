@@ -1,14 +1,14 @@
 #include "leg.h"
 #include "hexamotion_constants.h"
 
-// Base angle offsets for each leg (60° apart)
+// Base angle offsets for each leg (60° apart, radians)
 const double BASE_THETA_OFFSETS[NUM_LEGS] = {
-    0.0,    // Leg 0: Front right
-    60.0,   // Leg 1: Middle right
-    120.0,  // Leg 2: Back right
-    180.0,  // Leg 3: Back left
-    240.0,  // Leg 4: Middle left
-    300.0   // Leg 5: Front left
+    0.0 * DEGREES_TO_RADIANS_FACTOR,    // Leg 0: Front right
+    60.0 * DEGREES_TO_RADIANS_FACTOR,   // Leg 1: Middle right
+    120.0 * DEGREES_TO_RADIANS_FACTOR,  // Leg 2: Back right
+    180.0 * DEGREES_TO_RADIANS_FACTOR,  // Leg 3: Back left
+    240.0 * DEGREES_TO_RADIANS_FACTOR,  // Leg 4: Middle left
+    300.0 * DEGREES_TO_RADIANS_FACTOR   // Leg 5: Front left
 };
 
 Leg::Leg(int leg_id, const Parameters &params)
@@ -265,16 +265,16 @@ void Leg::initializeDHParameters(const Parameters &params) {
     dh_parameters_[0][3] = BASE_THETA_OFFSETS[leg_id_]; // theta0 (fixed)
 
     // Coxa joint (row 1)
-    dh_parameters_[1][0] = 0.0;   // a1
-    dh_parameters_[1][1] = 90.0;  // alpha1 (+90°)
-    dh_parameters_[1][2] = 0.0;   // d1
-    dh_parameters_[1][3] = 0.0;   // theta1 offset
+    dh_parameters_[1][0] = 0.0;                          // a1
+    dh_parameters_[1][1] = 90.0 * DEGREES_TO_RADIANS_FACTOR;  // alpha1 (+90°)
+    dh_parameters_[1][2] = 0.0;                          // d1
+    dh_parameters_[1][3] = 0.0;                          // theta1 offset
 
     // Femur joint (row 2)
-    dh_parameters_[2][0] = params.coxa_length; // a2 = coxa length
-    dh_parameters_[2][1] = 90.0;               // alpha2 (+90°)
-    dh_parameters_[2][2] = 0.0;                // d2
-    dh_parameters_[2][3] = 0.0;                // theta2 offset
+    dh_parameters_[2][0] = params.coxa_length;                   // a2 = coxa length
+    dh_parameters_[2][1] = 90.0 * DEGREES_TO_RADIANS_FACTOR;     // alpha2 (+90°)
+    dh_parameters_[2][2] = 0.0;                                  // d2
+    dh_parameters_[2][3] = 0.0;                                  // theta2 offset
 
     // Tibia joint (row 3)
     dh_parameters_[3][0] = params.femur_length; // a3 = femur length
@@ -285,7 +285,7 @@ void Leg::initializeDHParameters(const Parameters &params) {
 
 void Leg::calculateBasePosition(const Parameters &params) {
     // Calculate leg base position in world coordinates
-    double angle_rad = math_utils::degreesToRadians(BASE_THETA_OFFSETS[leg_id_]);
+    double angle_rad = BASE_THETA_OFFSETS[leg_id_];
     base_position_.x = params.hexagon_radius * cos(angle_rad);
     base_position_.y = params.hexagon_radius * sin(angle_rad);
     base_position_.z = 0.0; // Base is at ground level

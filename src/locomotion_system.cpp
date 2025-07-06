@@ -264,9 +264,9 @@ bool LocomotionSystem::setLegJointAngles(int leg, const JointAngles &q) {
     double tibia_speed = velocity_controller ? velocity_controller->getServoSpeed(leg, 2) : params.default_servo_speed;
 
     // Apply sign inversion/preservation per servo using params.angle_sign_* (adjust left/right or above/below servo orientation)
-    double servo_coxa = clamped_angles.coxa * params.angle_sign_coxa;
-    double servo_femur = clamped_angles.femur * params.angle_sign_femur;
-    double servo_tibia = clamped_angles.tibia * params.angle_sign_tibia;
+    double servo_coxa = clamped_angles.coxa * params.angle_sign_coxa * RADIANS_TO_DEGREES_FACTOR;
+    double servo_femur = clamped_angles.femur * params.angle_sign_femur * RADIANS_TO_DEGREES_FACTOR;
+    double servo_tibia = clamped_angles.tibia * params.angle_sign_tibia * RADIANS_TO_DEGREES_FACTOR;
     servo_interface->setJointAngleAndSpeed(leg, 0, servo_coxa, coxa_speed);
     servo_interface->setJointAngleAndSpeed(leg, 1, servo_femur, femur_speed);
     servo_interface->setJointAngleAndSpeed(leg, 2, servo_tibia, tibia_speed);
