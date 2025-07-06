@@ -291,10 +291,9 @@ void WalkController::init() {
         int leg_index = leg_stepper->getLegIndex();
 
         // Calculate stance position based on leg geometry
-        double base_angle_deg = params.dh_parameters[leg_index][0][3];
-        double base_angle = base_angle_deg * M_PI / 180.0; // Convert to radians
-        double base_x = params.hexagon_radius * cos(base_angle);
-        double base_y = params.hexagon_radius * sin(base_angle);
+        Point3D base_pos = model.getAnalyticLegBasePosition(leg_index);
+        double base_x = base_pos.x;
+        double base_y = base_pos.y;
 
         // Use 65% of leg reach for safe stance position
         double leg_reach = params.coxa_length + params.femur_length + params.tibia_length;
@@ -603,10 +602,9 @@ void WalkController::generateWalkspace() {
 
         for (int leg = 0; leg < NUM_LEGS; leg++) {
             // Get leg base position
-            double base_angle_deg = params.dh_parameters[leg][0][3];
-            double base_angle = base_angle_deg * M_PI / 180.0;
-            double base_x = params.hexagon_radius * cos(base_angle);
-            double base_y = params.hexagon_radius * sin(base_angle);
+            Point3D base_pos = model.getAnalyticLegBasePosition(leg);
+            double base_x = base_pos.x;
+            double base_y = base_pos.y;
 
             // Calculate reach in bearing direction
             double target_x = base_x + safe_reach * cos(bearing_rad);
@@ -1114,11 +1112,10 @@ bool WalkController::checkTerrainConditions() const {
 Point3D WalkController::calculateDefaultStancePosition(int leg_index) {
     const auto& params = model.getParams();
 
-    // Use the same base positions as the main model (DH parameters)
-    double base_angle_deg = params.dh_parameters[leg_index][0][3];
-    double base_angle = base_angle_deg * M_PI / 180.0; // Convert to radians
-    double base_x = params.hexagon_radius * cos(base_angle);
-    double base_y = params.hexagon_radius * sin(base_angle);
+    // Use the same base positions as the main model
+    Point3D base_pos = model.getAnalyticLegBasePosition(leg_index);
+    double base_x = base_pos.x;
+    double base_y = base_pos.y;
     double leg_reach = params.coxa_length + params.femur_length + params.tibia_length;
     double safe_reach = leg_reach * 0.65f; // 65% safety margin
     double default_foot_x = base_x + safe_reach * cos(base_angle);

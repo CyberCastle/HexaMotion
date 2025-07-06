@@ -31,11 +31,12 @@
 std::array<LegStancePosition, NUM_LEGS> calculateHexagonalStancePositions(const Parameters &params) {
     std::array<LegStancePosition, NUM_LEGS> positions;
     double total_radius_mm = params.hexagon_radius + params.coxa_length;
+    // Create a temporary RobotModel to get leg base positions
+    RobotModel temp_model(params);
     for (int i = 0; i < NUM_LEGS; i++) {
-        double angle_deg = params.dh_parameters[i][0][3];
-        double angle_rad = math_utils::degreesToRadians(angle_deg);
-        positions[i].x = total_radius_mm * cos(angle_rad);
-        positions[i].y = total_radius_mm * sin(angle_rad);
+        Point3D base_pos = temp_model.getAnalyticLegBasePosition(i);
+        positions[i].x = base_pos.x + params.coxa_length * cos(atan2(base_pos.y, base_pos.x));
+        positions[i].y = base_pos.y + params.coxa_length * sin(atan2(base_pos.y, base_pos.x));
     }
     return positions;
 }

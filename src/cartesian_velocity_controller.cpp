@@ -267,13 +267,9 @@ double CartesianVelocityController::calculateLegSpeedCompensation(int leg_index,
     }
 
     // Get leg position in robot frame
-    const Parameters &params = model_.getParams();
-    double leg_angle_deg = params.dh_parameters[leg_index][0][3];
-    double leg_angle_rad = math_utils::degreesToRadians(leg_angle_deg);
-
-    // Leg position relative to robot center
-    double leg_x = params.hexagon_radius * std::cos(leg_angle_rad) / 1000.0f; // Convert to meters
-    double leg_y = params.hexagon_radius * std::sin(leg_angle_rad) / 1000.0f;
+    Point3D base_pos = model_.getAnalyticLegBasePosition(leg_index);
+    double leg_x = base_pos.x / 1000.0f; // Convert to meters
+    double leg_y = base_pos.y / 1000.0f;
 
     // Calculate the velocity of this leg due to body motion
     // Linear motion: all legs move at same speed

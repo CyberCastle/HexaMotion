@@ -315,15 +315,8 @@ int main() {
     params.stability_margin = 50.0f;
     params.control_frequency = 50.0f;
 
-    // Initialize DH parameters
+    // Use default DH parameters (RobotModel will initialize them automatically)
     params.use_custom_dh_parameters = false;
-    for (int l = 0; l < NUM_LEGS; ++l) {
-        for (int j = 0; j < DOF_PER_LEG + 1; ++j) {
-            for (int k = 0; k < 4; ++k) {
-                params.dh_parameters[l][j][k] = 0.0f;
-            }
-        }
-    }
 
     // Create validator with reasonable tolerances
     IKFKValidator validator(params, 1.0f, 1.0f); // 1mm position, 1° angle tolerance

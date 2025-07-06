@@ -20,14 +20,8 @@ int main() {
     params.tibia_angle_limits[0] = -180.0f;
     params.tibia_angle_limits[1] = 180.0f;
 
-    // Initialize DH parameters
-    for (int l = 0; l < NUM_LEGS; ++l) {
-        for (int j = 0; j < DOF_PER_LEG + 1; ++j) {
-            for (int k = 0; k < 4; ++k) {
-                params.dh_parameters[l][j][k] = 0.0f;
-            }
-        }
-    }
+    // Use default DH parameters (RobotModel will initialize them automatically)
+    params.use_custom_dh_parameters = false;
 
     RobotModel model(params);
 
