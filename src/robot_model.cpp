@@ -36,18 +36,6 @@ RobotModel::RobotModel(const Parameters &p) : params(p) {
     params.body_comp.max_tilt_deg =
         math_utils::degreesToRadians(params.body_comp.max_tilt_deg);
 
-    // Convert custom DH parameters if provided
-    if (params.use_custom_dh_parameters) {
-        for (int l = 0; l < NUM_LEGS; ++l) {
-            for (int j = 0; j < DOF_PER_LEG + 1; ++j) {
-                params.dh_parameters[l][j][1] =
-                    math_utils::degreesToRadians(params.dh_parameters[l][j][1]);
-                params.dh_parameters[l][j][3] =
-                    math_utils::degreesToRadians(params.dh_parameters[l][j][3]);
-            }
-        }
-    }
-
     initializeDH();
 }
 
