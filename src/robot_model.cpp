@@ -21,20 +21,16 @@ static const double BASE_THETA_OFFSETS[NUM_LEGS] = {
     30.0 * DEGREES_TO_RADIANS_FACTOR};
 
 RobotModel::RobotModel(const Parameters &p) : params(p) {
-    // Convert configuration angles from degrees to radians once
+    // Convert configuration angles from degrees to radians for internal use
+    // Keep original parameters in degrees for configuration
     for (int i = 0; i < 2; ++i) {
-        params.coxa_angle_limits[i] =
-            math_utils::degreesToRadians(params.coxa_angle_limits[i]);
-        params.femur_angle_limits[i] =
-            math_utils::degreesToRadians(params.femur_angle_limits[i]);
-        params.tibia_angle_limits[i] =
-            math_utils::degreesToRadians(params.tibia_angle_limits[i]);
+        coxa_angle_limits_rad[i] = math_utils::degreesToRadians(params.coxa_angle_limits[i]);
+        femur_angle_limits_rad[i] = math_utils::degreesToRadians(params.femur_angle_limits[i]);
+        tibia_angle_limits_rad[i] = math_utils::degreesToRadians(params.tibia_angle_limits[i]);
     }
 
-    params.max_angular_velocity =
-        math_utils::degreesToRadians(params.max_angular_velocity);
-    params.body_comp.max_tilt_deg =
-        math_utils::degreesToRadians(params.body_comp.max_tilt_deg);
+    max_angular_velocity_rad = math_utils::degreesToRadians(params.max_angular_velocity);
+    body_comp_max_tilt_rad = math_utils::degreesToRadians(params.body_comp.max_tilt_deg);
 
     initializeDH();
 }
@@ -151,9 +147,9 @@ JointAngles RobotModel::solveIK(int leg, const Point3D &local_target, JointAngle
         current_angles.tibia = normalizeAngle(current_angles.tibia);
 
         if (params.ik.clamp_joints) {
-            current_angles.coxa = constrainAngle(current_angles.coxa, params.coxa_angle_limits[0], params.coxa_angle_limits[1]);
-            current_angles.femur = constrainAngle(current_angles.femur, params.femur_angle_limits[0], params.femur_angle_limits[1]);
-            current_angles.tibia = constrainAngle(current_angles.tibia, params.tibia_angle_limits[0], params.tibia_angle_limits[1]);
+            current_angles.coxa = constrainAngle(current_angles.coxa, coxa_angle_limits_rad[0], coxa_angle_limits_rad[1]);
+            current_angles.femur = constrainAngle(current_angles.femur, femur_angle_limits_rad[0], femur_angle_limits_rad[1]);
+            current_angles.tibia = constrainAngle(current_angles.tibia, tibia_angle_limits_rad[0], tibia_angle_limits_rad[1]);
         }
     }
 
@@ -187,13 +183,13 @@ JointAngles RobotModel::inverseKinematicsGlobalCoordinates(int leg, const Point3
     if (distance > max_reach * 0.98f || distance < min_reach * 1.02f) {
         // Target outside workspace - return safe default angles within joint limits
         double coxa_angle = atan2(local_target.y, local_target.x);
-        coxa_angle = constrainAngle(coxa_angle, params.coxa_angle_limits[0], params.coxa_angle_limits[1]);
-        return JointAngles(coxa_angle, params.femur_angle_limits[0] / 2.0f, params.tibia_angle_limits[0] / 2.0f);
+        coxa_angle = constrainAngle(coxa_angle, coxa_angle_limits_rad[0], coxa_angle_limits_rad[1]);
+        return JointAngles(coxa_angle, femur_angle_limits_rad[0] / 2.0f, tibia_angle_limits_rad[0] / 2.0f);
     }
 
     // Initial guess based on target direction and realistic kinematics
     double coxa_start = atan2(local_target.y, local_target.x);
-    coxa_start = constrainAngle(coxa_start, params.coxa_angle_limits[0], params.coxa_angle_limits[1]);
+    coxa_start = constrainAngle(coxa_start, coxa_angle_limits_rad[0], coxa_angle_limits_rad[1]);
 
     // Initial estimates for femur and tibia based only on DH model
     double femur_estimate = 0.0f;
@@ -203,9 +199,9 @@ JointAngles RobotModel::inverseKinematicsGlobalCoordinates(int leg, const Point3
 
     // Clamp to joint limits
     if (params.ik.clamp_joints) {
-        current_angles.coxa = constrainAngle(current_angles.coxa, params.coxa_angle_limits[0], params.coxa_angle_limits[1]);
-        current_angles.femur = constrainAngle(current_angles.femur, params.femur_angle_limits[0], params.femur_angle_limits[1]);
-        current_angles.tibia = constrainAngle(current_angles.tibia, params.tibia_angle_limits[0], params.tibia_angle_limits[1]);
+        current_angles.coxa = constrainAngle(current_angles.coxa, coxa_angle_limits_rad[0], coxa_angle_limits_rad[1]);
+        current_angles.femur = constrainAngle(current_angles.femur, femur_angle_limits_rad[0], femur_angle_limits_rad[1]);
+        current_angles.tibia = constrainAngle(current_angles.tibia, tibia_angle_limits_rad[0], tibia_angle_limits_rad[1]);
     }
 
     return solveIK(leg, local_target, current_angles);
@@ -227,9 +223,9 @@ JointAngles RobotModel::inverseKinematicsCurrentGlobalCoordinates(int leg, const
 
     JointAngles start = current_angles;
     if (params.ik.clamp_joints) {
-        start.coxa = constrainAngle(start.coxa, params.coxa_angle_limits[0], params.coxa_angle_limits[1]);
-        start.femur = constrainAngle(start.femur, params.femur_angle_limits[0], params.femur_angle_limits[1]);
-        start.tibia = constrainAngle(start.tibia, params.tibia_angle_limits[0], params.tibia_angle_limits[1]);
+        start.coxa = constrainAngle(start.coxa, coxa_angle_limits_rad[0], coxa_angle_limits_rad[1]);
+        start.femur = constrainAngle(start.femur, femur_angle_limits_rad[0], femur_angle_limits_rad[1]);
+        start.tibia = constrainAngle(start.tibia, tibia_angle_limits_rad[0], tibia_angle_limits_rad[1]);
     }
 
     return solveIK(leg, local_target, start);
@@ -344,9 +340,9 @@ Eigen::Matrix3d RobotModel::calculateJacobian(int leg, const JointAngles &q, con
 }
 
 bool RobotModel::checkJointLimits(int leg_index, const JointAngles &angles) const {
-    return (angles.coxa >= params.coxa_angle_limits[0] && angles.coxa <= params.coxa_angle_limits[1] &&
-            angles.femur >= params.femur_angle_limits[0] && angles.femur <= params.femur_angle_limits[1] &&
-            angles.tibia >= params.tibia_angle_limits[0] && angles.tibia <= params.tibia_angle_limits[1]);
+    return (angles.coxa >= coxa_angle_limits_rad[0] && angles.coxa <= coxa_angle_limits_rad[1] &&
+            angles.femur >= femur_angle_limits_rad[0] && angles.femur <= femur_angle_limits_rad[1] &&
+            angles.tibia >= tibia_angle_limits_rad[0] && angles.tibia <= tibia_angle_limits_rad[1]);
 }
 
 double RobotModel::constrainAngle(double angle, double min_angle, double max_angle) const {
@@ -376,17 +372,17 @@ std::pair<double, double> RobotModel::calculateHeightRange() const {
     // Based on "Introduction to Robotics" - Craig and "Robotics: Modelling, Planning and Control" - Siciliano
     const int resolution = WORKSPACE_RESOLUTION; // discretization resolution
 
-    const double coxa_step = (params.coxa_angle_limits[1] - params.coxa_angle_limits[0]) / resolution;
-    const double femur_step = (params.femur_angle_limits[1] - params.femur_angle_limits[0]) / resolution;
-    const double tibia_step = (params.tibia_angle_limits[1] - params.tibia_angle_limits[0]) / resolution;
+    const double coxa_step = (coxa_angle_limits_rad[1] - coxa_angle_limits_rad[0]) / resolution;
+    const double femur_step = (femur_angle_limits_rad[1] - femur_angle_limits_rad[0]) / resolution;
+    const double tibia_step = (tibia_angle_limits_rad[1] - tibia_angle_limits_rad[0]) / resolution;
 
     // Evaluate the entire workspace of valid joint configurations
     for (int i = 0; i <= resolution; i++) {
         for (int j = 0; j <= resolution; j++) {
             for (int k = 0; k <= resolution; k++) {
-                double coxa = params.coxa_angle_limits[0] + i * coxa_step;
-                double femur = params.femur_angle_limits[0] + j * femur_step;
-                double tibia = params.tibia_angle_limits[0] + k * tibia_step;
+                double coxa = coxa_angle_limits_rad[0] + i * coxa_step;
+                double femur = femur_angle_limits_rad[0] + j * femur_step;
+                double tibia = tibia_angle_limits_rad[0] + k * tibia_step;
                 JointAngles q(coxa, femur, tibia);
 
                 // Check that angles are within limits

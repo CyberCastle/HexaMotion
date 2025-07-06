@@ -226,7 +226,7 @@ double CartesianVelocityController::calculateAngularVelocityScale(double angular
 
     // Map angular velocity to speed scaling using the robot's maximum angular velocity as reference
     const Parameters &params = model_.getParams();
-    double max_angular_velocity_rads = math_utils::degreesToRadians(params.max_angular_velocity);
+    double max_angular_velocity_rads = params.max_angular_velocity; // Already in rad/s
 
     if (max_angular_velocity_rads < VELOCITY_THRESHOLD) {
         return SERVO_SPEED_DEFAULT; // Default scaling if max angular velocity not properly set

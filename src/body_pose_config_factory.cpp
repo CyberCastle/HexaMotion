@@ -66,12 +66,12 @@ CalculatedServoAngles calculateServoAnglesForHeight(double target_height_mm,
     CalculatedServoAngles best{0.0, 0.0, 0.0, false};
     double bestErr = std::numeric_limits<double>::infinity();
 
-    // Ranges based on servo limits
-    const double alphaMin = params.femur_angle_limits[0] * DEGREES_TO_RADIANS_FACTOR;
-    const double alphaMax = params.femur_angle_limits[1] * DEGREES_TO_RADIANS_FACTOR;
-    const double betaMin = params.tibia_angle_limits[0] * DEGREES_TO_RADIANS_FACTOR;
-    const double betaMax = params.tibia_angle_limits[1] * DEGREES_TO_RADIANS_FACTOR;
-    const double dBeta = 0.1 * DEGREES_TO_RADIANS_FACTOR;
+    // Ranges based on servo limits (already in degrees, convert to radians for calculations)
+    const double alphaMin = math_utils::degreesToRadians(params.femur_angle_limits[0]);
+    const double alphaMax = math_utils::degreesToRadians(params.femur_angle_limits[1]);
+    const double betaMin = math_utils::degreesToRadians(params.tibia_angle_limits[0]);
+    const double betaMax = math_utils::degreesToRadians(params.tibia_angle_limits[1]);
+    const double dBeta = math_utils::degreesToRadians(0.1);
 
     const double A = params.coxa_length;
     const double B = params.femur_length;
@@ -97,8 +97,8 @@ CalculatedServoAngles calculateServoAnglesForHeight(double target_height_mm,
             if (err >= bestErr)
                 continue;
 
-            double theta1 = (alpha - beta) * RADIANS_TO_DEGREES_FACTOR;
-            double theta2 = -beta * RADIANS_TO_DEGREES_FACTOR;
+            double theta1 = math_utils::radiansToDegrees(alpha - beta);
+            double theta2 = math_utils::radiansToDegrees(-beta);
 
             // Skip solutions that exceed servo limits
             if (theta1 < params.femur_angle_limits[0] ||

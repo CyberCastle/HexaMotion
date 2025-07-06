@@ -698,6 +698,13 @@ class RobotModel {
     // The first entry stores the fixed base transform for the leg
     double dh_transforms[NUM_LEGS][DOF_PER_LEG + 1][4];
 
+    // Internal joint limits in radians (converted from degrees in constructor)
+    double coxa_angle_limits_rad[2];
+    double femur_angle_limits_rad[2];
+    double tibia_angle_limits_rad[2];
+    double max_angular_velocity_rad;
+    double body_comp_max_tilt_rad;
+
     JointAngles solveIK(int leg, const Point3D &local_target, JointAngles current) const;
 };
 
