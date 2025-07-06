@@ -187,8 +187,7 @@ class LocomotionSystem {
     bool setGaitType(GaitType gait);
     /** Plan the next gait step from desired velocities. */
     bool planGaitSequence(double velocity_x, double velocity_y, double angular_velocity);
-    /** Update internal gait phase counters. */
-    void updateGaitPhase();
+
     /** Compute foot trajectory for a leg at given phase. */
     Point3D calculateFootTrajectory(int leg_index, double phase);
 

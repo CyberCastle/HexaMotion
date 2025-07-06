@@ -333,14 +333,6 @@ bool LocomotionSystem::planGaitSequence(double velocity_x, double velocity_y, do
     return success;
 }
 
-// Gait phase update
-void LocomotionSystem::updateGaitPhase() {
-    // Delegate to WalkController for gait phase management
-    if (walk_ctrl) {
-        walk_ctrl->updateGaitPhase(dt);
-    }
-}
-
 // Foot trajectory calculation
 Point3D LocomotionSystem::calculateFootTrajectory(int leg_index, double phase) {
     if (!walk_ctrl)
@@ -773,16 +765,12 @@ bool LocomotionSystem::update() {
         return true;
     }
 
-    // Actualizar la planificación de la marcha con el último comando de velocidad
-    planGaitSequence(commanded_linear_velocity_, 0.0, commanded_angular_velocity_);
-
-    // Actualizar el walk controller con el último comando de velocidad
+    // Update walk controller with the last commanded velocity
     if (walk_ctrl) {
-        walk_ctrl->updateWalk(Point3D(commanded_linear_velocity_, 0.0, 0.0), commanded_angular_velocity_);
+        walk_ctrl->updateWalk(Point3D(commanded_linear_velocity_, 0.0, 0.0),
+                              commanded_angular_velocity_);
     }
 
-    // Update gait phase (delegated to WalkController)
-    updateGaitPhase();
 
     // Delegate gait pattern updates to WalkController
     if (walk_ctrl) {
@@ -793,8 +781,9 @@ bool LocomotionSystem::update() {
             walk_ctrl->updateAdaptivePattern();
         }
 
-        // Update adaptive gait if conditions require it
-        if (walk_ctrl->shouldAdaptGaitPattern()) {
+        // Update adaptive gait offsets only when using the adaptive gait
+        if (walk_ctrl->getCurrentGait() == ADAPTIVE_GAIT &&
+            walk_ctrl->shouldAdaptGaitPattern()) {
             walk_ctrl->calculateAdaptivePhaseOffsets();
         }
 
