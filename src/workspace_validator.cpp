@@ -403,7 +403,31 @@ double WorkspaceValidator::getDistanceFromBase(int leg_index, const Point3D &tar
 
 Point3D WorkspaceValidator::constrainToGeometricWorkspace(int leg_index, const Point3D &target_position) const {
     if (leg_index < 0 || leg_index >= NUM_LEGS) {
-            return target_position;
+        return target_position;
+    }
+
+    const Parameters &params = model_.getParams();
+    Point3D leg_base = getLegBase(leg_index);
+
+    // Calculate max reach
+    double max_reach = params.coxa_length + params.femur_length + params.tibia_length;
+    max_reach *= config_.safety_margin_factor;
+
+    // Calculate distance from base
+    double distance = getDistanceFromBase(leg_index, target_position);
+
+    if (distance <= max_reach) {
+        return target_position; // Already within bounds
+    }
+
+    // Constrain to max reach
+    double scale = max_reach / distance;
+    Point3D constrained = target_position;
+    constrained.x = leg_base.x + (target_position.x - leg_base.x) * scale;
+    constrained.y = leg_base.y + (target_position.y - leg_base.y) * scale;
+    constrained.z = leg_base.z + (target_position.z - leg_base.z) * scale;
+
+    return constrained;
 }
 
 double WorkspaceValidator::calculateLimitProximity(int leg_index, const JointAngles &joint_angles) const {
@@ -447,28 +471,4 @@ double WorkspaceValidator::calculateLimitProximity(int leg_index, const JointAng
     min_limit_proximity = std::min(tibia_proximity, min_limit_proximity);
 
     return min_limit_proximity;
-}
-
-    const Parameters &params = model_.getParams();
-    Point3D leg_base = getLegBase(leg_index);
-
-    // Calculate max reach
-    double max_reach = params.coxa_length + params.femur_length + params.tibia_length;
-    max_reach *= config_.safety_margin_factor;
-
-    // Calculate distance from base
-    double distance = getDistanceFromBase(leg_index, target_position);
-
-    if (distance <= max_reach) {
-        return target_position; // Already within bounds
-    }
-
-    // Constrain to max reach
-    double scale = max_reach / distance;
-    Point3D constrained = target_position;
-    constrained.x = leg_base.x + (target_position.x - leg_base.x) * scale;
-    constrained.y = leg_base.y + (target_position.y - leg_base.y) * scale;
-    constrained.z = leg_base.z + (target_position.z - leg_base.z) * scale;
-
-    return constrained;
 }

@@ -219,6 +219,26 @@ class WorkspaceValidator {
      */
     double calculateLimitProximity(int leg_index, const JointAngles &joint_angles) const;
 
+    /**
+     * @brief Get base position for a specific leg (for testing)
+     */
+    Point3D getLegBase(int leg_index) const;
+
+    /**
+     * @brief Calculate distance from leg base to target (for testing)
+     */
+    double getDistanceFromBase(int leg_index, const Point3D &target) const;
+
+    /**
+     * @brief Check if position respects joint limits (requires IK) (for testing)
+     */
+    bool checkJointLimits(int leg_index, const Point3D &target) const;
+
+    /**
+     * @brief Constrain position to geometric workspace bounds only (for testing)
+     */
+    Point3D constrainToGeometricWorkspace(int leg_index, const Point3D &target) const;
+
     // ===== MIGRATED FROM LegCollisionAvoidance =====
 
     /**
@@ -298,25 +318,7 @@ class WorkspaceValidator {
      */
     Point3D legLocalToGlobal(int leg_index, const Point3D &local_pos) const;
 
-    /**
-     * @brief Get base position for a specific leg
-     */
-    Point3D getLegBase(int leg_index) const;
 
-    /**
-     * @brief Calculate distance from leg base to target
-     */
-    double getDistanceFromBase(int leg_index, const Point3D &target) const;
-
-    /**
-     * @brief Check if position respects joint limits (requires IK)
-     */
-    bool checkJointLimits(int leg_index, const Point3D &target) const;
-
-    /**
-     * @brief Constrain position to geometric workspace bounds only
-     */
-    Point3D constrainToGeometricWorkspace(int leg_index, const Point3D &target) const;
 
     /**
      * @brief Apply collision avoidance adjustment (internal implementation)
