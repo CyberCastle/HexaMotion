@@ -356,11 +356,11 @@ public:
      */
     bool isInDefaultStance(double tolerance = 5.0) const;
 
-    // ✅ NEW: Set desired tip position in global coordinates
+    // Set desired tip position in global coordinates
     void setDesiredTipPositionGlobal(const Point3D& desired_position);
     Point3D getDesiredTipPositionGlobal() const { return desired_tip_position_; }
 
-    // ✅ NEW: Apply inverse kinematics (OpenSHC architecture)
+    // Apply inverse kinematics (OpenSHC architecture)
     bool applyIK(const RobotModel& model);
 
 private:
@@ -390,7 +390,7 @@ private:
     JointAngles default_angles_;    ///< Default joint angles
     Point3D default_tip_position_;  ///< Default tip position
 
-    // ✅ NEW: Desired tip position
+    // Desired tip position
     Point3D desired_tip_position_;   ///< Desired tip position
 
 

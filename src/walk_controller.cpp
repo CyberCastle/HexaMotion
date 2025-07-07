@@ -32,10 +32,10 @@ WalkController::WalkController(RobotModel &m, Leg legs[NUM_LEGS])
         0.5f  // Leg 5 (Anterior Left) - Group B (odd)
     };
 
-    // ✅ NEW: Initialize gait configurations (OpenSHC-style)
+    // Initialize gait configurations (OpenSHC-style)
     initializeGaitConfigs();
 
-    // ✅ NEW: Set initial gait pattern (migrated from LocomotionSystem)
+    // Set initial gait pattern (migrated from LocomotionSystem)
     initGaitParameters(TRIPOD_GAIT);
 
     // Create LegStepper objects for each leg
@@ -112,7 +112,7 @@ Point3D WalkController::footTrajectory(int leg_index, double phase, double step_
                                        double stance_duration, double swing_duration, double robot_height,
                                        const double leg_phase_offsets[NUM_LEGS], LegState (&leg_states)[NUM_LEGS],
                                        IFSRInterface *fsr, IIMUInterface *imu) {
-    // ✅ UPDATED: Use internal step parameters instead of passed parameters
+    // Use internal step parameters instead of passed parameters
     // This maintains backward compatibility while using internal state
     double internal_step_height = step_height_;
     double internal_step_length = step_length_;
@@ -139,7 +139,7 @@ Point3D WalkController::footTrajectory(int leg_index, double phase, double step_
     int step_phase = (int)(leg_phase * step.period_);
     leg_stepper->setPhase(step_phase);
 
-    // ✅ CORRECTED: Update the leg stepper's trajectory with proper parameters
+    //Update the leg stepper's trajectory with proper parameters
     leg_stepper->updateTipPosition(internal_step_length, time_delta_, false, false);
 
     // Get the calculated trajectory from the leg stepper
@@ -364,7 +364,7 @@ StepCycle WalkController::generateStepCycle(bool set_step_cycle) {
         step_ = step;
         if (walk_state_ == WALK_MOVING) {
             for (auto &leg_stepper : leg_steppers_) {
-                // ✅ CORRECTED: Pass step parameter to updatePhase
+                //Pass step parameter to updatePhase
                 leg_stepper->updatePhase(step);
             }
         }
@@ -444,7 +444,7 @@ void WalkController::updateWalk(const Point3D &linear_velocity_input, double ang
     // State transition: STOPPED->STARTING
     if (walk_state_ == WALK_STOPPED && has_velocity_command) {
         walk_state_ = WALK_STARTING;
-        // ✅ CORRECTED: Initialize LegSteppers with proper StepCycle
+        //Initialize LegSteppers with proper StepCycle
         StepCycle step = generateStepCycle(true);
         for (auto &leg_stepper : leg_steppers_) {
             leg_stepper->setAtCorrectPhase(false);
@@ -471,16 +471,16 @@ void WalkController::updateWalk(const Point3D &linear_velocity_input, double ang
         walk_state_ = WALK_STOPPED;
     }
 
-    // ✅ CORRECTED: Update walk/step state and tip position along trajectory for each leg
+    //Update walk/step state and tip position along trajectory for each leg
     for (auto &leg_stepper : leg_steppers_) {
-        // ✅ CORRECTED: Set walk state in LegStepper
+        //Set walk state in LegStepper
         leg_stepper->setWalkState(walk_state_);
 
         // Calcular la fase local continua usando la fase global y el offset de la pierna
         double local_phase = std::fmod(gait_phase + leg_stepper->getPhaseOffset(), 1.0);
         if (local_phase < 0)
             local_phase += 1.0;
-        // ✅ CORRECTED: Pass time_delta parameter to updateWithPhase
+        //Pass time_delta parameter to updateWithPhase
         leg_stepper->updateWithPhase(local_phase, step_depth_, time_delta_);
     }
 
@@ -804,7 +804,7 @@ bool WalkController::isCurrentlyStable() const {
     return analysis_info.current_result.is_stable;
 }
 
-// ✅ NEW: Gait pattern management methods (migrated from LocomotionSystem)
+// Gait pattern management methods (migrated from LocomotionSystem)
 
 void WalkController::initializeGaitConfigs() {
     // Initialize gait configurations (OpenSHC-style)
@@ -893,7 +893,7 @@ void WalkController::initGaitParameters(GaitType gait) {
         applyGaitConfig(gait_configs_[TRIPOD_GAIT]);
     }
 
-    // ✅ NEW: Update step parameters based on gait type
+    // Update step parameters based on gait type
     updateStepParameters();
 
     // Generate new step cycle with updated parameters
@@ -1126,7 +1126,7 @@ Point3D WalkController::calculateDefaultStancePosition(int leg_index) {
     return Point3D(default_foot_x, default_foot_y, 0);
 }
 
-// ✅ NEW: Step parameter control methods (migrated from LocomotionSystem)
+// Step parameter control methods (migrated from LocomotionSystem)
 
 bool WalkController::setStepParameters(double height, double length) {
     if (height < 15.0f || height > 50.0f || length < 20.0f || length > 80.0f) {

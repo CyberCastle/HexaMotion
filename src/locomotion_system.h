@@ -340,7 +340,7 @@ class LocomotionSystem {
     /** Stop walking and return to standing pose. */
     bool stopWalking();
 
-    // ✅ NEW: Update model (OpenSHC architecture)
+    // Update model (OpenSHC architecture)
     void updateModel();
 
   private:

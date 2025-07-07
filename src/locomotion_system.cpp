@@ -284,21 +284,21 @@ bool LocomotionSystem::setGaitType(GaitType gait) {
 
 // Advanced gait methods
 void LocomotionSystem::updateMetachronalPattern() {
-    // ✅ UPDATED: Delegate to WalkController
+    // Delegate to WalkController
     if (walk_ctrl) {
         walk_ctrl->updateMetachronalPattern();
     }
 }
 
 void LocomotionSystem::updateAdaptivePattern() {
-    // ✅ UPDATED: Delegate to WalkController
+    // Delegate to WalkController
     if (walk_ctrl) {
         walk_ctrl->updateAdaptivePattern();
     }
 }
 
 bool LocomotionSystem::shouldAdaptGaitPattern() {
-    // ✅ UPDATED: Delegate to WalkController
+    // Delegate to WalkController
     if (walk_ctrl) {
         return walk_ctrl->shouldAdaptGaitPattern();
     }
@@ -306,7 +306,7 @@ bool LocomotionSystem::shouldAdaptGaitPattern() {
 }
 
 void LocomotionSystem::calculateAdaptivePhaseOffsets() {
-    // ✅ UPDATED: Delegate to WalkController
+    // Delegate to WalkController
     if (walk_ctrl) {
         walk_ctrl->calculateAdaptivePhaseOffsets();
     }
@@ -1330,7 +1330,7 @@ void LocomotionSystem::setAllLegPhaseOffsets(const double offsets[NUM_LEGS]) {
 }
 
 void LocomotionSystem::configureGaitPhaseOffsets(GaitType gait) {
-    // ✅ UPDATED: Delegate to WalkController
+    // Delegate to WalkController
     if (walk_ctrl) {
         walk_ctrl->configureGaitPhaseOffsets(gait);
     }
@@ -1448,7 +1448,7 @@ bool LocomotionSystem::stopWalking() {
     return true;
 }
 
-// ✅ NEW: Update model (OpenSHC architecture)
+// Update model (OpenSHC architecture)
 void LocomotionSystem::updateModel() {
     // Set desired tip poses from leg steppers y aplica IK para cada pierna
     for (int i = 0; i < NUM_LEGS; ++i) {

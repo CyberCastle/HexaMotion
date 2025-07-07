@@ -55,7 +55,7 @@ struct LegStepperExternalTarget {
  */
 class LegStepper {
 public:
-    // ✅ CORRECTED: Constructor without WalkController dependency
+    //Constructor without WalkController dependency
     LegStepper(int leg_index, const Point3D& identity_tip_pose, Leg& leg, RobotModel& robot_model);
 
     // Accessors
@@ -66,7 +66,7 @@ public:
     Point3D getDefaultTipPose() const { return default_tip_pose_; }
     Point3D getIdentityTipPose() const { return identity_tip_pose_; }
     Point3D getTargetTipPose() const { return target_tip_pose_; }
-    WalkState getWalkState() const { return current_walk_state_; }  // ✅ Internal state
+    WalkState getWalkState() const { return current_walk_state_; }  // Internal state
     Point3D getWalkPlane() const { return walk_plane_; }
     Point3D getWalkPlaneNormal() const { return walk_plane_normal_; }
     StepState getStepState() const { return step_state_; }
@@ -100,29 +100,29 @@ public:
     void setTouchdownDetection(bool detection) { touchdown_detection_ = detection; }
     void setExternalTarget(const LegStepperExternalTarget& target) { external_target_ = target; }
     void setExternalDefault(const LegStepperExternalTarget& default_pos) { external_default_ = default_pos; }
-    void setWalkState(WalkState state) { current_walk_state_ = state; }  // ✅ Set by WalkController
+    void setWalkState(WalkState state) { current_walk_state_ = state; }  // Set by WalkController
 
-    // ✅ CORRECTED: Core functionality without WalkController dependency
-    void updatePhase(const StepCycle& step);  // ✅ StepCycle passed as parameter
-    void iteratePhase(const StepCycle& step);  // ✅ StepCycle passed as parameter
-    void updateStepState(const StepCycle& step);  // ✅ StepCycle passed as parameter
+    //Core functionality without WalkController dependency
+    void updatePhase(const StepCycle& step);  // StepCycle passed as parameter
+    void iteratePhase(const StepCycle& step);  // StepCycle passed as parameter
+    void updateStepState(const StepCycle& step);  // StepCycle passed as parameter
     void updateStride(double step_length);
     Point3D calculateStanceSpanChange();
     void updateDefaultTipPosition();
-    void updateTipPosition(double step_length, double time_delta, bool rough_terrain_mode, bool force_normal_touchdown);  // ✅ Parameters passed
+    void updateTipPosition(double step_length, double time_delta, bool rough_terrain_mode, bool force_normal_touchdown);  // Parameters passed
     void generatePrimarySwingControlNodes();
     void generateSecondarySwingControlNodes(bool ground_contact);
     void generateStanceControlNodes(double stride_scaler);
     void forceNormalTouchdown();
 
-    // ✅ CORRECTED: OpenSHC-like API without WalkController dependency
+    //OpenSHC-like API without WalkController dependency
     void updateWithPhase(double local_phase, double step_length, double time_delta);
 
 private:
     // ❌ REMOVED: WalkController* walker_;  // No more dependency on WalkController
     int leg_index_;
     Leg& leg_;
-    RobotModel& robot_model_;  // ✅ Store robot model for kinematics
+    RobotModel& robot_model_;  // Store robot model for kinematics
     Point3D identity_tip_pose_;
     Point3D default_tip_pose_;
     Point3D origin_tip_pose_;
@@ -147,7 +147,7 @@ private:
     double swing_progress_;
     double step_progress_;
     StepState step_state_;
-    WalkState current_walk_state_;  // ✅ Internal walk state
+    WalkState current_walk_state_;  // Internal walk state
 
     // Timing
     double swing_delta_t_;

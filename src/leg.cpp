@@ -205,12 +205,12 @@ bool Leg::isInDefaultStance(double tolerance) const {
     return math_utils::distance(tip_position_, default_tip_position_) <= tolerance;
 }
 
-// ✅ NEW: Set desired tip position (OpenSHC architecture)
+// Set desired tip position (OpenSHC architecture)
 void Leg::setDesiredTipPositionGlobal(const Point3D &desired_position) {
     desired_tip_position_ = desired_position;
 }
 
-// ✅ NEW: Apply inverse kinematics (OpenSHC architecture)
+// Apply inverse kinematics (OpenSHC architecture)
 bool Leg::applyIK(const RobotModel &model) {
     // Calculate IK from desired tip pose to get new joint angles
     JointAngles new_angles = model.inverseKinematicsGlobalCoordinates(leg_id_, desired_tip_position_);

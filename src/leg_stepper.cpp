@@ -3,7 +3,7 @@
 #include <algorithm>
 #include <cmath>
 
-// ✅ CORRECTED: Constructor without WalkController dependency
+//Constructor without WalkController dependency
 LegStepper::LegStepper(int leg_index, const Point3D& identity_tip_pose, Leg& leg, RobotModel& robot_model)
             : leg_index_(leg_index), leg_(leg), robot_model_(robot_model), identity_tip_pose_(identity_tip_pose),
           default_tip_pose_(identity_tip_pose), origin_tip_pose_(identity_tip_pose), target_tip_pose_(identity_tip_pose),
@@ -151,7 +151,7 @@ void LegStepper::generatePrimarySwingControlNodes() {
     bool positive_y_axis = (identity_tip_pose_.y > 0.0);
     mid_tip_position.y += positive_y_axis ? mid_lateral_shift : -mid_lateral_shift;
 
-    // ✅ CORRECTED: Avoid division by zero and use reasonable defaults
+    //Avoid division by zero and use reasonable defaults
     Point3D stance_node_separation;
     if (swing_delta_t_ > 1e-6) {  // Check for very small values
         stance_node_separation = swing_origin_tip_velocity_ * (1.0 / swing_delta_t_) * 0.25;
@@ -170,7 +170,7 @@ void LegStepper::generatePrimarySwingControlNodes() {
 }
 
 void LegStepper::generateSecondarySwingControlNodes(bool ground_contact) {
-    // ✅ CORRECTED: Avoid division by zero and use reasonable defaults
+    //Avoid division by zero and use reasonable defaults
     Point3D final_tip_velocity;
     Point3D stance_node_separation;
 
@@ -213,7 +213,7 @@ void LegStepper::generateStanceControlNodes(double stride_scaler) {
 }
 
 void LegStepper::forceNormalTouchdown() {
-    // ✅ CORRECTED: Avoid division by zero and use reasonable defaults
+    //Avoid division by zero and use reasonable defaults
     Point3D final_tip_velocity;
     Point3D stance_node_separation;
 
