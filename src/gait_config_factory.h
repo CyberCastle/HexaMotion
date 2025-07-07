@@ -24,15 +24,4 @@ GaitConfiguration createMetachronalGaitConfig(const Parameters& params);
 // Gait selection configuration
 GaitSelectionConfig createGaitSelectionConfig();
 
-// Convenience getter functions
-GaitConfiguration getDefaultGaitConfig();
-GaitConfiguration getConservativeGaitConfig();
-GaitConfiguration getHighSpeedGaitConfig();
-GaitConfiguration getAdaptiveGaitConfig();
-GaitConfiguration getGaitConfigByName(const std::string& gait_name);
-
-// Utility functions
-StepCycle calculateStepCycleFromGait(const GaitConfiguration& gait_config, double time_delta = 0.01);
-std::vector<std::string> getAvailableGaitNames();
-
 #endif // GAIT_CONFIG_FACTORY_H
