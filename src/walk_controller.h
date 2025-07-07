@@ -9,6 +9,8 @@
 #include "walkspace_analyzer.h"
 #include "math_utils.h"
 #include "leg_stepper.h"
+#include "gait_config.h"
+#include "gait_config_factory.h"
 #include <memory>
 #include <map>
 
@@ -114,14 +116,7 @@ public:
     void setAngularAccelerationLimitMap(const std::map<int, double>& limit_map) { max_angular_acceleration_ = limit_map; }
     void setRegenerateWalkspace() { regenerate_walkspace_ = true; }
 
-    // Legacy interface compatibility
-    bool planGaitSequence(double vx, double vy, double omega);
-    void updateGaitPhase(double dt);
-    double getGaitPhase() const { return gait_phase; }
-    Point3D footTrajectory(int leg, double phase, double step_height, double step_length,
-                           double stance_duration, double swing_duration, double robot_height,
-                           const double leg_phase_offsets[NUM_LEGS], LegState (&leg_states)[NUM_LEGS],
-                           IFSRInterface *fsr, IIMUInterface *imu);
+
 
     // Velocity limiting methods
     VelocityLimits::LimitValues getVelocityLimits(double bearing_degrees = 0.0f) const;
@@ -166,100 +161,83 @@ public:
     std::map<int, double> getLegReachabilityScores() const;
     bool isCurrentlyStable() const;
 
-    // Gait pattern management methods (migrated from LocomotionSystem)
+    // Gait configuration management methods (OpenSHC equivalent)
     /**
-     * @brief Initialize gait parameters for a specific gait type
-     * @param gait The gait type to initialize
-     */
-    void initGaitParameters(GaitType gait);
-
-    /**
-     * @brief Set gait type and configure all related parameters
-     * @param gait The gait type to set
+     * @brief Set gait configuration and apply to all leg steppers
+     * @param gait_config The gait configuration to apply
      * @return true if successful, false otherwise
      */
-    bool setGaitType(GaitType gait);
+    bool setGaitConfiguration(const GaitConfiguration& gait_config);
 
     /**
-     * @brief Get current gait type
-     * @return Current gait type
+     * @brief Get current gait configuration
+     * @return Current gait configuration
      */
-    GaitType getCurrentGait() const { return current_gait; }
+    const GaitConfiguration& getCurrentGaitConfig() const { return current_gait_config_; }
 
     /**
-     * @brief Configure phase offsets for a specific gait type
-     * @param gait The gait type to configure
+     * @brief Set gait by name using gait factory
+     * @param gait_name Name of the gait to set
+     * @return true if successful, false otherwise
      */
-    void configureGaitPhaseOffsets(GaitType gait);
+    bool setGaitByName(const std::string& gait_name);
 
     /**
-     * @brief Update metachronal gait pattern based on movement direction
+     * @brief Get current gait name
+     * @return Current gait name
      */
-    void updateMetachronalPattern();
+    std::string getCurrentGaitName() const { return current_gait_config_.gait_name; }
 
     /**
-     * @brief Update adaptive gait pattern based on terrain and stability
+     * @brief Get all available gait names
+     * @return Vector of available gait names
      */
-    void updateAdaptivePattern();
+    std::vector<std::string> getAvailableGaitNames() const;
 
     /**
-     * @brief Check if gait pattern should be adapted
-     * @return true if adaptation is needed, false otherwise
+     * @brief Apply gait configuration to leg steppers
+     * @param gait_config The gait configuration to apply
      */
-    bool shouldAdaptGaitPattern();
+    void applyGaitConfigToLegSteppers(const GaitConfiguration& gait_config);
 
-    /**
-     * @brief Calculate adaptive phase offsets based on current conditions
-     */
-    void calculateAdaptivePhaseOffsets();
 
-    /**
-     * @brief Get gait-specific timing parameters
-     * @param gait The gait type
-     * @param stance_duration Output stance duration (0-1)
-     * @param swing_duration Output swing duration (0-1)
-     * @param cycle_frequency Output cycle frequency (Hz)
-     */
-    void getGaitTimingParameters(GaitType gait, double& stance_duration, double& swing_duration, double& cycle_frequency) const;
 
-    // Step parameter control (migrated from LocomotionSystem)
+    // Step parameter control
     /**
-     * @brief Configure step height and length
-     * @param height Step height in mm
-     * @param length Step length in mm
-     * @return true if parameters are valid, false otherwise
-     */
-    bool setStepParameters(double height, double length);
-
-    /**
-     * @brief Get current step height
+     * @brief Get current step height from gait configuration
      * @return Step height in mm
      */
-    double getStepHeight() const;
+    double getStepHeight() const { return current_gait_config_.swing_height; }
 
     /**
-     * @brief Get current step length (with terrain and stability adjustments)
+     * @brief Get current step length from gait configuration
      * @return Step length in mm
      */
-    double getStepLength() const;
+    double getStepLength() const { return current_gait_config_.step_length; }
 
     /**
-     * @brief Get current stance duration
+     * @brief Get current stance duration from gait configuration
      * @return Stance duration (0-1)
      */
-    double getStanceDuration() const { return stance_duration_; }
+    double getStanceDuration() const {
+        return (double)current_gait_config_.phase_config.stance_phase /
+               (current_gait_config_.phase_config.stance_phase + current_gait_config_.phase_config.swing_phase);
+    }
 
     /**
-     * @brief Get current swing duration
+     * @brief Get current swing duration from gait configuration
      * @return Swing duration (0-1)
      */
-    double getSwingDuration() const { return swing_duration_; }
+    double getSwingDuration() const {
+        return (double)current_gait_config_.phase_config.swing_phase /
+               (current_gait_config_.phase_config.stance_phase + current_gait_config_.phase_config.swing_phase);
+    }
 
     /**
-     * @brief Get current cycle frequency
+     * @brief Get current cycle frequency from gait configuration
      * @return Cycle frequency in Hz
      */
-    double getCycleFrequency() const { return cycle_frequency_; }
+    double getCycleFrequency() const { return current_gait_config_.step_frequency; }
 
 private:
     RobotModel &model;
@@ -294,30 +272,11 @@ private:
     // Leg steppers
     std::vector<std::shared_ptr<LegStepper>> leg_steppers_;
 
-    // Gait pattern management (migrated from LocomotionSystem)
-    GaitType current_gait;
-    double gait_phase;
+    // Gait configuration system (OpenSHC equivalent)
+    GaitConfiguration current_gait_config_;
+    GaitSelectionConfig gait_selection_config_;
 
-    // Gait-specific parameters (migrated from LocomotionSystem)
-    double stance_duration_;             // Stance phase duration (0-1)
-    double swing_duration_;              // Swing phase duration (0-1)
-    double cycle_frequency_;             // Gait cycle frequency (Hz)
 
-    // Step parameters (migrated from LocomotionSystem)
-    double step_height_;                 // Step height in mm
-    double step_length_;                 // Step length in mm
-
-    // Gait pattern configuration (OpenSHC-style)
-    struct GaitConfig {
-        double phase_offsets[NUM_LEGS];  // Phase offsets for each leg
-        double stance_duration;          // Stance duration (0-1)
-        double swing_duration;           // Swing duration (0-1)
-        double cycle_frequency;          // Cycle frequency (Hz)
-        std::string description;         // Gait description
-    };
-
-    // Gait configurations (OpenSHC-style)
-    std::map<GaitType, GaitConfig> gait_configs_;
 
     // Terrain adaptation system
     TerrainAdaptation terrain_adaptation_;
@@ -336,15 +295,9 @@ private:
     // Collision avoidance: track current leg positions
     Point3D current_leg_positions_[NUM_LEGS];
 
-    // Helper methods for gait pattern management
-    void initializeGaitConfigs();
-    void applyGaitConfig(const GaitConfig& config);
+    // Helper methods
     double calculateStabilityIndex() const;
     bool checkTerrainConditions() const;
-
-    // Helper methods for step parameter management (migrated from LocomotionSystem)
-    void updateStepParameters();
-    void adjustStepParameters();
     double calculateLegReach() const;
 
     // Declaración del método auxiliar para la posición de apoyo por defecto
