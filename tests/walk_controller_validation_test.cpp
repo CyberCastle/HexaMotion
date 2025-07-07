@@ -72,7 +72,6 @@ int main() {
     for (int i = 0; i < 10; ++i) {
         wc.updateWalk(Point3D(-20.0, 0.0, 0.0), 0.0);
     }
-    wc.updateMetachronalPattern();
     auto stepper = wc.getLegStepper(0);
     assert(stepper);
     std::cout << "Phase offset L0: " << stepper->getPhaseOffset() << std::endl;

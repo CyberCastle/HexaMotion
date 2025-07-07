@@ -18,7 +18,6 @@
 GaitConfiguration createWaveGaitConfig(const Parameters& params);
 GaitConfiguration createTripodGaitConfig(const Parameters& params);
 GaitConfiguration createRippleGaitConfig(const Parameters& params);
-GaitConfiguration createAmbleGaitConfig(const Parameters& params);
 GaitConfiguration createMetachronalGaitConfig(const Parameters& params);
 
 // Gait selection configuration

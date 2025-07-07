@@ -203,16 +203,6 @@ class LocomotionSystem {
     /** Get current system state */
     SystemState getSystemState() const { return system_state; }
 
-    // Phase offset management
-    /** Set phase offset for a specific leg. */
-    void setLegPhaseOffset(int leg_index, double offset);
-    /** Get phase offset for a specific leg. */
-    double getLegPhaseOffset(int leg_index) const;
-    /** Set phase offsets for all legs at once. */
-    void setAllLegPhaseOffsets(const double offsets[NUM_LEGS]);
-    /** Configure phase offsets for a specific gait type. */
-    void configureGaitPhaseOffsets(GaitType gait);
-
     // Locomotion control
     /** Start walking forward indefinitely. */
     bool walkForward(double velocity);
@@ -353,12 +343,6 @@ class LocomotionSystem {
     // Adaptive control
     void adaptGaitToTerrain();
     void compensateForSlope();
-
-    // Advanced gait methods
-    void updateMetachronalPattern();
-    void updateAdaptivePattern();
-    bool shouldAdaptGaitPattern();
-    void calculateAdaptivePhaseOffsets();
 };
 
 #include "math_utils.h"

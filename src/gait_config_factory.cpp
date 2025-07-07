@@ -134,44 +134,6 @@ GaitConfiguration createRippleGaitConfig(const Parameters& params) {
 }
 
 /**
- * @brief Create amble gait configuration (OpenSHC equivalent)
- * Step order: AR/CL,BR/BL,AL/CR
- * Fastest gait with minimal stability
- */
-GaitConfiguration createAmbleGaitConfig(const Parameters& params) {
-    GaitConfiguration config;
-    config.gait_name = "amble_gait";
-
-    // OpenSHC gait.yaml parameters
-    config.phase_config.stance_phase = 2;
-    config.phase_config.swing_phase = 1;
-    config.phase_config.phase_offset = 1;
-
-    // OpenSHC offset_multiplier mapping
-    config.offsets.multipliers = {
-        {"AR", 1}, {"BR", 2}, {"CR", 0},
-        {"CL", 1}, {"BL", 2}, {"AL", 0}
-    };
-
-    // Calculated parameters
-    double leg_reach = params.coxa_length + params.femur_length + params.tibia_length;
-    config.step_length = leg_reach * params.gait_factors.amble_length_factor;
-    config.swing_height = params.robot_height * params.gait_factors.amble_height_factor;
-    config.body_clearance = params.robot_height;
-    int total_phase = config.phase_config.stance_phase + config.phase_config.swing_phase;
-    config.step_frequency = 1.0 / (total_phase * 0.01); // Assuming 10ms iterations
-    config.max_velocity = 200.0; // Maximum speed
-    config.stability_factor = 0.40; // Lower stability
-    config.supports_rough_terrain = false; // Not suitable for rough terrain
-
-    // Description
-    config.description = "Amble gait: Fastest gait with minimal stability requirements";
-    config.step_order = {"AR/CL", "BR/BL", "AL/CR"};
-
-    return config;
-}
-
-/**
  * @brief Create metachronal gait configuration (HexaMotion specific)
  * Step order: AR,CL,BL,AL,CR,BR with adaptive timing
  * Adaptive gait that adjusts to terrain conditions
@@ -216,12 +178,18 @@ GaitConfiguration createMetachronalGaitConfig(const Parameters& params) {
 GaitSelectionConfig createGaitSelectionConfig() {
     GaitSelectionConfig config;
 
+    // Create default parameters for gait configuration
+    Parameters default_params;
+    default_params.coxa_length = 50.0;
+    default_params.femur_length = 101.0;
+    default_params.tibia_length = 208.0;
+    default_params.robot_height = 150.0;
+
     // Add all available gaits
-    config.available_gaits["wave_gait"] = createWaveGaitConfig();
-    config.available_gaits["tripod_gait"] = createTripodGaitConfig();
-    config.available_gaits["ripple_gait"] = createRippleGaitConfig();
-    config.available_gaits["amble_gait"] = createAmbleGaitConfig();
-    config.available_gaits["metachronal_gait"] = createMetachronalGaitConfig();
+    config.available_gaits["wave_gait"] = createWaveGaitConfig(default_params);
+    config.available_gaits["tripod_gait"] = createTripodGaitConfig(default_params);
+    config.available_gaits["ripple_gait"] = createRippleGaitConfig(default_params);
+    config.available_gaits["metachronal_gait"] = createMetachronalGaitConfig(default_params);
 
     // Default configuration
     config.default_gait = "tripod_gait";

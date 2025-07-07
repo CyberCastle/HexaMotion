@@ -104,6 +104,7 @@ struct Parameters {
         double ripple_length_factor = 0.30f;      // 30% for balance
         double metachronal_length_factor = 0.28f; // 28% for smooth motion
         double adaptive_length_factor = 0.30f;    // 30% base for adaptation
+        double amble_length_factor = 0.40f;       // 40% for maximum speed
 
         // Step height as percentage of robot height
         double tripod_height_factor = 0.30f;      // 30% for obstacle clearance
@@ -111,6 +112,7 @@ struct Parameters {
         double ripple_height_factor = 0.25f;      // 25% for balance
         double metachronal_height_factor = 0.25f; // 25% for smooth motion
         double adaptive_height_factor = 0.25f;    // 25% base for adaptation
+        double amble_height_factor = 0.35f;       // 35% for maximum clearance
 
         // Safety limits as percentage of leg reach/height
         double min_length_factor = 0.12f; // 12% minimum step length

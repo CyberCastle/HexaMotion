@@ -6,15 +6,6 @@
 #include <iostream>
 #include <vector>
 
-void printGaitOffsets(const std::string &gait_name, const double offsets[NUM_LEGS]) {
-    std::cout << "\n"
-              << gait_name << " Gait Phase Offsets:" << std::endl;
-    for (int i = 0; i < NUM_LEGS; ++i) {
-        std::cout << "  Leg " << i << ": " << std::fixed << std::setprecision(3)
-                  << offsets[i] << std::endl;
-    }
-}
-
 bool validateTripodGait(LocomotionSystem &sys) {
     std::cout << "\n=== VALIDATING TRIPOD GAIT ===" << std::endl;
 

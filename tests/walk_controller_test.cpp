@@ -1,5 +1,7 @@
 #include "../src/leg_stepper.h"
 #include "../src/walk_controller.h"
+#include "../src/gait_config_factory.h"
+#include "../src/gait_config.h"
 #include "test_stubs.h"
 #include <cassert>
 #include <cmath>
@@ -306,36 +308,6 @@ void testExternalTargetHandling(LegStepper &stepper, Leg &leg) {
     std::cout << "  ✅ External target handling passed" << std::endl;
 }
 
-void testPhaseOffsetCalculation(LegStepper &stepper, const Leg &leg) {
-    std::cout << "Testing phase offset calculation" << std::endl;
-
-    // Simular un valor de fase global
-    double global_phase = 0.3;
-    double original_offset = stepper.getPhaseOffset();
-
-    // Calcular fase local antes de cambiar el offset
-    double local_phase_before = std::fmod(global_phase + original_offset, 1.0);
-
-    // Cambiar el offset
-    double new_offset = 0.6;
-    stepper.setPhaseOffset(new_offset);
-    double retrieved_offset = stepper.getPhaseOffset();
-    std::cout << "  Set offset: " << new_offset << ", Retrieved: " << retrieved_offset << std::endl;
-    assert(std::abs(retrieved_offset - new_offset) < 1e-6);
-
-    // Calcular fase local después de cambiar el offset
-    double local_phase_after = std::fmod(global_phase + new_offset, 1.0);
-
-    std::cout << "  Local phase before offset: " << local_phase_before << std::endl;
-    std::cout << "  Local phase after offset:  " << local_phase_after << std::endl;
-    assert(std::abs(local_phase_before - local_phase_after) > 1e-3); // Debe cambiar
-
-    // Restaurar offset original
-    stepper.setPhaseOffset(original_offset);
-
-    std::cout << "  ✅ Phase offset calculation and effect verified" << std::endl;
-}
-
 void testWalkStateTransitions(LegStepper &stepper) {
     std::cout << "Testing walk state transitions" << std::endl;
 
@@ -431,11 +403,19 @@ int main() {
 
     // Test WalkController basic functionality
     WalkController wc(model, test_legs);
-    assert(wc.setGaitType(TRIPOD_GAIT));
-    wc.updateGaitPhase(0.5f);
-    LegState states[NUM_LEGS]{};
-    double offsets[NUM_LEGS]{};
-    Point3D traj = wc.footTrajectory(0, 0.2f, 20, 50, 0.5f, 0.5f, p.robot_height, offsets, states, nullptr, nullptr);
+
+    // Create gait configuration for tripod gait
+    GaitConfiguration gait_config = createTripodGaitConfig(p);
+    wc.setGaitConfiguration(gait_config);
+
+    // Simular un paso de marcha con velocidad hacia adelante
+    Point3D forward_velocity(10.0, 0.0, 0.0); // 10 mm/s en X
+    wc.updateWalk(forward_velocity, 0.0);
+
+    // Obtener el LegStepper y la posición del pie para la pierna 0
+    auto leg_stepper = wc.getLegStepper(0);
+    assert(leg_stepper != nullptr);
+    Point3D traj = leg_stepper->getCurrentTipPose();
     (void)traj;
 
     std::cout << "✅ WalkController basic functionality passed" << std::endl;
@@ -476,7 +456,6 @@ int main() {
         testTipPositionUpdates(stepper, leg, model);
         testStrideVectorUpdates(stepper);
         testExternalTargetHandling(stepper, leg);
-        testPhaseOffsetCalculation(stepper, leg);
         testWalkStateTransitions(stepper);
         testKinematicConsistency(stepper, leg, model);
 

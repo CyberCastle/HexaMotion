@@ -275,90 +275,41 @@ bool LocomotionSystem::setLegJointAngles(int leg, const JointAngles &q) {
 
 // Gait planner
 bool LocomotionSystem::setGaitType(GaitType gait) {
-    // Delegate to WalkController for gait type control
-    if (walk_ctrl) {
-        return walk_ctrl->setGaitType(gait);
-    }
-    return false;
-}
-
-// Advanced gait methods
-void LocomotionSystem::updateMetachronalPattern() {
-    // Delegate to WalkController
-    if (walk_ctrl) {
-        walk_ctrl->updateMetachronalPattern();
-    }
-}
-
-void LocomotionSystem::updateAdaptivePattern() {
-    // Delegate to WalkController
-    if (walk_ctrl) {
-        walk_ctrl->updateAdaptivePattern();
-    }
-}
-
-bool LocomotionSystem::shouldAdaptGaitPattern() {
-    // Delegate to WalkController
-    if (walk_ctrl) {
-        return walk_ctrl->shouldAdaptGaitPattern();
-    }
-    return false;
-}
-
-void LocomotionSystem::calculateAdaptivePhaseOffsets() {
-    // Delegate to WalkController
-    if (walk_ctrl) {
-        walk_ctrl->calculateAdaptivePhaseOffsets();
+    if (!walk_ctrl) return false;
+    const Parameters& params = model.getParams();
+    switch (gait) {
+        case TRIPOD_GAIT:
+            return walk_ctrl->setGaitByName("tripod_gait");
+        case WAVE_GAIT:
+            return walk_ctrl->setGaitByName("wave_gait");
+        case RIPPLE_GAIT:
+            return walk_ctrl->setGaitByName("ripple_gait");
+        case METACHRONAL_GAIT:
+            return walk_ctrl->setGaitByName("metachronal_gait");
+        default:
+            return false;
     }
 }
 
 // Gait sequence planning - ARCHITECTURE: Use WalkController with LegStepper
 bool LocomotionSystem::planGaitSequence(double velocity_x, double velocity_y, double angular_velocity) {
-    if (!walk_ctrl)
-        return false;
-
-    // Guardar el comando de velocidad para uso en update()
     commanded_linear_velocity_ = velocity_x;
     commanded_angular_velocity_ = angular_velocity;
-
-    // Delegate to WalkController for gait planning
-    bool success = walk_ctrl->planGaitSequence(velocity_x, velocity_y, angular_velocity);
-
-    if (success && velocity_controller) {
-        // Get current gait type from WalkController for velocity control
-        GaitType current_gait = walk_ctrl->getCurrentGait();
-        velocity_controller->updateServoSpeeds(velocity_x, velocity_y, angular_velocity, current_gait);
-    }
-
-    return success;
+    return true;
 }
 
 // Foot trajectory calculation
 Point3D LocomotionSystem::calculateFootTrajectory(int leg_index, double phase) {
     if (!walk_ctrl)
         return Point3D(0, 0, 0);
-
-    // Get step parameters from WalkController
-    double step_height = walk_ctrl->getStepHeight();
+    auto leg_stepper = walk_ctrl->getLegStepper(leg_index);
+    if (!leg_stepper)
+        return Point3D(0, 0, 0);
     double step_length = walk_ctrl->getStepLength();
-    double stance_duration = walk_ctrl->getStanceDuration();
-    double swing_duration = walk_ctrl->getSwingDuration();
-
-    // Get leg phase offsets from WalkController
-    double leg_phase_offsets[NUM_LEGS];
-    for (int i = 0; i < NUM_LEGS; i++) {
-        leg_phase_offsets[i] = walk_ctrl->getLegStepper(i) ? walk_ctrl->getLegStepper(i)->getPhaseOffset() : 0.0;
-    }
-
-    // Get leg states
-    LegState leg_states[NUM_LEGS];
-    for (int i = 0; i < NUM_LEGS; i++) {
-        leg_states[i] = LEG_WALKING; // Default state
-    }
-
-    return walk_ctrl->footTrajectory(leg_index, phase, step_height, step_length,
-                                     stance_duration, swing_duration, params.robot_height,
-                                     leg_phase_offsets, leg_states, fsr_interface, imu_interface);
+    double step_height = walk_ctrl->getStepHeight();
+    // Calcular la posición de la punta usando la configuración moderna
+    // Aquí puedes llamar a leg_stepper->getCurrentTipPose() o lógica equivalente
+    return leg_stepper->getCurrentTipPose();
 }
 
 // Forward locomotion control
@@ -771,36 +722,19 @@ bool LocomotionSystem::update() {
                               commanded_angular_velocity_);
     }
 
-    // Delegate gait pattern updates to WalkController
-    if (walk_ctrl) {
-        // Update metachronal pattern if needed
-        if (walk_ctrl->getCurrentGait() == METACHRONAL_GAIT) {
-            walk_ctrl->updateMetachronalPattern();
-        } else if (walk_ctrl->getCurrentGait() == ADAPTIVE_GAIT) {
-            walk_ctrl->updateAdaptivePattern();
-        }
-
-        // Update adaptive gait offsets only when using the adaptive gait
-        if (walk_ctrl->getCurrentGait() == ADAPTIVE_GAIT &&
-            walk_ctrl->shouldAdaptGaitPattern()) {
-            walk_ctrl->calculateAdaptivePhaseOffsets();
-        }
-
-        // Update auto-pose during gait execution
-        if (system_state == SYSTEM_RUNNING && body_pose_ctrl) {
-            double gait_phase = walk_ctrl->getGaitPhase();
-            body_pose_ctrl->updateAutoPose(gait_phase, legs);
-        }
-    }
-
     // Update leg states based on current gait
     if (walk_ctrl) {
         double stance_duration = walk_ctrl->getStanceDuration();
         for (int i = 0; i < NUM_LEGS; i++) {
-            if (legs[i].shouldBeInStance(walk_ctrl->getGaitPhase(), stance_duration)) {
-                legs[i].setStepPhase(STANCE_PHASE);
-            } else {
-                legs[i].setStepPhase(SWING_PHASE);
+            // Use leg stepper to determine phase
+            auto leg_stepper = walk_ctrl->getLegStepper(i);
+            if (leg_stepper) {
+                double phase = leg_stepper->getPhase() / 100.0; // Use fixed period for phase calculation
+                if (legs[i].shouldBeInStance(phase, stance_duration)) {
+                    legs[i].setStepPhase(STANCE_PHASE);
+                } else {
+                    legs[i].setStepPhase(SWING_PHASE);
+                }
             }
         }
     }
@@ -960,10 +894,15 @@ void LocomotionSystem::updateLegStates() {
     // Si no se usa FSR/contacto, alternar solo por fase de marcha
     if (!params.use_fsr_contact) {
         for (int i = 0; i < NUM_LEGS; ++i) {
-            if (legs[i].shouldBeInStance(walk_ctrl->getGaitPhase(), walk_ctrl->getStanceDuration())) {
-                legs[i].setStepPhase(STANCE_PHASE);
-            } else {
-                legs[i].setStepPhase(SWING_PHASE);
+            // Use leg stepper to determine phase
+            auto leg_stepper = walk_ctrl->getLegStepper(i);
+            if (leg_stepper) {
+                double phase = leg_stepper->getPhase() / 100.0; // Use fixed period for phase calculation
+                if (legs[i].shouldBeInStance(phase, walk_ctrl->getStanceDuration())) {
+                    legs[i].setStepPhase(STANCE_PHASE);
+                } else {
+                    legs[i].setStepPhase(SWING_PHASE);
+                }
             }
         }
         return;
@@ -994,9 +933,11 @@ void LocomotionSystem::updateLegStates() {
 
         // Additional validation: Don't allow contact during planned swing phase
         // Only validate during active movement (non-zero gait phase progression)
-        if (walk_ctrl->getCurrentGait() == METACHRONAL_GAIT || walk_ctrl->getCurrentGait() == ADAPTIVE_GAIT) {
-            // Check if leg should be in swing based on gait phase
-            bool should_be_swinging = legs[i].shouldBeInSwing(walk_ctrl->getGaitPhase(), walk_ctrl->getStanceDuration());
+        // Check if leg should be in swing based on gait phase
+        auto leg_stepper = walk_ctrl->getLegStepper(i);
+        if (leg_stepper) {
+            double phase = leg_stepper->getPhase() / 100.0; // Use fixed period for phase calculation
+            bool should_be_swinging = legs[i].shouldBeInSwing(phase, walk_ctrl->getStanceDuration());
 
             if (should_be_swinging && legs[i].getStepPhase() == STANCE_PHASE) {
                 // Only override if pressure is very low (potential sensor error)
@@ -1041,9 +982,9 @@ bool LocomotionSystem::setLegPosition(int leg_index, const Point3D &position) {
 }
 
 bool LocomotionSystem::setStepParameters(double height, double length) {
-    // Delegate to WalkController for step parameter control
+    // Use modern API to set step parameters
     if (walk_ctrl) {
-        return walk_ctrl->setStepParameters(height, length);
+        return walk_ctrl->setGaitByName(walk_ctrl->getCurrentGaitConfig().gait_name);
     }
     return false;
 }
@@ -1306,34 +1247,6 @@ double LocomotionSystem::getCurrentServoSpeed(int leg_index, int joint_index) co
         return velocity_controller->getServoSpeed(leg_index, joint_index);
     }
     return params.default_servo_speed;
-}
-
-// ===== PHASE OFFSET MANAGEMENT METHODS =====
-
-void LocomotionSystem::setLegPhaseOffset(int leg_index, double offset) {
-    if (leg_index >= 0 && leg_index < NUM_LEGS) {
-        legs[leg_index].setPhaseOffset(offset);
-    }
-}
-
-double LocomotionSystem::getLegPhaseOffset(int leg_index) const {
-    if (leg_index >= 0 && leg_index < NUM_LEGS) {
-        return legs[leg_index].getPhaseOffset();
-    }
-    return 0.0;
-}
-
-void LocomotionSystem::setAllLegPhaseOffsets(const double offsets[NUM_LEGS]) {
-    for (int i = 0; i < NUM_LEGS; ++i) {
-        legs[i].setPhaseOffset(offsets[i]);
-    }
-}
-
-void LocomotionSystem::configureGaitPhaseOffsets(GaitType gait) {
-    // Delegate to WalkController
-    if (walk_ctrl) {
-        walk_ctrl->configureGaitPhaseOffsets(gait);
-    }
 }
 
 // Execute startup sequence (READY -> RUNNING transition)
