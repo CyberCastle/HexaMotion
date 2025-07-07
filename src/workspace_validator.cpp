@@ -403,8 +403,51 @@ double WorkspaceValidator::getDistanceFromBase(int leg_index, const Point3D &tar
 
 Point3D WorkspaceValidator::constrainToGeometricWorkspace(int leg_index, const Point3D &target_position) const {
     if (leg_index < 0 || leg_index >= NUM_LEGS) {
-        return target_position;
+            return target_position;
+}
+
+double WorkspaceValidator::calculateLimitProximity(int leg_index, const JointAngles &joint_angles) const {
+    if (leg_index < 0 || leg_index >= NUM_LEGS) {
+        return 1.0; // Safe default
     }
+
+    const Parameters &params = model_.getParams();
+
+    // Convert angle limits from degrees to radians
+    double coxa_min_rad = params.coxa_angle_limits[0] * M_PI / 180.0;
+    double coxa_max_rad = params.coxa_angle_limits[1] * M_PI / 180.0;
+    double femur_min_rad = params.femur_angle_limits[0] * M_PI / 180.0;
+    double femur_max_rad = params.femur_angle_limits[1] * M_PI / 180.0;
+    double tibia_min_rad = params.tibia_angle_limits[0] * M_PI / 180.0;
+    double tibia_max_rad = params.tibia_angle_limits[1] * M_PI / 180.0;
+
+    // Calculate limit proximity (OpenSHC-style)
+    // (1.0 = furthest possible from limit, 0.0 = equal to limit)
+    double min_limit_proximity = 1.0;
+
+    // Check coxa joint
+    double coxa_min_diff = abs(coxa_min_rad - joint_angles.coxa);
+    double coxa_max_diff = abs(coxa_max_rad - joint_angles.coxa);
+    double coxa_half_range = (coxa_max_rad - coxa_min_rad) / 2.0;
+    double coxa_proximity = coxa_half_range != 0 ? std::min(coxa_min_diff, coxa_max_diff) / coxa_half_range : 1.0;
+    min_limit_proximity = std::min(coxa_proximity, min_limit_proximity);
+
+    // Check femur joint
+    double femur_min_diff = abs(femur_min_rad - joint_angles.femur);
+    double femur_max_diff = abs(femur_max_rad - joint_angles.femur);
+    double femur_half_range = (femur_max_rad - femur_min_rad) / 2.0;
+    double femur_proximity = femur_half_range != 0 ? std::min(femur_min_diff, femur_max_diff) / femur_half_range : 1.0;
+    min_limit_proximity = std::min(femur_proximity, min_limit_proximity);
+
+    // Check tibia joint
+    double tibia_min_diff = abs(tibia_min_rad - joint_angles.tibia);
+    double tibia_max_diff = abs(tibia_max_rad - joint_angles.tibia);
+    double tibia_half_range = (tibia_max_rad - tibia_min_rad) / 2.0;
+    double tibia_proximity = tibia_half_range != 0 ? std::min(tibia_min_diff, tibia_max_diff) / tibia_half_range : 1.0;
+    min_limit_proximity = std::min(tibia_proximity, min_limit_proximity);
+
+    return min_limit_proximity;
+}
 
     const Parameters &params = model_.getParams();
     Point3D leg_base = getLegBase(leg_index);

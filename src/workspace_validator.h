@@ -211,6 +211,14 @@ class WorkspaceValidator {
      */
     const ValidationConfig &getConfig() const { return config_; }
 
+    /**
+     * @brief Calculate limit proximity for joint angles (OpenSHC-style)
+     * @param leg_index Index of the leg
+     * @param joint_angles Current joint angles
+     * @return Limit proximity (1.0 = furthest from limit, 0.0 = at limit)
+     */
+    double calculateLimitProximity(int leg_index, const JointAngles &joint_angles) const;
+
     // ===== MIGRATED FROM LegCollisionAvoidance =====
 
     /**

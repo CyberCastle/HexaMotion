@@ -224,8 +224,8 @@ class ComprehensiveKinematicsValidator {
             }
 
             // Test tip pose transformations
-            Pose tip_pose = model.getTipPoseRobotFrame(leg, test_angles, Pose::Identity());
-            Pose tip_leg = model.getTipPoseLegFrame(leg, test_angles, Pose::Identity());
+                    Pose tip_pose = model.getPoseRobotFrame(leg, test_angles, Pose::Identity());
+        Pose tip_leg = model.getPoseLegFrame(leg, test_angles, Pose::Identity());
 
             // Verify tip pose is consistent with FK
             Point3D fk_pos = model.forwardKinematicsGlobalCoordinates(leg, test_angles);
@@ -373,7 +373,7 @@ class ComprehensiveKinematicsValidator {
                 // Test different IK methods
                 JointAngles ik1 = model.inverseKinematicsGlobalCoordinates(leg, target);
                 JointAngles ik2 = model.inverseKinematicsCurrentGlobalCoordinates(leg, current_angles, target);
-                JointAngles ik3 = model.solveIKGlobalCoordinates(leg, target, current_angles);
+                JointAngles ik3 = model.inverseKinematicsCurrentGlobalCoordinates(leg, current_angles, target);
                 JointAngles ik4 = model.solveIKLocalCoordinates(leg, target, current_angles);
 
                 // Verify all methods produce similar results

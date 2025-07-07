@@ -117,19 +117,11 @@
 // INVERSE KINEMATICS CONSTANTS
 // ========================================================================
 
-// DLS (Damped Least Squares) IK parameters
+// DLS (Damped Least Squares) IK parameters (OpenSHC-style)
 #define IK_DLS_COEFFICIENT 0.02f       // Damping factor for numerical stability in DLS method
 #define IK_TOLERANCE 1.0f              // Position tolerance for IK convergence (1mm)
 #define IK_DEFAULT_MAX_ITERATIONS 30   // Default maximum iterations for IK solver
-#define IK_HIGH_DAMPING 0.1f           // High damping factor for singular configurations
-#define IK_STAGNATION_THRESHOLD 0.001f // Threshold for detecting stagnation in IK iteration
-#define IK_STAGNATION_COUNT_MAX 5      // Maximum stagnation count before trying next start
-#define IK_SINGULAR_THRESHOLD 1e-6f    // Determinant threshold for detecting singular configurations
-
-// IK workspace safety margins
-#define IK_MIN_REACH_MARGIN 0.9f    // Safety margin for minimum reach (90% of theoretical)
-#define IK_MAX_REACH_MARGIN 1.02f   // Safety margin for maximum reach (102% of theoretical)
-#define IK_STEP_SIZE_REDUCTION 0.5f // Step size reduction factor for singular configurations
+#define IK_MAX_ANGLE_STEP 5.0f         // Maximum angle change per IK iteration (degrees)
 
 // Workspace analysis parameters
 #define WORKSPACE_RESOLUTION 10 // Discretization resolution for workspace analysis

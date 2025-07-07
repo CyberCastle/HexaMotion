@@ -471,11 +471,11 @@ class RobotModel {
     /** Homogeneous transform for a full leg chain. */
     Eigen::Matrix4d legTransform(int leg, const JointAngles &q) const;
     /** Verify if joint angles are within defined limits. */
-    bool checkJointLimits(int leg, const JointAngles &q) const;
+    inline bool checkJointLimits(int leg, const JointAngles &q) const;
     /** Clamp angle within limits. */
-    double constrainAngle(double angle, double min_angle, double max_angle) const;
+    inline double constrainAngle(double angle, double min_angle, double max_angle) const;
     /** Normalize angle to [-pi, pi] radians. */
-    double normalizeAngle(double angle_rad) const;
+    inline double normalizeAngle(double angle_rad) const;
     /** Validate parameter consistency. */
     bool validate() const;
     /**
@@ -492,7 +492,7 @@ class RobotModel {
      * @param leg_frame_pose Pose relative to leg frame (default: identity)
      * @return Pose transformed to robot frame
      */
-    Pose getPoseRobotFrame(int leg_index, const JointAngles &joint_angles, const Pose &leg_frame_pose = Pose::Identity()) const;
+    inline Pose getPoseRobotFrame(int leg_index, const JointAngles &joint_angles, const Pose &leg_frame_pose = Pose::Identity()) const;
 
     /**
      * @brief Get pose in leg frame (equivalent to OpenSHC's getPoseJointFrame)
@@ -501,34 +501,18 @@ class RobotModel {
      * @param robot_frame_pose Pose relative to robot frame (default: identity)
      * @return Pose transformed to leg frame
      */
-    Pose getPoseLegFrame(int leg_index, const JointAngles &joint_angles, const Pose &robot_frame_pose = Pose::Identity()) const;
+    inline Pose getPoseLegFrame(int leg_index, const JointAngles &joint_angles, const Pose &robot_frame_pose = Pose::Identity()) const;
 
-    /**
-     * @brief Get tip pose in robot frame (equivalent to OpenSHC's tip getPoseRobotFrame)
-     * @param leg_index Index of the leg
-     * @param joint_angles Current joint angles
-     * @param tip_frame_pose Pose relative to tip frame (default: identity)
-     * @return Tip pose transformed to robot frame
-     */
-    Pose getTipPoseRobotFrame(int leg_index, const JointAngles &joint_angles, const Pose &tip_frame_pose = Pose::Identity()) const;
 
-    /**
-     * @brief Get tip pose in leg frame (equivalent to OpenSHC's tip getPoseTipFrame)
-     * @param leg_index Index of the leg
-     * @param joint_angles Current joint angles
-     * @param robot_frame_pose Pose relative to robot frame (default: identity)
-     * @return Tip pose transformed to leg frame
-     */
-    Pose getTipPoseLegFrame(int leg_index, const JointAngles &joint_angles, const Pose &robot_frame_pose = Pose::Identity()) const;
 
     /** Get the Analytic position of the leg base (without joint transformations) */
-    Point3D getAnalyticLegBasePosition(int leg_index) const;
+    inline Point3D getAnalyticLegBasePosition(int leg_index) const;
 
     /** Get the DH position of the leg base (without joint transformations) */
-    Point3D getDHLegBasePosition(int leg_index) const;
+    inline Point3D getDHLegBasePosition(int leg_index) const;
 
     /** Get the base angle offset for a specific leg in radians */
-    double getLegBaseAngleOffset(int leg_index) const;
+    inline double getLegBaseAngleOffset(int leg_index) const;
 
     /**
      * Calculate target position based on current position (OpenSHC-style)
@@ -594,7 +578,7 @@ class RobotModel {
      * @param stance_height Height of the stance in millimeters
      * @return Array of stance positions in local coordinates for each leg
      */
-    std::array<Point3D, NUM_LEGS> getSymmetricStancePositionsLocalCoordinates(double stance_radius, double stance_height) const;
+    inline std::array<Point3D, NUM_LEGS> getSymmetricStancePositionsLocalCoordinates(double stance_radius, double stance_height) const;
 
     /**
      * @brief Transform global position to local leg coordinates (OpenSHC-style)
@@ -606,7 +590,7 @@ class RobotModel {
      * @param current_angles Current joint angles for the transformation
      * @return Position in local leg coordinates
      */
-    Point3D transformGlobalToLocalCoordinates(int leg, const Point3D &global_position,
+    inline Point3D transformGlobalToLocalCoordinates(int leg, const Point3D &global_position,
                                               const JointAngles &current_angles) const;
 
     /**
@@ -619,7 +603,7 @@ class RobotModel {
      * @param current_angles Current joint angles for the transformation
      * @return Position in global robot coordinates
      */
-    Point3D transformLocalToGlobalCoordinates(int leg, const Point3D &local_position,
+    inline Point3D transformLocalToGlobalCoordinates(int leg, const Point3D &local_position,
                                               const JointAngles &current_angles) const;
 
     /**
@@ -645,35 +629,15 @@ class RobotModel {
      * @param current_angles Current joint angles for transformation
      * @return Position delta in local leg coordinates
      */
-    Point3D calculatePositionDeltaLocalCoordinates(int leg, const Point3D &global_desired_pose,
+    inline Point3D calculatePositionDeltaLocalCoordinates(int leg, const Point3D &global_desired_pose,
                                                    const Point3D &global_current_pose,
                                                    const JointAngles &current_angles) const;
 
     // ===== GLOBAL COORDINATE METHODS (Original HexaMotion approach) =====
 
-    /**
-     * @brief Apply inverse kinematics using global robot coordinates (Original HexaMotion approach)
-     * This method solves IK directly in global coordinates, which can introduce asymmetry
-     * due to different leg base offsets.
-     *
-     * @param leg Leg index (0-5)
-     * @param global_target Target position in global robot coordinates
-     * @param current_angles Current joint angles for initial guess
-     * @return Joint angles to reach the target position
-     */
-    JointAngles solveIKGlobalCoordinates(int leg, const Point3D &global_target,
-                                         const JointAngles &current_angles) const;
 
-    /**
-     * @brief Get symmetric stance positions in global robot coordinates (Original HexaMotion approach)
-     * This method returns stance positions in global coordinates, which can introduce asymmetry
-     * when transformed to local leg coordinates.
-     *
-     * @param stance_radius Radius of the stance circle in millimeters
-     * @param stance_height Height of the stance in millimeters
-     * @return Array of stance positions in global coordinates for each leg
-     */
-    std::array<Point3D, NUM_LEGS> getSymmetricStancePositionsGlobalCoordinates(double stance_radius, double stance_height) const;
+
+
 
   private:
     Parameters params;
@@ -689,6 +653,11 @@ class RobotModel {
     double body_comp_max_tilt_rad;
 
     JointAngles solveIK(int leg, const Point3D &local_target, JointAngles current) const;
+
+    // Helper methods to reduce code duplication
+    inline Point3D transformGlobalToLocalLegCoordinates(int leg, const Point3D &global_target) const;
+    inline void clampJointAngles(JointAngles &angles) const;
+    inline std::vector<Eigen::Matrix4d> buildDHTransforms(int leg, const JointAngles &q) const;
 };
 
 #endif // ROBOT_MODEL_H
