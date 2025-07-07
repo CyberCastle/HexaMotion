@@ -52,7 +52,7 @@ int main() {
                     // Transform back to local coordinates using zero pose as reference
                     Point3D local_pos = model.transformGlobalToLocalCoordinates(leg, global_pos, JointAngles(0, 0, 0));
                     // Check IK round-trip
-                    JointAngles ik_angles = model.inverseKinematics(leg, global_pos);
+                    JointAngles ik_angles = model.inverseKinematicsGlobalCoordinates(leg, global_pos);
                     Point3D fk_verify = model.forwardKinematics(leg, ik_angles);
                     double err = std::sqrt(std::pow(fk_verify.x - global_pos.x, 2) +
                                            std::pow(fk_verify.y - global_pos.y, 2) +

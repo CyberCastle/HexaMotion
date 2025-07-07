@@ -1,5 +1,5 @@
-#include "robot_model.h"
 #include "math_utils.h"
+#include "robot_model.h"
 #include <iostream>
 
 int main() {
@@ -34,7 +34,7 @@ int main() {
     std::cout << "Within joint limits: " << (within_limits ? "YES" : "NO") << std::endl;
 
     // Forward kinematics to get target
-    Point3D target = model.forwardKinematics(0, config);
+    Point3D target = model.forwardKinematicsGlobalCoordinates(0, config);
     std::cout << "Target position: (" << target.x << ", " << target.y << ", " << target.z << ")" << std::endl;
 
     // Check workspace bounds
@@ -60,31 +60,31 @@ int main() {
 
     // Try IK
     std::cout << "\n=== IK Analysis ===" << std::endl;
-    JointAngles ik_result = model.inverseKinematics(0, target);
+    JointAngles ik_result = model.inverseKinematicsGlobalCoordinates(0, target);
     std::cout << "IK result: (" << ik_result.coxa << "°, " << ik_result.femur << "°, " << ik_result.tibia << "°)" << std::endl;
 
     bool ik_within_limits = model.checkJointLimits(0, ik_result);
     std::cout << "IK result within limits: " << (ik_within_limits ? "YES" : "NO") << std::endl;
 
     // Verify with FK
-    Point3D fk_verify = model.forwardKinematics(0, ik_result);
+    Point3D fk_verify = model.forwardKinematicsGlobalCoordinates(0, ik_result);
     std::cout << "FK verify: (" << fk_verify.x << ", " << fk_verify.y << ", " << fk_verify.z << ")" << std::endl;
 
     double error = sqrt(pow(target.x - fk_verify.x, 2) +
-                       pow(target.y - fk_verify.y, 2) +
-                       pow(target.z - fk_verify.z, 2));
+                        pow(target.y - fk_verify.y, 2) +
+                        pow(target.z - fk_verify.z, 2));
     std::cout << "Error: " << error << "mm" << std::endl;
 
     // This configuration may have multiple solutions - let's see if the original is correct
     std::cout << "\n=== Solution Equivalence Check ===" << std::endl;
 
     // Check if the original and IK result reach the same position
-    Point3D original_fk = model.forwardKinematics(0, config);
-    Point3D ik_fk = model.forwardKinematics(0, ik_result);
+    Point3D original_fk = model.forwardKinematicsGlobalCoordinates(0, config);
+    Point3D ik_fk = model.forwardKinematicsGlobalCoordinates(0, ik_result);
 
     double position_diff = sqrt(pow(original_fk.x - ik_fk.x, 2) +
-                               pow(original_fk.y - ik_fk.y, 2) +
-                               pow(original_fk.z - ik_fk.z, 2));
+                                pow(original_fk.y - ik_fk.y, 2) +
+                                pow(original_fk.z - ik_fk.z, 2));
 
     std::cout << "Original FK: (" << original_fk.x << ", " << original_fk.y << ", " << original_fk.z << ")" << std::endl;
     std::cout << "IK FK: (" << ik_fk.x << ", " << ik_fk.y << ", " << ik_fk.z << ")" << std::endl;

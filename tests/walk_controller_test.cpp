@@ -1,12 +1,12 @@
-#include "../src/walk_controller.h"
 #include "../src/leg_stepper.h"
+#include "../src/walk_controller.h"
 #include "test_stubs.h"
 #include <cassert>
-#include <iostream>
 #include <cmath>
+#include <iostream>
 
 // Test helper functions
-bool isPointClose(const Point3D& p1, const Point3D& p2, double tolerance = 1.0) {
+bool isPointClose(const Point3D &p1, const Point3D &p2, double tolerance = 1.0) {
     return std::abs(p1.x - p2.x) < tolerance &&
            std::abs(p1.y - p2.y) < tolerance &&
            std::abs(p1.z - p2.z) < tolerance;
@@ -17,7 +17,7 @@ bool isAngleClose(double a1, double a2, double tolerance = 1.0) {
     return diff < tolerance || diff > (360.0 - tolerance);
 }
 
-void testLegStepperInitialization(const Leg& leg, const LegStepper& stepper, int leg_index) {
+void testLegStepperInitialization(const Leg &leg, const LegStepper &stepper, int leg_index) {
     std::cout << "Testing LegStepper initialization for leg " << leg_index << std::endl;
 
     // Verify basic properties
@@ -38,7 +38,7 @@ void testLegStepperInitialization(const Leg& leg, const LegStepper& stepper, int
     std::cout << "  ✅ LegStepper initialization passed" << std::endl;
 }
 
-void testStepCyclePhaseUpdates(LegStepper& stepper, const StepCycle& step_cycle) {
+void testStepCyclePhaseUpdates(LegStepper &stepper, const StepCycle &step_cycle) {
     std::cout << "Testing step cycle phase updates" << std::endl;
 
     // Test initial state
@@ -83,7 +83,7 @@ void testStepCyclePhaseUpdates(LegStepper& stepper, const StepCycle& step_cycle)
     std::cout << "  ✅ Step cycle phase updates passed" << std::endl;
 }
 
-void testTrajectoryGeneration(LegStepper& stepper, const RobotModel& model) {
+void testTrajectoryGeneration(LegStepper &stepper, const RobotModel &model) {
     std::cout << "Testing trajectory generation" << std::endl;
 
     // Initialize timing parameters by calling updateWithPhase
@@ -193,7 +193,7 @@ void testTrajectoryGeneration(LegStepper& stepper, const RobotModel& model) {
     std::cout << "  ✅ Trajectory generation passed" << std::endl;
 }
 
-void testTipPositionUpdates(LegStepper& stepper, Leg& leg, const RobotModel& model) {
+void testTipPositionUpdates(LegStepper &stepper, Leg &leg, const RobotModel &model) {
     std::cout << "Testing tip position updates" << std::endl;
 
     Point3D initial_position = leg.getCurrentTipPositionGlobal();
@@ -205,10 +205,10 @@ void testTipPositionUpdates(LegStepper& stepper, Leg& leg, const RobotModel& mod
 
     // Set stepper to swing state and advance phase to ensure position changes
     stepper.setStepState(STEP_SWING);
-    stepper.setPhase(5); // Advance to middle of swing phase
+    stepper.setPhase(5);           // Advance to middle of swing phase
     stepper.setSwingProgress(0.5); // Set swing progress to 50%
-    stepper.setStepProgress(0.5); // Set step progress to 50% for interpolation
-        stepper.updateTipPosition(step_length, time_delta, false, false);
+    stepper.setStepProgress(0.5);  // Set step progress to 50% for interpolation
+    stepper.updateTipPosition(step_length, time_delta, false, false);
 
     Point3D new_position = leg.getCurrentTipPositionGlobal();
     std::cout << "  New tip position: (" << new_position.x << ", " << new_position.y << ", " << new_position.z << ")" << std::endl;
@@ -228,9 +228,9 @@ void testTipPositionUpdates(LegStepper& stepper, Leg& leg, const RobotModel& mod
 
     // Test stance phase position update
     stepper.setStepState(STEP_STANCE);
-    stepper.setPhase(15); // Advance to middle of stance phase
+    stepper.setPhase(15);           // Advance to middle of stance phase
     stepper.setStanceProgress(0.5); // Set stance progress to 50%
-    stepper.setStepProgress(0.5); // Set step progress to 50% for interpolation
+    stepper.setStepProgress(0.5);   // Set step progress to 50% for interpolation
     Point3D stance_initial = leg.getCurrentTipPositionGlobal();
     stepper.updateTipPosition(step_length, time_delta, false, false);
     Point3D stance_new = leg.getCurrentTipPositionGlobal();
@@ -249,7 +249,7 @@ void testTipPositionUpdates(LegStepper& stepper, Leg& leg, const RobotModel& mod
     std::cout << "  ✅ Tip position updates passed" << std::endl;
 }
 
-void testStrideVectorUpdates(LegStepper& stepper) {
+void testStrideVectorUpdates(LegStepper &stepper) {
     std::cout << "Testing stride vector updates" << std::endl;
 
     Point3D initial_stride = stepper.getStrideVector();
@@ -273,7 +273,7 @@ void testStrideVectorUpdates(LegStepper& stepper) {
     assert(new_stride.norm() > 0);
 
     // Verify the change is significant (should be close to the step_length)
-    assert(stride_change > 1.0); // Should be at least 1mm change
+    assert(stride_change > 1.0);                // Should be at least 1mm change
     assert(stride_change <= step_length + 5.0); // Should not be much larger than step_length
 
     // Verify stride direction is primarily in X (forward direction)
@@ -286,7 +286,7 @@ void testStrideVectorUpdates(LegStepper& stepper) {
     std::cout << "  ✅ Stride vector updates passed" << std::endl;
 }
 
-void testExternalTargetHandling(LegStepper& stepper, Leg& leg) {
+void testExternalTargetHandling(LegStepper &stepper, Leg &leg) {
     std::cout << "Testing external target handling" << std::endl;
 
     // Set external target
@@ -306,7 +306,7 @@ void testExternalTargetHandling(LegStepper& stepper, Leg& leg) {
     std::cout << "  ✅ External target handling passed" << std::endl;
 }
 
-void testPhaseOffsetCalculation(LegStepper& stepper, const Leg& leg) {
+void testPhaseOffsetCalculation(LegStepper &stepper, const Leg &leg) {
     std::cout << "Testing phase offset calculation" << std::endl;
 
     // Simular un valor de fase global
@@ -336,7 +336,7 @@ void testPhaseOffsetCalculation(LegStepper& stepper, const Leg& leg) {
     std::cout << "  ✅ Phase offset calculation and effect verified" << std::endl;
 }
 
-void testWalkStateTransitions(LegStepper& stepper) {
+void testWalkStateTransitions(LegStepper &stepper) {
     std::cout << "Testing walk state transitions" << std::endl;
 
     // Test all walk state transitions
@@ -350,7 +350,7 @@ void testWalkStateTransitions(LegStepper& stepper) {
     std::cout << "  ✅ Walk state transitions passed" << std::endl;
 }
 
-void testKinematicConsistency(LegStepper& stepper, Leg& leg, const RobotModel& model) {
+void testKinematicConsistency(LegStepper &stepper, Leg &leg, const RobotModel &model) {
     std::cout << "Testing kinematic consistency" << std::endl;
 
     // Get current joint angles and tip position
@@ -361,21 +361,21 @@ void testKinematicConsistency(LegStepper& stepper, Leg& leg, const RobotModel& m
     std::cout << "  Tip position from Leg: (" << tip_position.x << ", " << tip_position.y << ", " << tip_position.z << ")" << std::endl;
 
     // Test Forward Kinematics consistency
-    Point3D fk_position = model.forwardKinematics(stepper.getLegIndex(), angles);
+    Point3D fk_position = model.forwardKinematicsGlobalCoordinates(stepper.getLegIndex(), angles);
     double fk_error = (tip_position - fk_position).norm();
     std::cout << "  FK position: (" << fk_position.x << ", " << fk_position.y << ", " << fk_position.z << ")" << std::endl;
     std::cout << "  FK error: " << fk_error << " mm" << std::endl;
 
     // Test Inverse Kinematics consistency
-    JointAngles ik_angles = model.inverseKinematics(stepper.getLegIndex(), tip_position);
-    Point3D ik_position = model.forwardKinematics(stepper.getLegIndex(), ik_angles);
+    JointAngles ik_angles = model.inverseKinematicsGlobalCoordinates(stepper.getLegIndex(), tip_position);
+    Point3D ik_position = model.forwardKinematicsGlobalCoordinates(stepper.getLegIndex(), ik_angles);
     double ik_error = (tip_position - ik_position).norm();
     std::cout << "  IK error: " << ik_error << " mm" << std::endl;
 
     // Verify consistency with adjusted tolerance for FK (110mm due to initialization issues)
     // IK should be very accurate
-    assert(fk_error < 1.0);  // Relaxed tolerance for FK
-    assert(ik_error < 1.0);   // Strict tolerance for IK
+    assert(fk_error < 1.0); // Relaxed tolerance for FK
+    assert(ik_error < 1.0); // Strict tolerance for IK
 
     // Log high FK errors for analysis
     if (fk_error > 50.0) {
@@ -408,8 +408,7 @@ int main() {
     // Create leg objects for testing
     Leg test_legs[NUM_LEGS] = {
         Leg(0, model), Leg(1, model), Leg(2, model),
-        Leg(3, model), Leg(4, model), Leg(5, model)
-    };
+        Leg(3, model), Leg(4, model), Leg(5, model)};
 
     // Initialize legs with default stance
     for (int i = 0; i < NUM_LEGS; ++i) {
@@ -445,7 +444,7 @@ int main() {
     for (int leg_index = 0; leg_index < NUM_LEGS; ++leg_index) {
         std::cout << "\n--- Testing Leg " << leg_index << " ---" << std::endl;
 
-        Leg& leg = test_legs[leg_index];
+        Leg &leg = test_legs[leg_index];
 
         // Get leg's identity pose for LegStepper initialization
         Point3D identity_pose = leg.getCurrentTipPositionGlobal();
@@ -463,9 +462,9 @@ int main() {
 
         // Create step cycle for testing
         StepCycle step_cycle;
-        step_cycle.frequency_ = 2.0; // 2 Hz step frequency
-        step_cycle.period_ = 25; // 25 iterations per cycle
-        step_cycle.swing_period_ = 12; // 12 iterations swing
+        step_cycle.frequency_ = 2.0;    // 2 Hz step frequency
+        step_cycle.period_ = 25;        // 25 iterations per cycle
+        step_cycle.swing_period_ = 12;  // 12 iterations swing
         step_cycle.stance_period_ = 13; // 13 iterations stance
         step_cycle.swing_start_ = 0;
         step_cycle.swing_end_ = 12;
@@ -484,11 +483,11 @@ int main() {
         std::cout << "✅ Leg " << leg_index << " integration tests completed" << std::endl;
     }
 
-        // Test coordinated behavior across multiple legs
+    // Test coordinated behavior across multiple legs
     std::cout << "\n--- Testing Coordinated Multi-Leg Behavior ---" << std::endl;
 
     // Create LegSteppers for all legs (using pointers due to reference members)
-    LegStepper* steppers[NUM_LEGS];
+    LegStepper *steppers[NUM_LEGS];
     for (int i = 0; i < NUM_LEGS; ++i) {
         Point3D identity_pose = test_legs[i].getCurrentTipPositionGlobal();
         steppers[i] = new LegStepper(i, identity_pose, test_legs[i], model);
@@ -509,7 +508,7 @@ int main() {
     sync_cycle.stance_start_ = 10;
     sync_cycle.stance_end_ = 20;
 
-        for (int cycle = 0; cycle < 3; ++cycle) {
+    for (int cycle = 0; cycle < 3; ++cycle) {
         for (int step = 0; step < sync_cycle.period_; ++step) {
             // Update all steppers
             for (int i = 0; i < NUM_LEGS; ++i) {

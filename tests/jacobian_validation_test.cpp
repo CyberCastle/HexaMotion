@@ -11,7 +11,7 @@ Eigen::Matrix3d numericalJacobian(const RobotModel& model, int leg,
     Eigen::Matrix3d jacobian;
 
     // Get base position
-    Point3D base_pos = model.forwardKinematics(leg, angles);
+    Point3D base_pos = model.forwardKinematicsGlobalCoordinates(leg, angles);
 
     // Test each joint using central differences for better accuracy
     for (int joint = 0; joint < 3; ++joint) {
@@ -33,8 +33,8 @@ Eigen::Matrix3d numericalJacobian(const RobotModel& model, int leg,
                 break;
         }
 
-        Point3D pos_plus = model.forwardKinematics(leg, plus);
-        Point3D pos_minus = model.forwardKinematics(leg, minus);
+        Point3D pos_plus = model.forwardKinematicsGlobalCoordinates(leg, plus);
+        Point3D pos_minus = model.forwardKinematicsGlobalCoordinates(leg, minus);
 
         // Calculate partial derivative
         jacobian(0, joint) = (pos_plus.x - pos_minus.x) / delta;
@@ -128,7 +128,7 @@ int main() {
                   << "°, femur=" << std::setw(6) << math_utils::radiansToDegrees(zero_angles.femur)
                   << "°, tibia=" << std::setw(6) << math_utils::radiansToDegrees(zero_angles.tibia) << "°" << std::endl;
 
-        Point3D base_pos = model.forwardKinematics(leg, zero_angles);
+        Point3D base_pos = model.forwardKinematicsGlobalCoordinates(leg, zero_angles);
         std::cout << "   • End-effector position: (" << std::setw(8) << base_pos.x
                   << ", " << std::setw(8) << base_pos.y
                   << ", " << std::setw(8) << base_pos.z << ") mm" << std::endl;
@@ -156,7 +156,7 @@ int main() {
         std::cout << std::endl;
 
         JointAngles test_angles(0, 0, 0);
-        Point3D base_pos = model.forwardKinematics(leg, test_angles);
+        Point3D base_pos = model.forwardKinematicsGlobalCoordinates(leg, test_angles);
         std::cout << "📍 Base position: (" << std::setw(8) << base_pos.x
                   << ", " << std::setw(8) << base_pos.y
                   << ", " << std::setw(8) << base_pos.z << ") mm" << std::endl;
@@ -168,8 +168,8 @@ int main() {
         JointAngles minus = test_angles;
         plus.coxa += perturbation * 0.5f;
         minus.coxa -= perturbation * 0.5f;
-        Point3D pos_plus = model.forwardKinematics(leg, plus);
-        Point3D pos_minus = model.forwardKinematics(leg, minus);
+        Point3D pos_plus = model.forwardKinematicsGlobalCoordinates(leg, plus);
+        Point3D pos_minus = model.forwardKinematicsGlobalCoordinates(leg, minus);
         std::cout << "📍 Perturbed position (coxa +" << perturbation << " rad): ("
                   << std::setw(8) << pos_plus.x
                   << ", " << std::setw(8) << pos_plus.y

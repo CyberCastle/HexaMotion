@@ -464,23 +464,6 @@ class RobotModel {
     /** Compute forward kinematics for a leg (Global coordinates). */
     Point3D forwardKinematicsGlobalCoordinates(int leg, const JointAngles &q) const;
 
-    // ===== BACKWARD COMPATIBILITY ALIASES =====
-
-    /** @deprecated Use inverseKinematicsGlobalCoordinates() instead */
-    JointAngles inverseKinematics(int leg, const Point3D &p) const {
-        return inverseKinematicsGlobalCoordinates(leg, p);
-    }
-
-    /** @deprecated Use inverseKinematicsCurrentGlobalCoordinates() instead */
-    JointAngles inverseKinematicsCurrent(int leg, const JointAngles &current_angles, const Point3D &target) const {
-        return inverseKinematicsCurrentGlobalCoordinates(leg, current_angles, target);
-    }
-
-    /** @deprecated Use forwardKinematicsGlobalCoordinates() instead */
-    Point3D forwardKinematics(int leg, const JointAngles &q) const {
-        return forwardKinematicsGlobalCoordinates(leg, q);
-    }
-
     /** Analytic Jacobian for a leg. */
     Eigen::Matrix3d analyticJacobian(int leg, const JointAngles &q) const;
     /** Numerical Jacobian calculation. */
@@ -559,7 +542,7 @@ class RobotModel {
      * @return Joint angles to reach the target position
      */
     JointAngles calculateTargetFromCurrentPosition(int leg, const JointAngles &current_angles,
-                                                  const Pose &current_pose, const Point3D &target_in_current_frame) const;
+                                                   const Pose &current_pose, const Point3D &target_in_current_frame) const;
 
     /**
      * Calculate target position based on current position with default stance pose (OpenSHC-style)
@@ -573,7 +556,7 @@ class RobotModel {
      * @return Joint angles to reach the transformed default stance position
      */
     JointAngles calculateTargetFromDefaultStance(int leg, const JointAngles &current_angles,
-                                                const Pose &current_pose, const Pose &default_stance_pose) const;
+                                                 const Pose &current_pose, const Pose &default_stance_pose) const;
 
     // ===== NEW: OpenSHC-style Local Coordinate Methods =====
 
@@ -588,7 +571,7 @@ class RobotModel {
      * @return Joint angles to reach the target position
      */
     JointAngles solveIKLocalCoordinates(int leg, const Point3D &global_target,
-                                       const JointAngles &current_angles) const;
+                                        const JointAngles &current_angles) const;
 
     /**
      * @brief Apply inverse kinematics using local leg coordinates with success indicator (OpenSHC-style)
@@ -600,7 +583,7 @@ class RobotModel {
      * @return Success indicator (1.0 for success, 0.0 for failure)
      */
     double applyIKLocalCoordinates(int leg, const Point3D &global_target,
-                                  const JointAngles &current_angles) const;
+                                   const JointAngles &current_angles) const;
 
     /**
      * @brief Get symmetric stance positions in local leg coordinates (OpenSHC-style)
@@ -624,7 +607,7 @@ class RobotModel {
      * @return Position in local leg coordinates
      */
     Point3D transformGlobalToLocalCoordinates(int leg, const Point3D &global_position,
-                                             const JointAngles &current_angles) const;
+                                              const JointAngles &current_angles) const;
 
     /**
      * @brief Transform local position to global robot coordinates (OpenSHC-style)
@@ -637,7 +620,7 @@ class RobotModel {
      * @return Position in global robot coordinates
      */
     Point3D transformLocalToGlobalCoordinates(int leg, const Point3D &local_position,
-                                             const JointAngles &current_angles) const;
+                                              const JointAngles &current_angles) const;
 
     /**
      * @brief Set desired tip pose in global coordinates and apply IK (OpenSHC-style)
@@ -649,7 +632,7 @@ class RobotModel {
      * @return Success indicator (1.0 for success, 0.0 for failure)
      */
     double setDesiredTipPoseAndApplyIK(int leg, const Point3D &global_desired_pose,
-                                      const JointAngles &current_angles) const;
+                                       const JointAngles &current_angles) const;
 
     /**
      * @brief Calculate position delta in local leg coordinates (OpenSHC-style)
@@ -679,7 +662,7 @@ class RobotModel {
      * @return Joint angles to reach the target position
      */
     JointAngles solveIKGlobalCoordinates(int leg, const Point3D &global_target,
-                                        const JointAngles &current_angles) const;
+                                         const JointAngles &current_angles) const;
 
     /**
      * @brief Get symmetric stance positions in global robot coordinates (Original HexaMotion approach)

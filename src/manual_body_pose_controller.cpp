@@ -195,7 +195,7 @@ bool ManualPoseController::applyPose(const PoseState &pose, Point3D leg_position
         leg_positions[i] = rotated_pos + pose.leg_positions[i];
 
         // Calculate joint angles
-        joint_angles[i] = model_.inverseKinematics(i, leg_positions[i]);
+        joint_angles[i] = model_.inverseKinematicsGlobalCoordinates(i, leg_positions[i]);
 
         // Check if solution is valid
         if (!model_.checkJointLimits(i, joint_angles[i])) {
@@ -379,7 +379,7 @@ void ManualPoseController::interpolateToQuaternionPose(const Point3D &target_pos
 
     // Simple SLERP implementation
     double dot = current_quat[0] * target_quat[0] + current_quat[1] * target_quat[1] +
-                current_quat[2] * target_quat[2] + current_quat[3] * target_quat[3];
+                 current_quat[2] * target_quat[2] + current_quat[3] * target_quat[3];
 
     // Take shorter path
     Eigen::Vector4d target_adjusted = target_quat;
@@ -393,9 +393,9 @@ void ManualPoseController::interpolateToQuaternionPose(const Point3D &target_pos
         current_pose_.body_quaternion = current_quat + speed * (target_adjusted - current_quat);
         // Normalize
         double norm = sqrt(current_pose_.body_quaternion[0] * current_pose_.body_quaternion[0] +
-                          current_pose_.body_quaternion[1] * current_pose_.body_quaternion[1] +
-                          current_pose_.body_quaternion[2] * current_pose_.body_quaternion[2] +
-                          current_pose_.body_quaternion[3] * current_pose_.body_quaternion[3]);
+                           current_pose_.body_quaternion[1] * current_pose_.body_quaternion[1] +
+                           current_pose_.body_quaternion[2] * current_pose_.body_quaternion[2] +
+                           current_pose_.body_quaternion[3] * current_pose_.body_quaternion[3]);
         if (norm > 0.0f) {
             current_pose_.body_quaternion = current_pose_.body_quaternion / norm;
         }

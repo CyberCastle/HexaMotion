@@ -40,10 +40,10 @@ int main() {
     for (int leg = 0; leg < NUM_LEGS; ++leg) {
         // Target: posición de reposo física real de la punta de la pierna
         JointAngles zero_angles(0, 0, 0);
-        Point3D target = model.forwardKinematics(leg, zero_angles);
+        Point3D target = model.forwardKinematicsGlobalCoordinates(leg, zero_angles);
 
-        JointAngles ik = model.inverseKinematics(leg, target);
-        Point3D fk = model.forwardKinematics(leg, ik);
+        JointAngles ik = model.inverseKinematicsGlobalCoordinates(leg, target);
+        Point3D fk = model.forwardKinematicsGlobalCoordinates(leg, ik);
         double err = sqrt(pow(target.x - fk.x, 2) +
                           pow(target.y - fk.y, 2) +
                           pow(target.z - fk.z, 2));
@@ -66,7 +66,7 @@ int main() {
 
         // Verify by transforming to global and using global IK
         Point3D global_target = transformLocalToGlobal(model, leg, local_target);
-        JointAngles ik_global = model.inverseKinematics(leg, global_target);
+        JointAngles ik_global = model.inverseKinematicsGlobalCoordinates(leg, global_target);
 
         // Check consistency between local and global IK
         double angle_diff = std::sqrt(std::pow(ik_local.coxa - ik_global.coxa, 2) +
@@ -88,12 +88,12 @@ int main() {
     for (int leg = 0; leg < NUM_LEGS; ++leg) {
         // Use the same relative joint angles for every leg (converted from degrees to radians)
         JointAngles test_angles(0, 20 * M_PI / 180.0, 20 * M_PI / 180.0); // 0°, 20°, 20° -> 0, 0.349, 0.349 rad
-        Point3D target = model.forwardKinematics(leg, test_angles);
+        Point3D target = model.forwardKinematicsGlobalCoordinates(leg, test_angles);
 
         // Provide a neutral starting guess
         JointAngles start_angles(0, 0, 0);
-        JointAngles ik = model.inverseKinematicsCurrent(leg, start_angles, target);
-        Point3D fk = model.forwardKinematics(leg, ik);
+        JointAngles ik = model.inverseKinematicsCurrentGlobalCoordinates(leg, start_angles, target);
+        Point3D fk = model.forwardKinematicsGlobalCoordinates(leg, ik);
 
         double position_error = std::sqrt(std::pow(fk.x - target.x, 2) +
                                           std::pow(fk.y - target.y, 2) +
@@ -107,7 +107,7 @@ int main() {
         if (position_error > 2.0f) {
             ok = false;
         }
-    }     // Test 4: Local IK Reachable Pose Validation
+    } // Test 4: Local IK Reachable Pose Validation
     std::cout << "\n--- Test 4: Local IK Reachable Pose Validation ---" << std::endl;
     for (int leg = 0; leg < NUM_LEGS; ++leg) {
         // Known reachable local target: forward position that works well
@@ -115,7 +115,7 @@ int main() {
         // Solve IK using local helper
         JointAngles ik_local = solveIKLocal(model, leg, local_target);
         // Compute global FK, then transform back to local frame
-        Point3D fk_global = model.forwardKinematics(leg, ik_local);
+        Point3D fk_global = model.forwardKinematicsGlobalCoordinates(leg, ik_local);
         Point3D fk_local = transformGlobalToLocal(model, leg, fk_global);
         // Compute error in local coordinates
         double local_error = std::sqrt(
@@ -154,11 +154,11 @@ int main() {
 
             // Convert to global and solve in global coordinates
             Point3D global_target = transformLocalToGlobal(model, leg, local_target);
-            JointAngles ik_global = model.inverseKinematics(leg, global_target);
+            JointAngles ik_global = model.inverseKinematicsGlobalCoordinates(leg, global_target);
 
             // Verify both solutions reach the same position
-            Point3D fk_local = model.forwardKinematics(leg, ik_local);
-            Point3D fk_global = model.forwardKinematics(leg, ik_global);
+            Point3D fk_local = model.forwardKinematicsGlobalCoordinates(leg, ik_local);
+            Point3D fk_global = model.forwardKinematicsGlobalCoordinates(leg, ik_global);
 
             double consistency_error = std::sqrt(std::pow(fk_local.x - fk_global.x, 2) +
                                                  std::pow(fk_local.y - fk_global.y, 2) +
@@ -222,7 +222,7 @@ JointAngles solveIKLocal(const RobotModel &model, int leg, const Point3D &local_
     Point3D global_target = transformLocalToGlobal(model, leg, local_target);
 
     // Use the robot model's global IK solver
-    JointAngles result = model.inverseKinematics(leg, global_target);
+    JointAngles result = model.inverseKinematicsGlobalCoordinates(leg, global_target);
 
     return result;
 }
@@ -230,5 +230,5 @@ JointAngles solveIKLocal(const RobotModel &model, int leg, const Point3D &local_
 // Helper: IK with starting angles in local frame
 JointAngles solveIKLocalCurrent(const RobotModel &model, int leg, const JointAngles &start_angles, const Point3D &local_target) {
     Point3D global_target = transformLocalToGlobal(model, leg, local_target);
-    return model.inverseKinematicsCurrent(leg, start_angles, global_target);
+    return model.inverseKinematicsCurrentGlobalCoordinates(leg, start_angles, global_target);
 }

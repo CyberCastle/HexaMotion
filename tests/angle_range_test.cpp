@@ -43,7 +43,7 @@ int main() {
 
         std::cout << "Target " << (i + 1) << ": (" << target.x << ", " << target.y << ", " << target.z << ")" << std::endl;
 
-        JointAngles angles = model.inverseKinematics(0, target);
+        JointAngles angles = model.inverseKinematicsGlobalCoordinates(0, target);
 
         std::cout << "  Result: (" << angles.coxa << "°, " << angles.femur << "°, " << angles.tibia << "°)" << std::endl;
 

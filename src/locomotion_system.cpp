@@ -14,9 +14,9 @@
  */
 
 #include "locomotion_system.h"
+#include "body_pose_config_factory.h"
 #include "hexamotion_constants.h"
 #include "math_utils.h"
-#include "body_pose_config_factory.h"
 #include "walk_controller.h"
 #include "workspace_validator.h" // Add unified validator
 #include <algorithm>
@@ -138,12 +138,12 @@ bool LocomotionSystem::calibrateSystem() {
 // Inverse kinematics using an optimized geometric method
 JointAngles LocomotionSystem::calculateInverseKinematics(int leg,
                                                          const Point3D &p_target) {
-    return model.inverseKinematics(leg, p_target);
+    return model.inverseKinematicsGlobalCoordinates(leg, p_target);
 }
 
 // Forward kinematics using DH transforms
 Point3D LocomotionSystem::calculateForwardKinematics(int leg_index, const JointAngles &angles) {
-    return model.forwardKinematics(leg_index, angles);
+    return model.forwardKinematicsGlobalCoordinates(leg_index, angles);
 }
 
 // DH transformation calculation
@@ -255,8 +255,8 @@ bool LocomotionSystem::setLegJointAngles(int leg, const JointAngles &q) {
     }
 
     // Update both joint angles and leg positions in a single atomic operation
-    legs[leg].setJointAngles(clamped_angles);                            // Update leg object
-    legs[leg].updateForwardKinematics(model);                            // Update leg position based on new angles
+    legs[leg].setJointAngles(clamped_angles); // Update leg object
+    legs[leg].updateForwardKinematics(model); // Update leg position based on new angles
 
     // Use velocity controller to get appropriate servo speeds
     double coxa_speed = velocity_controller ? velocity_controller->getServoSpeed(leg, 0) : params.default_servo_speed;
@@ -770,7 +770,6 @@ bool LocomotionSystem::update() {
         walk_ctrl->updateWalk(Point3D(commanded_linear_velocity_, 0.0, 0.0),
                               commanded_angular_velocity_);
     }
-
 
     // Delegate gait pattern updates to WalkController
     if (walk_ctrl) {
@@ -1455,7 +1454,8 @@ void LocomotionSystem::updateModel() {
     for (int i = 0; i < NUM_LEGS; ++i) {
         // Obtener el LegStepper desde el WalkController
         auto leg_stepper = walk_ctrl ? walk_ctrl->getLegStepper(i) : nullptr;
-        if (!leg_stepper) continue;
+        if (!leg_stepper)
+            continue;
         // Obtener la pose objetivo actual del tip
         Point3D desired_tip_pose = leg_stepper->getCurrentTipPose();
         // Establecer la pose objetivo en la pierna
@@ -1464,5 +1464,3 @@ void LocomotionSystem::updateModel() {
         legs[i].applyIK(model);
     }
 }
-
-

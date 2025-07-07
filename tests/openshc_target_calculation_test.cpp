@@ -3,36 +3,37 @@
  * @brief Test demonstrating OpenSHC-style target position calculation based on current position
  */
 
-#include "robot_model.h"
 #include "math_utils.h"
-#include <iostream>
-#include <iomanip>
+#include "robot_model.h"
 #include <cmath>
+#include <iomanip>
+#include <iostream>
 
 // Test parameters
 const double TEST_POSITION_TOLERANCE = 5.0; // mm - increased tolerance for frame differences
 const double TEST_ANGLE_TOLERANCE = 0.1;    // degrees
 
-void printTestHeader(const std::string& test_name) {
-    std::cout << "\n" << std::string(60, '=') << std::endl;
+void printTestHeader(const std::string &test_name) {
+    std::cout << "\n"
+              << std::string(60, '=') << std::endl;
     std::cout << "TEST: " << test_name << std::endl;
     std::cout << std::string(60, '=') << std::endl;
 }
 
-void printPoint3D(const std::string& label, const Point3D& point) {
+void printPoint3D(const std::string &label, const Point3D &point) {
     std::cout << std::fixed << std::setprecision(2);
     std::cout << "  " << label << ": ("
               << point.x << ", " << point.y << ", " << point.z << ") mm" << std::endl;
 }
 
-void printJointAngles(const std::string& label, const JointAngles& angles) {
+void printJointAngles(const std::string &label, const JointAngles &angles) {
     std::cout << std::fixed << std::setprecision(2);
     std::cout << "  " << label << ": coxa=" << math_utils::radiansToDegrees(angles.coxa)
               << "°, femur=" << math_utils::radiansToDegrees(angles.femur)
               << "°, tibia=" << math_utils::radiansToDegrees(angles.tibia) << "°" << std::endl;
 }
 
-void printPose(const std::string& label, const Pose& pose) {
+void printPose(const std::string &label, const Pose &pose) {
     std::cout << std::fixed << std::setprecision(2);
     std::cout << "  " << label << ":" << std::endl;
     std::cout << "    Position: (" << pose.position.x << ", " << pose.position.y << ", " << pose.position.z << ") mm" << std::endl;
@@ -53,9 +54,12 @@ bool testBasicTargetCalculation() {
     params.coxa_length = 50.0f;
     params.femur_length = 101.0f;
     params.tibia_length = 208.0f;
-    params.coxa_angle_limits[0] = -65.0f; params.coxa_angle_limits[1] = 65.0f;
-    params.femur_angle_limits[0] = -75.0f; params.femur_angle_limits[1] = 75.0f;
-    params.tibia_angle_limits[0] = -45.0f; params.tibia_angle_limits[1] = 45.0f;
+    params.coxa_angle_limits[0] = -65.0f;
+    params.coxa_angle_limits[1] = 65.0f;
+    params.femur_angle_limits[0] = -75.0f;
+    params.femur_angle_limits[1] = 75.0f;
+    params.tibia_angle_limits[0] = -45.0f;
+    params.tibia_angle_limits[1] = 45.0f;
     params.ik.clamp_joints = true;
 
     RobotModel robot_model(params);
@@ -69,7 +73,7 @@ bool testBasicTargetCalculation() {
     // Define a realistic target position that is within the robot's reachable workspace
     // Use a position that we know works from simple_ik_test
     JointAngles zero_angles(0.0f, 0.0f, 0.0f);
-    Point3D target_in_current_frame = robot_model.forwardKinematics(0, zero_angles);
+    Point3D target_in_current_frame = robot_model.forwardKinematicsGlobalCoordinates(0, zero_angles);
     // No offset - use the exact position that we know works
 
     printPose("Current Robot Pose", current_pose);
@@ -83,7 +87,7 @@ bool testBasicTargetCalculation() {
     printJointAngles("Required Joint Angles", target_angles);
 
     // Verify the result by doing forward kinematics
-    Point3D achieved_position = robot_model.forwardKinematics(0, target_angles);
+    Point3D achieved_position = robot_model.forwardKinematicsGlobalCoordinates(0, target_angles);
     printPoint3D("Achieved Position", achieved_position);
 
     // Calculate expected position (target transformed to robot frame)
@@ -92,8 +96,8 @@ bool testBasicTargetCalculation() {
 
     // Check accuracy
     double position_error = sqrt(pow(achieved_position.x - expected_position.x, 2) +
-                                pow(achieved_position.y - expected_position.y, 2) +
-                                pow(achieved_position.z - expected_position.z, 2));
+                                 pow(achieved_position.y - expected_position.y, 2) +
+                                 pow(achieved_position.z - expected_position.z, 2));
 
     std::cout << "  Position Error: " << position_error << " mm" << std::endl;
 
@@ -112,9 +116,12 @@ bool testDefaultStanceCalculation() {
     params.coxa_length = 50.0f;
     params.femur_length = 101.0f;
     params.tibia_length = 208.0f;
-    params.coxa_angle_limits[0] = -65.0f; params.coxa_angle_limits[1] = 65.0f;
-    params.femur_angle_limits[0] = -75.0f; params.femur_angle_limits[1] = 75.0f;
-    params.tibia_angle_limits[0] = -45.0f; params.tibia_angle_limits[1] = 45.0f;
+    params.coxa_angle_limits[0] = -65.0f;
+    params.coxa_angle_limits[1] = 65.0f;
+    params.femur_angle_limits[0] = -75.0f;
+    params.femur_angle_limits[1] = 75.0f;
+    params.tibia_angle_limits[0] = -45.0f;
+    params.tibia_angle_limits[1] = 45.0f;
     params.ik.clamp_joints = true;
 
     RobotModel robot_model(params);
@@ -125,7 +132,7 @@ bool testDefaultStanceCalculation() {
     // Define a realistic default stance pose that is within the robot's reachable workspace
     // Use a position that we know works from simple_ik_test
     JointAngles zero_angles(0.0f, 0.0f, 0.0f);
-    Point3D stance_position = robot_model.forwardKinematics(0, zero_angles);
+    Point3D stance_position = robot_model.forwardKinematicsGlobalCoordinates(0, zero_angles);
     Pose default_stance_pose = Pose(stance_position, Eigen::Quaterniond::Identity());
 
     // Current joint angles (matching simple_ik_test)
@@ -142,7 +149,7 @@ bool testDefaultStanceCalculation() {
     printJointAngles("Required Joint Angles", target_angles);
 
     // Verify the result
-    Point3D achieved_position = robot_model.forwardKinematics(0, target_angles);
+    Point3D achieved_position = robot_model.forwardKinematicsGlobalCoordinates(0, target_angles);
     printPoint3D("Achieved Position", achieved_position);
 
     // Expected position is the default stance position directly (already in robot frame)
@@ -151,8 +158,8 @@ bool testDefaultStanceCalculation() {
 
     // Check accuracy
     double position_error = sqrt(pow(achieved_position.x - expected_position.x, 2) +
-                                pow(achieved_position.y - expected_position.y, 2) +
-                                pow(achieved_position.z - expected_position.z, 2));
+                                 pow(achieved_position.y - expected_position.y, 2) +
+                                 pow(achieved_position.z - expected_position.z, 2));
 
     std::cout << "  Position Error: " << position_error << " mm" << std::endl;
 
@@ -192,8 +199,8 @@ bool testPoseTransformation() {
 
     // Verify the transformation is correct
     double error = sqrt(pow(world_point.x - back_to_world.x, 2) +
-                       pow(world_point.y - back_to_world.y, 2) +
-                       pow(world_point.z - back_to_world.z, 2));
+                        pow(world_point.y - back_to_world.y, 2) +
+                        pow(world_point.z - back_to_world.z, 2));
 
     std::cout << "  Transformation Error: " << error << " mm" << std::endl;
 
@@ -212,9 +219,12 @@ bool testTerrainAdaptation() {
     params.coxa_length = 50.0f;
     params.femur_length = 101.0f;
     params.tibia_length = 208.0f;
-    params.coxa_angle_limits[0] = -65.0f; params.coxa_angle_limits[1] = 65.0f;
-    params.femur_angle_limits[0] = -75.0f; params.femur_angle_limits[1] = 75.0f;
-    params.tibia_angle_limits[0] = -45.0f; params.tibia_angle_limits[1] = 45.0f;
+    params.coxa_angle_limits[0] = -65.0f;
+    params.coxa_angle_limits[1] = 65.0f;
+    params.femur_angle_limits[0] = -75.0f;
+    params.femur_angle_limits[1] = 75.0f;
+    params.tibia_angle_limits[0] = -45.0f;
+    params.tibia_angle_limits[1] = 45.0f;
     params.ik.clamp_joints = true;
 
     RobotModel robot_model(params);
@@ -239,7 +249,7 @@ bool testTerrainAdaptation() {
     // Define a realistic target that should be relative to the pose and within reach
     // Use a position that we know works from simple_ik_test
     JointAngles zero_angles(0.0f, 0.0f, 0.0f);
-    Point3D target_in_pose_frame = robot_model.forwardKinematics(0, zero_angles);
+    Point3D target_in_pose_frame = robot_model.forwardKinematicsGlobalCoordinates(0, zero_angles);
     // No offset - use the exact position that we know works
 
     printPose("Flat Robot Pose", flat_pose);
@@ -288,9 +298,12 @@ bool testMultipleLegs() {
     params.coxa_length = 50.0f;
     params.femur_length = 101.0f;
     params.tibia_length = 208.0f;
-    params.coxa_angle_limits[0] = -65.0f; params.coxa_angle_limits[1] = 65.0f;
-    params.femur_angle_limits[0] = -75.0f; params.femur_angle_limits[1] = 75.0f;
-    params.tibia_angle_limits[0] = -45.0f; params.tibia_angle_limits[1] = 45.0f;
+    params.coxa_angle_limits[0] = -65.0f;
+    params.coxa_angle_limits[1] = 65.0f;
+    params.femur_angle_limits[0] = -75.0f;
+    params.femur_angle_limits[1] = 75.0f;
+    params.tibia_angle_limits[0] = -45.0f;
+    params.tibia_angle_limits[1] = 45.0f;
     params.ik.clamp_joints = true;
 
     RobotModel robot_model(params);
@@ -309,7 +322,7 @@ bool testMultipleLegs() {
     // Define a realistic default stance pose that is within the robot's reachable workspace
     // Use a position that we know works from simple_ik_test
     JointAngles zero_angles(0.0f, 0.0f, 0.0f);
-    Point3D stance_position = robot_model.forwardKinematics(0, zero_angles);
+    Point3D stance_position = robot_model.forwardKinematicsGlobalCoordinates(0, zero_angles);
     Pose default_stance_pose = Pose(stance_position, Eigen::Quaterniond::Identity());
 
     printPose("Current Robot Pose", current_pose);
@@ -327,7 +340,7 @@ bool testMultipleLegs() {
         // Calculate target joint angles using the leg's own base position as target
         // Each leg has a different base position, so we need to use the leg's own position
         JointAngles zero_angles(0.0f, 0.0f, 0.0f);
-        Point3D leg_target = robot_model.forwardKinematics(leg, zero_angles);
+        Point3D leg_target = robot_model.forwardKinematicsGlobalCoordinates(leg, zero_angles);
         Pose leg_stance_pose = Pose(leg_target, Eigen::Quaterniond::Identity());
 
         JointAngles target_angles = robot_model.calculateTargetFromDefaultStance(
@@ -336,12 +349,12 @@ bool testMultipleLegs() {
         printJointAngles("    Target Angles", target_angles);
 
         // Verify the result
-        Point3D achieved_position = robot_model.forwardKinematics(leg, target_angles);
+        Point3D achieved_position = robot_model.forwardKinematicsGlobalCoordinates(leg, target_angles);
         Point3D expected_position = leg_target; // Use the leg's own target position
 
         double position_error = sqrt(pow(achieved_position.x - expected_position.x, 2) +
-                                    pow(achieved_position.y - expected_position.y, 2) +
-                                    pow(achieved_position.z - expected_position.z, 2));
+                                     pow(achieved_position.y - expected_position.y, 2) +
+                                     pow(achieved_position.z - expected_position.z, 2));
 
         std::cout << "    Position Error: " << position_error << " mm" << std::endl;
 
@@ -365,9 +378,12 @@ bool testSimpleIKVerification() {
     params.coxa_length = 50.0f;
     params.femur_length = 101.0f;
     params.tibia_length = 208.0f;
-    params.coxa_angle_limits[0] = -65.0f; params.coxa_angle_limits[1] = 65.0f;
-    params.femur_angle_limits[0] = -75.0f; params.femur_angle_limits[1] = 75.0f;
-    params.tibia_angle_limits[0] = -45.0f; params.tibia_angle_limits[1] = 45.0f;
+    params.coxa_angle_limits[0] = -65.0f;
+    params.coxa_angle_limits[1] = 65.0f;
+    params.femur_angle_limits[0] = -75.0f;
+    params.femur_angle_limits[1] = 75.0f;
+    params.tibia_angle_limits[0] = -45.0f;
+    params.tibia_angle_limits[1] = 45.0f;
     params.ik.clamp_joints = true;
 
     RobotModel robot_model(params);
@@ -379,22 +395,22 @@ bool testSimpleIKVerification() {
     // Use a target that we know works from simple_ik_test
     // First calculate what position corresponds to angles (0,0,0) - this should work
     JointAngles zero_angles(0.0f, 0.0f, 0.0f);
-    Point3D target = robot_model.forwardKinematics(0, zero_angles); // This should be reachable
+    Point3D target = robot_model.forwardKinematicsGlobalCoordinates(0, zero_angles); // This should be reachable
 
     printJointAngles("Current Joint Angles (Leg 0)", current_angles);
     printPoint3D("Target Position", target);
 
-    // Use inverseKinematicsCurrent directly (same as our method does)
-    JointAngles ik_result = robot_model.inverseKinematicsCurrent(0, current_angles, target);
-    Point3D fk_result = robot_model.forwardKinematics(0, ik_result);
+    // Use inverseKinematicsCurrentGlobalCoordinates directly (same as our method does)
+    JointAngles ik_result = robot_model.inverseKinematicsCurrentGlobalCoordinates(0, current_angles, target);
+    Point3D fk_result = robot_model.forwardKinematicsGlobalCoordinates(0, ik_result);
 
     printJointAngles("IK Result", ik_result);
     printPoint3D("FK Result", fk_result);
 
     // Check accuracy
     double position_error = sqrt(pow(fk_result.x - target.x, 2) +
-                                pow(fk_result.y - target.y, 2) +
-                                pow(fk_result.z - target.z, 2));
+                                 pow(fk_result.y - target.y, 2) +
+                                 pow(fk_result.z - target.z, 2));
 
     std::cout << "  Position Error: " << position_error << " mm" << std::endl;
 
@@ -419,7 +435,8 @@ int main() {
     all_tests_passed &= testSimpleIKVerification();
 
     // Summary
-    std::cout << "\n" << std::string(60, '=') << std::endl;
+    std::cout << "\n"
+              << std::string(60, '=') << std::endl;
     std::cout << "TEST SUMMARY" << std::endl;
     std::cout << std::string(60, '=') << std::endl;
     std::cout << "Overall Result: " << (all_tests_passed ? "ALL TESTS PASSED" : "SOME TESTS FAILED") << std::endl;

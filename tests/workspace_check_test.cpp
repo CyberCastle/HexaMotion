@@ -46,11 +46,11 @@ int main() {
 
     // Test with different targets that should be reachable
     std::vector<Point3D> test_targets = {
-        Point3D(120.0, 0.0, -150.0),   // Forward position
-        Point3D(100.0, 0.0, -180.0),   // Forward, lower
-        Point3D(80.0, 0.0, -160.0),    // Similar to problematic but centered
-        Point3D(60.0, 0.0, -140.0),    // Closer, higher
-        Point3D(140.0, 0.0, -160.0),   // Further forward
+        Point3D(120.0, 0.0, -150.0), // Forward position
+        Point3D(100.0, 0.0, -180.0), // Forward, lower
+        Point3D(80.0, 0.0, -160.0),  // Similar to problematic but centered
+        Point3D(60.0, 0.0, -140.0),  // Closer, higher
+        Point3D(140.0, 0.0, -160.0), // Further forward
     };
 
     std::cout << "\n--- Testing different targets ---" << std::endl;
@@ -66,8 +66,8 @@ int main() {
         // Test IK for leg 0
         JointAngles zero_angles(0, 0, 0);
         Point3D global_target = model.transformLocalToGlobalCoordinates(0, target, zero_angles);
-        JointAngles ik = model.inverseKinematics(0, global_target);
-        Point3D fk = model.forwardKinematics(0, ik);
+        JointAngles ik = model.inverseKinematicsGlobalCoordinates(0, global_target);
+        Point3D fk = model.forwardKinematicsGlobalCoordinates(0, ik);
         Point3D fk_local = model.transformGlobalToLocalCoordinates(0, fk, zero_angles);
 
         double error = std::sqrt(

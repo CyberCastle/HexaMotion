@@ -13,8 +13,8 @@
  * 8. Performance benchmarking
  */
 
-#include "robot_model.h"
 #include "math_utils.h"
+#include "robot_model.h"
 #include <chrono>
 #include <cmath>
 #include <iomanip>
@@ -66,18 +66,18 @@ class IKFKValidator {
         auto start_time = std::chrono::high_resolution_clock::now();
 
         // Step 1: Compute IK for target position
-        JointAngles computed_angles = model.inverseKinematics(leg, target_pos);
+        JointAngles computed_angles = model.inverseKinematicsGlobalCoordinates(leg, target_pos);
 
         // Step 2: Compute FK with computed angles
-        Point3D computed_pos = model.forwardKinematics(leg, computed_angles);
+        Point3D computed_pos = model.forwardKinematicsGlobalCoordinates(leg, computed_angles);
 
         auto end_time = std::chrono::high_resolution_clock::now();
         auto duration = std::chrono::duration_cast<std::chrono::microseconds>(end_time - start_time);
 
         // Step 3: Calculate position error
         double position_error = sqrt(pow(target_pos.x - computed_pos.x, 2) +
-                                    pow(target_pos.y - computed_pos.y, 2) +
-                                    pow(target_pos.z - computed_pos.z, 2));
+                                     pow(target_pos.y - computed_pos.y, 2) +
+                                     pow(target_pos.z - computed_pos.z, 2));
 
         // Step 4: Check joint limits
         bool within_limits = model.checkJointLimits(leg, computed_angles);
@@ -113,10 +113,10 @@ class IKFKValidator {
         auto start_time = std::chrono::high_resolution_clock::now();
 
         // Step 1: Compute FK for target angles
-        Point3D computed_pos = model.forwardKinematics(leg, target_angles);
+        Point3D computed_pos = model.forwardKinematicsGlobalCoordinates(leg, target_angles);
 
         // Step 2: Compute IK with computed position
-        JointAngles computed_angles = model.inverseKinematics(leg, computed_pos);
+        JointAngles computed_angles = model.inverseKinematicsGlobalCoordinates(leg, computed_pos);
 
         auto end_time = std::chrono::high_resolution_clock::now();
         auto duration = std::chrono::duration_cast<std::chrono::microseconds>(end_time - start_time);
@@ -178,15 +178,15 @@ class IKFKValidator {
         // Test 2: Realistic joint configurations for all legs
         std::cout << "\n2. TESTING REALISTIC JOINT CONFIGURATIONS:" << std::endl;
         std::vector<JointAngles> realistic_configs = {
-            JointAngles(0.0f, math_utils::degreesToRadians(-30.0f), math_utils::degreesToRadians(60.0f)),   // Mild bend
-            JointAngles(0.0f, math_utils::degreesToRadians(-45.0f), math_utils::degreesToRadians(90.0f)),   // Standard bend
-            JointAngles(0.0f, math_utils::degreesToRadians(-60.0f), math_utils::degreesToRadians(120.0f)),  // Deep bend
+            JointAngles(0.0f, math_utils::degreesToRadians(-30.0f), math_utils::degreesToRadians(60.0f)),                                 // Mild bend
+            JointAngles(0.0f, math_utils::degreesToRadians(-45.0f), math_utils::degreesToRadians(90.0f)),                                 // Standard bend
+            JointAngles(0.0f, math_utils::degreesToRadians(-60.0f), math_utils::degreesToRadians(120.0f)),                                // Deep bend
             JointAngles(math_utils::degreesToRadians(30.0f), math_utils::degreesToRadians(-30.0f), math_utils::degreesToRadians(60.0f)),  // Side + mild bend
             JointAngles(math_utils::degreesToRadians(45.0f), math_utils::degreesToRadians(-45.0f), math_utils::degreesToRadians(90.0f)),  // Side + standard bend
             JointAngles(math_utils::degreesToRadians(-30.0f), math_utils::degreesToRadians(-30.0f), math_utils::degreesToRadians(60.0f)), // Other side + mild bend
             JointAngles(math_utils::degreesToRadians(-45.0f), math_utils::degreesToRadians(-45.0f), math_utils::degreesToRadians(90.0f)), // Other side + standard bend
-            JointAngles(0.0f, math_utils::degreesToRadians(-15.0f), math_utils::degreesToRadians(30.0f)),   // Extended pose
-            JointAngles(0.0f, math_utils::degreesToRadians(-75.0f), math_utils::degreesToRadians(150.0f)),  // High pose
+            JointAngles(0.0f, math_utils::degreesToRadians(-15.0f), math_utils::degreesToRadians(30.0f)),                                 // Extended pose
+            JointAngles(0.0f, math_utils::degreesToRadians(-75.0f), math_utils::degreesToRadians(150.0f)),                                // High pose
         };
 
         for (int leg = 0; leg < NUM_LEGS; leg++) {
@@ -250,8 +250,8 @@ class IKFKValidator {
         for (int i = 0; i < benchmark_iterations; i++) {
             int leg = i % NUM_LEGS;
             Point3D test_pos(200 + (i % 100), 0, -150 - (i % 50));
-            JointAngles angles = model.inverseKinematics(leg, test_pos);
-            Point3D computed_pos = model.forwardKinematics(leg, angles);
+            JointAngles angles = model.inverseKinematicsGlobalCoordinates(leg, test_pos);
+            Point3D computed_pos = model.forwardKinematicsGlobalCoordinates(leg, angles);
         }
 
         auto benchmark_end = std::chrono::high_resolution_clock::now();

@@ -1,10 +1,10 @@
 #include "body_pose_controller.h"
 #include "body_pose_config_factory.h"
-#include "math_utils.h"
-#include "leg_poser.h"
 #include "hexamotion_constants.h"
-#include <cmath>
+#include "leg_poser.h"
+#include "math_utils.h"
 #include <algorithm>
+#include <cmath>
 /**
  * @file body_pose_controller.cpp
  * @brief Implementation of the kinematic body pose controller.
@@ -12,14 +12,14 @@
 
 // Internal implementation class to avoid circular dependencies
 class BodyPoseController::LegPoserImpl {
-public:
-    LegPoserImpl(BodyPoseController* controller, int leg_index, Leg& leg)
+  public:
+    LegPoserImpl(BodyPoseController *controller, int leg_index, Leg &leg)
         : poser_(controller, nullptr, leg_index, leg) {}
 
-    LegPoser* get() { return &poser_; }
-    const LegPoser* get() const { return &poser_; }
+    LegPoser *get() { return &poser_; }
+    const LegPoser *get() const { return &poser_; }
 
-private:
+  private:
     LegPoser poser_;
 };
 
@@ -56,7 +56,7 @@ void BodyPoseController::initializeLegPosers(Leg legs[NUM_LEGS]) {
     }
 }
 
-LegPoser* BodyPoseController::getLegPoser(int leg_index) const {
+LegPoser *BodyPoseController::getLegPoser(int leg_index) const {
     if (leg_index >= 0 && leg_index < NUM_LEGS && leg_posers_[leg_index]) {
         return leg_posers_[leg_index]->get();
     }
@@ -64,7 +64,7 @@ LegPoser* BodyPoseController::getLegPoser(int leg_index) const {
 }
 
 bool BodyPoseController::setBodyPose(const Eigen::Vector3d &position, const Eigen::Vector3d &orientation,
-                                 Leg legs[NUM_LEGS]) {
+                                     Leg legs[NUM_LEGS]) {
     // OpenSHC-style: Check body pose limits before applying
     if (!checkBodyPoseLimits(position, orientation)) {
         return false; // Body pose exceeds configured limits
@@ -82,14 +82,14 @@ bool BodyPoseController::setBodyPose(const Eigen::Vector3d &position, const Eige
 
 bool BodyPoseController::setLegPosition(int leg_index, const Point3D &position, Leg legs[NUM_LEGS]) {
     // Use LegPoser if available
-    LegPoser* poser = getLegPoser(leg_index);
+    LegPoser *poser = getLegPoser(leg_index);
     if (poser) {
         // Use LegPoser's stepToPosition method for smooth movement
         Pose target_pose(position, Eigen::Vector3d(0, 0, 0));
         Pose delta_pose(Point3D(0, 0, 0), Eigen::Vector3d(0, 0, 0));
 
         // Use a reasonable step time and lift height
-        double step_time = 1.0; // 1 second for pose adjustment
+        double step_time = 1.0;    // 1 second for pose adjustment
         double lift_height = 20.0; // 20mm lift height
 
         int progress = poser->stepToPosition(target_pose, delta_pose, lift_height, step_time, true);
@@ -97,7 +97,7 @@ bool BodyPoseController::setLegPosition(int leg_index, const Point3D &position, 
     }
 
     // Fallback to direct calculation if LegPoser not available
-    JointAngles angles = model.inverseKinematics(leg_index, position);
+    JointAngles angles = model.inverseKinematicsGlobalCoordinates(leg_index, position);
 
     angles.coxa = model.constrainAngle(angles.coxa, model.getParams().coxa_angle_limits[0],
                                        model.getParams().coxa_angle_limits[1]);
@@ -107,7 +107,7 @@ bool BodyPoseController::setLegPosition(int leg_index, const Point3D &position, 
                                         model.getParams().tibia_angle_limits[1]);
 
     legs[leg_index].setJointAngles(angles);
-    legs[leg_index].setCurrentTipPositionGlobal(model.forwardKinematics(leg_index, angles));
+    legs[leg_index].setCurrentTipPositionGlobal(model.forwardKinematicsGlobalCoordinates(leg_index, angles));
 
     return true;
 }
@@ -134,7 +134,7 @@ bool BodyPoseController::calculateBodyPoseFromConfig(double height_offset, Leg l
             setLegPosition(i, target_pos, legs);
         } else {
             // Fallback to direct calculation
-            JointAngles angles = model.inverseKinematics(i, target_pos);
+            JointAngles angles = model.inverseKinematicsGlobalCoordinates(i, target_pos);
 
             if (!model.checkJointLimits(i, angles)) {
                 return false;
@@ -183,7 +183,7 @@ bool BodyPoseController::setStandingPose(Leg legs[NUM_LEGS]) {
                                             model.getParams().tibia_angle_limits[1]);
 
         // Calculate resulting position using forward kinematics
-        legs[i].setCurrentTipPositionGlobal(model.forwardKinematics(i, angles));
+        legs[i].setCurrentTipPositionGlobal(model.forwardKinematicsGlobalCoordinates(i, angles));
         legs[i].setJointAngles(angles);
     }
 
@@ -191,7 +191,7 @@ bool BodyPoseController::setStandingPose(Leg legs[NUM_LEGS]) {
 }
 
 bool BodyPoseController::setBodyPoseQuaternion(const Eigen::Vector3d &position, const Eigen::Vector4d &quaternion,
-                                           Leg legs[NUM_LEGS]) {
+                                               Leg legs[NUM_LEGS]) {
     // Use smooth trajectory with quaternion if enabled
     if (model.getParams().smooth_trajectory.use_current_servo_positions &&
         model.getParams().smooth_trajectory.enable_pose_interpolation &&
@@ -209,8 +209,8 @@ bool BodyPoseController::setBodyPoseQuaternion(const Eigen::Vector3d &position, 
 }
 
 bool BodyPoseController::interpolatePose(const Eigen::Vector3d &start_pos, const Eigen::Vector4d &start_quat,
-                                     const Eigen::Vector3d &end_pos, const Eigen::Vector4d &end_quat,
-                                     double t, Leg legs[NUM_LEGS]) {
+                                         const Eigen::Vector3d &end_pos, const Eigen::Vector4d &end_quat,
+                                         double t, Leg legs[NUM_LEGS]) {
     // Clamp interpolation parameter
     t = std::max(0.0, std::min(DEFAULT_ANGULAR_SCALING, t));
 
@@ -239,7 +239,7 @@ Eigen::Vector4d BodyPoseController::quaternionSlerp(const Eigen::Vector4d &q1, c
     if (dot > 0.9995f) {
         Eigen::Vector4d result = q1 + t * (q2_adj - q1);
         double norm = sqrt(result[0] * result[0] + result[1] * result[1] +
-                          result[2] * result[2] + result[3] * result[3]);
+                           result[2] * result[2] + result[3] * result[3]);
         if (norm > 0.0f) {
             result = result / norm;
         }
@@ -260,7 +260,7 @@ Eigen::Vector4d BodyPoseController::quaternionSlerp(const Eigen::Vector4d &q1, c
 }
 
 bool BodyPoseController::setBodyPoseSmooth(const Eigen::Vector3d &position, const Eigen::Vector3d &orientation,
-                                       Leg legs[NUM_LEGS], IServoInterface *servos) {
+                                           Leg legs[NUM_LEGS], IServoInterface *servos) {
     // Check if smooth trajectory is enabled
     if (!model.getParams().smooth_trajectory.use_current_servo_positions) {
         // Fall back to original non-smooth method
@@ -282,7 +282,7 @@ bool BodyPoseController::setBodyPoseSmooth(const Eigen::Vector3d &position, cons
 }
 
 bool BodyPoseController::setBodyPoseSmoothQuaternion(const Eigen::Vector3d &position, const Eigen::Vector4d &quaternion,
-                                                 Leg legs[NUM_LEGS]) {
+                                                     Leg legs[NUM_LEGS]) {
     // Convert quaternion to euler for compatibility with existing smooth trajectory
     Point3D euler_rad = math_utils::quaternionToEulerPoint3D(quaternion);
     Eigen::Vector3d orientation(
@@ -305,14 +305,14 @@ bool BodyPoseController::getCurrentServoPositions(IServoInterface *servos, Leg l
 
         // Update leg object with current servo positions
         legs[i].setJointAngles(current_angles);
-        legs[i].setCurrentTipPositionGlobal(model.forwardKinematics(i, current_angles));
+        legs[i].setCurrentTipPositionGlobal(model.forwardKinematicsGlobalCoordinates(i, current_angles));
     }
 
     return true;
 }
 
 bool BodyPoseController::setBodyPoseImmediate(const Eigen::Vector3d &position, const Eigen::Vector3d &orientation,
-                                          Leg legs[NUM_LEGS]) {
+                                              Leg legs[NUM_LEGS]) {
     // Reset any active trajectory
     resetTrajectory();
 
@@ -342,9 +342,9 @@ bool BodyPoseController::checkBodyPoseLimits(const Eigen::Vector3d &position, co
     }
 
     // Check orientation limits (roll, pitch, yaw) - simplified
-    double max_roll = 30.0;   // 30 degrees max roll
-    double max_pitch = 30.0;  // 30 degrees max pitch
-    double max_yaw = 45.0;    // 45 degrees max yaw
+    double max_roll = 30.0;  // 30 degrees max roll
+    double max_pitch = 30.0; // 30 degrees max pitch
+    double max_yaw = 45.0;   // 45 degrees max yaw
 
     if (std::abs(orientation.x()) > max_roll ||
         std::abs(orientation.y()) > max_pitch ||
@@ -356,8 +356,8 @@ bool BodyPoseController::checkBodyPoseLimits(const Eigen::Vector3d &position, co
 }
 
 bool BodyPoseController::initializeTrajectoryFromCurrent(const Eigen::Vector3d &target_position,
-                                                     const Eigen::Vector3d &target_orientation,
-                                                     Leg legs[NUM_LEGS], IServoInterface *servos) {
+                                                         const Eigen::Vector3d &target_orientation,
+                                                         Leg legs[NUM_LEGS], IServoInterface *servos) {
     // Store current positions as trajectory start
     for (int i = 0; i < NUM_LEGS; i++) {
         trajectory_start_positions[i] = legs[i].getCurrentTipPositionGlobal();
@@ -374,7 +374,7 @@ bool BodyPoseController::initializeTrajectoryFromCurrent(const Eigen::Vector3d &
         trajectory_target_positions[i].z = -target_position.z(); // Adjust height
 
         // Calculate target angles
-        trajectory_target_angles[i] = model.inverseKinematics(i, trajectory_target_positions[i]);
+        trajectory_target_angles[i] = model.inverseKinematicsGlobalCoordinates(i, trajectory_target_positions[i]);
     }
 
     return true;
@@ -406,20 +406,20 @@ bool BodyPoseController::updateTrajectoryStep(Leg legs[NUM_LEGS]) {
         // Linear interpolation for positions
         Point3D interp_pos;
         interp_pos.x = trajectory_start_positions[i].x +
-                      trajectory_progress * (trajectory_target_positions[i].x - trajectory_start_positions[i].x);
+                       trajectory_progress * (trajectory_target_positions[i].x - trajectory_start_positions[i].x);
         interp_pos.y = trajectory_start_positions[i].y +
-                      trajectory_progress * (trajectory_target_positions[i].y - trajectory_start_positions[i].y);
+                       trajectory_progress * (trajectory_target_positions[i].y - trajectory_start_positions[i].y);
         interp_pos.z = trajectory_start_positions[i].z +
-                      trajectory_progress * (trajectory_target_positions[i].z - trajectory_start_positions[i].z);
+                       trajectory_progress * (trajectory_target_positions[i].z - trajectory_start_positions[i].z);
 
         // Linear interpolation for angles
         JointAngles interp_angles;
         interp_angles.coxa = trajectory_start_angles[i].coxa +
-                           trajectory_progress * (trajectory_target_angles[i].coxa - trajectory_start_angles[i].coxa);
+                             trajectory_progress * (trajectory_target_angles[i].coxa - trajectory_start_angles[i].coxa);
         interp_angles.femur = trajectory_start_angles[i].femur +
-                            trajectory_progress * (trajectory_target_angles[i].femur - trajectory_start_angles[i].femur);
+                              trajectory_progress * (trajectory_target_angles[i].femur - trajectory_start_angles[i].femur);
         interp_angles.tibia = trajectory_start_angles[i].tibia +
-                            trajectory_progress * (trajectory_target_angles[i].tibia - trajectory_start_angles[i].tibia);
+                              trajectory_progress * (trajectory_target_angles[i].tibia - trajectory_start_angles[i].tibia);
 
         // Update leg
         legs[i].setCurrentTipPositionGlobal(interp_pos);
@@ -431,21 +431,21 @@ bool BodyPoseController::updateTrajectoryStep(Leg legs[NUM_LEGS]) {
 
 // OpenSHC-style tripod leg coordination for stance transition
 int BodyPoseController::stepToNewStance(Leg legs[NUM_LEGS], double step_height, double step_time) {
-    static int current_group = 0;  // 0 = Group A (AR, CR, BL), 1 = Group B (BR, CL, AL)
+    static int current_group = 0; // 0 = Group A (AR, CR, BL), 1 = Group B (BR, CL, AL)
     static int legs_completed_step = 0;
     static bool sequence_generated = false;
 
     // Define tripod groups (OpenSHC equivalent)
-    const int group_a_legs[] = {0, 2, 4};  // AR, CR, BL
-    const int group_b_legs[] = {1, 3, 5};  // BR, CL, AL
-    const int* current_group_legs = (current_group == 0) ? group_a_legs : group_b_legs;
+    const int group_a_legs[] = {0, 2, 4}; // AR, CR, BL
+    const int group_b_legs[] = {1, 3, 5}; // BR, CL, AL
+    const int *current_group_legs = (current_group == 0) ? group_a_legs : group_b_legs;
     const int legs_in_group = 3;
 
     // Generate sequence if not already done
     if (!sequence_generated) {
         // Calculate stance positions for each leg based on body pose configuration
         for (int i = 0; i < NUM_LEGS; i++) {
-            const auto& stance_pos = body_pose_config.leg_stance_positions[i];
+            const auto &stance_pos = body_pose_config.leg_stance_positions[i];
             Point3D stance_position(stance_pos.x, stance_pos.y, -model.getParams().robot_height);
 
             // Store target stance position for each leg
@@ -468,9 +468,9 @@ int BodyPoseController::stepToNewStance(Leg legs[NUM_LEGS], double step_height, 
 
             // Update leg with current position from LegPoser
             legs[leg_index].setCurrentTipPositionGlobal(leg_posers_[leg_index]->get()->getCurrentPosition());
-            legs[leg_index].setJointAngles(model.inverseKinematics(leg_index, legs[leg_index].getCurrentTipPositionGlobal()));
+            legs[leg_index].setJointAngles(model.inverseKinematicsGlobalCoordinates(leg_index, legs[leg_index].getCurrentTipPositionGlobal()));
 
-            if (leg_progress == 100) {  // PROGRESS_COMPLETE equivalent
+            if (leg_progress == 100) { // PROGRESS_COMPLETE equivalent
                 legs_completed_step++;
             }
             progress = std::max(progress, leg_progress);
@@ -482,14 +482,14 @@ int BodyPoseController::stepToNewStance(Leg legs[NUM_LEGS], double step_height, 
 
     // Check if current group is complete
     if (legs_completed_step >= legs_in_group) {
-        current_group = (current_group + 1) % 2;  // Switch between groups A and B
+        current_group = (current_group + 1) % 2; // Switch between groups A and B
         legs_completed_step = 0;
 
         // Check if all legs have completed
         if (current_group == 0) {
             // Reset for next cycle
             sequence_generated = false;
-            return 100;  // PROGRESS_COMPLETE
+            return 100; // PROGRESS_COMPLETE
         }
     }
 
@@ -510,9 +510,9 @@ int BodyPoseController::executeStartupSequence(Leg legs[NUM_LEGS]) {
     // Execute stepToNewStance for stance transition
     int progress = stepToNewStance(legs, 30.0, 0.5);
 
-    if (progress == 100) {  // Sequence complete
+    if (progress == 100) { // Sequence complete
         sequence_initialized = false;
-        return 100;  // PROGRESS_COMPLETE
+        return 100; // PROGRESS_COMPLETE
     }
 
     return progress;
@@ -534,28 +534,28 @@ int BodyPoseController::executeShutdownSequence(Leg legs[NUM_LEGS]) {
     for (int i = 0; i < NUM_LEGS; i++) {
         if (leg_posers_[i]) {
             // Get standing pose joint angles
-            const auto& standing_joints = body_pose_config.standing_pose_joints[i];
+            const auto &standing_joints = body_pose_config.standing_pose_joints[i];
             JointAngles target_angles;
             target_angles.coxa = standing_joints.coxa;
             target_angles.femur = standing_joints.femur;
             target_angles.tibia = standing_joints.tibia;
 
             // Calculate target position from joint angles
-            Point3D target_position = model.forwardKinematics(i, target_angles);
+            Point3D target_position = model.forwardKinematicsGlobalCoordinates(i, target_angles);
 
             int leg_progress = leg_posers_[i]->get()->stepToPosition(target_position, 30.0, 0.5);
 
             // Update leg with current position
             legs[i].setCurrentTipPositionGlobal(leg_posers_[i]->get()->getCurrentPosition());
-            legs[i].setJointAngles(model.inverseKinematics(i, legs[i].getCurrentTipPositionGlobal()));
+            legs[i].setJointAngles(model.inverseKinematicsGlobalCoordinates(i, legs[i].getCurrentTipPositionGlobal()));
 
             progress = std::max(progress, leg_progress);
         }
     }
 
-    if (progress == 100) {  // Sequence complete
+    if (progress == 100) { // Sequence complete
         sequence_initialized = false;
-        return 100;  // PROGRESS_COMPLETE
+        return 100; // PROGRESS_COMPLETE
     }
 
     return progress;
@@ -571,16 +571,16 @@ bool BodyPoseController::updateAutoPose(double gait_phase, Leg legs[NUM_LEGS]) {
     // Use configuration from factory instead of hardcoded values
 
     // Get tripod groups from configuration
-    const auto& group_a_legs = auto_pose_config.tripod_group_a_legs;
-    const auto& group_b_legs = auto_pose_config.tripod_group_b_legs;
+    const auto &group_a_legs = auto_pose_config.tripod_group_a_legs;
+    const auto &group_b_legs = auto_pose_config.tripod_group_b_legs;
 
     // Calculate which group is in stance phase
     bool group_a_stance = (gait_phase < 0.5);
     bool group_b_stance = (gait_phase >= 0.5);
 
     // Get amplitudes from configuration
-    const auto& roll_amplitudes = auto_pose_config.roll_amplitudes;
-    const auto& z_amplitudes = auto_pose_config.z_amplitudes;
+    const auto &roll_amplitudes = auto_pose_config.roll_amplitudes;
+    const auto &z_amplitudes = auto_pose_config.z_amplitudes;
 
     // Calculate compensation based on stance group
     double roll_compensation = 0.0;
@@ -588,12 +588,12 @@ bool BodyPoseController::updateAutoPose(double gait_phase, Leg legs[NUM_LEGS]) {
 
     if (group_a_stance && roll_amplitudes.size() >= 2 && z_amplitudes.size() >= 2) {
         // Group A in stance (AR, CR, BL) - compensate for Group B in swing
-        roll_compensation = roll_amplitudes[0];  // First amplitude value
-        z_compensation = z_amplitudes[0];        // First amplitude value
+        roll_compensation = roll_amplitudes[0]; // First amplitude value
+        z_compensation = z_amplitudes[0];       // First amplitude value
     } else if (group_b_stance && roll_amplitudes.size() >= 2 && z_amplitudes.size() >= 2) {
         // Group B in stance (BR, CL, AL) - compensate for Group A in swing
-        roll_compensation = roll_amplitudes[1];  // Second amplitude value
-        z_compensation = z_amplitudes[1];        // Second amplitude value
+        roll_compensation = roll_amplitudes[1]; // Second amplitude value
+        z_compensation = z_amplitudes[1];       // Second amplitude value
     }
 
     // Apply auto-pose compensation to all legs
@@ -615,7 +615,7 @@ bool BodyPoseController::updateAutoPose(double gait_phase, Leg legs[NUM_LEGS]) {
             legs[i].setCurrentTipPositionGlobal(compensated_pos);
 
             // Recalculate joint angles for compensated position
-            JointAngles compensated_angles = model.inverseKinematics(i, compensated_pos);
+            JointAngles compensated_angles = model.inverseKinematicsGlobalCoordinates(i, compensated_pos);
             legs[i].setJointAngles(compensated_angles);
         }
     }

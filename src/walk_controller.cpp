@@ -1,13 +1,12 @@
 #include "walk_controller.h"
 #include "hexamotion_constants.h"
-#include "workspace_validator.h" // Use unified validator instead
 #include "math_utils.h"
+#include "workspace_validator.h" // Use unified validator instead
 #include <algorithm>
 #include <cmath>
 #include <iostream>
 #include <memory>
 #include <vector>
-
 
 WalkController::WalkController(RobotModel &m, Leg legs[NUM_LEGS])
     : model(m), current_gait(TRIPOD_GAIT), gait_phase(0.0f),
@@ -614,7 +613,7 @@ void WalkController::generateWalkspace() {
 
             // Check if target is reachable by this leg
             Point3D target(target_x, target_y, -params.robot_height);
-            JointAngles angles = model.inverseKinematics(leg, target);
+            JointAngles angles = model.inverseKinematicsGlobalCoordinates(leg, target);
 
             if (model.checkJointLimits(leg, angles)) {
                 double distance = sqrt((target_x - base_x) * (target_x - base_x) +
@@ -832,9 +831,9 @@ void WalkController::initializeGaitConfigs() {
     wave_config.phase_offsets[3] = 1.0f / 6.0f; // CL: 0.167
     wave_config.phase_offsets[4] = 0.0f / 6.0f; // BL: 0.000
     wave_config.phase_offsets[5] = 5.0f / 6.0f; // AL: 0.833
-    wave_config.stance_duration = 0.833f;        // 83.3% stance for stability
-    wave_config.swing_duration = 0.167f;         // 16.7% swing
-    wave_config.cycle_frequency = 0.8f;          // Slower cycle for stability
+    wave_config.stance_duration = 0.833f;       // 83.3% stance for stability
+    wave_config.swing_duration = 0.167f;        // 16.7% swing
+    wave_config.cycle_frequency = 0.8f;         // Slower cycle for stability
     wave_config.description = "Wave Gait - Maximum stability with sequential stepping";
     gait_configs_[WAVE_GAIT] = wave_config;
 
@@ -860,9 +859,9 @@ void WalkController::initializeGaitConfigs() {
     metachronal_config.phase_offsets[3] = 3.0f / 6.0f; // CL: 0.500
     metachronal_config.phase_offsets[4] = 4.0f / 6.0f; // BL: 0.667
     metachronal_config.phase_offsets[5] = 5.0f / 6.0f; // AL: 0.833
-    metachronal_config.stance_duration = 0.75f;         // 75% stance for smooth motion
-    metachronal_config.swing_duration = 0.25f;          // 25% swing
-    metachronal_config.cycle_frequency = 1.1f;          // Smooth cycle
+    metachronal_config.stance_duration = 0.75f;        // 75% stance for smooth motion
+    metachronal_config.swing_duration = 0.25f;         // 25% swing
+    metachronal_config.cycle_frequency = 1.1f;         // Smooth cycle
     metachronal_config.description = "Metachronal Gait - Smooth wave-like motion";
     gait_configs_[METACHRONAL_GAIT] = metachronal_config;
 
@@ -874,9 +873,9 @@ void WalkController::initializeGaitConfigs() {
     adaptive_config.phase_offsets[3] = 6.0f / 8.0f; // CL: 0.750
     adaptive_config.phase_offsets[4] = 4.0f / 8.0f; // BL: 0.500
     adaptive_config.phase_offsets[5] = 7.0f / 8.0f; // AL: 0.875
-    adaptive_config.stance_duration = 0.6f;          // 60% stance - adaptive
-    adaptive_config.swing_duration = 0.4f;           // 40% swing - adaptive
-    adaptive_config.cycle_frequency = 1.0f;          // Will adapt based on conditions
+    adaptive_config.stance_duration = 0.6f;         // 60% stance - adaptive
+    adaptive_config.swing_duration = 0.4f;          // 40% swing - adaptive
+    adaptive_config.cycle_frequency = 1.0f;         // Will adapt based on conditions
     adaptive_config.description = "Adaptive Gait - Dynamic pattern that changes based on conditions";
     gait_configs_[ADAPTIVE_GAIT] = adaptive_config;
 }
@@ -929,7 +928,7 @@ bool WalkController::setGaitType(GaitType gait) {
 void WalkController::configureGaitPhaseOffsets(GaitType gait) {
     auto it = gait_configs_.find(gait);
     if (it != gait_configs_.end()) {
-        const GaitConfig& config = it->second;
+        const GaitConfig &config = it->second;
 
         // Apply phase offsets to all leg steppers
         for (int i = 0; i < NUM_LEGS && i < (int)leg_steppers_.size(); i++) {
@@ -1010,7 +1009,7 @@ void WalkController::calculateAdaptivePhaseOffsets() {
         return;
     }
 
-    const GaitConfig& base_config = it->second;
+    const GaitConfig &base_config = it->second;
     double base_offsets[NUM_LEGS];
     for (int i = 0; i < NUM_LEGS; i++) {
         base_offsets[i] = base_config.phase_offsets[i];
@@ -1027,7 +1026,7 @@ void WalkController::calculateAdaptivePhaseOffsets() {
         for (int i = 0; i < NUM_LEGS && i < (int)leg_steppers_.size(); i++) {
             double tripod_offset = (i % 2) * 0.5f;
             double new_offset = base_offsets[i] * (1.0f - tripod_factor) +
-                               tripod_offset * tripod_factor;
+                                tripod_offset * tripod_factor;
             if (leg_steppers_[i]) {
                 leg_steppers_[i]->setPhaseOffset(new_offset);
             }
@@ -1047,7 +1046,7 @@ void WalkController::calculateAdaptivePhaseOffsets() {
 
         for (int i = 0; i < NUM_LEGS && i < (int)leg_steppers_.size(); i++) {
             double new_offset = base_offsets[i] * (1.0f - wave_factor) +
-                               wave_offsets[i] * wave_factor;
+                                wave_offsets[i] * wave_factor;
             if (leg_steppers_[i]) {
                 leg_steppers_[i]->setPhaseOffset(new_offset);
             }
@@ -1062,10 +1061,10 @@ void WalkController::calculateAdaptivePhaseOffsets() {
     }
 }
 
-void WalkController::getGaitTimingParameters(GaitType gait, double& stance_duration, double& swing_duration, double& cycle_frequency) const {
+void WalkController::getGaitTimingParameters(GaitType gait, double &stance_duration, double &swing_duration, double &cycle_frequency) const {
     auto it = gait_configs_.find(gait);
     if (it != gait_configs_.end()) {
-        const GaitConfig& config = it->second;
+        const GaitConfig &config = it->second;
         stance_duration = config.stance_duration;
         swing_duration = config.swing_duration;
         cycle_frequency = config.cycle_frequency;
@@ -1077,7 +1076,7 @@ void WalkController::getGaitTimingParameters(GaitType gait, double& stance_durat
     }
 }
 
-void WalkController::applyGaitConfig(const GaitConfig& config) {
+void WalkController::applyGaitConfig(const GaitConfig &config) {
     // Apply timing parameters
     stance_duration_ = config.stance_duration;
     swing_duration_ = config.swing_duration;
@@ -1099,7 +1098,7 @@ double WalkController::calculateStabilityIndex() const {
         return 0.5f; // Default moderate stability
     }
 
-    const auto& analysis_info = walkspace_analyzer_->getAnalysisInfo();
+    const auto &analysis_info = walkspace_analyzer_->getAnalysisInfo();
     return analysis_info.overall_stability_score;
 }
 
@@ -1112,7 +1111,7 @@ bool WalkController::checkTerrainConditions() const {
 }
 
 Point3D WalkController::calculateDefaultStancePosition(int leg_index) {
-    const auto& params = model.getParams();
+    const auto &params = model.getParams();
 
     // Use the same base positions as the main model
     Point3D base_pos = model.getAnalyticLegBasePosition(leg_index);
@@ -1175,7 +1174,7 @@ double WalkController::getStepLength() const {
 }
 
 double WalkController::calculateLegReach() const {
-    const auto& params = model.getParams();
+    const auto &params = model.getParams();
     return params.coxa_length + params.femur_length + params.tibia_length;
 }
 

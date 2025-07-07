@@ -1,6 +1,6 @@
 #include "workspace_validator.h"
-#include "robot_model.h"
 #include "math_utils.h"
+#include "robot_model.h"
 #include <algorithm>
 #include <cmath>
 #include <limits>
@@ -66,7 +66,7 @@ bool WorkspaceValidator::isReachable(int leg_index, const Point3D &target_positi
 }
 
 double WorkspaceValidator::checkCollisionRisk(int leg_index, const Point3D &target_position,
-                                             const Point3D current_leg_positions[NUM_LEGS]) const {
+                                              const Point3D current_leg_positions[NUM_LEGS]) const {
     // Get adjacent leg indices
     int left_adjacent = (leg_index + NUM_LEGS - 1) % NUM_LEGS;
     int right_adjacent = (leg_index + 1) % NUM_LEGS;
@@ -381,7 +381,7 @@ bool WorkspaceValidator::checkJointLimits(int leg_index, const Point3D &target_p
 
     // Calculate inverse kinematics and check if joint angles are within limits
     try {
-        JointAngles angles = model_.inverseKinematics(leg_index, target_position);
+        JointAngles angles = model_.inverseKinematicsGlobalCoordinates(leg_index, target_position);
 
         // Basic joint limit checks (these would be robot-specific)
         const double COXA_MIN = -45.0f, COXA_MAX = 45.0f;

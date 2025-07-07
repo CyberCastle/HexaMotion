@@ -51,7 +51,7 @@ int main() {
         Point3D target = model.forwardKinematics(0, original);
 
         // Inverse kinematics
-        JointAngles ik_result = model.inverseKinematics(0, target);
+        JointAngles ik_result = model.inverseKinematicsGlobalCoordinates(0, target);
 
         // Verify with forward kinematics
         Point3D fk_verify = model.forwardKinematics(0, ik_result);

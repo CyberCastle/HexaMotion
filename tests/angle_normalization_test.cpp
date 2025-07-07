@@ -74,7 +74,7 @@ int main() {
         std::cout << "  Local target: (" << local_target.x << ", " << local_target.y << ", " << local_target.z << ")" << std::endl;
         std::cout << "  Distance from leg base: " << target_distance << "mm (max: 359mm)" << std::endl;
 
-        JointAngles angles = model.inverseKinematics(0, target);
+        JointAngles angles = model.inverseKinematicsGlobalCoordinates(0, target);
         std::cout << "  IK result: (" << angles.coxa << "°, " << angles.femur << "°, " << angles.tibia << "°)" << std::endl;
 
         // Check joint limits

@@ -3,9 +3,9 @@
 #include "math_utils.h"
 #include <algorithm>
 #include <cmath>
+#include <iomanip>
 #include <iostream>
 #include <sstream>
-#include <iomanip>
 
 WalkspaceAnalyzer::WalkspaceAnalyzer(RobotModel &model, ComputeConfig config)
     : model_(model), config_(config), analysis_enabled_(true), total_analysis_time_(0.0) {
@@ -213,8 +213,8 @@ void WalkspaceAnalyzer::generateWalkspaceForLeg(int leg_index) {
     // Generates multiple height layers (workplanes) for complete 3D workspace
     if (config_.precision == PRECISION_HIGH) {
         // OpenSHC algorithm parameters
-        const int WORKSPACE_LAYERS = 10;         // Height layers (from OpenSHC)
-        const int BEARING_STEP = 45;             // 45° steps = 8 directions (from OpenSHC)
+        const int WORKSPACE_LAYERS = 10;          // Height layers (from OpenSHC)
+        const int BEARING_STEP = 45;              // 45° steps = 8 directions (from OpenSHC)
         const double MAX_POSITION_DELTA = 0.005f; // 5mm increments (optimized for speed)
         const double MAX_WORKSPACE_RADIUS = 0.3f; // 300mm max radius
 
@@ -310,7 +310,7 @@ void WalkspaceAnalyzer::generateWalkspaceForLeg(int leg_index) {
 
 bool WalkspaceAnalyzer::detailedReachabilityCheck(int leg_index, const Point3D &position) {
     // Use inverse kinematics to check reachability
-    JointAngles angles = model_.inverseKinematics(leg_index, position);
+    JointAngles angles = model_.inverseKinematicsGlobalCoordinates(leg_index, position);
     return model_.checkJointLimits(leg_index, angles);
 }
 
@@ -654,7 +654,7 @@ std::string WalkspaceAnalyzer::getAnalysisInfoString() const {
        << analysis_info_.current_result.reachable_area << " mm²\n";
 
     ss << "\nLeg Reachability Scores:\n";
-    for (const auto& leg_score : analysis_info_.leg_reachability) {
+    for (const auto &leg_score : analysis_info_.leg_reachability) {
         ss << "  Leg " << leg_score.first << ": " << std::fixed << std::setprecision(3)
            << leg_score.second << "\n";
     }

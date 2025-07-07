@@ -2,19 +2,7 @@
 #include "hexamotion_constants.h"
 
 Leg::Leg(int leg_id, const RobotModel &model)
-    : leg_id_(leg_id)
-    , leg_name_("Leg_" + std::to_string(leg_id))
-    , joint_angles_(0.0, 0.0, 0.0)
-    , tip_position_(0.0, 0.0, 0.0)
-    , base_position_(0.0, 0.0, 0.0)
-    , step_phase_(STANCE_PHASE)
-    , gait_phase_(0.0)
-    , in_contact_(false)
-    , contact_force_(0.0)
-    , fsr_history_index_(0)
-    , leg_phase_offset_(0.0)
-    , default_angles_(0.0, 0.0, 0.0)
-    , default_tip_position_(0.0, 0.0, 0.0) {
+    : leg_id_(leg_id), leg_name_("Leg_" + std::to_string(leg_id)), joint_angles_(0.0, 0.0, 0.0), tip_position_(0.0, 0.0, 0.0), base_position_(0.0, 0.0, 0.0), step_phase_(STANCE_PHASE), gait_phase_(0.0), in_contact_(false), contact_force_(0.0), fsr_history_index_(0), leg_phase_offset_(0.0), default_angles_(0.0, 0.0, 0.0), default_tip_position_(0.0, 0.0, 0.0) {
 
     // Initialize FSR contact history
     for (int i = 0; i < 3; ++i) {
@@ -37,18 +25,28 @@ void Leg::setJointAngles(const JointAngles &angles) {
 
 double Leg::getJointAngle(int joint_index) const {
     switch (joint_index) {
-        case 0: return joint_angles_.coxa;
-        case 1: return joint_angles_.femur;
-        case 2: return joint_angles_.tibia;
-        default: return 0.0;
+    case 0:
+        return joint_angles_.coxa;
+    case 1:
+        return joint_angles_.femur;
+    case 2:
+        return joint_angles_.tibia;
+    default:
+        return 0.0;
     }
 }
 
 void Leg::setJointAngle(int joint_index, double angle) {
     switch (joint_index) {
-        case 0: joint_angles_.coxa = angle; break;
-        case 1: joint_angles_.femur = angle; break;
-        case 2: joint_angles_.tibia = angle; break;
+    case 0:
+        joint_angles_.coxa = angle;
+        break;
+    case 1:
+        joint_angles_.femur = angle;
+        break;
+    case 2:
+        joint_angles_.tibia = angle;
+        break;
     }
 }
 
@@ -77,7 +75,7 @@ void Leg::updateForwardKinematics(const RobotModel &model) {
 
 bool Leg::updateInverseKinematics(const RobotModel &model, const Point3D &target_position) {
     // Use RobotModel to calculate IK
-    JointAngles new_angles = model.inverseKinematics(leg_id_, target_position);
+    JointAngles new_angles = model.inverseKinematicsGlobalCoordinates(leg_id_, target_position);
 
     // Check if IK was successful (basic validation)
     if (checkJointLimits(model.getParams())) {
@@ -134,9 +132,9 @@ double Leg::getJointLimitProximity(const Parameters &params) const {
     double femur_range = params.femur_angle_limits[1] - params.femur_angle_limits[0];
     double tibia_range = params.tibia_angle_limits[1] - params.tibia_angle_limits[0];
 
-    double coxa_proximity = 1.0 - abs(joint_angles_.coxa - (params.coxa_angle_limits[0] + coxa_range/2)) / (coxa_range/2);
-    double femur_proximity = 1.0 - abs(joint_angles_.femur - (params.femur_angle_limits[0] + femur_range/2)) / (femur_range/2);
-    double tibia_proximity = 1.0 - abs(joint_angles_.tibia - (params.tibia_angle_limits[0] + tibia_range/2)) / (tibia_range/2);
+    double coxa_proximity = 1.0 - abs(joint_angles_.coxa - (params.coxa_angle_limits[0] + coxa_range / 2)) / (coxa_range / 2);
+    double femur_proximity = 1.0 - abs(joint_angles_.femur - (params.femur_angle_limits[0] + femur_range / 2)) / (femur_range / 2);
+    double tibia_proximity = 1.0 - abs(joint_angles_.tibia - (params.tibia_angle_limits[0] + tibia_range / 2)) / (tibia_range / 2);
 
     // Return minimum proximity (worst case)
     return std::min({coxa_proximity, femur_proximity, tibia_proximity});
@@ -144,20 +142,19 @@ double Leg::getJointLimitProximity(const Parameters &params) const {
 
 void Leg::constrainJointLimits(const Parameters &params) {
     joint_angles_.coxa = std::max(params.coxa_angle_limits[0],
-                                 std::min(params.coxa_angle_limits[1], joint_angles_.coxa));
+                                  std::min(params.coxa_angle_limits[1], joint_angles_.coxa));
     joint_angles_.femur = std::max(params.femur_angle_limits[0],
-                                  std::min(params.femur_angle_limits[1], joint_angles_.femur));
+                                   std::min(params.femur_angle_limits[1], joint_angles_.femur));
     joint_angles_.tibia = std::max(params.tibia_angle_limits[0],
-                                  std::min(params.tibia_angle_limits[1], joint_angles_.tibia));
+                                   std::min(params.tibia_angle_limits[1], joint_angles_.tibia));
 }
-
 
 void Leg::initialize(const RobotModel &model, const Pose &default_stance) {
     // Calculate default tip position from stance pose
     Point3D stance_tip = default_stance.position;
 
     // Calculate IK for default stance
-    JointAngles stance_angles = model.inverseKinematics(leg_id_, stance_tip);
+    JointAngles stance_angles = model.inverseKinematicsGlobalCoordinates(leg_id_, stance_tip);
 
     // Set default configuration
     default_angles_ = stance_angles;
@@ -194,13 +191,13 @@ double Leg::getDistanceToTarget(const Point3D &target) const {
     double dx = target.x - tip_position_.x;
     double dy = target.y - tip_position_.y;
     double dz = target.z - tip_position_.z;
-    return sqrt(dx*dx + dy*dy + dz*dz);
+    return sqrt(dx * dx + dy * dy + dz * dz);
 }
 
 Eigen::Vector3d Leg::getLegDirection() const {
     Eigen::Vector3d direction(tip_position_.x - base_position_.x,
-                             tip_position_.y - base_position_.y,
-                             tip_position_.z - base_position_.z);
+                              tip_position_.y - base_position_.y,
+                              tip_position_.z - base_position_.z);
     return direction.normalized();
 }
 
@@ -209,14 +206,14 @@ bool Leg::isInDefaultStance(double tolerance) const {
 }
 
 // ✅ NEW: Set desired tip position (OpenSHC architecture)
-void Leg::setDesiredTipPositionGlobal(const Point3D& desired_position) {
+void Leg::setDesiredTipPositionGlobal(const Point3D &desired_position) {
     desired_tip_position_ = desired_position;
 }
 
 // ✅ NEW: Apply inverse kinematics (OpenSHC architecture)
-bool Leg::applyIK(const RobotModel& model) {
+bool Leg::applyIK(const RobotModel &model) {
     // Calculate IK from desired tip pose to get new joint angles
-    JointAngles new_angles = model.inverseKinematics(leg_id_, desired_tip_position_);
+    JointAngles new_angles = model.inverseKinematicsGlobalCoordinates(leg_id_, desired_tip_position_);
 
     // Update joint angles
     setJointAngles(new_angles);
@@ -240,7 +237,7 @@ void Leg::calculateBasePosition(const RobotModel &model) {
 
 void Leg::updateTipPosition(const RobotModel &model) {
     // Calculate tip position from current joint angles using FK
-    Point3D new_tip = model.forwardKinematics(leg_id_, joint_angles_);
+    Point3D new_tip = model.forwardKinematicsGlobalCoordinates(leg_id_, joint_angles_);
     tip_position_ = new_tip;
 }
 
