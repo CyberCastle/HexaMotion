@@ -1,10 +1,10 @@
 #include "math_utils.h"
 #include "robot_model.h"
 #include <cmath>
+#include <iomanip>
 #include <iostream>
 #include <limits>
 #include <vector>
-#include <iomanip>
 
 /**
  * @brief Comprehensive Kinematics Validation Test for HexaMotion
@@ -29,7 +29,7 @@ struct ValidationResults {
     int failed_tests = 0;
     std::vector<std::string> error_messages;
 
-    void addError(const std::string& message) {
+    void addError(const std::string &message) {
         error_messages.push_back(message);
         failed_tests++;
     }
@@ -47,7 +47,7 @@ struct ValidationResults {
 
         if (!error_messages.empty()) {
             std::cout << "\n=== ERROR DETAILS ===" << std::endl;
-            for (const auto& error : error_messages) {
+            for (const auto &error : error_messages) {
                 std::cout << "- " << error << std::endl;
             }
         }
@@ -55,19 +55,19 @@ struct ValidationResults {
 };
 
 class ComprehensiveKinematicsValidator {
-private:
+  private:
     RobotModel model;
     ValidationResults results;
 
     // Test configuration
-    const double step_coxa = 10.0;    // Smaller steps for more thorough testing
+    const double step_coxa = 10.0; // Smaller steps for more thorough testing
     const double step_femur = 10.0;
     const double step_tibia = 10.0;
-    const double position_tolerance = 2.0;  // 2mm tolerance
-    const double angle_tolerance = 1.0;     // 1 degree tolerance
+    const double position_tolerance = 2.0;                            // 2mm tolerance
+    const double angle_tolerance = math_utils::degreesToRadians(1.0); // 1 degree tolerance
 
-public:
-    ComprehensiveKinematicsValidator(const Parameters& params) : model(params) {
+  public:
+    ComprehensiveKinematicsValidator(const Parameters &params) : model(params) {
         if (!model.validate()) {
             throw std::runtime_error("Invalid robot model parameters");
         }
@@ -88,7 +88,7 @@ public:
         results.printSummary();
     }
 
-private:
+  private:
     void validateBasicIKFK() {
         std::cout << "\n--- Basic IK/FK Validation ---" << std::endl;
 
@@ -123,18 +123,18 @@ private:
 
                         if (error > position_tolerance) {
                             results.addError("Leg " + std::to_string(leg) +
-                                           " FK/IK error: " + std::to_string(error) + "mm");
+                                             " FK/IK error: " + std::to_string(error) + "mm");
                         }
 
                         // Test 2: Local coordinates FK -> IK round-trip
-                        Point3D local_pos = model.transformGlobalToLocalCoordinates(leg, global_pos, original_angles);
+                        Point3D local_pos = model.transformGlobalToLocalCoordinates(leg, global_pos, JointAngles(0, 0, 0));
                         JointAngles local_ik = model.solveIKLocalCoordinates(leg, global_pos, original_angles);
                         Point3D local_fk = model.forwardKinematics(leg, local_ik);
 
                         error = math_utils::distance(local_fk, local_pos);
                         if (error > position_tolerance) {
                             results.addError("Leg " + std::to_string(leg) +
-                                           " Local FK/IK error: " + std::to_string(error) + "mm");
+                                             " Local FK/IK error: " + std::to_string(error) + "mm");
                         }
                     }
                 }
@@ -154,10 +154,9 @@ private:
                 JointAngles(math_utils::degreesToRadians(30), math_utils::degreesToRadians(-30), math_utils::degreesToRadians(20)),
                 JointAngles(math_utils::degreesToRadians(-30), math_utils::degreesToRadians(30), math_utils::degreesToRadians(-20)),
                 JointAngles(math_utils::degreesToRadians(45), math_utils::degreesToRadians(-45), math_utils::degreesToRadians(30)),
-                JointAngles(math_utils::degreesToRadians(-45), math_utils::degreesToRadians(45), math_utils::degreesToRadians(-30))
-            };
+                JointAngles(math_utils::degreesToRadians(-45), math_utils::degreesToRadians(45), math_utils::degreesToRadians(-30))};
 
-            for (const auto& angles : test_configs) {
+            for (const auto &angles : test_configs) {
                 if (!model.checkJointLimits(leg, angles)) {
                     continue;
                 }
@@ -174,7 +173,7 @@ private:
 
                 if (error > position_tolerance) {
                     results.addError("Leg " + std::to_string(leg) +
-                                   " Global->Local->Global error: " + std::to_string(error) + "mm");
+                                     " Global->Local->Global error: " + std::to_string(error) + "mm");
                 }
 
                 // Test with different reference angles (convert degrees to radians)
@@ -185,7 +184,7 @@ private:
                 error = math_utils::distance(global_pos, global_ref);
                 if (error > position_tolerance) {
                     results.addError("Leg " + std::to_string(leg) +
-                                   " Reference frame transform error: " + std::to_string(error) + "mm");
+                                     " Reference frame transform error: " + std::to_string(error) + "mm");
                 }
             }
         }
@@ -216,12 +215,12 @@ private:
 
             if (pos_error > position_tolerance) {
                 results.addError("Leg " + std::to_string(leg) +
-                               " Pose position error: " + std::to_string(pos_error) + "mm");
+                                 " Pose position error: " + std::to_string(pos_error) + "mm");
             }
 
             if (rot_error > 0.1) { // 0.1 rad tolerance for rotation
                 results.addError("Leg " + std::to_string(leg) +
-                               " Pose rotation error: " + std::to_string(rot_error) + "rad");
+                                 " Pose rotation error: " + std::to_string(rot_error) + "rad");
             }
 
             // Test tip pose transformations
@@ -234,12 +233,12 @@ private:
 
             if (tip_error > position_tolerance) {
                 results.addError("Leg " + std::to_string(leg) +
-                               " Tip pose consistency error: " + std::to_string(tip_error) + "mm");
+                                 " Tip pose consistency error: " + std::to_string(tip_error) + "mm");
             }
         }
     }
 
-        void validateJacobianCalculations() {
+    void validateJacobianCalculations() {
         std::cout << "\n--- Jacobian Validation ---" << std::endl;
 
         for (int leg = 0; leg < NUM_LEGS; ++leg) {
@@ -266,22 +265,21 @@ private:
             Point3D jac_prediction = Point3D(
                 numeric_jac(0, 0) * delta,
                 numeric_jac(1, 0) * delta,
-                numeric_jac(2, 0) * delta
-            );
+                numeric_jac(2, 0) * delta);
 
             double consistency_error = math_utils::distance(pos_diff, jac_prediction);
             results.max_jacobian_error = std::max(results.max_jacobian_error, consistency_error);
 
             if (consistency_error > 0.1) { // 0.1mm tolerance for Jacobian consistency
                 results.addError("Leg " + std::to_string(leg) +
-                               " Jacobian consistency error: " + std::to_string(consistency_error) + "mm");
+                                 " Jacobian consistency error: " + std::to_string(consistency_error) + "mm");
             }
 
             // Test Jacobian determinant (should be non-zero for valid configurations)
             double det = numeric_jac.determinant();
             if (std::abs(det) < 1e-6) {
                 results.addError("Leg " + std::to_string(leg) +
-                               " Jacobian near singular: det = " + std::to_string(det));
+                                 " Jacobian near singular: det = " + std::to_string(det));
             }
         }
     }
@@ -359,17 +357,17 @@ private:
 
             // Test different target positions
             std::vector<Point3D> test_targets = {
-                Point3D(100, 0, -80),   // Forward reach
-                Point3D(-100, 0, -80),  // Backward reach
-                Point3D(0, 100, -80),   // Side reach
-                Point3D(0, -100, -80),  // Opposite side reach
-                Point3D(80, 80, -120),  // Diagonal reach
-                Point3D(0, 0, -60)      // High position
+                Point3D(100, 0, -80),  // Forward reach
+                Point3D(-100, 0, -80), // Backward reach
+                Point3D(0, 100, -80),  // Side reach
+                Point3D(0, -100, -80), // Opposite side reach
+                Point3D(80, 80, -120), // Diagonal reach
+                Point3D(0, 0, -60)     // High position
             };
 
             JointAngles current_angles(0, -30, 45);
 
-            for (const auto& target : test_targets) {
+            for (const auto &target : test_targets) {
                 results.total_tests++;
 
                 // Test different IK methods
@@ -382,7 +380,7 @@ private:
                 std::vector<JointAngles> solutions = {ik1, ik2, ik3, ik4};
                 std::vector<Point3D> positions;
 
-                for (const auto& sol : solutions) {
+                for (const auto &sol : solutions) {
                     if (model.checkJointLimits(leg, sol)) {
                         positions.push_back(model.forwardKinematicsGlobalCoordinates(leg, sol));
                     }
@@ -394,7 +392,7 @@ private:
                         double error = math_utils::distance(positions[0], positions[i]);
                         if (error > position_tolerance * 2) { // Allow more tolerance for different methods
                             results.addError("Leg " + std::to_string(leg) +
-                                           " IK method inconsistency: " + std::to_string(error) + "mm");
+                                             " IK method inconsistency: " + std::to_string(error) + "mm");
                         }
                     }
                 }
@@ -411,15 +409,15 @@ private:
             results.total_tests++;
 
             // Test valid angles
-            JointAngles valid_angles(30, -30, 20);
+            JointAngles valid_angles(math_utils::degreesToRadians(30), math_utils::degreesToRadians(-30), math_utils::degreesToRadians(20));
             if (!model.checkJointLimits(leg, valid_angles)) {
                 results.addError("Leg " + std::to_string(leg) + " incorrectly rejected valid angles");
             }
 
             // Test invalid angles
-            JointAngles invalid_coxa(100, 0, 0);  // Beyond coxa limits
-            JointAngles invalid_femur(0, 100, 0); // Beyond femur limits
-            JointAngles invalid_tibia(0, 0, 100); // Beyond tibia limits
+            JointAngles invalid_coxa(math_utils::degreesToRadians(100), 0, 0);  // Beyond coxa limits
+            JointAngles invalid_femur(0, math_utils::degreesToRadians(100), 0); // Beyond femur limits
+            JointAngles invalid_tibia(0, 0, math_utils::degreesToRadians(100)); // Beyond tibia limits
 
             if (model.checkJointLimits(leg, invalid_coxa)) {
                 results.addError("Leg " + std::to_string(leg) + " incorrectly accepted invalid coxa angle");
@@ -440,8 +438,8 @@ private:
 
             // Test angle constraining
             double constrained_rad = model.constrainAngle(math_utils::degreesToRadians(100.0),
-                                                        math_utils::degreesToRadians(-45.0),
-                                                        math_utils::degreesToRadians(45.0)); // Should constrain to 45 degrees
+                                                          math_utils::degreesToRadians(-45.0),
+                                                          math_utils::degreesToRadians(45.0)); // Should constrain to 45 degrees
             double constrained_deg = math_utils::radiansToDegrees(constrained_rad);
             if (std::abs(constrained_deg - 45.0) > angle_tolerance) {
                 results.addError("Angle constraining error: expected 45°, got " + std::to_string(constrained_deg) + "°");
@@ -464,20 +462,18 @@ private:
 
             double error = math_utils::distance(
                 model.forwardKinematicsGlobalCoordinates(leg, zero_ik),
-                zero_pos
-            );
+                zero_pos);
             if (error > position_tolerance) {
                 results.addError("Leg " + std::to_string(leg) +
-                               " zero angles FK/IK error: " + std::to_string(error) + "mm");
+                                 " zero angles FK/IK error: " + std::to_string(error) + "mm");
             }
 
             // Test limit angles
-            const auto& params = model.getParams();
+            const auto &params = model.getParams();
             JointAngles limit_angles(
                 params.coxa_angle_limits[1],
                 params.femur_angle_limits[1],
-                params.tibia_angle_limits[1]
-            );
+                params.tibia_angle_limits[1]);
 
             if (model.checkJointLimits(leg, limit_angles)) {
                 Point3D limit_pos = model.forwardKinematicsGlobalCoordinates(leg, limit_angles);
@@ -485,27 +481,25 @@ private:
 
                 error = math_utils::distance(
                     model.forwardKinematicsGlobalCoordinates(leg, limit_ik),
-                    limit_pos
-                );
+                    limit_pos);
                 if (error > position_tolerance) {
                     results.addError("Leg " + std::to_string(leg) +
-                                   " limit angles FK/IK error: " + std::to_string(error) + "mm");
+                                     " limit angles FK/IK error: " + std::to_string(error) + "mm");
                 }
             }
 
             // Test very small movements
-            JointAngles small_angles(0.1, -0.1, 0.1);
+            JointAngles small_angles(math_utils::degreesToRadians(0.1), math_utils::degreesToRadians(-0.1), math_utils::degreesToRadians(0.1));
             if (model.checkJointLimits(leg, small_angles)) {
                 Point3D small_pos = model.forwardKinematicsGlobalCoordinates(leg, small_angles);
                 JointAngles small_ik = model.inverseKinematicsGlobalCoordinates(leg, small_pos);
 
                 error = math_utils::distance(
                     model.forwardKinematicsGlobalCoordinates(leg, small_ik),
-                    small_pos
-                );
+                    small_pos);
                 if (error > position_tolerance) {
                     results.addError("Leg " + std::to_string(leg) +
-                                   " small angles FK/IK error: " + std::to_string(error) + "mm");
+                                     " small angles FK/IK error: " + std::to_string(error) + "mm");
                 }
             }
         }
@@ -548,7 +542,7 @@ int main() {
         std::cout << "\n=== TEST COMPLETED ===" << std::endl;
         return 0;
 
-    } catch (const std::exception& e) {
+    } catch (const std::exception &e) {
         std::cerr << "Test failed with exception: " << e.what() << std::endl;
         return 1;
     }
