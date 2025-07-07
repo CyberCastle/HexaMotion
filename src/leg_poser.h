@@ -16,12 +16,12 @@ class LocomotionSystem;
  * Equivalent to OpenSHC's ExternalTarget
  */
 struct ExternalTarget {
-    Pose pose;              ///< The target tip pose
-    double swing_clearance; ///< The height of the swing trajectory clearance
-    std::string frame_id;   ///< The target tip pose reference frame id
-    unsigned long time;     ///< The time of the request for the target tip pose (milliseconds)
-    Pose transform;         ///< The transform between reference frames
-    bool defined = false;   ///< Flag denoting if external target object has been defined
+    Pose pose;              //< The target tip pose
+    double swing_clearance; //< The height of the swing trajectory clearance
+    std::string frame_id;   //< The target tip pose reference frame id
+    unsigned long time;     //< The time of the request for the target tip pose (milliseconds)
+    Pose transform;         //< The transform between reference frames
+    bool defined = false;   //< Flag denoting if external target object has been defined
 };
 
 /**
@@ -178,31 +178,31 @@ public:
     }
 
 private:
-    BodyPoseController* body_pose_controller_; ///< Pointer to body pose controller object
-    LocomotionSystem* locomotion_system_;    ///< Pointer to locomotion system
-    int leg_index_;                          ///< Index of the leg this poser controls
-    Leg& leg_;                               ///< Reference to the Leg object this poser controls
+    BodyPoseController* body_pose_controller_; //< Pointer to body pose controller object
+    LocomotionSystem* locomotion_system_;    //< Pointer to locomotion system
+    int leg_index_;                          //< Index of the leg this poser controls
+    Leg& leg_;                               //< Reference to the Leg object this poser controls
 
-    Pose auto_pose_;                         ///< Leg specific auto pose (from default auto pose - negated if required)
-    bool negate_auto_pose_ = false;          ///< Flag denoting if negation of auto pose is to occur
-    int pose_negation_phase_start_ = 0;      ///< Phase start of auto pose negation cycle
-    int pose_negation_phase_end_ = 0;        ///< Phase end of auto pose negation cycle
-    double negation_transition_ratio_ = 0.0; ///< The ratio of the negation period used to transition to total negation
+    Pose auto_pose_;                         //< Leg specific auto pose (from default auto pose - negated if required)
+    bool negate_auto_pose_ = false;          //< Flag denoting if negation of auto pose is to occur
+    int pose_negation_phase_start_ = 0;      //< Phase start of auto pose negation cycle
+    int pose_negation_phase_end_ = 0;        //< Phase end of auto pose negation cycle
+    double negation_transition_ratio_ = 0.0; //< The ratio of the negation period used to transition to total negation
 
-    bool first_iteration_ = true;            ///< Flag denoting if an iterating function is on it's first iteration
-    int master_iteration_count_ = 0;         ///< Master iteration count used in generating time input for bezier curves
+    bool first_iteration_ = true;            //< Flag denoting if an iterating function is on it's first iteration
+    int master_iteration_count_ = 0;         //< Master iteration count used in generating time input for bezier curves
 
-    JointConfiguration desired_configuration_; ///< Configuration target for transitionConfiguration function
-    JointConfiguration origin_configuration_;  ///< Configuration origin for transitionConfiguration function
+    JointConfiguration desired_configuration_; //< Configuration target for transitionConfiguration function
+    JointConfiguration origin_configuration_;  //< Configuration origin for transitionConfiguration function
 
-    Pose origin_tip_pose_;                   ///< Origin tip pose used in bezier curve equations
-    Pose current_tip_pose_;                  ///< Current tip pose
-    Pose target_tip_pose_;                   ///< Target tip pose used in bezier curve equations
-    ExternalTarget external_target_;         ///< Externally set target tip pose object
+    Pose origin_tip_pose_;                   //< Origin tip pose used in bezier curve equations
+    Pose current_tip_pose_;                  //< Current tip pose
+    Pose target_tip_pose_;                   //< Target tip pose used in bezier curve equations
+    ExternalTarget external_target_;         //< Externally set target tip pose object
 
-    std::vector<Pose> transition_poses_;     ///< Vector of transition target tip poses
+    std::vector<Pose> transition_poses_;     //< Vector of transition target tip poses
 
-    bool leg_completed_step_ = false;        ///< Flag denoting if leg has completed its required step in a sequence
+    bool leg_completed_step_ = false;        //< Flag denoting if leg has completed its required step in a sequence
 
     // Constants
     static constexpr double JOINT_TOLERANCE = 0.01;  // rad

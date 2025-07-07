@@ -16,11 +16,11 @@
  * @brief Leg states for state machine control (OpenSHC equivalent)
  */
 enum LegState {
-    LEG_WALKING,                ///< The leg is in a 'walking' state - participates in walking cycle
-    LEG_MANUAL,                 ///< The leg is in a 'manual' state - able to move via manual manipulation inputs
-    LEG_STATE_COUNT,            ///< Misc enum defining number of LegStates
-    LEG_WALKING_TO_MANUAL = -1, ///< The leg is in 'walking to manual' state - transitioning from 'walking' to 'manual' state
-    LEG_MANUAL_TO_WALKING = -2, ///< The leg is in 'manual to walking' state - transitioning from 'manual' to 'walking' state
+    LEG_WALKING,                //< The leg is in a 'walking' state - participates in walking cycle
+    LEG_MANUAL,                 //< The leg is in a 'manual' state - able to move via manual manipulation inputs
+    LEG_STATE_COUNT,            //< Misc enum defining number of LegStates
+    LEG_WALKING_TO_MANUAL = -1, //< The leg is in 'walking to manual' state - transitioning from 'walking' to 'manual' state
+    LEG_MANUAL_TO_WALKING = -2, //< The leg is in 'manual to walking' state - transitioning from 'manual' to 'walking' state
 };
 
 // StepCycle is now defined in leg_stepper.h to avoid duplication

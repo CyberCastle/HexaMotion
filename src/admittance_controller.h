@@ -26,13 +26,13 @@ class AdmittanceController {
      * @brief Admittance parameters for virtual leg model
      */
     struct AdmittanceParams {
-        double virtual_mass;      ///< Virtual mass (kg)
-        double virtual_damping;   ///< Damping coefficient
-        double virtual_stiffness; ///< Spring stiffness
-        Point3D velocity;        ///< Current velocity
-        Point3D acceleration;    ///< Current acceleration
-        Point3D applied_force;   ///< Applied force
-        Point3D position_delta;  ///< Position change from admittance
+        double virtual_mass;      //< Virtual mass (kg)
+        double virtual_damping;   //< Damping coefficient
+        double virtual_stiffness; //< Spring stiffness
+        Point3D velocity;        //< Current velocity
+        Point3D acceleration;    //< Current acceleration
+        Point3D applied_force;   //< Applied force
+        Point3D position_delta;  //< Position change from admittance
 
         AdmittanceParams() : virtual_mass(0.5f), virtual_damping(2.0f),
                              virtual_stiffness(100.0f), velocity(0, 0, 0),
@@ -43,11 +43,11 @@ class AdmittanceController {
      * @brief Parameters for derivative function in admittance equation
      */
     struct AdmittanceDerivativeParams {
-        double mass;             ///< Virtual mass
-        double damping;          ///< Damping coefficient
-        double stiffness;        ///< Spring stiffness
-        Point3D external_force; ///< External force applied
-        Point3D equilibrium;    ///< Equilibrium position
+        double mass;             //< Virtual mass
+        double damping;          //< Damping coefficient
+        double stiffness;        //< Spring stiffness
+        Point3D external_force; //< External force applied
+        Point3D equilibrium;    //< Equilibrium position
 
         AdmittanceDerivativeParams() : mass(0.5f), damping(2.0f), stiffness(100.0f),
                                        external_force(0, 0, 0), equilibrium(0, 0, 0) {}
@@ -57,9 +57,9 @@ class AdmittanceController {
      * @brief ODE integration methods
      */
     enum IntegrationMethod {
-        EULER_METHOD,  ///< First-order Euler (fastest)
-        RUNGE_KUTTA_2, ///< Second-order RK (balanced)
-        RUNGE_KUTTA_4  ///< Fourth-order RK (most accurate)
+        EULER_METHOD,  //< First-order Euler (fastest)
+        RUNGE_KUTTA_2, //< Second-order RK (balanced)
+        RUNGE_KUTTA_4  //< Fourth-order RK (most accurate)
     };
 
     /**
@@ -69,7 +69,7 @@ class AdmittanceController {
         AdmittanceParams params;
         Point3D equilibrium_position;
         bool active;
-        double stiffness_scale; ///< Dynamic stiffness scaling
+        double stiffness_scale; //< Dynamic stiffness scaling
 
         LegAdmittanceState() : equilibrium_position(0, 0, 0), active(true), stiffness_scale(1.0f) {}
     };

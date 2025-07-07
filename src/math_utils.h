@@ -179,8 +179,8 @@ inline int roundToInt(double x) {
  */
 template <typename T>
 struct StateVector {
-    T position; ///< Position component
-    T velocity; ///< Velocity component
+    T position; //< Position component
+    T velocity; //< Velocity component
 
     StateVector() = default;
     StateVector(const T &pos, const T &vel) : position(pos), velocity(vel) {}

@@ -4,48 +4,45 @@
 #include "robot_model.h"
 #include "leg.h"
 
-// Forward declarations - REMOVED WalkController dependency
-// class WalkController; // ❌ ELIMINAR esta dependencia
-
 // Enum definitions needed by LegStepper
 enum WalkState {
-    WALK_STARTING,    ///< The walk controller cycle is in 'starting' state (transitioning from 'stopped' to 'moving')
-    WALK_MOVING,      ///< The walk controller cycle is in a 'moving' state (the primary walking state)
-    WALK_STOPPING,    ///< The walk controller cycle is in a 'stopping' state (transitioning from 'moving' to 'stopped')
-    WALK_STOPPED,     ///< The walk controller cycle is in a 'stopped' state (state whilst velocity input is zero)
-    WALK_STATE_COUNT, ///< Misc enum defining number of Walk States
+    WALK_STARTING,    //< The walk controller cycle is in 'starting' state (transitioning from 'stopped' to 'moving')
+    WALK_MOVING,      //< The walk controller cycle is in a 'moving' state (the primary walking state)
+    WALK_STOPPING,    //< The walk controller cycle is in a 'stopping' state (transitioning from 'moving' to 'stopped')
+    WALK_STOPPED,     //< The walk controller cycle is in a 'stopped' state (state whilst velocity input is zero)
+    WALK_STATE_COUNT, //< Misc enum defining number of Walk States
 };
 
 enum StepState {
-    STEP_SWING,        ///< The leg step cycle is in 'swing' state, the forward 'in air' progression of the step cycle
-    STEP_STANCE,       ///< The leg step cycle is in 'stance' state, the backward 'on ground' regression of the step cycle
-    STEP_FORCE_STANCE, ///< State used to force a 'stance' state in non-standard instances
-    STEP_FORCE_STOP,   ///< State used to force the step cycle to stop iterating
-    STEP_STATE_COUNT,  ///< Misc enum defining number of Step States
+    STEP_SWING,        //< The leg step cycle is in 'swing' state, the forward 'in air' progression of the step cycle
+    STEP_STANCE,       //< The leg step cycle is in 'stance' state, the backward 'on ground' regression of the step cycle
+    STEP_FORCE_STANCE, //< State used to force a 'stance' state in non-standard instances
+    STEP_FORCE_STOP,   //< State used to force the step cycle to stop iterating
+    STEP_STATE_COUNT,  //< Misc enum defining number of Step States
 };
 
 /**
  * @brief Step cycle timing parameters (OpenSHC equivalent)
  */
 struct StepCycle {
-    double frequency_;      ///< Step frequency in Hz
-    int period_;           ///< Total step cycle length in iterations
-    int swing_period_;     ///< Swing period length in iterations
-    int stance_period_;    ///< Stance period length in iterations
-    int stance_end_;       ///< Iteration when stance period ends
-    int swing_start_;      ///< Iteration when swing period starts
-    int swing_end_;        ///< Iteration when swing period ends
-    int stance_start_;     ///< Iteration when stance period starts
+    double frequency_;      //< Step frequency in Hz
+    int period_;           //< Total step cycle length in iterations
+    int swing_period_;     //< Swing period length in iterations
+    int stance_period_;    //< Stance period length in iterations
+    int stance_end_;       //< Iteration when stance period ends
+    int swing_start_;      //< Iteration when swing period starts
+    int swing_end_;        //< Iteration when swing period ends
+    int stance_start_;     //< Iteration when stance period starts
 };
 
 /**
  * @brief External target for leg positioning (OpenSHC equivalent)
  */
 struct LegStepperExternalTarget {
-    Point3D position;           ///< Target position
-    double swing_clearance;     ///< Swing clearance height
-    std::string frame_id;       ///< Reference frame ID
-    bool defined = false;       ///< Whether target is defined
+    Point3D position;           //< Target position
+    double swing_clearance;     //< Swing clearance height
+    std::string frame_id;       //< Reference frame ID
+    bool defined = false;       //< Whether target is defined
 };
 
 /**
@@ -119,7 +116,6 @@ public:
     void updateWithPhase(double local_phase, double step_length, double time_delta);
 
 private:
-    // ❌ REMOVED: WalkController* walker_;  // No more dependency on WalkController
     int leg_index_;
     Leg& leg_;
     RobotModel& robot_model_;  // Store robot model for kinematics
@@ -127,7 +123,7 @@ private:
     Point3D default_tip_pose_;
     Point3D origin_tip_pose_;
     Point3D target_tip_pose_;
-    Point3D current_tip_pose_;       ///< Current tip pose calculated by stepper
+    Point3D current_tip_pose_;       //< Current tip pose calculated by stepper
 
     // Walking state
     Point3D walk_plane_;

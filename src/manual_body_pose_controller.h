@@ -20,27 +20,27 @@ class ManualBodyPoseController {
      * @brief Available body pose control modes
      */
     enum BodyPoseMode {
-        BODY_POSE_TRANSLATION,    ///< Move body in X,Y,Z
-        BODY_POSE_ROTATION,       ///< Rotate body around X,Y,Z axes
-        BODY_POSE_LEG_INDIVIDUAL, ///< Control individual legs
-        BODY_POSE_BODY_HEIGHT,    ///< Adjust overall height
-        BODY_POSE_COMBINED,       ///< Combined translation and rotation
-        BODY_POSE_MANUAL_BODY,    ///< Manual body pose mode
-        BODY_POSE_CUSTOM          ///< Custom pose sequences
+        BODY_POSE_TRANSLATION,    //< Move body in X,Y,Z
+        BODY_POSE_ROTATION,       //< Rotate body around X,Y,Z axes
+        BODY_POSE_LEG_INDIVIDUAL, //< Control individual legs
+        BODY_POSE_BODY_HEIGHT,    //< Adjust overall height
+        BODY_POSE_COMBINED,       //< Combined translation and rotation
+        BODY_POSE_MANUAL_BODY,    //< Manual body pose mode
+        BODY_POSE_CUSTOM          //< Custom pose sequences
     };
 
     /**
      * @brief Body pose state structure
      */
     struct BodyPoseState {
-        Point3D body_position;           ///< Body position offset
-        Point3D body_rotation;           ///< Body rotation (roll, pitch, yaw) in radians
-        Eigen::Vector4d body_quaternion; ///< Body orientation as quaternion [w, x, y, z]
-        Point3D leg_positions[NUM_LEGS]; ///< Individual leg positions
-        double body_height;               ///< Body height above ground
-        double pose_blend_factor;         ///< Blending factor for pose transitions
-        bool pose_active;                ///< Whether pose is actively applied
-        bool use_quaternion;             ///< Whether to use quaternion or Euler angles
+        Point3D body_position;           //< Body position offset
+        Point3D body_rotation;           //< Body rotation (roll, pitch, yaw) in radians
+        Eigen::Vector4d body_quaternion; //< Body orientation as quaternion [w, x, y, z]
+        Point3D leg_positions[NUM_LEGS]; //< Individual leg positions
+        double body_height;               //< Body height above ground
+        double pose_blend_factor;         //< Blending factor for pose transitions
+        bool pose_active;                //< Whether pose is actively applied
+        bool use_quaternion;             //< Whether to use quaternion or Euler angles
 
         BodyPoseState() : body_position(0, 0, 0), body_rotation(0, 0, 0),
                       body_quaternion(1, 0, 0, 0), // Identity quaternion
@@ -56,10 +56,10 @@ class ManualBodyPoseController {
      * @brief Body pose input scaling configuration
      */
     struct BodyPoseInputScaling {
-        double translation_scale; ///< Translation input scaling
-        double rotation_scale;    ///< Rotation input scaling
-        double height_scale;      ///< Height input scaling
-        double leg_scale;         ///< Individual leg scaling
+        double translation_scale; //< Translation input scaling
+        double rotation_scale;    //< Rotation input scaling
+        double height_scale;      //< Height input scaling
+        double leg_scale;         //< Individual leg scaling
 
         BodyPoseInputScaling() : translation_scale(1.0f), rotation_scale(0.017453f),
                          height_scale(1.0f), leg_scale(1.0f) {}

@@ -25,7 +25,7 @@ struct Parameters {
     double tibia_length;
 
     double robot_height;
-    double height_offset = 0.0f; ///< structural body height offset
+    double height_offset = 0.0f; //< structural body height offset
     double robot_weight;
     Eigen::Vector3d center_of_mass;
 
@@ -34,14 +34,14 @@ struct Parameters {
     double tibia_angle_limits[2];
 
     // Joint angle sign multipliers for hardware adaptation
-    double angle_sign_coxa = 1.0f;  ///< Sign multiplier for coxa joint output (+1.0 or -1.0 to match servo direction)
-    double angle_sign_femur = 1.0f; ///< Sign multiplier for femur joint output (+1.0 or -1.0 to match servo direction)
-    double angle_sign_tibia = 1.0f; ///< Sign multiplier for tibia joint output (+1.0 or -1.0 to match servo direction)
+    double angle_sign_coxa = 1.0f;  //< Sign multiplier for coxa joint output (+1.0 or -1.0 to match servo direction)
+    double angle_sign_femur = 1.0f; //< Sign multiplier for femur joint output (+1.0 or -1.0 to match servo direction)
+    double angle_sign_tibia = 1.0f; //< Sign multiplier for tibia joint output (+1.0 or -1.0 to match servo direction)
 
     // Enable FSR contact detection
     bool use_fsr_contact = false;
 
-    bool use_custom_dh_parameters = false; ///< Use custom Denavit-Hartenberg parameters
+    bool use_custom_dh_parameters = false; //< Use custom Denavit-Hartenberg parameters
     /**
      * @brief DH parameter table for each leg.
      * The first entry represents the fixed base transform.
@@ -57,26 +57,26 @@ struct Parameters {
     double max_angular_velocity;
     double stability_margin;
     double control_frequency;
-    double default_servo_speed = SERVO_SPEED_DEFAULT; ///< Default servo movement speed (0.1-3.0, where 1.0 is normal speed)
+    double default_servo_speed = SERVO_SPEED_DEFAULT; //< Default servo movement speed (0.1-3.0, where 1.0 is normal speed)
 
     /**
      * @brief Smooth trajectory configuration for pose updates.
      * Equivalent to OpenSHC's trajectory interpolation system.
      */
     struct SmoothTrajectoryConfig {
-        bool use_current_servo_positions = true;           ///< Use current servo positions as starting point for trajectories (OpenSHC-style)
-        bool enable_pose_interpolation = true;             ///< Enable smooth pose interpolation between positions
-        double interpolation_speed = MIN_SERVO_VELOCITY;   ///< Interpolation speed factor (0.01-1.0, where 0.1 is smooth)
-        double position_tolerance_mm = POSITION_TOLERANCE; ///< Position tolerance for determining if servo has reached target
-        uint8_t max_interpolation_steps = 20;              ///< Maximum steps for pose interpolation
-        bool use_quaternion_slerp = true;                  ///< Use spherical interpolation for orientations
+        bool use_current_servo_positions = true;           //< Use current servo positions as starting point for trajectories (OpenSHC-style)
+        bool enable_pose_interpolation = true;             //< Enable smooth pose interpolation between positions
+        double interpolation_speed = MIN_SERVO_VELOCITY;   //< Interpolation speed factor (0.01-1.0, where 0.1 is smooth)
+        double position_tolerance_mm = POSITION_TOLERANCE; //< Position tolerance for determining if servo has reached target
+        uint8_t max_interpolation_steps = 20;              //< Maximum steps for pose interpolation
+        bool use_quaternion_slerp = true;                  //< Use spherical interpolation for orientations
     } smooth_trajectory;
 
     /**
      * @brief Inverse kinematics solver settings.
      */
     struct IKConfig {
-        uint8_t max_iterations = IK_DEFAULT_MAX_ITERATIONS; ///< Maximum iterations for RobotModel::inverseKinematics
+        uint8_t max_iterations = IK_DEFAULT_MAX_ITERATIONS; //< Maximum iterations for RobotModel::inverseKinematics
         double pos_threshold_mm = 0.5f;
         bool use_damping = true;
         double damping_lambda = 30.0f;
@@ -295,24 +295,24 @@ struct JointAngles {
  * @brief IMU operation modes for different sensor capabilities
  */
 enum IMUMode {
-    IMU_MODE_RAW_DATA,    ///< Use raw sensor data with library algorithms
-    IMU_MODE_FUSION,      ///< Use sensor's built-in sensor fusion
-    IMU_MODE_ABSOLUTE_POS ///< Use sensor's absolute position calculations (e.g., BNO055)
+    IMU_MODE_RAW_DATA,    //< Use raw sensor data with library algorithms
+    IMU_MODE_FUSION,      //< Use sensor's built-in sensor fusion
+    IMU_MODE_ABSOLUTE_POS //< Use sensor's absolute position calculations (e.g., BNO055)
 };
 
 /**
  * @brief Absolute position data from advanced IMUs
  */
 struct IMUAbsoluteData {
-    double absolute_roll, absolute_pitch, absolute_yaw;            ///< Absolute orientation in degrees
-    double linear_accel_x, linear_accel_y, linear_accel_z;         ///< Linear acceleration (gravity removed)
-    double quaternion_w, quaternion_x, quaternion_y, quaternion_z; ///< Orientation quaternion
-    bool absolute_orientation_valid;                               ///< Whether absolute orientation is valid
-    bool linear_acceleration_valid;                                ///< Whether linear acceleration is valid
-    bool quaternion_valid;                                         ///< Whether quaternion data is valid
-    uint8_t calibration_status;                                    ///< Overall calibration status (0-3, 3=fully calibrated)
-    uint8_t system_status;                                         ///< System status from sensor
-    uint8_t self_test_result;                                      ///< Self test result
+    double absolute_roll, absolute_pitch, absolute_yaw;            //< Absolute orientation in degrees
+    double linear_accel_x, linear_accel_y, linear_accel_z;         //< Linear acceleration (gravity removed)
+    double quaternion_w, quaternion_x, quaternion_y, quaternion_z; //< Orientation quaternion
+    bool absolute_orientation_valid;                               //< Whether absolute orientation is valid
+    bool linear_acceleration_valid;                                //< Whether linear acceleration is valid
+    bool quaternion_valid;                                         //< Whether quaternion data is valid
+    uint8_t calibration_status;                                    //< Overall calibration status (0-3, 3=fully calibrated)
+    uint8_t system_status;                                         //< System status from sensor
+    uint8_t self_test_result;                                      //< Self test result
 };
 
 /**
@@ -320,15 +320,15 @@ struct IMUAbsoluteData {
  */
 struct IMUData {
     // Basic IMU data (always available)
-    double roll, pitch, yaw;          ///< Euler angles in degrees
-    double accel_x, accel_y, accel_z; ///< Raw acceleration in m/s²
-    double gyro_x, gyro_y, gyro_z;    ///< Angular velocity in rad/s
-    bool is_valid;                    ///< Basic data validity
+    double roll, pitch, yaw;          //< Euler angles in degrees
+    double accel_x, accel_y, accel_z; //< Raw acceleration in m/s²
+    double gyro_x, gyro_y, gyro_z;    //< Angular velocity in rad/s
+    bool is_valid;                    //< Basic data validity
 
     // Extended data for advanced IMUs
-    IMUAbsoluteData absolute_data; ///< Absolute position data (when available)
-    IMUMode mode;                  ///< Current operation mode
-    bool has_absolute_capability;  ///< Whether IMU supports absolute positioning
+    IMUAbsoluteData absolute_data; //< Absolute position data (when available)
+    IMUMode mode;                  //< Current operation mode
+    bool has_absolute_capability;  //< Whether IMU supports absolute positioning
 };
 
 /**

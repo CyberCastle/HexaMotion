@@ -26,11 +26,11 @@ class TerrainAdaptation {
      * @brief External target structure for terrain-aware stepping
      */
     struct ExternalTarget {
-        Point3D position;        ///< Target tip position
-        double swing_clearance;   ///< Height clearance during swing
-        std::string frame_id;    ///< Reference frame ID
-        unsigned long timestamp; ///< Request timestamp
-        bool defined;            ///< Whether target is valid
+        Point3D position;        //< Target tip position
+        double swing_clearance;   //< Height clearance during swing
+        std::string frame_id;    //< Reference frame ID
+        unsigned long timestamp; //< Request timestamp
+        bool defined;            //< Whether target is valid
 
         ExternalTarget() : position(0, 0, 0), swing_clearance(0),
                            frame_id(""), timestamp(0), defined(false) {}
@@ -40,10 +40,10 @@ class TerrainAdaptation {
      * @brief Step plane detection structure
      */
     struct StepPlane {
-        Point3D position; ///< Step surface position
-        Point3D normal;   ///< Step surface normal vector
-        bool valid;       ///< Whether detection is valid
-        double confidence; ///< Detection confidence (0-1)
+        Point3D position; //< Step surface position
+        Point3D normal;   //< Step surface normal vector
+        bool valid;       //< Whether detection is valid
+        double confidence; //< Detection confidence (0-1)
 
         StepPlane() : position(0, 0, 0), normal(0, 0, 1), valid(false), confidence(0) {}
     };
@@ -52,10 +52,10 @@ class TerrainAdaptation {
      * @brief Walk plane estimation structure
      */
     struct WalkPlane {
-        Eigen::Vector3d coeffs; ///< Plane coefficients [a,b,c] for ax+by+c=z
-        Eigen::Vector3d normal; ///< Plane normal vector
-        bool valid;             ///< Whether estimation is valid
-        double confidence;       ///< Estimation confidence (0-1)
+        Eigen::Vector3d coeffs; //< Plane coefficients [a,b,c] for ax+by+c=z
+        Eigen::Vector3d normal; //< Plane normal vector
+        bool valid;             //< Whether estimation is valid
+        double confidence;       //< Estimation confidence (0-1)
 
         WalkPlane() : coeffs(0, 0, 0), normal(0, 0, 1), valid(false), confidence(0) {}
     };
@@ -68,9 +68,9 @@ class TerrainAdaptation {
     bool gravity_aligned_tips_;
 
     // Terrain detection parameters
-    double touchdown_threshold_; ///< FSR threshold for touchdown detection
-    double liftoff_threshold_;   ///< FSR threshold for liftoff detection
-    double step_depth_;          ///< Depth to probe for reactive terrain detection
+    double touchdown_threshold_; //< FSR threshold for touchdown detection
+    double liftoff_threshold_;   //< FSR threshold for liftoff detection
+    double step_depth_;          //< Depth to probe for reactive terrain detection
 
     // Walk plane estimation
     WalkPlane current_walk_plane_;

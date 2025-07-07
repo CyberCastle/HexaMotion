@@ -25,43 +25,43 @@ class WalkspaceAnalyzer {
      * @brief Walkspace analysis result structure
      */
     struct WalkspaceResult {
-        Point3D center_of_mass;               ///< Calculated center of mass
-        double stability_margin;               ///< Stability margin (mm)
-        std::vector<Point3D> support_polygon; ///< Support polygon vertices
-        std::map<int, double> walkspace_radii; ///< Walkspace radii by bearing
-        bool is_stable;                       ///< Overall stability flag
-        double reachable_area;                 ///< Total reachable area (mm²)
+        Point3D center_of_mass;               //< Calculated center of mass
+        double stability_margin;               //< Stability margin (mm)
+        std::vector<Point3D> support_polygon; //< Support polygon vertices
+        std::map<int, double> walkspace_radii; //< Walkspace radii by bearing
+        bool is_stable;                       //< Overall stability flag
+        double reachable_area;                 //< Total reachable area (mm²)
     };
 
     /**
      * @brief Individual leg workspace bounds
      */
     struct WorkspaceBounds {
-        double min_radius; ///< Minimum reachable radius (mm)
-        double max_radius; ///< Maximum reachable radius (mm)
-        double min_height; ///< Minimum reachable height (mm)
-        double max_height; ///< Maximum reachable height (mm)
-        double min_angle;  ///< Minimum angular range (degrees)
-        double max_angle;  ///< Maximum angular range (degrees)
+        double min_radius; //< Minimum reachable radius (mm)
+        double max_radius; //< Maximum reachable radius (mm)
+        double min_height; //< Minimum reachable height (mm)
+        double max_height; //< Maximum reachable height (mm)
+        double min_angle;  //< Minimum angular range (degrees)
+        double max_angle;  //< Maximum angular range (degrees)
     };
 
     /**
      * @brief Comprehensive analysis information for external systems
      */
     struct AnalysisInfo {
-        WalkspaceResult current_result;        ///< Current walkspace analysis result
-        std::map<int, WorkspaceBounds> leg_bounds; ///< Workspace bounds for each leg
-        std::map<int, double> leg_reachability;    ///< Reachability scores (0-1) for each leg
-        double overall_stability_score;            ///< Overall stability score (0-1)
-        bool analysis_enabled;                     ///< Whether analysis is currently enabled
-        unsigned long last_analysis_time;          ///< Timestamp of last analysis
-        int analysis_count;                        ///< Number of analyses performed
-        double average_analysis_time_ms;           ///< Average analysis time in milliseconds
-        double total_analysis_time_ms;             ///< Total time spent in analysis
-        double min_analysis_time_ms;               ///< Minimum analysis time
-        double max_analysis_time_ms;               ///< Maximum analysis time
-        std::map<int, double> walkspace_radii;     ///< Current walkspace radii by bearing
-        bool walkspace_map_generated;              ///< Whether walkspace map has been generated
+        WalkspaceResult current_result;        //< Current walkspace analysis result
+        std::map<int, WorkspaceBounds> leg_bounds; //< Workspace bounds for each leg
+        std::map<int, double> leg_reachability;    //< Reachability scores (0-1) for each leg
+        double overall_stability_score;            //< Overall stability score (0-1)
+        bool analysis_enabled;                     //< Whether analysis is currently enabled
+        unsigned long last_analysis_time;          //< Timestamp of last analysis
+        int analysis_count;                        //< Number of analyses performed
+        double average_analysis_time_ms;           //< Average analysis time in milliseconds
+        double total_analysis_time_ms;             //< Total time spent in analysis
+        double min_analysis_time_ms;               //< Minimum analysis time
+        double max_analysis_time_ms;               //< Maximum analysis time
+        std::map<int, double> walkspace_radii;     //< Current walkspace radii by bearing
+        bool walkspace_map_generated;              //< Whether walkspace map has been generated
     };
 
   private:
@@ -81,10 +81,10 @@ class WalkspaceAnalyzer {
     static constexpr double STABILITY_THRESHOLD = 10.0f;   // mm
 
     // Runtime control flags
-    bool analysis_enabled_;                    ///< Flag to enable/disable real-time analysis
-    AnalysisInfo analysis_info_;               ///< Comprehensive analysis information
-    unsigned long last_analysis_timestamp_;    ///< Timestamp of last analysis
-    double total_analysis_time_;               ///< Total time spent in analysis
+    bool analysis_enabled_;                    //< Flag to enable/disable real-time analysis
+    AnalysisInfo analysis_info_;               //< Comprehensive analysis information
+    unsigned long last_analysis_timestamp_;    //< Timestamp of last analysis
+    double total_analysis_time_;               //< Total time spent in analysis
 
   public:
     explicit WalkspaceAnalyzer(RobotModel &model, ComputeConfig config = ComputeConfig::medium());

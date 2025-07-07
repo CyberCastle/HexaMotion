@@ -17,13 +17,13 @@ public:
      * @brief Body pose state containing position and orientation
      */
     struct BodyPoseState {
-        Point3D position;                    ///< Body position in world frame (meters)
-        Eigen::Vector3d euler_angles;        ///< Body orientation as Euler angles (roll, pitch, yaw in radians)
-        Eigen::Vector4d quaternion;          ///< Body orientation as quaternion [w, x, y, z]
-        double height;                       ///< Body height above ground (meters)
-        bool use_quaternion;                 ///< Whether to use quaternion or Euler angles
-        double blend_factor;                 ///< Blending factor for pose transitions
-        bool pose_active;                    ///< Whether pose is actively applied
+        Point3D position;                    //< Body position in world frame (meters)
+        Eigen::Vector3d euler_angles;        //< Body orientation as Euler angles (roll, pitch, yaw in radians)
+        Eigen::Vector4d quaternion;          //< Body orientation as quaternion [w, x, y, z]
+        double height;                       //< Body height above ground (meters)
+        bool use_quaternion;                 //< Whether to use quaternion or Euler angles
+        double blend_factor;                 //< Blending factor for pose transitions
+        bool pose_active;                    //< Whether pose is actively applied
 
         BodyPoseState()
             : position(0, 0, 0), euler_angles(0, 0, 0), quaternion(1, 0, 0, 0),
@@ -34,11 +34,11 @@ public:
      * @brief Body pose limits for safety constraints
      */
     struct BodyPoseLimits {
-        Point3D translation_limits;          ///< Maximum translation limits (±X, ±Y, ±Z in meters)
-        Eigen::Vector3d rotation_limits;     ///< Maximum rotation limits (±Roll, ±Pitch, ±Yaw in radians)
-        double height_min, height_max;       ///< Height limits (meters)
-        double max_translation_velocity;     ///< Maximum translation velocity (m/s)
-        double max_rotation_velocity;        ///< Maximum rotation velocity (rad/s)
+        Point3D translation_limits;          //< Maximum translation limits (±X, ±Y, ±Z in meters)
+        Eigen::Vector3d rotation_limits;     //< Maximum rotation limits (±Roll, ±Pitch, ±Yaw in radians)
+        double height_min, height_max;       //< Height limits (meters)
+        double max_translation_velocity;     //< Maximum translation velocity (m/s)
+        double max_rotation_velocity;        //< Maximum rotation velocity (rad/s)
 
         BodyPoseLimits()
             : translation_limits(0.1, 0.1, 0.05), rotation_limits(0.3, 0.3, 0.5),
@@ -49,13 +49,13 @@ public:
      * @brief Body pose configuration parameters
      */
     struct BodyPoseConfig {
-        double body_clearance;               ///< Requested height of robot body above ground (m)
-        double swing_height;                 ///< Vertical displacement of swing trajectory above default (m)
-        bool gravity_aligned_tips;           ///< Flag denoting if tip should align with gravity direction
-        bool force_symmetric_pose;           ///< Force hexagonal symmetry if true
-        std::string auto_pose_type;          ///< String denoting the default auto posing cycle type
-        bool start_up_sequence;              ///< Flag allowing execution of start up and shutdown sequences
-        double time_to_start;                ///< The time to complete a direct start up
+        double body_clearance;               //< Requested height of robot body above ground (m)
+        double swing_height;                 //< Vertical displacement of swing trajectory above default (m)
+        bool gravity_aligned_tips;           //< Flag denoting if tip should align with gravity direction
+        bool force_symmetric_pose;           //< Force hexagonal symmetry if true
+        std::string auto_pose_type;          //< String denoting the default auto posing cycle type
+        bool start_up_sequence;              //< Flag allowing execution of start up and shutdown sequences
+        double time_to_start;                //< The time to complete a direct start up
 
         BodyPoseConfig()
             : body_clearance(120.0), swing_height(0.02), gravity_aligned_tips(false),
@@ -66,32 +66,32 @@ public:
      * @brief Available body pose control modes
      */
     enum BodyPoseMode {
-        BODY_POSE_TRANSLATION,    ///< Move body in X,Y,Z
-        BODY_POSE_ROTATION,       ///< Rotate body around X,Y,Z axes
-        BODY_POSE_HEIGHT,         ///< Adjust overall height
-        BODY_POSE_COMBINED,       ///< Combined translation and rotation
-        BODY_POSE_MANUAL,         ///< Manual body pose mode
-        BODY_POSE_AUTO,           ///< Automatic body pose mode
-        BODY_POSE_CUSTOM          ///< Custom pose sequences
+        BODY_POSE_TRANSLATION,    //< Move body in X,Y,Z
+        BODY_POSE_ROTATION,       //< Rotate body around X,Y,Z axes
+        BODY_POSE_HEIGHT,         //< Adjust overall height
+        BODY_POSE_COMBINED,       //< Combined translation and rotation
+        BODY_POSE_MANUAL,         //< Manual body pose mode
+        BODY_POSE_AUTO,           //< Automatic body pose mode
+        BODY_POSE_CUSTOM          //< Custom pose sequences
     };
 
     /**
      * @brief Body pose reset modes
      */
     enum BodyPoseResetMode {
-        BODY_POSE_RESET_NONE,     ///< Don't reset any pose components
-        BODY_POSE_RESET_TRANSLATION, ///< Reset only translation components
-        BODY_POSE_RESET_ROTATION,    ///< Reset only rotation components
-        BODY_POSE_RESET_ALL       ///< Reset all pose components
+        BODY_POSE_RESET_NONE,     //< Don't reset any pose components
+        BODY_POSE_RESET_TRANSLATION, //< Reset only translation components
+        BODY_POSE_RESET_ROTATION,    //< Reset only rotation components
+        BODY_POSE_RESET_ALL       //< Reset all pose components
     };
 
     /**
      * @brief Body pose state for auto posing
      */
     enum BodyPosingState {
-        BODY_POSING_COMPLETE,     ///< Auto posing is complete
-        BODY_POSING_IN_PROGRESS,  ///< Auto posing is in progress
-        BODY_POSING_PAUSED        ///< Auto posing is paused
+        BODY_POSING_COMPLETE,     //< Auto posing is complete
+        BODY_POSING_IN_PROGRESS,  //< Auto posing is in progress
+        BODY_POSING_PAUSED        //< Auto posing is paused
     };
 
 private:

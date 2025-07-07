@@ -365,33 +365,33 @@ public:
 
 private:
     // ===== IDENTIFICATION =====
-    int leg_id_;                    ///< Leg identification number (0-5)
-    String leg_name_;               ///< Leg name string
+    int leg_id_;                    //< Leg identification number (0-5)
+    String leg_name_;               //< Leg name string
 
     // ===== JOINT STATE =====
-    JointAngles joint_angles_;      ///< Current joint angles (coxa, femur, tibia)
-    Point3D tip_position_;          ///< Current tip position in world coordinates
-    Point3D base_position_;         ///< Leg base position in world coordinates
+    JointAngles joint_angles_;      //< Current joint angles (coxa, femur, tibia)
+    Point3D tip_position_;          //< Current tip position in world coordinates
+    Point3D base_position_;         //< Leg base position in world coordinates
 
     // ===== GAIT STATE =====
-    StepPhase step_phase_;          ///< Current step phase
-    double gait_phase_;             ///< Gait phase (0.0 to 1.0)
-    bool in_contact_;               ///< Contact state with ground
-    double contact_force_;          ///< Contact force reading
+    StepPhase step_phase_;          //< Current step phase
+    double gait_phase_;             //< Gait phase (0.0 to 1.0)
+    bool in_contact_;               //< Contact state with ground
+    double contact_force_;          //< Contact force reading
 
     // ===== FSR CONTACT HISTORY =====
-    double fsr_contact_history_[3]; ///< Circular buffer for FSR contact history (3 samples)
-    int fsr_history_index_;         ///< Current index in the circular buffer
+    double fsr_contact_history_[3]; //< Circular buffer for FSR contact history (3 samples)
+    int fsr_history_index_;         //< Current index in the circular buffer
 
     // ===== GAIT PHASE OFFSET =====
-    double leg_phase_offset_;       ///< Phase offset for this leg in gait cycle (0.0 to 1.0)
+    double leg_phase_offset_;       //< Phase offset for this leg in gait cycle (0.0 to 1.0)
 
     // ===== DEFAULT CONFIGURATION =====
-    JointAngles default_angles_;    ///< Default joint angles
-    Point3D default_tip_position_;  ///< Default tip position
+    JointAngles default_angles_;    //< Default joint angles
+    Point3D default_tip_position_;  //< Default tip position
 
     // Desired tip position
-    Point3D desired_tip_position_;   ///< Desired tip position
+    Point3D desired_tip_position_;   //< Desired tip position
 
 
     /**
