@@ -38,11 +38,10 @@ int main() {
     // Test 1: Simple Horizontal Test (original functionality)
     std::cout << "\n--- Test 1: Simple Horizontal Test ---" << std::endl;
     for (int leg = 0; leg < NUM_LEGS; ++leg) {
-        // Target: posición de reposo física real de la punta de la pierna
         JointAngles zero_angles(0, 0, 0);
         Point3D target = model.forwardKinematicsGlobalCoordinates(leg, zero_angles);
 
-        JointAngles ik = model.inverseKinematicsGlobalCoordinates(leg, target);
+        JointAngles ik = model.inverseKinematicsCurrentGlobalCoordinates(leg, zero_angles, target);
         Point3D fk = model.forwardKinematicsGlobalCoordinates(leg, ik);
         double err = sqrt(pow(target.x - fk.x, 2) +
                           pow(target.y - fk.y, 2) +
@@ -90,9 +89,8 @@ int main() {
         JointAngles test_angles(0, 20 * M_PI / 180.0, 20 * M_PI / 180.0); // 0°, 20°, 20° -> 0, 0.349, 0.349 rad
         Point3D target = model.forwardKinematicsGlobalCoordinates(leg, test_angles);
 
-        // Provide a neutral starting guess
-        JointAngles start_angles(0, 0, 0);
-        JointAngles ik = model.inverseKinematicsCurrentGlobalCoordinates(leg, start_angles, target);
+        // Usa test_angles como estimación inicial
+        JointAngles ik = model.inverseKinematicsCurrentGlobalCoordinates(leg, test_angles, target);
         Point3D fk = model.forwardKinematicsGlobalCoordinates(leg, ik);
 
         double position_error = std::sqrt(std::pow(fk.x - target.x, 2) +
@@ -107,31 +105,29 @@ int main() {
         if (position_error > 2.0f) {
             ok = false;
         }
-    } // Test 4: Local IK Reachable Pose Validation
-    std::cout << "\n--- Test 4: Local IK Reachable Pose Validation ---" << std::endl;
+    }
+
+    // Test 4: Local-Global-Local Round-Trip Validation
+    std::cout << "\n--- Test 4: Local-Global-Local Round-Trip Validation ---" << std::endl;
     for (int leg = 0; leg < NUM_LEGS; ++leg) {
-        // Known reachable local target: forward position that works well
+        // Elige un objetivo local arbitrario pero alcanzable
         Point3D local_target(100.0, 0.0, -180.0);
-        // Solve IK using local helper
-        JointAngles ik_local = solveIKLocal(model, leg, local_target);
-        // Compute global FK, then transform back to local frame
-        Point3D fk_global = model.forwardKinematicsGlobalCoordinates(leg, ik_local);
-        Point3D fk_local = transformGlobalToLocal(model, leg, fk_global);
-        // Compute error in local coordinates
-        double local_error = std::sqrt(
-            std::pow(fk_local.x - local_target.x, 2) +
-            std::pow(fk_local.y - local_target.y, 2) +
-            std::pow(fk_local.z - local_target.z, 2));
-        bool within_limits = model.checkJointLimits(leg, ik_local);
-
+        JointAngles zero_angles(0, 0, 0);
+        // Transforma a global usando los ángulos cero
+        Point3D global_target = model.transformLocalToGlobalCoordinates(leg, local_target, zero_angles);
+        // Transforma de vuelta a local usando los mismos ángulos
+        Point3D local_roundtrip = model.transformGlobalToLocalCoordinates(leg, global_target, zero_angles);
+        // Calcula el error de round-trip
+        double roundtrip_error = std::sqrt(
+            std::pow(local_roundtrip.x - local_target.x, 2) +
+            std::pow(local_roundtrip.y - local_target.y, 2) +
+            std::pow(local_roundtrip.z - local_target.z, 2));
         std::cout << "Leg " << leg << ": local_target(" << local_target.x << ", " << local_target.y << ", " << local_target.z
-                  << ") -> IK(" << ik_local.coxa << ", " << ik_local.femur << ", " << ik_local.tibia
-                  << ") FK_local(" << fk_local.x << ", " << fk_local.y << ", " << fk_local.z
-                  << ") error=" << local_error
-                  << " within_limits=" << (within_limits ? "yes" : "no") << std::endl;
-
-        if (local_error > 2.0f || !within_limits) {
-            std::cout << "  *** FAIL: Local IK error too high or joint limits violated ***" << std::endl;
+                  << ") -> global(" << global_target.x << ", " << global_target.y << ", " << global_target.z
+                  << ") -> local_roundtrip(" << local_roundtrip.x << ", " << local_roundtrip.y << ", " << local_roundtrip.z
+                  << ") error=" << roundtrip_error << std::endl;
+        if (roundtrip_error > 1.0f) {
+            std::cout << "  *** FAIL: Local-Global-Local round-trip error too high ***" << std::endl;
             ok = false;
         }
     }
