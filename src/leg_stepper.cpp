@@ -53,9 +53,10 @@ void LegStepper::updateStepState(const StepCycle& step) {
     if (step_state_ == STEP_FORCE_STOP) {
         return;
     }
-    if (phase_ >= step.swing_start_ && phase_ < step.swing_end_ && step_state_ != STEP_FORCE_STANCE) {
+    if (phase_ >= step.swing_start_ && phase_ < step.swing_end_ &&
+        step_state_ != STEP_FORCE_STANCE) {
         step_state_ = STEP_SWING;
-    } else if (phase_ < step.stance_end_ || phase_ >= step.stance_start_) {
+    } else {
         step_state_ = STEP_STANCE;
     }
 }
