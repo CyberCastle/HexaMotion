@@ -1,11 +1,11 @@
 #include "walk_controller.h"
 #include "gait_config_factory.h"
 #include "hexamotion_constants.h"
-#include "math_utils.h"
-#include "workspace_validator.h" // Use unified validator instead
 #include "leg_stepper.h"
-#include "velocity_limits.h"
+#include "math_utils.h"
 #include "terrain_adaptation.h"
+#include "velocity_limits.h"
+#include "workspace_validator.h" // Use unified validator instead
 #include <algorithm>
 #include <cmath>
 #include <iostream>
@@ -56,7 +56,7 @@ WalkController::WalkController(RobotModel &m, Leg legs[NUM_LEGS])
 }
 
 // Gait configuration management methods (OpenSHC equivalent)
-bool WalkController::setGaitConfiguration(const GaitConfiguration& gait_config) {
+bool WalkController::setGaitConfiguration(const GaitConfiguration &gait_config) {
     // Store the new gait configuration
     current_gait_config_ = gait_config;
 
@@ -72,9 +72,9 @@ bool WalkController::setGaitConfiguration(const GaitConfiguration& gait_config) 
     return true;
 }
 
-bool WalkController::setGaitByName(const std::string& gait_name) {
+bool WalkController::setGaitByName(const std::string &gait_name) {
     // Get gait configuration from factory usando los parámetros del robot
-    const Parameters& params = model.getParams();
+    const Parameters &params = model.getParams();
     GaitConfiguration gait_config;
     if (gait_name == "tripod_gait") {
         gait_config = createTripodGaitConfig(params);
@@ -98,15 +98,16 @@ std::vector<std::string> WalkController::getAvailableGaitNames() const {
     return names;
 }
 
-void WalkController::applyGaitConfigToLegSteppers(const GaitConfiguration& gait_config) {
+void WalkController::applyGaitConfigToLegSteppers(const GaitConfiguration &gait_config) {
     // Apply gait configuration to each leg stepper
     for (int i = 0; i < NUM_LEGS && i < leg_steppers_.size(); i++) {
         auto leg_stepper = leg_steppers_[i];
-        if (!leg_stepper) continue;
+        if (!leg_stepper)
+            continue;
 
         // Set phase offset based on gait configuration
         double phase_offset = (double)gait_config.offsets.getForLegIndex(i) *
-                             gait_config.phase_config.phase_offset;
+                              gait_config.phase_config.phase_offset;
         leg_stepper->setPhaseOffset(phase_offset);
 
         // Update step parameters using modern API
@@ -122,10 +123,6 @@ void WalkController::applyGaitConfigToLegSteppers(const GaitConfiguration& gait_
     // Update velocity limits based on gait performance
     // Note: Velocity limits are updated through modern API when needed
 }
-
-
-
-
 
 // Terrain adaptation methods
 void WalkController::enableRoughTerrainMode(bool enabled, bool force_normal_touchdown,
@@ -204,13 +201,22 @@ bool WalkController::validateVelocityCommand(double vx, double vy, double omega)
 }
 
 void WalkController::updateVelocityLimits(double frequency, double stance_ratio, double time_to_max_stride) {
-    VelocityLimits::GaitConfig gait_config;
-    gait_config.frequency = frequency;
-    gait_config.stance_ratio = DEFAULT_ANGULAR_SCALING - stance_ratio;
-    gait_config.swing_ratio = DEFAULT_ANGULAR_SCALING - stance_ratio;
-    gait_config.time_to_max_stride = time_to_max_stride;
+    // Update the current gait configuration directly
+    current_gait_config_.step_frequency = frequency;
+    current_gait_config_.stance_ratio = stance_ratio;
+    current_gait_config_.swing_ratio = 1.0 - stance_ratio; // Complement
+    current_gait_config_.time_to_max_stride = time_to_max_stride;
 
-    velocity_limits_.updateGaitParameters(gait_config);
+    // Update phase configuration to maintain consistency
+    double total_ratio = current_gait_config_.stance_ratio + current_gait_config_.swing_ratio;
+    if (total_ratio > 0) {
+        int total_phase = current_gait_config_.step_cycle.period_;
+        current_gait_config_.phase_config.stance_phase = (int)(stance_ratio * total_phase / total_ratio);
+        current_gait_config_.phase_config.swing_phase = total_phase - current_gait_config_.phase_config.stance_phase;
+    }
+
+    // Use unified interface
+    velocity_limits_.updateGaitParameters(current_gait_config_);
 }
 
 void WalkController::setVelocitySafetyMargin(double margin) {
@@ -230,7 +236,6 @@ VelocityLimits::WorkspaceConfig WalkController::getWorkspaceConfig() const {
 }
 
 // --- WalkController Methods Implementation ---
-
 void WalkController::init() {
     time_delta_ = 0.01; // 10ms default
     walk_state_ = WALK_STOPPED;
@@ -274,11 +279,19 @@ void WalkController::updateWalk(const Point3D &linear_velocity_input, double ang
     Point3D new_linear_velocity;
     double new_angular_velocity;
 
-    // Get limits for current velocity input
-    double max_linear_speed = getLimit(linear_velocity_input, angular_velocity_input, max_linear_speed_);
-    double max_angular_speed = getLimit(linear_velocity_input, angular_velocity_input, max_angular_speed_);
-    double max_linear_acceleration = getLimit(linear_velocity_input, angular_velocity_input, max_linear_acceleration_);
-    double max_angular_acceleration = getLimit(linear_velocity_input, angular_velocity_input, max_angular_acceleration_);
+    // Calculate bearing from velocity input for limit lookup
+    double bearing_rad = atan2(linear_velocity_input.y, linear_velocity_input.x);
+    double bearing_degrees = bearing_rad * 180.0 / M_PI;
+    if (bearing_degrees < 0)
+        bearing_degrees += 360.0;
+
+    // Get limits from VelocityLimits for current bearing
+    VelocityLimits::LimitValues limits = velocity_limits_.getLimit(bearing_degrees);
+
+    double max_linear_speed = limits.linear_x;
+    double max_angular_speed = limits.angular_z;
+    double max_linear_acceleration = limits.acceleration;
+    double max_angular_acceleration = limits.acceleration; // Use same for angular
 
     // Calculate desired velocities according to input mode and max limits
     if (walk_state_ != WALK_STOPPING) {
@@ -337,7 +350,7 @@ void WalkController::updateWalk(const Point3D &linear_velocity_input, double ang
     // State transition: STOPPED->STARTING
     if (walk_state_ == WALK_STOPPED && has_velocity_command) {
         walk_state_ = WALK_STARTING;
-        //Initialize LegSteppers with proper StepCycle
+        // Initialize LegSteppers with proper StepCycle
         StepCycle step = current_gait_config_.step_cycle; // Usar current_gait_config_.step_cycle
         for (auto &leg_stepper : leg_steppers_) {
             leg_stepper->setAtCorrectPhase(false);
@@ -345,7 +358,7 @@ void WalkController::updateWalk(const Point3D &linear_velocity_input, double ang
             leg_stepper->setStepState(STEP_STANCE);
             // Set phase offset based on gait configuration (OpenSHC style)
             double phase_offset = (double)current_gait_config_.offsets.getForLegIndex(leg_stepper->getLegIndex()) *
-                                 current_gait_config_.phase_config.phase_offset;
+                                  current_gait_config_.phase_config.phase_offset;
             leg_stepper->setPhaseOffset(phase_offset);
             leg_stepper->updateStepState(step);
         }
@@ -367,15 +380,15 @@ void WalkController::updateWalk(const Point3D &linear_velocity_input, double ang
         walk_state_ = WALK_STOPPED;
     }
 
-    //Update walk/step state and tip position along trajectory for each leg
+    // Update walk/step state and tip position along trajectory for each leg
     for (auto &leg_stepper : leg_steppers_) {
-        //Set walk state in LegStepper
+        // Set walk state in LegStepper
         leg_stepper->setWalkState(walk_state_);
 
         // Calculate local phase using step cycle and leg offset
         int current_phase = leg_stepper->getPhase();
         double local_phase = (double)current_phase / current_gait_config_.step_cycle.period_; // Usar current_gait_config_.step_cycle.period_
-        leg_stepper->updateWithPhase(local_phase, 50.0, time_delta_); // Use default step length
+        leg_stepper->updateWithPhase(local_phase, 50.0, time_delta_);                         // Use default step length
     }
 
     updateWalkPlane();
@@ -520,6 +533,8 @@ void WalkController::generateWalkspace() {
     }
 
     regenerate_walkspace_ = false;
+
+    // Use unified configuration interface - no more conversions needed!
     velocity_limits_.generateLimits(current_gait_config_);
 }
 
@@ -593,8 +608,6 @@ double WalkController::getWalkspaceRadius(double bearing_degrees) const {
     return walkspace_analyzer_ ? walkspace_analyzer_->getWalkspaceRadius(bearing_degrees) : 0.0;
 }
 
-// ===== ENHANCED WALKSPACE ANALYSIS METHODS =====
-
 const std::map<int, double> &WalkController::getCurrentWalkspaceMap() const {
     static std::map<int, double> empty_map;
     return walkspace_analyzer_ ? walkspace_analyzer_->getCurrentWalkspaceMap() : empty_map;
@@ -636,12 +649,8 @@ bool WalkController::isCurrentlyStable() const {
     return analysis_info.current_result.is_stable;
 }
 
-// Gait pattern management methods (migrated from LocomotionSystem)
-
-// Note: initializeGaitConfigs removed - using modern factory-based configuration
-
 double WalkController::calculateStabilityIndex() const {
-    // Simplified stability calculation
+    // TODO: Simplified stability calculation
     // In a real implementation, this would use IMU and FSR data
 
     if (!walkspace_analyzer_) {
@@ -653,7 +662,7 @@ double WalkController::calculateStabilityIndex() const {
 }
 
 bool WalkController::checkTerrainConditions() const {
-    // Simplified terrain condition check
+    // TODO Simplified terrain condition check
     // In a real implementation, this would use IMU and FSR data
 
     // For now, return false (no challenging terrain)
@@ -680,5 +689,3 @@ double WalkController::calculateLegReach() const {
     const auto &params = model.getParams();
     return params.coxa_length + params.femur_length + params.tibia_length;
 }
-
-// Note: updateStepParameters and adjustStepParameters removed - using modern factory-based configuration

@@ -7,6 +7,7 @@
  */
 
 #include "velocity_limits.h"
+#include "gait_config.h"
 #include "hexamotion_constants.h"
 #include "math_utils.h"
 #include "workspace_validator.h"
@@ -93,6 +94,19 @@ VelocityLimits::LimitValues VelocityLimits::getLimit(double bearing_degrees) con
     return interpolateLimits(normalized_bearing);
 }
 
+// Unified configuration interface overloads
+void VelocityLimits::generateLimits(const GaitConfiguration &gait_config) {
+    // Convert unified configuration to internal format
+    GaitConfig internal_config;
+    internal_config.frequency = gait_config.step_frequency;
+    internal_config.stance_ratio = gait_config.getStanceRatio();
+    internal_config.swing_ratio = gait_config.getSwingRatio();
+    internal_config.time_to_max_stride = gait_config.time_to_max_stride;
+
+    // Use existing implementation
+    generateLimits(internal_config);
+}
+
 void VelocityLimits::calculateWorkspace(const GaitConfig &gait_config) {
     // Replace complex workspace calculation with WorkspaceValidator
 
@@ -120,6 +134,18 @@ void VelocityLimits::calculateWorkspace(const GaitConfig &gait_config) {
         std::max(pimpl_->workspace_config_.walkspace_radius, 0.05);
     pimpl_->workspace_config_.stance_radius =
         std::max(pimpl_->workspace_config_.stance_radius, 0.03);
+}
+
+void VelocityLimits::calculateWorkspace(const GaitConfiguration &gait_config) {
+    // Convert unified configuration to internal format
+    GaitConfig internal_config;
+    internal_config.frequency = gait_config.step_frequency;
+    internal_config.stance_ratio = gait_config.getStanceRatio();
+    internal_config.swing_ratio = gait_config.getSwingRatio();
+    internal_config.time_to_max_stride = gait_config.time_to_max_stride;
+
+    // Use existing implementation
+    calculateWorkspace(internal_config);
 }
 
 VelocityLimits::LimitValues VelocityLimits::scaleVelocityLimits(
@@ -229,6 +255,18 @@ void VelocityLimits::updateGaitParameters(const GaitConfig &gait_config) {
     generateLimits(gait_config);
 }
 
+void VelocityLimits::updateGaitParameters(const GaitConfiguration &gait_config) {
+    // Convert unified configuration to internal format
+    GaitConfig internal_config;
+    internal_config.frequency = gait_config.step_frequency;
+    internal_config.stance_ratio = gait_config.getStanceRatio();
+    internal_config.swing_ratio = gait_config.getSwingRatio();
+    internal_config.time_to_max_stride = gait_config.time_to_max_stride;
+
+    // Use existing implementation
+    generateLimits(internal_config);
+}
+
 const VelocityLimits::WorkspaceConfig &VelocityLimits::getWorkspaceConfig() const {
     return pimpl_->workspace_config_;
 }
@@ -291,7 +329,7 @@ double VelocityLimits::calculateBearing(double vx, double vy) {
 }
 
 double VelocityLimits::calculateMaxLinearSpeed(double walkspace_radius,
-                                              double on_ground_ratio, double frequency) const {
+                                               double on_ground_ratio, double frequency) const {
     // Use simplified OpenSHC-equivalent calculation with constraints
     if (on_ground_ratio <= 0.0 || frequency <= 0.0 || walkspace_radius <= 0.0) {
         return 0.0;
@@ -366,14 +404,14 @@ VelocityLimits::LimitValues VelocityLimits::calculateLimitsForBearing(
 
     // Calculate limits based on the most constraining constraints
     double max_linear_speed = calculateMaxLinearSpeed(min_effective_radius,
-                                                     gait_config.stance_ratio,
-                                                     gait_config.frequency);
+                                                      gait_config.stance_ratio,
+                                                      gait_config.frequency);
 
     double max_angular_speed = calculateMaxAngularSpeed(max_linear_speed,
-                                                       pimpl_->workspace_config_.stance_radius);
+                                                        pimpl_->workspace_config_.stance_radius);
 
     double max_acceleration = calculateMaxAcceleration(max_linear_speed,
-                                                      gait_config.time_to_max_stride);
+                                                       gait_config.time_to_max_stride);
 
     // Create limit values using constraints
     LimitValues limits;

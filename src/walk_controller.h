@@ -1,18 +1,17 @@
 #ifndef WALK_CONTROLLER_H
 #define WALK_CONTROLLER_H
 
-#include "robot_model.h"
-#include "terrain_adaptation.h"
-#include "leg_stepper.h"  // Include for StepCycle definition
-#include "velocity_limits.h"
-#include "workspace_validator.h"
-#include "walkspace_analyzer.h"
-#include "math_utils.h"
-#include "leg_stepper.h"
 #include "gait_config.h"
 #include "gait_config_factory.h"
-#include <memory>
+#include "leg_stepper.h" // Include for StepCycle definition
+#include "math_utils.h"
+#include "robot_model.h"
+#include "terrain_adaptation.h"
+#include "velocity_limits.h"
+#include "walkspace_analyzer.h"
+#include "workspace_validator.h"
 #include <map>
+#include <memory>
 
 /**
  * @brief Leg states for state machine control (OpenSHC equivalent)
@@ -33,7 +32,7 @@ enum LegState {
  * @brief Complete walking controller with OpenSHC architecture
  */
 class WalkController {
-public:
+  public:
     /**
      * @brief Constructor with robot model and leg references
      * @param m Robot model for kinematics and parameters
@@ -62,15 +61,9 @@ public:
     void generateLimits(StepCycle step);
 
     /**
-     * @brief Get velocity limit for a given bearing
-     */
-    double getLimit(const Point3D& linear_velocity_input, double angular_velocity_input,
-                   const std::map<int, double>& limit);
-
-    /**
      * @brief Update walking with velocity commands (OpenSHC equivalent)
      */
-    void updateWalk(const Point3D& linear_velocity_input, double angular_velocity_input);
+    void updateWalk(const Point3D &linear_velocity_input, double angular_velocity_input);
 
     /**
      * @brief Update walk plane estimation
@@ -104,13 +97,11 @@ public:
 
     // Modifiers
     void setPoseState(int state) { pose_state_ = state; }
-    void setLinearSpeedLimitMap(const std::map<int, double>& limit_map) { max_linear_speed_ = limit_map; }
-    void setAngularSpeedLimitMap(const std::map<int, double>& limit_map) { max_angular_speed_ = limit_map; }
-    void setLinearAccelerationLimitMap(const std::map<int, double>& limit_map) { max_linear_acceleration_ = limit_map; }
-    void setAngularAccelerationLimitMap(const std::map<int, double>& limit_map) { max_angular_acceleration_ = limit_map; }
+    void setLinearSpeedLimitMap(const std::map<int, double> &limit_map) { max_linear_speed_ = limit_map; }
+    void setAngularSpeedLimitMap(const std::map<int, double> &limit_map) { max_angular_speed_ = limit_map; }
+    void setLinearAccelerationLimitMap(const std::map<int, double> &limit_map) { max_linear_acceleration_ = limit_map; }
+    void setAngularAccelerationLimitMap(const std::map<int, double> &limit_map) { max_angular_acceleration_ = limit_map; }
     void setRegenerateWalkspace() { regenerate_walkspace_ = true; }
-
-
 
     // Velocity limiting methods
     VelocityLimits::LimitValues getVelocityLimits(double bearing_degrees = 0.0f) const;
@@ -134,13 +125,13 @@ public:
     const VelocityLimits::LimitValues &getCurrentVelocities() const;
 
     // Terrain adaptation accessors for LegStepper
-    const TerrainAdaptation& getTerrainAdaptation() const { return terrain_adaptation_; }
-    RobotModel& getModel() { return model; }
+    const TerrainAdaptation &getTerrainAdaptation() const { return terrain_adaptation_; }
+    RobotModel &getModel() { return model; }
 
     // Walkspace analysis control methods (OpenSHC equivalent)
     void enableWalkspaceAnalysis(bool enabled);
     bool isWalkspaceAnalysisEnabled() const;
-    const WalkspaceAnalyzer::AnalysisInfo& getWalkspaceAnalysisInfo() const;
+    const WalkspaceAnalyzer::AnalysisInfo &getWalkspaceAnalysisInfo() const;
     std::string getWalkspaceAnalysisInfoString() const;
     void resetWalkspaceAnalysisStats();
     WalkspaceAnalyzer::WalkspaceResult analyzeCurrentWalkspace();
@@ -148,7 +139,7 @@ public:
     double getWalkspaceRadius(double bearing_degrees) const;
 
     // Enhanced walkspace analysis methods
-    const std::map<int, double>& getCurrentWalkspaceMap() const;
+    const std::map<int, double> &getCurrentWalkspaceMap() const;
     bool isWalkspaceMapGenerated() const;
     double getStabilityMargin() const;
     double getOverallStabilityScore() const;
@@ -161,20 +152,20 @@ public:
      * @param gait_config The gait configuration to apply
      * @return true if successful, false otherwise
      */
-    bool setGaitConfiguration(const GaitConfiguration& gait_config);
+    bool setGaitConfiguration(const GaitConfiguration &gait_config);
 
     /**
      * @brief Get current gait configuration
      * @return Current gait configuration
      */
-    const GaitConfiguration& getCurrentGaitConfig() const { return current_gait_config_; }
+    const GaitConfiguration &getCurrentGaitConfig() const { return current_gait_config_; }
 
     /**
      * @brief Set gait by name using gait factory
      * @param gait_name Name of the gait to set
      * @return true if successful, false otherwise
      */
-    bool setGaitByName(const std::string& gait_name);
+    bool setGaitByName(const std::string &gait_name);
 
     /**
      * @brief Get current gait name
@@ -192,9 +183,7 @@ public:
      * @brief Apply gait configuration to leg steppers
      * @param gait_config The gait configuration to apply
      */
-    void applyGaitConfigToLegSteppers(const GaitConfiguration& gait_config);
-
-
+    void applyGaitConfigToLegSteppers(const GaitConfiguration &gait_config);
 
     // Step parameter control
     /**
@@ -233,7 +222,7 @@ public:
      */
     double getCycleFrequency() const { return current_gait_config_.step_frequency; }
 
-private:
+  private:
     RobotModel &model;
 
     // OpenSHC architecture components
@@ -270,8 +259,6 @@ private:
     GaitConfiguration current_gait_config_;
     GaitSelectionConfig gait_selection_config_;
 
-
-
     // Terrain adaptation system
     TerrainAdaptation terrain_adaptation_;
 
@@ -289,6 +276,7 @@ private:
     // Collision avoidance: track current leg positions
     Point3D current_leg_positions_[NUM_LEGS];
 
+    // Helper methods
     // Helper methods
     double calculateStabilityIndex() const;
     bool checkTerrainConditions() const;

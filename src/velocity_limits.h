@@ -8,6 +8,9 @@
 #include <memory>
 #include <vector>
 
+// Forward declaration
+struct GaitConfiguration;
+
 /**
  * Dynamic velocity limits system equivalent to OpenSHC's velocity limiting mechanism.
  * This system dynamically calculates maximum linear and angular velocities based on:
@@ -79,10 +82,12 @@ class VelocityLimits {
 
     // Main velocity limiting functions (equivalent to OpenSHC's generateLimits/getLimit)
     void generateLimits(const GaitConfig &gait_config);
+    void generateLimits(const GaitConfiguration &gait_config); // Unified configuration interface
     LimitValues getLimit(double bearing_degrees) const;
 
     // Workspace generation and calculation
     void calculateWorkspace(const GaitConfig &gait_config);
+    void calculateWorkspace(const GaitConfiguration &gait_config); // Unified configuration interface
     const WorkspaceConfig &getWorkspaceConfig() const;
 
     // Velocity scaling and validation
@@ -105,6 +110,7 @@ class VelocityLimits {
 
     // Configuration and parameter updates
     void updateGaitParameters(const GaitConfig &gait_config);
+    void updateGaitParameters(const GaitConfiguration &gait_config); // Unified configuration interface
     void setSafetyMargin(double margin);
     void setAngularVelocityScaling(double scaling);
 
@@ -128,7 +134,7 @@ class VelocityLimits {
 
     // Internal calculation methods (now implemented via WorkspaceValidator)
     double calculateMaxLinearSpeed(double walkspace_radius, double on_ground_ratio,
-                                  double frequency) const;
+                                   double frequency) const;
     double calculateMaxAngularSpeed(double max_linear_speed, double stance_radius) const;
     double calculateMaxAcceleration(double max_speed, double time_to_max) const;
     LimitValues calculateLimitsForBearing(double bearing_degrees,
