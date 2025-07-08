@@ -106,8 +106,9 @@ void WalkController::applyGaitConfigToLegSteppers(const GaitConfiguration &gait_
             continue;
 
         // Set phase offset based on gait configuration
-        double phase_offset = (double)gait_config.offsets.getForLegIndex(i) *
-                              gait_config.phase_config.phase_offset;
+        double phase_offset = static_cast<double>(gait_config.offsets.getForLegIndex(i) *
+                              gait_config.phase_config.phase_offset) /
+                              static_cast<double>(gait_config.step_cycle.period_);
         leg_stepper->setPhaseOffset(phase_offset);
 
         // Update step parameters using modern API
@@ -357,8 +358,10 @@ void WalkController::updateWalk(const Point3D &linear_velocity_input, double ang
             leg_stepper->setCompletedFirstStep(false);
             leg_stepper->setStepState(STEP_STANCE);
             // Set phase offset based on gait configuration (OpenSHC style)
-            double phase_offset = (double)current_gait_config_.offsets.getForLegIndex(leg_stepper->getLegIndex()) *
-                                  current_gait_config_.phase_config.phase_offset;
+            double phase_offset = static_cast<double>(current_gait_config_.offsets.getForLegIndex(
+                                        leg_stepper->getLegIndex()) *
+                                    current_gait_config_.phase_config.phase_offset) /
+                                    static_cast<double>(current_gait_config_.step_cycle.period_);
             leg_stepper->setPhaseOffset(phase_offset);
             leg_stepper->updateStepState(step);
         }
@@ -385,10 +388,14 @@ void WalkController::updateWalk(const Point3D &linear_velocity_input, double ang
         // Set walk state in LegStepper
         leg_stepper->setWalkState(walk_state_);
 
+        // Advance phase for this leg
+        leg_stepper->iteratePhase(current_gait_config_.step_cycle);
+
         // Calculate local phase using step cycle and leg offset
         int current_phase = leg_stepper->getPhase();
-        double local_phase = (double)current_phase / current_gait_config_.step_cycle.period_; // Usar current_gait_config_.step_cycle.period_
-        leg_stepper->updateWithPhase(local_phase, 50.0, time_delta_);                         // Use default step length
+        double local_phase = static_cast<double>(current_phase) /
+                              static_cast<double>(current_gait_config_.step_cycle.period_);
+        leg_stepper->updateWithPhase(local_phase, 50.0, time_delta_); // Use default step length
     }
 
     updateWalkPlane();

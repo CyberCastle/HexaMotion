@@ -731,7 +731,8 @@ bool LocomotionSystem::update() {
             // Use leg stepper to determine phase
             auto leg_stepper = walk_ctrl->getLegStepper(i);
             if (leg_stepper) {
-                double phase = leg_stepper->getPhase() / 100.0; // Use fixed period for phase calculation
+                double phase = static_cast<double>(leg_stepper->getPhase()) /
+                               static_cast<double>(walk_ctrl->getStepCycle().period_);
                 if (legs[i].shouldBeInStance(phase, stance_duration)) {
                     legs[i].setStepPhase(STANCE_PHASE);
                 } else {
@@ -899,7 +900,8 @@ void LocomotionSystem::updateLegStates() {
             // Use leg stepper to determine phase
             auto leg_stepper = walk_ctrl->getLegStepper(i);
             if (leg_stepper) {
-                double phase = leg_stepper->getPhase() / 100.0; // Use fixed period for phase calculation
+                double phase = static_cast<double>(leg_stepper->getPhase()) /
+                               static_cast<double>(walk_ctrl->getStepCycle().period_);
                 if (legs[i].shouldBeInStance(phase, walk_ctrl->getStanceDuration())) {
                     legs[i].setStepPhase(STANCE_PHASE);
                 } else {
@@ -938,7 +940,8 @@ void LocomotionSystem::updateLegStates() {
         // Check if leg should be in swing based on gait phase
         auto leg_stepper = walk_ctrl->getLegStepper(i);
         if (leg_stepper) {
-            double phase = leg_stepper->getPhase() / 100.0; // Use fixed period for phase calculation
+            double phase = static_cast<double>(leg_stepper->getPhase()) /
+                           static_cast<double>(walk_ctrl->getStepCycle().period_);
             bool should_be_swinging = legs[i].shouldBeInSwing(phase, walk_ctrl->getStanceDuration());
 
             if (should_be_swinging && legs[i].getStepPhase() == STANCE_PHASE) {
