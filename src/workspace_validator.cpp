@@ -379,16 +379,20 @@ bool WorkspaceValidator::checkJointLimits(int leg_index, const Point3D &target_p
         return false;
     }
 
-    // Calculate inverse kinematics and check if joint angles are within limits
+    // Calcular la cinemática inversa y comprobar si los ángulos articulares están dentro de los límites
     try {
-        // For validation purposes, use zero angles as starting point
+        // Para validación, usar ángulos cero como punto de partida
         JointAngles zero_angles(0, 0, 0);
         JointAngles angles = model_.inverseKinematicsCurrentGlobalCoordinates(leg_index, zero_angles, target_position);
 
-        // Basic joint limit checks (these would be robot-specific)
-        const double COXA_MIN = -45.0f, COXA_MAX = 45.0f;
-        const double FEMUR_MIN = -90.0f, FEMUR_MAX = 90.0f;
-        const double TIBIA_MIN = -135.0f, TIBIA_MAX = 45.0f;
+        // Usar los límites de los parámetros de configuración
+        const Parameters &params = model_.getParams();
+        const double COXA_MIN = params.coxa_angle_limits[0];
+        const double COXA_MAX = params.coxa_angle_limits[1];
+        const double FEMUR_MIN = params.femur_angle_limits[0];
+        const double FEMUR_MAX = params.femur_angle_limits[1];
+        const double TIBIA_MIN = params.tibia_angle_limits[0];
+        const double TIBIA_MAX = params.tibia_angle_limits[1];
 
         return (angles.coxa >= COXA_MIN && angles.coxa <= COXA_MAX &&
                 angles.femur >= FEMUR_MIN && angles.femur <= FEMUR_MAX &&
