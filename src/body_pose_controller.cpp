@@ -97,7 +97,9 @@ bool BodyPoseController::setLegPosition(int leg_index, const Point3D &position, 
     }
 
     // Fallback to direct calculation if LegPoser not available
-    JointAngles angles = model.inverseKinematicsGlobalCoordinates(leg_index, position);
+    // Use current joint angles as starting point for IK (OpenSHC approach)
+    JointAngles current_angles = legs[leg_index].getJointAngles();
+    JointAngles angles = model.inverseKinematicsCurrentGlobalCoordinates(leg_index, current_angles, position);
 
     angles.coxa = model.constrainAngle(angles.coxa, model.getParams().coxa_angle_limits[0],
                                        model.getParams().coxa_angle_limits[1]);
@@ -134,7 +136,9 @@ bool BodyPoseController::calculateBodyPoseFromConfig(double height_offset, Leg l
             setLegPosition(i, target_pos, legs);
         } else {
             // Fallback to direct calculation
-            JointAngles angles = model.inverseKinematicsGlobalCoordinates(i, target_pos);
+            // Use current joint angles as starting point for IK (OpenSHC approach)
+            JointAngles current_angles = legs[i].getJointAngles();
+            JointAngles angles = model.inverseKinematicsCurrentGlobalCoordinates(i, current_angles, target_pos);
 
             if (!model.checkJointLimits(i, angles)) {
                 return false;
@@ -373,8 +377,9 @@ bool BodyPoseController::initializeTrajectoryFromCurrent(const Eigen::Vector3d &
         trajectory_target_positions[i] = trajectory_start_positions[i];
         trajectory_target_positions[i].z = -target_position.z(); // Adjust height
 
-        // Calculate target angles
-        trajectory_target_angles[i] = model.inverseKinematicsGlobalCoordinates(i, trajectory_target_positions[i]);
+        // Calculate target angles using current angles as starting point
+        JointAngles current_angles = legs[i].getJointAngles();
+        trajectory_target_angles[i] = model.inverseKinematicsCurrentGlobalCoordinates(i, current_angles, trajectory_target_positions[i]);
     }
 
     return true;
@@ -468,7 +473,9 @@ int BodyPoseController::stepToNewStance(Leg legs[NUM_LEGS], double step_height, 
 
             // Update leg with current position from LegPoser
             legs[leg_index].setCurrentTipPositionGlobal(leg_posers_[leg_index]->get()->getCurrentPosition());
-            legs[leg_index].setJointAngles(model.inverseKinematicsGlobalCoordinates(leg_index, legs[leg_index].getCurrentTipPositionGlobal()));
+            // Use current joint angles as starting point for IK (OpenSHC approach)
+            JointAngles current_angles = legs[leg_index].getJointAngles();
+            legs[leg_index].setJointAngles(model.inverseKinematicsCurrentGlobalCoordinates(leg_index, current_angles, legs[leg_index].getCurrentTipPositionGlobal()));
 
             if (leg_progress == 100) { // PROGRESS_COMPLETE equivalent
                 legs_completed_step++;
@@ -547,7 +554,9 @@ int BodyPoseController::executeShutdownSequence(Leg legs[NUM_LEGS]) {
 
             // Update leg with current position
             legs[i].setCurrentTipPositionGlobal(leg_posers_[i]->get()->getCurrentPosition());
-            legs[i].setJointAngles(model.inverseKinematicsGlobalCoordinates(i, legs[i].getCurrentTipPositionGlobal()));
+            // Use current joint angles as starting point for IK (OpenSHC approach)
+            JointAngles current_angles = legs[i].getJointAngles();
+            legs[i].setJointAngles(model.inverseKinematicsCurrentGlobalCoordinates(i, current_angles, legs[i].getCurrentTipPositionGlobal()));
 
             progress = std::max(progress, leg_progress);
         }
@@ -614,8 +623,9 @@ bool BodyPoseController::updateAutoPose(double gait_phase, Leg legs[NUM_LEGS]) {
             // Update leg position with compensation
             legs[i].setCurrentTipPositionGlobal(compensated_pos);
 
-            // Recalculate joint angles for compensated position
-            JointAngles compensated_angles = model.inverseKinematicsGlobalCoordinates(i, compensated_pos);
+            // Recalculate joint angles for compensated position using current angles as starting point
+            JointAngles current_angles = legs[i].getJointAngles();
+            JointAngles compensated_angles = model.inverseKinematicsCurrentGlobalCoordinates(i, current_angles, compensated_pos);
             legs[i].setJointAngles(compensated_angles);
         }
     }

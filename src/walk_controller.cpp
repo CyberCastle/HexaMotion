@@ -520,7 +520,9 @@ void WalkController::generateWalkspace() {
 
             // Check if target is reachable by this leg
             Point3D target(target_x, target_y, -params.robot_height);
-            JointAngles angles = model.inverseKinematicsGlobalCoordinates(leg, target);
+            // For workspace generation, use zero angles as starting point
+            JointAngles zero_angles(0, 0, 0);
+            JointAngles angles = model.inverseKinematicsCurrentGlobalCoordinates(leg, zero_angles, target);
 
             if (model.checkJointLimits(leg, angles)) {
                 double distance = sqrt((target_x - base_x) * (target_x - base_x) +

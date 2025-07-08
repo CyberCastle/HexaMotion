@@ -138,7 +138,9 @@ bool LocomotionSystem::calibrateSystem() {
 // Inverse kinematics using an optimized geometric method
 JointAngles LocomotionSystem::calculateInverseKinematics(int leg,
                                                          const Point3D &p_target) {
-    return model.inverseKinematicsGlobalCoordinates(leg, p_target);
+    // Use current joint angles as starting point for IK
+    JointAngles current_angles = legs[leg].getJointAngles();
+    return model.inverseKinematicsCurrentGlobalCoordinates(leg, current_angles, p_target);
 }
 
 // Forward kinematics using DH transforms

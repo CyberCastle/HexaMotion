@@ -381,7 +381,9 @@ bool WorkspaceValidator::checkJointLimits(int leg_index, const Point3D &target_p
 
     // Calculate inverse kinematics and check if joint angles are within limits
     try {
-        JointAngles angles = model_.inverseKinematicsGlobalCoordinates(leg_index, target_position);
+        // For validation purposes, use zero angles as starting point
+        JointAngles zero_angles(0, 0, 0);
+        JointAngles angles = model_.inverseKinematicsCurrentGlobalCoordinates(leg_index, zero_angles, target_position);
 
         // Basic joint limit checks (these would be robot-specific)
         const double COXA_MIN = -45.0f, COXA_MAX = 45.0f;

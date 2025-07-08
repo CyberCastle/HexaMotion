@@ -310,7 +310,9 @@ void WalkspaceAnalyzer::generateWalkspaceForLeg(int leg_index) {
 
 bool WalkspaceAnalyzer::detailedReachabilityCheck(int leg_index, const Point3D &position) {
     // Use inverse kinematics to check reachability
-    JointAngles angles = model_.inverseKinematicsGlobalCoordinates(leg_index, position);
+    // For validation purposes, use zero angles as starting point
+    JointAngles zero_angles(0, 0, 0);
+    JointAngles angles = model_.inverseKinematicsCurrentGlobalCoordinates(leg_index, zero_angles, position);
     return model_.checkJointLimits(leg_index, angles);
 }
 

@@ -74,8 +74,8 @@ void Leg::updateForwardKinematics(const RobotModel &model) {
 }
 
 bool Leg::updateInverseKinematics(const RobotModel &model, const Point3D &target_position) {
-    // Use RobotModel to calculate IK
-    JointAngles new_angles = model.inverseKinematicsGlobalCoordinates(leg_id_, target_position);
+    // Use current joint angles as starting point for IK
+    JointAngles new_angles = model.inverseKinematicsCurrentGlobalCoordinates(leg_id_, joint_angles_, target_position);
 
     // Check if IK was successful (basic validation)
     if (checkJointLimits(model.getParams())) {
@@ -153,8 +153,9 @@ void Leg::initialize(const RobotModel &model, const Pose &default_stance) {
     // Calculate default tip position from stance pose
     Point3D stance_tip = default_stance.position;
 
-    // Calculate IK for default stance
-    JointAngles stance_angles = model.inverseKinematicsGlobalCoordinates(leg_id_, stance_tip);
+    // Calculate IK for default stance using zero angles as starting point
+    JointAngles zero_angles(0, 0, 0);
+    JointAngles stance_angles = model.inverseKinematicsCurrentGlobalCoordinates(leg_id_, zero_angles, stance_tip);
 
     // Set default configuration
     default_angles_ = stance_angles;
@@ -212,8 +213,8 @@ void Leg::setDesiredTipPositionGlobal(const Point3D &desired_position) {
 
 // Apply inverse kinematics (OpenSHC architecture)
 bool Leg::applyIK(const RobotModel &model) {
-    // Calculate IK from desired tip pose to get new joint angles
-    JointAngles new_angles = model.inverseKinematicsGlobalCoordinates(leg_id_, desired_tip_position_);
+    // Use current joint angles as starting point for IK (OpenSHC approach)
+    JointAngles new_angles = model.inverseKinematicsCurrentGlobalCoordinates(leg_id_, joint_angles_, desired_tip_position_);
 
     // Update joint angles
     setJointAngles(new_angles);

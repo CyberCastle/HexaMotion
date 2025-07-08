@@ -195,7 +195,8 @@ bool ManualPoseController::applyPose(const PoseState &pose, Point3D leg_position
         leg_positions[i] = rotated_pos + pose.leg_positions[i];
 
         // Calculate joint angles
-        joint_angles[i] = model_.inverseKinematicsGlobalCoordinates(i, leg_positions[i]);
+        JointAngles current_angles = model_.getLegs()[i].getJointAngles();
+        joint_angles[i] = model_.inverseKinematicsCurrentGlobalCoordinates(i, current_angles, leg_positions[i]);
 
         // Check if solution is valid
         if (!model_.checkJointLimits(i, joint_angles[i])) {

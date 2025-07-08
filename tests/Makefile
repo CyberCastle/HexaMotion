@@ -9,7 +9,7 @@ CXXFLAGS=-I../src -I. -I$(EIGEN_PATH) -std=c++17
 
 SOURCES = ../src/math_utils.cpp ../src/robot_model.cpp ../src/body_pose_controller.cpp ../src/walk_controller.cpp ../src/leg_stepper.cpp ../src/terrain_adaptation.cpp ../src/admittance_controller.cpp ../src/velocity_limits.cpp ../src/state_controller.cpp ../src/locomotion_system.cpp ../src/cartesian_velocity_controller.cpp ../src/workspace_validator.cpp ../src/body_pose_config_factory.cpp ../src/body_pose.cpp ../src/leg.cpp ../src/walkspace_analyzer.cpp ../src/leg_poser.cpp
 
-all: math_utils_test model_test pose_controller_test walk_controller_test walk_controller_validation_test admittance_controller_test locomotion_system_test state_controller_test cruise_control_comprehensive_test tripod_gait_sim_test tripod_gait_validation_test tripod_gait_detailed_analysis height_range_test geometry_test dls_validation_test workspace_analysis actual_workspace_test angle_range_test edge_case_analysis angle_normalization_test terrain_adaptation_test fsr_threshold_test velocity_limits_test state_controller_runtime_test openshc_equivalent_features_test full_feature_sim_test test_metachronal_adaptive_gaits final_validation_test quaternion_pose_system_test quaternion_functions_test pose_control_comprehensive_test pose_control_equivalence_test absolute_positioning_compile_test admittance_derivatives_test test_velocity_control test_smooth_movement ik_fk_validation_test simple_kinematics_test kinematics_validation_test collision_diagnostics_test simple_dh_test simple_ik_test brute_force_workspace_test jacobian_validation_test openshc_target_calculation_test walkspace_integration_test walkspace_workspace_integration_test transform_debug_test workspace_check_test comprehensive_kinematics_validation_test angle_test ik_analysis_test
+all: math_utils_test model_test pose_controller_test walk_controller_test walk_controller_validation_test admittance_controller_test locomotion_system_test state_controller_test cruise_control_comprehensive_test tripod_gait_sim_test tripod_gait_validation_test tripod_gait_detailed_analysis height_range_test geometry_test dls_validation_test workspace_analysis actual_workspace_test angle_range_test edge_case_analysis angle_normalization_test terrain_adaptation_test fsr_threshold_test velocity_limits_test state_controller_runtime_test openshc_equivalent_features_test full_feature_sim_test test_metachronal_adaptive_gaits final_validation_test quaternion_pose_system_test quaternion_functions_test pose_control_comprehensive_test pose_control_equivalence_test absolute_positioning_compile_test admittance_derivatives_test test_velocity_control test_smooth_movement ik_fk_validation_test simple_kinematics_test kinematics_validation_test collision_diagnostics_test simple_dh_test simple_ik_test brute_force_workspace_test jacobian_validation_test openshc_target_calculation_test walkspace_integration_test walkspace_workspace_integration_test transform_debug_test workspace_check_test comprehensive_kinematics_validation_test angle_test ik_analysis_test pose_controller_ik_test
 
 math_utils_test: math_utils_test.cpp ../src/math_utils.cpp
 	$(CXX) $(CXXFLAGS) $^ -o $@
@@ -174,6 +174,9 @@ angle_test: angle_test.cpp ../src/locomotion_system.cpp ../src/robot_model.cpp .
 	$(CXX) $(CXXFLAGS) $^ -o $@
 
 ik_analysis_test: ik_analysis_test.cpp ../src/robot_model.cpp ../src/math_utils.cpp
+	$(CXX) $(CXXFLAGS) $^ -o $@
+
+pose_controller_ik_test: pose_controller_ik_test.cpp ../src/body_pose_controller.cpp ../src/robot_model.cpp ../src/math_utils.cpp ../src/body_pose_config_factory.cpp ../src/leg.cpp ../src/leg_poser.cpp
 	$(CXX) $(CXXFLAGS) $^ -o $@
 
 clean:
