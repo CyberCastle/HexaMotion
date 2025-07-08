@@ -37,7 +37,7 @@ int main() {
     // Test 1: Validate global FK consistency
     std::cout << "\n--- Test 1: Global Forward Kinematics Validation ---" << std::endl;
     for (int leg = 0; leg < NUM_LEGS; ++leg) {
-        Point3D pos = model.forwardKinematics(leg, q);
+        Point3D pos = model.forwardKinematicsGlobalCoordinates(leg, q);
         double theta_rad = BASE_THETA_OFFSETS[leg] * M_PI / 180.0f;
         double reach = p.hexagon_radius + p.coxa_length + p.femur_length;
         double expected_x = reach * cos(theta_rad);
@@ -82,7 +82,7 @@ int main() {
     JointAngles zero_angles(0, 0, 0);
     for (int leg = 0; leg < NUM_LEGS; ++leg) {
         // Get global position from FK
-        Point3D global_pos = model.forwardKinematics(leg, zero_angles);
+        Point3D global_pos = model.forwardKinematicsGlobalCoordinates(leg, zero_angles);
 
         // Transform to local coordinates using RobotModel function
         Point3D local_converted = model.transformGlobalToLocalCoordinates(leg, global_pos, zero_angles);
@@ -108,7 +108,7 @@ int main() {
     // Test 3B: Compare manual vs RobotModel coordinate transformations
     std::cout << "\n--- Test 3B: Manual vs RobotModel Coordinate Transformation Comparison ---" << std::endl;
     for (int leg = 0; leg < NUM_LEGS; ++leg) {
-        Point3D global_pos = model.forwardKinematics(leg, zero_angles);
+        Point3D global_pos = model.forwardKinematicsGlobalCoordinates(leg, zero_angles);
 
         // Manual transformation
         Point3D local_manual = transformGlobalToLocal(model, leg, global_pos);
@@ -143,7 +143,7 @@ int main() {
     // Test 4: Consistency between local FK and transformed global FK
     std::cout << "\n--- Test 4: Local FK vs Transformed Global FK Consistency ---" << std::endl;
     for (int leg = 0; leg < NUM_LEGS; ++leg) {
-        Point3D global_pos = model.forwardKinematics(leg, q);
+        Point3D global_pos = model.forwardKinematicsGlobalCoordinates(leg, q);
         Point3D local_from_transform = transformGlobalToLocal(model, leg, global_pos);
         Point3D local_from_fk = forwardKinematicsLocal(model, leg, q);
 
@@ -165,7 +165,7 @@ int main() {
     JointAngles test_angles(15.0, -30.0, 20.0); // Coxa=15°, Femur=-30°, Tibia=20°
 
     for (int leg = 0; leg < NUM_LEGS; ++leg) {
-        Point3D global_pos = model.forwardKinematics(leg, test_angles);
+        Point3D global_pos = model.forwardKinematicsGlobalCoordinates(leg, test_angles);
         Point3D local_converted = transformGlobalToLocal(model, leg, global_pos);
         Point3D global_restored = transformLocalToGlobal(model, leg, local_converted);
 
