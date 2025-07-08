@@ -458,6 +458,18 @@ class RobotModel {
 
     /** Compute inverse kinematics for a leg using a heuristic start guess (Global coordinates). */
     JointAngles inverseKinematicsGlobalCoordinates(int leg, const Point3D &p) const;
+
+    /**
+     * @brief Estimate initial joint angles for inverse kinematics based on target position
+     * This method provides a more intelligent initial guess than the basic atan2 approach,
+     * taking into account the target position and leg geometry to estimate reasonable
+     * starting angles for the IK solver.
+     *
+     * @param leg Leg index (0-5)
+     * @param target_position Target position in global robot coordinates
+     * @return Estimated initial joint angles for IK solver
+     */
+    JointAngles estimateInitialAngles(int leg, const Point3D &target_position) const;
     /**
      * @brief Compute inverse kinematics starting from current joint angles (Global coordinates).
      * @param leg Leg index.
