@@ -55,7 +55,6 @@ bool Leg::setCurrentTipPositionGlobal(const Point3D &position) {
     Point3D target = position;
 
     // Check if target is reachable
-    // Note: This is a simplified check - full workspace validation should be done by RobotModel
     double distance = sqrt(target.x * target.x + target.y * target.y + target.z * target.z);
     double max_reach = 300.0; // Approximate max reach for hexapod
 

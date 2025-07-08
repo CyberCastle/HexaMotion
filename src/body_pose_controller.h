@@ -102,8 +102,6 @@ class BodyPoseController {
 
     /**
      * @brief Get current servo positions and calculate corresponding leg positions.
-     * Note: This method now requires the servo interface to be passed as a parameter
-     * since the PoseController no longer stores a reference to it.
      * @param servos Servo interface to read current positions from.
      * @param legs Array of Leg objects to update with current positions.
      * @return True if current positions were successfully retrieved.

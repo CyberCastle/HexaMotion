@@ -251,12 +251,12 @@ void WorkspaceValidator::updateSafetyMargin(double margin) {
 }
 
 void WorkspaceValidator::updateAngularScaling(double scaling) {
-    // Store angular scaling in configuration for future use
+    // TODO:Store angular scaling in configuration for future use
     // Note: This could be extended to modify a stored scaling factor if needed
     // For now, angular scaling is handled in getScalingFactors()
 }
 
-// ===== MIGRATED FROM LegCollisionAvoidance =====
+
 
 double WorkspaceValidator::calculateSafeHexagonRadius(double leg_reach, double safety_margin) {
     // For a hexagon with 60° between legs, we need to ensure that adjacent leg

@@ -111,18 +111,10 @@ void WalkController::applyGaitConfigToLegSteppers(const GaitConfiguration &gait_
                               static_cast<double>(gait_config.step_cycle.period_);
         leg_stepper->setPhaseOffset(phase_offset);
 
-        // Update step parameters using modern API
-        // Note: Parameters are accessed through getters when needed
-
-        // Update external targets for terrain adaptation
-        // Note: setExternalDefault removed - using modern API
     }
 
     // Update terrain adaptation parameters
     terrain_adaptation_.setRoughTerrainMode(gait_config.supports_rough_terrain);
-
-    // Update velocity limits based on gait performance
-    // Note: Velocity limits are updated through modern API when needed
 }
 
 // Terrain adaptation methods

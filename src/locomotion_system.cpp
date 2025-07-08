@@ -163,7 +163,7 @@ Eigen::Matrix4d LocomotionSystem::calculateLegTransform(int leg_index,
 
 bool LocomotionSystem::isTargetReachable(int leg_index, const Point3D &target) {
     // Delegate to WorkspaceValidator for consistency
-    // Note: This creates a temporary validator. For better performance,
+    // TODO: This creates a temporary validator. For better performance,
     // consider using a shared validator instance in production code.
     WorkspaceValidator temp_validator(model);
     return temp_validator.isReachable(leg_index, target);
@@ -171,7 +171,7 @@ bool LocomotionSystem::isTargetReachable(int leg_index, const Point3D &target) {
 
 Point3D LocomotionSystem::constrainToWorkspace(int leg_index, const Point3D &target) {
     // Delegate to WorkspaceValidator for consistency
-    // Note: This creates a temporary validator. For better performance,
+    // TODO This creates a temporary validator. For better performance,
     // consider using a shared validator instance in production code.
     WorkspaceValidator temp_validator(model);
     Point3D dummy_positions[6]; // Empty positions for basic geometric constraint
