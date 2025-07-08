@@ -2,18 +2,37 @@
 #include "math_utils.h"
 #include <algorithm>
 #include <cmath>
+#include "hexamotion_constants.h"
 
 //Constructor without WalkController dependency
-LegStepper::LegStepper(int leg_index, const Point3D& identity_tip_pose, Leg& leg, RobotModel& robot_model)
-            : leg_index_(leg_index), leg_(leg), robot_model_(robot_model), identity_tip_pose_(identity_tip_pose),
-          default_tip_pose_(identity_tip_pose), origin_tip_pose_(identity_tip_pose), target_tip_pose_(identity_tip_pose),
-          walk_plane_(Point3D(0, 0, 0)), walk_plane_normal_(Point3D(0, 0, 1)), stride_vector_(Point3D(0, 0, 0)),
-          current_tip_velocity_(Point3D(0, 0, 0)), swing_origin_tip_position_(identity_tip_pose),
-          swing_origin_tip_velocity_(Point3D(0, 0, 0)), stance_origin_tip_position_(identity_tip_pose),
-          swing_clearance_(Point3D(0, 0, 30.0)), at_correct_phase_(false), completed_first_step_(false), phase_(0),
-          stance_progress_(0.0), swing_progress_(0.0), step_progress_(0.0), step_state_(STEP_STANCE),
-          current_walk_state_(WALK_STOPPED), swing_delta_t_(0.02), stance_delta_t_(0.02), touchdown_detection_(false)
-{
+LegStepper::LegStepper(int leg_index, const Point3D& identity_tip_pose, Leg& leg, RobotModel& robot_model,
+                       WalkspaceAnalyzer* walkspace_analyzer, WorkspaceValidator* workspace_validator)
+    : leg_index_(leg_index),
+      leg_(leg),
+      robot_model_(robot_model),
+      identity_tip_pose_(identity_tip_pose),
+      walkspace_analyzer_(walkspace_analyzer),
+      workspace_validator_(workspace_validator) {
+    // Inicialización estándar
+    default_tip_pose_ = identity_tip_pose_;
+    origin_tip_pose_ = identity_tip_pose_;
+    target_tip_pose_ = identity_tip_pose_;
+    current_tip_pose_ = identity_tip_pose_;
+    at_correct_phase_ = false;
+    completed_first_step_ = false;
+    phase_ = 0;
+    stance_progress_ = 0.0;
+    swing_progress_ = 0.0;
+    step_progress_ = 0.0;
+    step_state_ = STEP_STANCE;
+    current_walk_state_ = WALK_STOPPED;
+    swing_delta_t_ = 0.0;
+    stance_delta_t_ = 0.0;
+    touchdown_detection_ = false;
+    step_length_ = 0.0;
+    swing_height_ = 0.0;
+    body_clearance_ = 0.0;
+
     for (int i = 0; i < 5; ++i) {
         swing_1_nodes_[i] = identity_tip_pose_;
         swing_2_nodes_[i] = identity_tip_pose_;
@@ -67,59 +86,71 @@ void LegStepper::updateStride(double step_length) {
 }
 
 Point3D LegStepper::calculateStanceSpanChange() {
-    // Calcular altura objetivo del plano dentro del workspace
+    // Obtener altura objetivo del plano de trabajo
     Point3D default_shift = default_tip_pose_ - identity_tip_pose_;
     double target_workplane_height = default_shift.z;
 
-    // Get stance span modifier from robot model parameters
-    double stance_span_modifier = 0.1; // Default value, can be made configurable
+    // stance_span_modifier configurable por marcha
+    double stance_span_modifier = stance_span_modifier_;
+
+    // Determinar bearing (dirección lateral de la pierna)
     bool positive_y_axis = (identity_tip_pose_.y > 0.0);
     int bearing = (positive_y_axis ^ (stance_span_modifier > 0.0)) ? 270 : 90;
     stance_span_modifier *= (positive_y_axis ? 1.0 : -1.0);
 
-    // Simplificado por ahora
-    return Point3D(0.0, 50.0 * stance_span_modifier, 0.0);
+    // Consultar el workspace real usando WalkspaceAnalyzer
+    double radius = 0.0;
+    if (walkspace_analyzer_) {
+        // Obtener workplane interpolado a la altura objetivo
+        auto workplane = walkspace_analyzer_->getWorkplane(leg_index_, target_workplane_height);
+        if (!workplane.empty() && workplane.count(bearing)) {
+            radius = workplane.at(bearing);
+        }
+    }
+    // Fallback: usar WorkspaceValidator si no hay WalkspaceAnalyzer
+    if (radius == 0.0 && workspace_validator_) {
+        WorkspaceBounds bounds = workspace_validator_->getWorkspaceBounds(leg_index_);
+        radius = bounds.max_radius;
+    }
+
+    // Aplicar el modificador de span
+    double span = radius * stance_span_modifier;
+    return Point3D(0.0, span, 0.0);
 }
 
 void LegStepper::updateDefaultTipPosition() {
     Point3D new_default_tip_pose;
 
-    // Generar nueva posición por defecto basada en posición del tip al final del período de swing
     if (external_default_.defined) {
         new_default_tip_pose = external_default_.position;
     } else {
-        // Modificar posiciones de tip de identidad según el modificador de stance span
         Point3D identity_tip_position = identity_tip_pose_;
         identity_tip_position = identity_tip_position + calculateStanceSpanChange();
-
-        // Actualizar posición por defecto como proyección de la posición del tip al inicio del período STANCE
+        // Usar body_clearance_ si está configurado
+        if (body_clearance_ > 0.0) {
+            identity_tip_position.z = -body_clearance_;
+        }
         Point3D identity_to_stance_origin = stance_origin_tip_position_ - identity_tip_position;
         Point3D projection_to_walk_plane = math_utils::projectVector(identity_to_stance_origin, walk_plane_normal_);
         new_default_tip_pose = identity_tip_position + projection_to_walk_plane;
     }
-
-    // Actualizar posición por defecto del tip
     double default_tip_position_delta = math_utils::distance(default_tip_pose_, new_default_tip_pose);
     default_tip_pose_ = new_default_tip_pose;
 }
 
 void LegStepper::updateTipPosition(double step_length, double time_delta, bool rough_terrain_mode, bool force_normal_touchdown) {
-    // Generar target por defecto
+    // Usar el step_length configurado si no se pasa uno explícito
+    double used_step_length = (step_length_ > 0.0) ? step_length_ : step_length;
     target_tip_pose_ = default_tip_pose_ + stride_vector_ * 0.5;
 
     // Período de Swing
     if (step_state_ == STEP_SWING) {
-        updateStride(step_length);
-        // Usar step_progress_ como parámetro de interpolación [0,1]
+        updateStride(used_step_length);
         double time_input = step_progress_;
-        // Generar nodos de control si es necesario (puedes optimizar esto si lo deseas)
         generatePrimarySwingControlNodes();
         generateSecondarySwingControlNodes(false);
-        // Interpolación Bézier para swing
         Point3D delta_pos = math_utils::quarticBezierDot(swing_1_nodes_, time_input);
         Point3D new_tip_position = swing_origin_tip_position_ + delta_pos;
-
-        // Update both internal state and leg position using proper IK architecture
         current_tip_pose_ = new_tip_position;
         current_tip_velocity_ = delta_pos / time_delta;
         leg_.setDesiredTipPositionGlobal(new_tip_position);
@@ -127,14 +158,11 @@ void LegStepper::updateTipPosition(double step_length, double time_delta, bool r
     }
     // Período de Stance
     else if (step_state_ == STEP_STANCE || step_state_ == STEP_FORCE_STANCE) {
-        updateStride(step_length);
+        updateStride(used_step_length);
         double time_input = step_progress_;
-        generateStanceControlNodes(1.0); // Puedes ajustar el stride_scaler si es necesario
-        // Interpolación Bézier para stance
+        generateStanceControlNodes(1.0);
         Point3D delta_pos = math_utils::quarticBezierDot(stance_nodes_, time_input);
         Point3D new_tip_position = stance_origin_tip_position_ + delta_pos;
-
-        // Update both internal state and leg position using proper IK architecture
         current_tip_pose_ = new_tip_position;
         current_tip_velocity_ = delta_pos / time_delta;
         leg_.setDesiredTipPositionGlobal(new_tip_position);
@@ -144,28 +172,32 @@ void LegStepper::updateTipPosition(double step_length, double time_delta, bool r
 
 void LegStepper::generatePrimarySwingControlNodes() {
     Point3D mid_tip_position = (swing_origin_tip_position_ + target_tip_pose_) * 0.5;
-    mid_tip_position.z = std::max(swing_origin_tip_position_.z, target_tip_pose_.z);
-    mid_tip_position = mid_tip_position + swing_clearance_;
+    // Usar swing_height_ si está configurado
+    if (swing_height_ > 0.0) {
+        mid_tip_position.z = swing_origin_tip_position_.z + swing_height_;
+    } else {
+        mid_tip_position.z = std::max(swing_origin_tip_position_.z, target_tip_pose_.z);
+        mid_tip_position = mid_tip_position + swing_clearance_;
+    }
 
     // Get swing width parameter from robot model or use default
-    double mid_lateral_shift = 10.0; // Default swing width, can be made configurable
+    double mid_lateral_shift = LEG_STEPPER_SWING_LATERAL_SHIFT; // Default swing width, configurable
     bool positive_y_axis = (identity_tip_pose_.y > 0.0);
     mid_tip_position.y += positive_y_axis ? mid_lateral_shift : -mid_lateral_shift;
 
     //Avoid division by zero and use reasonable defaults
     Point3D stance_node_separation;
-    if (swing_delta_t_ > 1e-6 && swing_origin_tip_velocity_.norm() < 100.0) {  // Check for very small values and reasonable velocity
-        stance_node_separation = swing_origin_tip_velocity_ * (1.0 / swing_delta_t_) * 0.25;
+    if (swing_delta_t_ > LEG_STEPPER_FLOAT_TOLERANCE && swing_origin_tip_velocity_.norm() < LEG_STEPPER_MAX_SWING_VELOCITY) {
+        stance_node_separation = swing_origin_tip_velocity_ * (1.0 / swing_delta_t_) * LEG_STEPPER_SWING_NODE_SCALER;
     } else {
-        // Use default separation based on stride vector (more conservative)
-        stance_node_separation = stride_vector_ * 0.05;  // 5% of stride as default (reduced from 10%)
+        stance_node_separation = stride_vector_ * LEG_STEPPER_DEFAULT_NODE_SEPARATION;
     }
 
     // Nodos de control para curvas Bézier cuárticas de swing primario
     swing_1_nodes_[0] = swing_origin_tip_position_;
     swing_1_nodes_[1] = swing_origin_tip_position_ + stance_node_separation;
     swing_1_nodes_[2] = swing_origin_tip_position_ + stance_node_separation * 2.0;
-    swing_1_nodes_[3] = (mid_tip_position + swing_1_nodes_[2]) * 0.5;
+    swing_1_nodes_[3] = (mid_tip_position + swing_1_nodes_[2]) * LEG_STEPPER_TOUCHDOWN_INTERPOLATION;
     swing_1_nodes_[3].z = mid_tip_position.z;
     swing_1_nodes_[4] = mid_tip_position;
 }
@@ -175,13 +207,13 @@ void LegStepper::generateSecondarySwingControlNodes(bool ground_contact) {
     Point3D final_tip_velocity;
     Point3D stance_node_separation;
 
-    if (stance_delta_t_ > 1e-6 && swing_delta_t_ > 1e-6) {
+    if (stance_delta_t_ > LEG_STEPPER_FLOAT_TOLERANCE && swing_delta_t_ > LEG_STEPPER_FLOAT_TOLERANCE) {
         final_tip_velocity = stride_vector_ * (stance_delta_t_ / 1.0) * -1.0;
-        stance_node_separation = final_tip_velocity * (1.0 / swing_delta_t_) * 0.25;
+        stance_node_separation = final_tip_velocity * (1.0 / swing_delta_t_) * LEG_STEPPER_SWING_NODE_SCALER;
     } else {
         // Use default values when timing parameters are not properly initialized
-        final_tip_velocity = stride_vector_ * -0.2;  // Default velocity (reduced from -0.5)
-        stance_node_separation = stride_vector_ * 0.05;  // 5% of stride as default (reduced from 10%)
+        final_tip_velocity = stride_vector_ * LEG_STEPPER_DEFAULT_TOUCHDOWN_VELOCITY;
+        stance_node_separation = stride_vector_ * LEG_STEPPER_DEFAULT_NODE_SEPARATION;
     }
 
     // Nodos de control para curvas Bézier cuárticas de swing secundario
@@ -203,7 +235,7 @@ void LegStepper::generateSecondarySwingControlNodes(bool ground_contact) {
 }
 
 void LegStepper::generateStanceControlNodes(double stride_scaler) {
-    Point3D stance_node_separation = stride_vector_ * stride_scaler * -0.25;
+    Point3D stance_node_separation = stride_vector_ * stride_scaler * LEG_STEPPER_STANCE_NODE_SCALER;
 
     // Nodos de control para curva Bézier cuártica de stance
     stance_nodes_[0] = stance_origin_tip_position_ + stance_node_separation * 0.0;
@@ -218,25 +250,25 @@ void LegStepper::forceNormalTouchdown() {
     Point3D final_tip_velocity;
     Point3D stance_node_separation;
 
-    if (stance_delta_t_ > 1e-6 && swing_delta_t_ > 1e-6) {
+    if (stance_delta_t_ > LEG_STEPPER_FLOAT_TOLERANCE && swing_delta_t_ > LEG_STEPPER_FLOAT_TOLERANCE) {
         final_tip_velocity = stride_vector_ * (stance_delta_t_ / 1.0) * -1.0;
-        stance_node_separation = final_tip_velocity * (1.0 / swing_delta_t_) * 0.25;
+        stance_node_separation = final_tip_velocity * (1.0 / swing_delta_t_) * LEG_STEPPER_SWING_NODE_SCALER;
     } else {
         // Use default values when timing parameters are not properly initialized
-        final_tip_velocity = stride_vector_ * -0.2;  // Default velocity (reduced from -0.5)
-        stance_node_separation = stride_vector_ * 0.05;  // 5% of stride as default (reduced from 10%)
+        final_tip_velocity = stride_vector_ * LEG_STEPPER_DEFAULT_TOUCHDOWN_VELOCITY;
+        stance_node_separation = stride_vector_ * LEG_STEPPER_DEFAULT_NODE_SEPARATION;
     }
 
     Point3D bezier_target = target_tip_pose_;
-    Point3D bezier_origin = target_tip_pose_ - stance_node_separation * 4.0;
+    Point3D bezier_origin = target_tip_pose_ - stance_node_separation * LEG_STEPPER_TOUCHDOWN_NODE_MULTIPLIER;
     bezier_origin.z = std::max(swing_origin_tip_position_.z, target_tip_pose_.z);
     bezier_origin = bezier_origin + swing_clearance_;
 
     swing_1_nodes_[4] = bezier_origin;
     swing_2_nodes_[0] = bezier_origin;
     swing_2_nodes_[2] = bezier_target - stance_node_separation * 2.0;
-    swing_1_nodes_[3] = swing_2_nodes_[0] - (swing_2_nodes_[2] - bezier_origin) * 0.5;
-    swing_2_nodes_[1] = swing_2_nodes_[0] + (swing_2_nodes_[2] - bezier_origin) * 0.5;
+    swing_1_nodes_[3] = swing_2_nodes_[0] - (swing_2_nodes_[2] - bezier_origin) * LEG_STEPPER_TOUCHDOWN_INTERPOLATION;
+    swing_2_nodes_[1] = swing_2_nodes_[0] + (swing_2_nodes_[2] - bezier_origin) * LEG_STEPPER_TOUCHDOWN_INTERPOLATION;
 }
 
 // These methods are now inline in the header file
@@ -244,7 +276,7 @@ void LegStepper::forceNormalTouchdown() {
 // Nueva API OpenSHC-like
 void LegStepper::updateWithPhase(double local_phase, double step_length, double time_delta) {
     // Duty factor para trípode (0.5: mitad del ciclo en stance, mitad en swing)
-    constexpr double duty_factor = 0.5;
+    constexpr double duty_factor = LEG_STEPPER_DUTY_FACTOR;
 
     // Actualizar posiciones de origen si es necesario
     if (step_state_ == STEP_STANCE && local_phase < duty_factor) {

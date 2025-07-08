@@ -29,21 +29,22 @@ WalkController::WalkController(RobotModel &m, Leg legs[NUM_LEGS])
     std::string default_gait = model.getParams().gait_type.empty() ? "tripod_gait" : model.getParams().gait_type;
     setGaitByName(default_gait);
 
-    // Create LegStepper objects for each leg
-    for (int i = 0; i < NUM_LEGS; i++) {
-        // Calculate default stance position for each leg
-        Point3D default_stance = calculateDefaultStancePosition(i);
-
-        // Create LegStepper with leg reference
-        auto stepper = std::make_shared<LegStepper>(i, default_stance, legs[i], model);
-        leg_steppers_.push_back(stepper);
-    }
-
     // Initialize workspace validator
     workspace_validator_ = std::make_unique<WorkspaceValidator>(model);
 
     // Initialize walkspace analyzer
     walkspace_analyzer_ = std::make_unique<WalkspaceAnalyzer>(model);
+
+    // Create LegStepper objects for each leg
+    for (int i = 0; i < NUM_LEGS; i++) {
+        // Calculate default stance position for each leg
+        Point3D default_stance = calculateDefaultStancePosition(i);
+
+        // Crear LegStepper con referencias a los validadores
+        auto stepper = std::make_shared<LegStepper>(i, default_stance, legs[i], model,
+                                                    walkspace_analyzer_.get(), workspace_validator_.get());
+        leg_steppers_.push_back(stepper);
+    }
 
     // Initialize terrain adaptation
     terrain_adaptation_.initialize();
@@ -99,21 +100,26 @@ std::vector<std::string> WalkController::getAvailableGaitNames() const {
 }
 
 void WalkController::applyGaitConfigToLegSteppers(const GaitConfiguration &gait_config) {
-    // Apply gait configuration to each leg stepper
+    // Aplicar todos los parámetros relevantes de GaitConfiguration a cada LegStepper
     for (int i = 0; i < NUM_LEGS && i < leg_steppers_.size(); i++) {
         auto leg_stepper = leg_steppers_[i];
         if (!leg_stepper)
             continue;
 
-        // Set phase offset based on gait configuration
-        double phase_offset = static_cast<double>(gait_config.offsets.getForLegIndex(i) *
-                              gait_config.phase_config.phase_offset) /
+        // Offset de fase normalizado [0,1]
+        double phase_offset = static_cast<double>(gait_config.offsets.getForLegIndex(i) * gait_config.phase_config.phase_offset) /
                               static_cast<double>(gait_config.step_cycle.period_);
         leg_stepper->setPhaseOffset(phase_offset);
 
+        // Configuración de parámetros de marcha
+        leg_stepper->setStepLength(gait_config.step_length);
+        leg_stepper->setSwingHeight(gait_config.swing_height);
+        leg_stepper->setBodyClearance(gait_config.body_clearance);
+        leg_stepper->setStanceSpanModifier(gait_config.stance_span_modifier);
+        // Si hay otros parámetros relevantes, configurarlos aquí
     }
 
-    // Update terrain adaptation parameters
+    // Actualizar parámetros de adaptación al terreno
     terrain_adaptation_.setRoughTerrainMode(gait_config.supports_rough_terrain);
 }
 
@@ -343,21 +349,16 @@ void WalkController::updateWalk(const Point3D &linear_velocity_input, double ang
     // State transition: STOPPED->STARTING
     if (walk_state_ == WALK_STOPPED && has_velocity_command) {
         walk_state_ = WALK_STARTING;
-        // Initialize LegSteppers with proper StepCycle
-        StepCycle step = current_gait_config_.step_cycle; // Usar current_gait_config_.step_cycle
+        // Inicializar LegSteppers solo con el offset y parámetros de GaitConfiguration
+        StepCycle step = current_gait_config_.step_cycle;
         for (auto &leg_stepper : leg_steppers_) {
             leg_stepper->setAtCorrectPhase(false);
             leg_stepper->setCompletedFirstStep(false);
             leg_stepper->setStepState(STEP_STANCE);
-            // Set phase offset based on gait configuration (OpenSHC style)
-            double phase_offset = static_cast<double>(current_gait_config_.offsets.getForLegIndex(
-                                        leg_stepper->getLegIndex()) *
-                                    current_gait_config_.phase_config.phase_offset) /
-                                    static_cast<double>(current_gait_config_.step_cycle.period_);
-            leg_stepper->setPhaseOffset(phase_offset);
+            // Offset y parámetros ya aplicados en applyGaitConfigToLegSteppers
             leg_stepper->updateStepState(step);
         }
-        return; // Skip iteration of phase so auto posing can catch up
+        return;
     }
     // State transition: STARTING->MOVING
     else if (walk_state_ == WALK_STARTING && legs_at_correct_phase_ == leg_count && legs_completed_first_step_ == leg_count) {
@@ -387,7 +388,8 @@ void WalkController::updateWalk(const Point3D &linear_velocity_input, double ang
         int current_phase = leg_stepper->getPhase();
         double local_phase = static_cast<double>(current_phase) /
                               static_cast<double>(current_gait_config_.step_cycle.period_);
-        leg_stepper->updateWithPhase(local_phase, 50.0, time_delta_); // Use default step length
+        // Usar los parámetros de marcha de GaitConfiguration
+        leg_stepper->updateWithPhase(local_phase, current_gait_config_.step_length, time_delta_);
     }
 
     updateWalkPlane();

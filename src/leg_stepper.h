@@ -3,6 +3,8 @@
 
 #include "robot_model.h"
 #include "leg.h"
+#include "walkspace_analyzer.h"
+#include "workspace_validator.h"
 
 // Enum definitions needed by LegStepper
 enum WalkState {
@@ -52,8 +54,9 @@ struct LegStepperExternalTarget {
  */
 class LegStepper {
 public:
-    //Constructor without WalkController dependency
-    LegStepper(int leg_index, const Point3D& identity_tip_pose, Leg& leg, RobotModel& robot_model);
+    // Modificar el constructor para aceptar los validadores
+    LegStepper(int leg_index, const Point3D& identity_tip_pose, Leg& leg, RobotModel& robot_model,
+               WalkspaceAnalyzer* walkspace_analyzer, WorkspaceValidator* workspace_validator);
 
     // Accessors
     int getLegIndex() const { return leg_index_; }
@@ -98,6 +101,10 @@ public:
     void setExternalTarget(const LegStepperExternalTarget& target) { external_target_ = target; }
     void setExternalDefault(const LegStepperExternalTarget& default_pos) { external_default_ = default_pos; }
     void setWalkState(WalkState state) { current_walk_state_ = state; }  // Set by WalkController
+    void setStepLength(double length) { step_length_ = length; }
+    void setSwingHeight(double height) { swing_height_ = height; }
+    void setBodyClearance(double clearance) { body_clearance_ = clearance; }
+    void setStanceSpanModifier(double modifier) { stance_span_modifier_ = modifier; }
 
     //Core functionality without WalkController dependency
     void updatePhase(const StepCycle& step);  // StepCycle passed as parameter
@@ -158,6 +165,13 @@ private:
     Point3D swing_1_nodes_[5];
     Point3D swing_2_nodes_[5];
     Point3D stance_nodes_[5];
+    double step_length_ = 0.0;
+    double swing_height_ = 0.0;
+    double body_clearance_ = 0.0;
+    double stance_span_modifier_ = 0.0;
+
+    WalkspaceAnalyzer* walkspace_analyzer_ = nullptr;
+    WorkspaceValidator* workspace_validator_ = nullptr;
 };
 
 #endif // LEG_STEPPER_H

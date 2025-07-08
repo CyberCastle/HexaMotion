@@ -47,6 +47,7 @@ GaitConfiguration createWaveGaitConfig(const Parameters &params) {
     config.stance_ratio = (double)config.phase_config.stance_phase / total_phase;
     config.swing_ratio = (double)config.phase_config.swing_phase / total_phase;
     config.time_to_max_stride = 2.0; // Default conservative value for wave gait
+    config.stance_span_modifier = 0.0; // OpenSHC: configurable, por defecto 0.0
 
     config.description = "Wave gait: Most stable gait with sequential leg movement";
     config.step_order = {"AR", "CL", "BL", "AL", "CR", "BR"};
@@ -88,6 +89,7 @@ GaitConfiguration createTripodGaitConfig(const Parameters &params) {
     config.stance_ratio = (double)config.phase_config.stance_phase / total_phase;
     config.swing_ratio = (double)config.phase_config.swing_phase / total_phase;
     config.time_to_max_stride = 1.5; // Faster than wave gait
+    config.stance_span_modifier = 0.0; // OpenSHC: configurable, por defecto 0.0
 
     config.description = "Tripod gait: Balanced speed and stability with alternating tripods";
     config.step_order = {"AR/BL/CR", "AL/BR/CL"};
@@ -131,6 +133,7 @@ GaitConfiguration createRippleGaitConfig(const Parameters &params) {
     config.max_velocity = 150.0;                        // Faster movement
     config.stability_factor = 0.60;                     // Moderate stability
     config.supports_rough_terrain = false;              // Less suitable for rough terrain
+    config.stance_span_modifier = 0.0; // OpenSHC: configurable, por defecto 0.0
 
     // Velocity limits parameters (unified configuration)
     config.stance_ratio = (double)config.phase_config.stance_phase / total_phase;
@@ -172,6 +175,7 @@ GaitConfiguration createMetachronalGaitConfig(const Parameters &params) {
     config.max_velocity = 80.0;     // Adaptive speed
     config.stability_factor = 0.85; // High stability with adaptation
     config.supports_rough_terrain = true;
+    config.stance_span_modifier = 0.0; // OpenSHC: configurable, por defecto 0.0
 
     // Velocity limits parameters (unified configuration)
     config.stance_ratio = (double)config.phase_config.stance_phase / total_phase;
