@@ -55,10 +55,33 @@ void VelocityLimits::generateLimits(const GaitConfig &gait_config) {
     // Calculate overshoot compensation using workspace data
     calculateOvershoot(gait_config);
 
-    // Generate limits for all bearings (0-359 degrees) using validation
+    // Para cada dirección (bearing), calcular límites de velocidad y aceleración
     for (int bearing = 0; bearing < 360; ++bearing) {
-        pimpl_->limit_map_.limits[bearing] = calculateLimitsForBearing(
-            static_cast<double>(bearing), gait_config);
+        double walkspace_radius = pimpl_->workspace_config_.walkspace_radius;
+        double on_ground_ratio = gait_config.stance_ratio;
+        double step_frequency = gait_config.frequency;
+        double stance_duration = on_ground_ratio / step_frequency;
+
+        // Maximum linear speed based on step length and frequency
+        double max_step_length = walkspace_radius * 2.0;                    // Maximum step length
+        double max_linear_speed = (max_step_length * step_frequency) / 2.0; // Average speed
+
+        // Maximum angular speed based on stance radius
+        double stance_radius = walkspace_radius * 0.8; // Effective stance radius
+        double max_angular_speed = max_linear_speed / stance_radius;
+
+        // Acceleration limits based on step timing
+        double time_to_max_stride = gait_config.time_to_max_stride;
+        double max_linear_acceleration = max_linear_speed / time_to_max_stride;
+        double max_angular_acceleration = max_angular_speed / time_to_max_stride;
+
+        // Crear y asignar los límites
+        LimitValues limits;
+        limits.linear_x = max_linear_speed;
+        limits.linear_y = max_linear_speed;
+        limits.angular_z = max_angular_speed;
+        limits.acceleration = max_linear_acceleration;
+        pimpl_->limit_map_.limits[bearing] = limits;
     }
 }
 

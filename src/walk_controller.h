@@ -62,11 +62,6 @@ public:
     void generateLimits(StepCycle step);
 
     /**
-     * @brief Generate step cycle timing parameters
-     */
-    StepCycle generateStepCycle(bool set_step_cycle = true);
-
-    /**
      * @brief Get velocity limit for a given bearing
      */
     double getLimit(const Point3D& linear_velocity_input, double angular_velocity_input,
@@ -93,7 +88,7 @@ public:
     Point3D estimateGravity() const;
 
     // Accessors
-    StepCycle getStepCycle() const { return step_; }
+    StepCycle getStepCycle() const { return current_gait_config_.step_cycle; }
     double getTimeDelta() const { return time_delta_; }
     double getStepClearance() const { return step_clearance_; }
     double getStepDepth() const { return step_depth_; }
@@ -105,7 +100,6 @@ public:
     Point3D getWalkPlane() const { return walk_plane_; }
     Point3D getWalkPlaneNormal() const { return walk_plane_normal_; }
     Point3D getOdometryIdeal() const { return odometry_ideal_; }
-    Point3D getModelCurrentPose() const;
     std::shared_ptr<LegStepper> getLegStepper(int leg_index) const;
 
     // Modifiers

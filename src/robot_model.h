@@ -120,6 +120,9 @@ struct Parameters {
         double min_height_factor = 0.12f; // 12% minimum step height
         double max_height_factor = 0.40f; // 40% maximum step height
     } gait_factors;
+
+    // Tipo de gait seleccionado (OpenSHC compatible)
+    std::string gait_type;
 };
 
 enum GaitType {

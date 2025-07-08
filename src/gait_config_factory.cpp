@@ -173,23 +173,18 @@ GaitConfiguration createMetachronalGaitConfig(const Parameters& params) {
 
 /**
  * @brief Create gait selection configuration with all available gaits
+ * @param params Parámetros del robot a usar para la configuración de los gaits
  * @return Complete gait selection configuration
  */
-GaitSelectionConfig createGaitSelectionConfig() {
+GaitSelectionConfig createGaitSelectionConfig(const Parameters& params) {
     GaitSelectionConfig config;
 
-    // Create default parameters for gait configuration
-    Parameters default_params;
-    default_params.coxa_length = 50.0;
-    default_params.femur_length = 101.0;
-    default_params.tibia_length = 208.0;
-    default_params.robot_height = 150.0;
-
+    // Usar los parámetros recibidos
     // Add all available gaits
-    config.available_gaits["wave_gait"] = createWaveGaitConfig(default_params);
-    config.available_gaits["tripod_gait"] = createTripodGaitConfig(default_params);
-    config.available_gaits["ripple_gait"] = createRippleGaitConfig(default_params);
-    config.available_gaits["metachronal_gait"] = createMetachronalGaitConfig(default_params);
+    config.available_gaits["wave_gait"] = createWaveGaitConfig(params);
+    config.available_gaits["tripod_gait"] = createTripodGaitConfig(params);
+    config.available_gaits["ripple_gait"] = createRippleGaitConfig(params);
+    config.available_gaits["metachronal_gait"] = createMetachronalGaitConfig(params);
 
     // Default configuration
     config.default_gait = "tripod_gait";
