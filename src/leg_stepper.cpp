@@ -153,11 +153,11 @@ void LegStepper::generatePrimarySwingControlNodes() {
 
     //Avoid division by zero and use reasonable defaults
     Point3D stance_node_separation;
-    if (swing_delta_t_ > 1e-6) {  // Check for very small values
+    if (swing_delta_t_ > 1e-6 && swing_origin_tip_velocity_.norm() < 100.0) {  // Check for very small values and reasonable velocity
         stance_node_separation = swing_origin_tip_velocity_ * (1.0 / swing_delta_t_) * 0.25;
     } else {
-        // Use default separation based on stride vector
-        stance_node_separation = stride_vector_ * 0.1;  // 10% of stride as default
+        // Use default separation based on stride vector (more conservative)
+        stance_node_separation = stride_vector_ * 0.05;  // 5% of stride as default (reduced from 10%)
     }
 
     // Nodos de control para curvas Bézier cuárticas de swing primario
@@ -179,8 +179,8 @@ void LegStepper::generateSecondarySwingControlNodes(bool ground_contact) {
         stance_node_separation = final_tip_velocity * (1.0 / swing_delta_t_) * 0.25;
     } else {
         // Use default values when timing parameters are not properly initialized
-        final_tip_velocity = stride_vector_ * -0.5;  // Default velocity
-        stance_node_separation = stride_vector_ * 0.1;  // 10% of stride as default
+        final_tip_velocity = stride_vector_ * -0.2;  // Default velocity (reduced from -0.5)
+        stance_node_separation = stride_vector_ * 0.05;  // 5% of stride as default (reduced from 10%)
     }
 
     // Nodos de control para curvas Bézier cuárticas de swing secundario
@@ -222,8 +222,8 @@ void LegStepper::forceNormalTouchdown() {
         stance_node_separation = final_tip_velocity * (1.0 / swing_delta_t_) * 0.25;
     } else {
         // Use default values when timing parameters are not properly initialized
-        final_tip_velocity = stride_vector_ * -0.5;  // Default velocity
-        stance_node_separation = stride_vector_ * 0.1;  // 10% of stride as default
+        final_tip_velocity = stride_vector_ * -0.2;  // Default velocity (reduced from -0.5)
+        stance_node_separation = stride_vector_ * 0.05;  // 5% of stride as default (reduced from 10%)
     }
 
     Point3D bezier_target = target_tip_pose_;
