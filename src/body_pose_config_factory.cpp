@@ -134,26 +134,25 @@ CalculatedServoAngles calculateServoAnglesForHeight(double target_height_mm,
  * @return Array of standing pose joint configurations
  */
 std::array<StandingPoseJoints, NUM_LEGS> getDefaultStandingPoseJoints(const Parameters &params) {
-    std::array<StandingPoseJoints, NUM_LEGS> joints;
+    std::array<StandingPoseJoints, NUM_LEGS> joints{};
 
-    // Target height for standing pose (use robot_height from parameters)
-    const double target_height_mm = params.robot_height;
+    // Build a temporary model to reuse the kinematics functions
+    RobotModel model(params);
+    auto stance_positions = calculateHexagonalStancePositions(params);
 
-    // Calculate optimal servo angles for the target height using inverse kinematics
-    CalculatedServoAngles calculated = calculateServoAnglesForHeight(target_height_mm, params);
-
-    // Standing pose for stable equilibrium (all legs identical for symmetry)
     for (int i = 0; i < NUM_LEGS; i++) {
-        if (calculated.valid) {
-            // Use calculated individual servo angles from inverse kinematics
-            joints[i].coxa = calculated.coxa;   // Calculated coxa angle (typically 0°)
-            joints[i].femur = calculated.femur; // Calculated femur servo angle
-            joints[i].tibia = calculated.tibia; // Calculated tibia servo angle
+        Point3D target(stance_positions[i].x, stance_positions[i].y, -params.robot_height);
+        JointAngles angles = model.inverseKinematicsGlobalCoordinates(i, target);
+
+        if (model.checkJointLimits(i, angles)) {
+            joints[i].coxa = angles.coxa;
+            joints[i].femur = angles.femur;
+            joints[i].tibia = angles.tibia;
         } else {
-            // Fallback to safe default values if calculation fails
-            joints[i].coxa = 0.0f;   // Radially aligned (0° relative to mounting)
-            joints[i].femur = 30.0f; // Conservative forward angle for stability
-            joints[i].tibia = 20.0f; // Conservative knee bend for target height
+            // Fallback to neutral configuration in radians
+            joints[i].coxa = 0.0;
+            joints[i].femur = math_utils::degreesToRadians(30.0);
+            joints[i].tibia = math_utils::degreesToRadians(20.0);
         }
     }
 
