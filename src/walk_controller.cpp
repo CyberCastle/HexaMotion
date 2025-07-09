@@ -15,7 +15,7 @@
 
 WalkController::WalkController(RobotModel &m, Leg legs[NUM_LEGS])
     : model(m), terrain_adaptation_(m), velocity_limits_(m),
-      step_clearance_(30.0), step_depth_(10.0), body_clearance_(100.0),
+      step_clearance_(30.0), step_depth_(10.0),
       desired_linear_velocity_(0, 0, 0), desired_angular_velocity_(0.0),
       walk_state_(WALK_STOPPED), pose_state_(0),
       regenerate_walkspace_(false), legs_at_correct_phase_(0), legs_completed_first_step_(0),
@@ -64,8 +64,7 @@ bool WalkController::setGaitConfiguration(const GaitConfiguration &gait_config) 
     // Apply the configuration to all leg steppers
     applyGaitConfigToLegSteppers(gait_config);
 
-    // Update step parameters
-    body_clearance_ = gait_config.body_clearance;
+
 
     // Update gait selection config
     gait_selection_config_.current_gait = gait_config.gait_name;

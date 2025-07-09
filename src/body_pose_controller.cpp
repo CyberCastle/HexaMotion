@@ -118,7 +118,7 @@ bool BodyPoseController::setLegPosition(int leg_index, const Point3D &position, 
 // Calculates leg positions based on pose configuration and desired body height
 bool BodyPoseController::calculateBodyPoseFromConfig(double height_offset, Leg legs[NUM_LEGS]) {
     // Calculate Z position based on body clearance and height offset
-    double target_z = -(body_pose_config.body_clearance + height_offset); // Body clearance already in mm
+    double target_z = -(body_pose_config.body_clearance + height_offset); // Body clearance in mm
 
     // Use configured stance positions for each leg
     for (int i = 0; i < NUM_LEGS; i++) {

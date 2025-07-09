@@ -85,7 +85,7 @@ class WalkController {
     double getTimeDelta() const { return time_delta_; }
     double getStepClearance() const { return step_clearance_; }
     double getStepDepth() const { return step_depth_; }
-    double getBodyClearance() const { return body_clearance_; }
+
     Point3D getDesiredLinearVelocity() const { return desired_linear_velocity_; }
     double getDesiredAngularVelocity() const { return desired_angular_velocity_; }
     WalkState getWalkState() const { return walk_state_; }
@@ -230,7 +230,6 @@ class WalkController {
     double time_delta_;
     double step_clearance_;
     double step_depth_;
-    double body_clearance_;
     Point3D desired_linear_velocity_;
     double desired_angular_velocity_;
     WalkState walk_state_;
