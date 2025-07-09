@@ -439,10 +439,34 @@ void VelocityLimits::setSafetyMargin(double margin) {
 }
 
 void VelocityLimits::setAngularVelocityScaling(double scaling) {
-    pimpl_->angular_velocity_scaling_ = scaling;
+    pimpl_->angular_velocity_scaling_ = std::clamp<double>(scaling, 0.1, 2.0);
+}
 
-    // Update validator angular scaling
-    pimpl_->workspace_validator_->updateAngularScaling(scaling);
+Point3D VelocityLimits::calculateStrideVector(double linear_velocity_x, double linear_velocity_y,
+                                             double angular_velocity, const Point3D& current_tip_position,
+                                             double stance_ratio, double step_frequency) {
+    // OpenSHC equivalent stride vector calculation
+
+    // 1. Linear stride vector (OpenSHC: stride_vector_linear)
+    Point3D stride_vector_linear(linear_velocity_x, linear_velocity_y, 0.0);
+
+    // 2. Angular stride vector (OpenSHC: angular_velocity.cross(radius))
+    // Get radius by projecting current tip position to XY plane (OpenSHC: getRejection)
+    Point3D radius = current_tip_position;
+    radius.z = 0.0; // Project to XY plane (equivalent to getRejection)
+
+    // Calculate angular stride vector using cross product
+    // For 2D case: cross(angular_velocity * k, radius) = (-angular_velocity * radius.y, angular_velocity * radius.x, 0)
+    Point3D stride_vector_angular(-angular_velocity * radius.y, angular_velocity * radius.x, 0.0);
+
+    // 3. Combination (OpenSHC: stride_vector_linear + stride_vector_angular)
+    Point3D stride_vector = stride_vector_linear + stride_vector_angular;
+
+    // 4. Scaling by stance ratio and frequency (OpenSHC: stride_vector_ *= (on_ground_ratio / step.frequency_))
+    double scaling_factor = stance_ratio / step_frequency;
+    stride_vector = stride_vector * scaling_factor;
+
+    return stride_vector;
 }
 
 double VelocityLimits::getOvershootX() const {

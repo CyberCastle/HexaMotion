@@ -97,7 +97,7 @@ void testTrajectoryGeneration(LegStepper &stepper, const RobotModel &model) {
 
     // Set up initial conditions
     stepper.setStepState(STEP_SWING);
-    stepper.updateStride(step_length);
+    stepper.updateStride(step_length, 0.0, 0.0, 0.8, 1.0);
 
     // Initialize tip velocity with reasonable values (much lower than before)
     // Use a more realistic velocity that won't cause numerical issues
@@ -275,7 +275,7 @@ void testStrideVectorUpdates(LegStepper &stepper) {
 
     // Update stride
     double step_length = 25.0;
-    stepper.updateStride(step_length);
+    stepper.updateStride(step_length, 0.0, 0.0, 0.8, 1.0);
 
     Point3D new_stride = stepper.getStrideVector();
     std::cout << "  New stride vector: (" << new_stride.x << ", " << new_stride.y << ", " << new_stride.z << ")" << std::endl;

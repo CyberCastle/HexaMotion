@@ -110,7 +110,7 @@ public:
     void updatePhase(const StepCycle& step);  // StepCycle passed as parameter
     void iteratePhase(const StepCycle& step);  // StepCycle passed as parameter
     void updateStepState(const StepCycle& step);  // StepCycle passed as parameter
-    void updateStride(double step_length);
+    void updateStride(double linear_velocity_x, double linear_velocity_y, double angular_velocity, double stance_ratio, double step_frequency);
     Point3D calculateStanceSpanChange();
     void updateDefaultTipPosition();
     void updateTipPosition(double step_length, double time_delta, bool rough_terrain_mode, bool force_normal_touchdown);  // Parameters passed
