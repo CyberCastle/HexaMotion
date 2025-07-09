@@ -23,7 +23,7 @@ pose_controller_test: pose_controller_test.cpp ../src/body_pose_controller.cpp .
 walk_controller_test: walk_controller_test.cpp ../src/walk_controller.cpp ../src/leg_stepper.cpp ../src/terrain_adaptation.cpp ../src/robot_model.cpp ../src/velocity_limits.cpp ../src/math_utils.cpp ../src/workspace_validator.cpp ../src/leg.cpp ../src/walkspace_analyzer.cpp ../src/gait_config_factory.cpp ../src/body_pose_config_factory.cpp ../src/body_pose_controller.cpp ../src/leg_poser.cpp
 	$(CXX) $(CXXFLAGS) $^ -o $@
 
-walk_controller_validation_test: walk_controller_validation_test.cpp ../src/walk_controller.cpp ../src/leg_stepper.cpp ../src/terrain_adaptation.cpp ../src/robot_model.cpp ../src/velocity_limits.cpp ../src/math_utils.cpp ../src/workspace_validator.cpp ../src/leg.cpp ../src/walkspace_analyzer.cpp
+walk_controller_validation_test: walk_controller_validation_test.cpp ../src/walk_controller.cpp ../src/leg_stepper.cpp ../src/terrain_adaptation.cpp ../src/robot_model.cpp ../src/velocity_limits.cpp ../src/math_utils.cpp ../src/workspace_validator.cpp ../src/leg.cpp ../src/walkspace_analyzer.cpp ../src/gait_config_factory.cpp
 	$(CXX) $(CXXFLAGS) $^ -o $@
 
 admittance_controller_test: admittance_controller_test.cpp ../src/admittance_controller.cpp ../src/robot_model.cpp ../src/math_utils.cpp ../src/workspace_validator.cpp

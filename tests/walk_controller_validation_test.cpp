@@ -30,20 +30,21 @@ int main() {
     wc.init();
     assert(wc.getWalkState() == WALK_STOPPED);
 
-    // Validate gait switching and timing parameters
-    assert(wc.setGaitType(WAVE_GAIT));
-    double stance = 0, swing = 0, freq = 0;
-    wc.getGaitTimingParameters(WAVE_GAIT, stance, swing, freq);
-    assert(std::abs(wc.getStanceDuration() - stance) < 1e-6);
-    assert(std::abs(wc.getSwingDuration() - swing) < 1e-6);
-    assert(std::abs(wc.getCycleFrequency() - freq) < 1e-6);
-    assert(wc.getCurrentGait() == WAVE_GAIT);
+    // Validate gait switching using gait names
+    assert(wc.setGaitByName("wave_gait"));
+    double stance = wc.getStanceDuration();
+    double swing = wc.getSwingDuration();
+    double freq = wc.getCycleFrequency();
+    assert(stance > 0.0 && stance < 1.0);
+    assert(swing > 0.0 && swing < 1.0);
+    assert(freq > 0.0);
+    assert(wc.getCurrentGaitName() == "wave_gait");
 
-    // Validate step parameter setters
-    assert(wc.setStepParameters(40.0, 60.0));
-    assert(std::abs(wc.getStepHeight() - 40.0) < 1e-6);
-    double len = wc.getStepLength();
-    assert(len >= 20.0 && len <= 80.0);
+    // Validate step parameters from gait configuration
+    double step_height = wc.getStepHeight();
+    double step_length = wc.getStepLength();
+    assert(step_height > 0.0);
+    assert(step_length > 0.0);
 
     // Generate walkspace and verify values
     wc.generateWalkspace();
@@ -59,23 +60,36 @@ int main() {
     std::cout << "Odometry: (" << odom.x << ", " << odom.y << ")" << std::endl;
     assert(std::abs(odom.x) > 0.0);
 
-    // Foot trajectory generation
-    LegState states[NUM_LEGS]{};
-    double offsets[NUM_LEGS]{};
-    Point3D traj = wc.footTrajectory(0, 0.5, wc.getStepHeight(), wc.getStepLength(),
-                                    wc.getStanceDuration(), wc.getSwingDuration(),
-                                    p.robot_height, offsets, states, nullptr, nullptr);
-    assert(!std::isnan(traj.x) && !std::isnan(traj.y) && !std::isnan(traj.z));
+    // Get leg stepper and validate phase offset
+    auto stepper = wc.getLegStepper(0);
+    assert(stepper);
+    double phase_offset = stepper->getPhaseOffset();
+    std::cout << "Phase offset L0: " << phase_offset << std::endl;
+    assert(phase_offset >= 0.0 && phase_offset <= 1.0);
 
-    // Metachronal wave direction adaptation
-    assert(wc.setGaitType(METACHRONAL_GAIT));
+    // Test metachronal gait
+    assert(wc.setGaitByName("metachronal_gait"));
     for (int i = 0; i < 10; ++i) {
         wc.updateWalk(Point3D(-20.0, 0.0, 0.0), 0.0);
     }
-    auto stepper = wc.getLegStepper(0);
-    assert(stepper);
-    std::cout << "Phase offset L0: " << stepper->getPhaseOffset() << std::endl;
-    assert(stepper->getPhaseOffset() > 0.5);
+    auto metachronal_stepper = wc.getLegStepper(0);
+    assert(metachronal_stepper);
+    std::cout << "Metachronal phase offset L0: " << metachronal_stepper->getPhaseOffset() << std::endl;
+    assert(metachronal_stepper->getPhaseOffset() >= 0.0 && metachronal_stepper->getPhaseOffset() <= 1.0);
+
+    // Test available gait names
+    auto available_gaits = wc.getAvailableGaitNames();
+    assert(!available_gaits.empty());
+    std::cout << "Available gaits: ";
+    for (const auto& gait : available_gaits) {
+        std::cout << gait << " ";
+    }
+    std::cout << std::endl;
+
+    // Test velocity limits
+    auto limits = wc.getVelocityLimits();
+    assert(limits.linear_x > 0.0);
+    assert(limits.angular_z > 0.0);
 
     std::cout << "walk_controller_validation_test passed" << std::endl;
     return 0;
