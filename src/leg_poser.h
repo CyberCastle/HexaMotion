@@ -81,10 +81,6 @@ public:
     inline int getPoseNegationPhaseEnd() const { return pose_negation_phase_end_; }
     inline bool getLegCompletedStep() const { return leg_completed_step_; }
 
-    // Leg access
-    inline Leg& getLeg() { return leg_; }
-    inline const Leg& getLeg() const { return leg_; }
-
     // Modifiers
     inline void setCurrentTipPose(const Pose& current) {
         leg_.setCurrentTipPositionGlobal(current.position);
