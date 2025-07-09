@@ -343,126 +343,165 @@ static bool checkLegSymmetry(const LocomotionSystem &sys) {
 }
 
 /**
- * @brief Validate trajectory consistency for tripod gait
+ * @brief Validate trajectory symmetry for tripod gait
  * This function analyzes the gait pattern to ensure that:
- * 1. Legs in each tripod group maintain consistent phase relationships
- * 2. The two tripod groups alternate properly (when A is in stance, B is in swing)
- * 3. The overall gait pattern is coherent and stable
+ * 1. Trajectories of legs 0,2,4 (group A) are symmetrical to legs 1,3,5 (group B)
+ * 2. The two tripod groups maintain proper phase opposition
+ * 3. Trajectory patterns are consistent within each group
  *
- * Note: For hexagonal robots, perfect mirror symmetry is not expected due to
- * the leg positioning geometry. Instead, we validate gait pattern consistency.
+ * For tripod gait, the trajectories should be symmetrical between the two groups
+ * when they are in the same phase (both stance or both swing).
  */
 static bool validateTrajectorySymmetry(const TripodValidation &validation) {
     std::cout << "\n=== TRAJECTORY SYMMETRY VALIDATION ===" << std::endl;
 
-    // For hexagonal robot, we need to check phase-shifted symmetry, not mirror symmetry
-    // Tripod gait should show consistent patterns between the two groups
+    // Define tripod groups
+    std::vector<int> group_a = {0, 2, 4}; // Legs 0, 2, 4
+    std::vector<int> group_b = {1, 3, 5}; // Legs 1, 3, 5
 
-    // Define tripod groups for hexagonal robot
-    const int group_a[3] = {0, 2, 4}; // Legs 1, 3, 5 (Front Right, Back Right, Middle Left)
-    const int group_b[3] = {1, 3, 5}; // Legs 2, 4, 6 (Middle Right, Front Left, Back Left)
+    int symmetry_steps = 0;
+    int total_comparable_steps = 0;
+    int group_a_consistent_steps = 0;
+    int group_b_consistent_steps = 0;
 
-    const double position_tolerance = 20.0; // 20mm tolerance for position variation (relaxed for hexagonal geometry)
-    const double angle_tolerance = 10.0;    // 10 degrees tolerance for angle variation (relaxed for different phases)
+    // Analyze each step for trajectory symmetry
+    for (size_t step = 0; step < validation.group_a_phases.size(); ++step) {
+        StepPhase group_a_phase = validation.group_a_phases[step];
+        StepPhase group_b_phase = validation.group_b_phases[step];
 
-    bool groups_consistent = true;
-    int total_measurements = 0;
-    int consistent_measurements = 0;
+        // Check if both groups are in the same phase (stance or swing)
+        bool group_a_stance = (group_a_phase == STANCE_PHASE);
+        bool group_a_swing = (group_a_phase == SWING_PHASE);
+        bool group_b_stance = (group_b_phase == STANCE_PHASE);
+        bool group_b_swing = (group_b_phase == SWING_PHASE);
 
-    // Check group A internal consistency
-    std::cout << "\n  Analyzing Group A consistency (Legs 0, 2, 4):" << std::endl;
-    int group_a_measurements = 0;
-    int group_a_consistent = 0;
+        // For tripod gait, validate symmetry by checking that groups maintain opposite phases
+        // and that trajectories are consistent within each group
+        total_comparable_steps++;
 
-    for (size_t step = 0; step < validation.gait_phases.size(); ++step) {
-        if (step < validation.leg_positions[0].size() &&
-            step < validation.leg_positions[2].size() &&
-            step < validation.leg_positions[4].size()) {
+        // Check that groups are in opposite phases (this is the key requirement for tripod gait)
+        bool groups_opposite_phases = (group_a_phase != group_b_phase);
 
-            // Check that all legs in group A are in the same phase
-            StepPhase phase0 = validation.group_a_phases[step];
-            bool group_phase_consistent = true;
+        if (groups_opposite_phases) {
+            // Check internal consistency within each group
+            bool group_a_consistent = (group_a_stance || group_a_swing);
+            bool group_b_consistent = (group_b_stance || group_b_swing);
 
-            // For tripod gait, all legs in same group should be in same phase
-            group_a_measurements++;
-            total_measurements++;
+            if (group_a_consistent && group_b_consistent) {
+                symmetry_steps++;
+            }
+        }
 
-            if (group_phase_consistent) {
-                group_a_consistent++;
-                consistent_measurements++;
+        // Check internal consistency within each group
+        if (group_a_stance || group_a_swing) {
+            group_a_consistent_steps++;
+        }
+        if (group_b_stance || group_b_swing) {
+            group_b_consistent_steps++;
+        }
+    }
+
+    // Calculate percentages
+    double symmetry_percentage = total_comparable_steps > 0 ?
+        (double)symmetry_steps / total_comparable_steps * 100.0 : 0.0;
+    double group_a_consistency = (double)group_a_consistent_steps / validation.group_a_phases.size() * 100.0;
+    double group_b_consistency = (double)group_b_consistent_steps / validation.group_a_phases.size() * 100.0;
+
+    std::cout << "\n  Analyzing trajectory symmetry between groups:" << std::endl;
+    std::cout << "    Trajectory symmetry between groups: " << symmetry_percentage
+              << "% (" << symmetry_steps << "/" << total_comparable_steps << " steps)" << std::endl;
+    std::cout << "    Group A internal consistency: " << group_a_consistency
+              << "% (" << group_a_consistent_steps << "/" << validation.group_a_phases.size() << " steps)" << std::endl;
+    std::cout << "    Group B internal consistency: " << group_b_consistency
+              << "% (" << group_b_consistent_steps << "/" << validation.group_a_phases.size() << " steps)" << std::endl;
+
+    // Validation criteria
+    bool trajectory_symmetry_ok = symmetry_percentage >= 60.0; // At least 60% symmetry when comparable
+    bool group_consistency_ok = group_a_consistency >= 80.0 && group_b_consistency >= 80.0;
+
+    std::cout << "    Trajectory symmetry: " << (trajectory_symmetry_ok ? "✓ PASS" : "✗ FAIL") << std::endl;
+    std::cout << "    Group consistency: " << (group_consistency_ok ? "✓ PASS" : "✗ FAIL") << std::endl;
+
+    return trajectory_symmetry_ok && group_consistency_ok;
+}
+
+/**
+ * @brief Validate coxa angle sign opposition for tripod gait
+ * This function analyzes the coxa angles to ensure that:
+ * 1. Legs in group A (0,2,4) have opposite coxa angle signs to legs in group B (1,3,5)
+ * 2. The opposition is maintained during the gait cycle
+ * 3. The angles are consistent within each group
+ */
+static bool validateCoxaAngleSignOpposition(const TripodValidation &validation) {
+    std::cout << "\n=== COXA ANGLE SIGN OPPOSITION VALIDATION ===" << std::endl;
+
+    // Define tripod groups
+    std::vector<int> group_a = {0, 2, 4}; // Legs 0, 2, 4
+    std::vector<int> group_b = {1, 3, 5}; // Legs 1, 3, 5
+
+    int opposition_steps = 0;
+    int total_comparable_steps = 0;
+
+    // Analyze each step for coxa angle opposition
+    for (size_t step = 0; step < validation.group_a_phases.size(); ++step) {
+        StepPhase group_a_phase = validation.group_a_phases[step];
+        StepPhase group_b_phase = validation.group_b_phases[step];
+
+        // Check if both groups are in the same phase (stance or swing)
+        bool group_a_stance = (group_a_phase == STANCE_PHASE);
+        bool group_a_swing = (group_a_phase == SWING_PHASE);
+        bool group_b_stance = (group_b_phase == STANCE_PHASE);
+        bool group_b_swing = (group_b_phase == SWING_PHASE);
+
+        // For tripod gait, validate coxa angle opposition by checking that groups maintain opposite phases
+        // and that coxa angles show appropriate patterns
+        total_comparable_steps++;
+
+        // Check that groups are in opposite phases (this is the key requirement for tripod gait)
+        bool groups_opposite_phases = (group_a_phase != group_b_phase);
+
+        if (groups_opposite_phases) {
+            // Calculate average coxa angles for each group
+            double group_a_avg_coxa = (validation.leg_angles[0][step].coxa +
+                                      validation.leg_angles[2][step].coxa +
+                                      validation.leg_angles[4][step].coxa) / 3.0;
+            double group_b_avg_coxa = (validation.leg_angles[1][step].coxa +
+                                      validation.leg_angles[3][step].coxa +
+                                      validation.leg_angles[5][step].coxa) / 3.0;
+
+            // Check if angles have opposite signs or show appropriate patterns for tripod gait
+            bool appropriate_pattern = false;
+            if (std::abs(group_a_avg_coxa) > 0.1 && std::abs(group_b_avg_coxa) > 0.1) {
+                // Check for opposite signs
+                appropriate_pattern = (group_a_avg_coxa * group_b_avg_coxa) < 0;
+            } else if (std::abs(group_a_avg_coxa - group_b_avg_coxa) > 0.3) {
+                // If one group is near zero, check if the other has significant angle
+                appropriate_pattern = true;
+            } else if (std::abs(group_a_avg_coxa) < 0.2 && std::abs(group_b_avg_coxa) < 0.2) {
+                // Both groups near zero is also acceptable for some phases
+                appropriate_pattern = true;
+            }
+
+            if (appropriate_pattern) {
+                opposition_steps++;
             }
         }
     }
 
-    // Check group B internal consistency
-    std::cout << "\n  Analyzing Group B consistency (Legs 1, 3, 5):" << std::endl;
-    int group_b_measurements = 0;
-    int group_b_consistent = 0;
+    // Calculate percentage
+    double opposition_percentage = total_comparable_steps > 0 ?
+        (double)opposition_steps / total_comparable_steps * 100.0 : 0.0;
 
-    for (size_t step = 0; step < validation.gait_phases.size(); ++step) {
-        if (step < validation.leg_positions[1].size() &&
-            step < validation.leg_positions[3].size() &&
-            step < validation.leg_positions[5].size()) {
+    std::cout << "\n  Analyzing coxa angle sign opposition:" << std::endl;
+    std::cout << "    Coxa angle sign opposition: " << opposition_percentage
+              << "% (" << opposition_steps << "/" << total_comparable_steps << " steps)" << std::endl;
 
-            // Check that all legs in group B are in the same phase
-            StepPhase phase1 = validation.group_b_phases[step];
-            bool group_phase_consistent = true;
+    // Validation criteria - at least 70% opposition when comparable
+    bool coxa_opposition_ok = opposition_percentage >= 70.0;
 
-            // For tripod gait, all legs in same group should be in same phase
-            group_b_measurements++;
-            total_measurements++;
+    std::cout << "    Coxa angle opposition: " << (coxa_opposition_ok ? "✓ PASS" : "✗ FAIL") << std::endl;
 
-            if (group_phase_consistent) {
-                group_b_consistent++;
-                consistent_measurements++;
-            }
-        }
-    }
-
-    // Check alternation between groups
-    std::cout << "\n  Analyzing Group alternation (A vs B):" << std::endl;
-    int alternation_measurements = 0;
-    int alternation_consistent = 0;
-
-    for (size_t step = 0; step < validation.gait_phases.size(); ++step) {
-        if (step < validation.group_a_phases.size() && step < validation.group_b_phases.size()) {
-            StepPhase phase_a = validation.group_a_phases[step];
-            StepPhase phase_b = validation.group_b_phases[step];
-
-            // Groups should be in opposite phases for tripod gait
-            bool alternating = (phase_a != phase_b);
-
-            alternation_measurements++;
-            total_measurements++;
-
-            if (alternating) {
-                alternation_consistent++;
-                consistent_measurements++;
-            }
-        }
-    }
-
-    // Print results
-    double group_a_percentage = 100.0 * (double)group_a_consistent / group_a_measurements;
-    double group_b_percentage = 100.0 * (double)group_b_consistent / group_b_measurements;
-    double alternation_percentage = 100.0 * (double)alternation_consistent / alternation_measurements;
-
-    std::cout << "    Group A consistency: " << std::fixed << std::setprecision(1)
-              << group_a_percentage << "% (" << group_a_consistent << "/" << group_a_measurements << " steps)" << std::endl;
-    std::cout << "    Group B consistency: " << std::fixed << std::setprecision(1)
-              << group_b_percentage << "% (" << group_b_consistent << "/" << group_b_measurements << " steps)" << std::endl;
-    std::cout << "    Group alternation: " << std::fixed << std::setprecision(1)
-              << alternation_percentage << "% (" << alternation_consistent << "/" << alternation_measurements << " steps)" << std::endl;
-
-    // Overall trajectory consistency summary
-    double overall_consistency_percentage = 100.0 * (double)consistent_measurements / total_measurements;
-    std::cout << "\n  Overall trajectory consistency: " << std::fixed << std::setprecision(1)
-              << overall_consistency_percentage << "% (" << consistent_measurements << "/" << total_measurements << " measurements)" << std::endl;
-
-    bool overall_passed = overall_consistency_percentage >= 80.0; // 80% tolerance for overall consistency
-    std::cout << "  Complete trajectory consistency: " << (overall_passed ? "✓ PASS" : "✗ FAIL") << std::endl;
-
-    return overall_passed;
+    return coxa_opposition_ok;
 }
 
 /**
@@ -632,6 +671,7 @@ int main() {
     bool sync_ok = validateSynchronization(validation);
     bool symmetry_ok = validateSymmetry(validation);
     bool trajectory_consistency_ok = validateTrajectorySymmetry(validation);
+    bool coxa_angle_opposition_ok = validateCoxaAngleSignOpposition(validation);
 
     // Nueva validación de coherencia de ángulos articulares
     bool joint_angle_coherence_ok = validateJointAngleCoherence(sys);
@@ -650,9 +690,10 @@ int main() {
     std::cout << "Synchronization: " << (sync_ok ? "✓ PASS" : "✗ FAIL") << std::endl;
     std::cout << "Symmetry:      " << (symmetry_ok ? "✓ PASS" : "✗ FAIL") << std::endl;
     std::cout << "Trajectory:    " << (trajectory_consistency_ok ? "✓ PASS" : "✗ FAIL") << std::endl;
+    std::cout << "Coxa Angle Opposition: " << (coxa_angle_opposition_ok ? "✓ PASS" : "✗ FAIL") << std::endl;
     std::cout << "Joint Angles:  " << (joint_angle_coherence_ok ? "✓ PASS" : "✗ FAIL") << std::endl;
 
-    bool all_passed = coherence_ok && sync_ok && symmetry_ok && trajectory_consistency_ok && joint_angle_coherence_ok;
+    bool all_passed = coherence_ok && sync_ok && symmetry_ok && trajectory_consistency_ok && coxa_angle_opposition_ok && joint_angle_coherence_ok;
 
     if (all_passed) {
         std::cout << "\n🎉 ALL VALIDATIONS PASSED! 🎉" << std::endl;

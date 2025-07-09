@@ -152,15 +152,24 @@ void LegStepper::updateTipPosition(double step_length, double time_delta, bool r
     // Update dynamic timing parameters (OpenSHC equivalent)
     updateDynamicTiming(used_step_length, time_delta);
 
+    // Obtener parámetros de la configuración de marcha actual
+    const auto& config = robot_model_.getParams().dynamic_gait;
+    double stance_ratio = config.duty_factor;
+
+    // Usar la frecuencia de control del sistema en lugar de la frecuencia de la marcha
+    // La frecuencia de control determina qué tan rápido se ejecutan los pasos
+    double control_frequency = robot_model_.getParams().control_frequency;
+
+    // Calcular velocidad lineal basada en step_length y frecuencia de control
+    // Para una marcha efectiva, la velocidad debe ser step_length * control_frequency / 2
+    // (dividido por 2 porque cada paso completo incluye stance y swing)
+    double linear_velocity_x = used_step_length * control_frequency / 2.0;
+    double linear_velocity_y = 0.0;
+    double angular_velocity = 0.0;
+
     // Período de Swing
     if (step_state_ == STEP_SWING) {
-        // Aquí se asume avance en X, sin velocidad angular, stance_ratio y frecuencia típicos
-        double linear_velocity_x = used_step_length;
-        double linear_velocity_y = 0.0;
-        double angular_velocity = 0.0;
-        double stance_ratio = 0.8; // Valor típico
-        double step_frequency = 1.0; // Valor típico
-        updateStride(linear_velocity_x, linear_velocity_y, angular_velocity, stance_ratio, step_frequency);
+        updateStride(linear_velocity_x, linear_velocity_y, angular_velocity, stance_ratio, control_frequency);
         double time_input = step_progress_;
         generatePrimarySwingControlNodes();
         generateSecondarySwingControlNodes(false);
@@ -173,13 +182,7 @@ void LegStepper::updateTipPosition(double step_length, double time_delta, bool r
     }
     // Período de Stance
     else if (step_state_ == STEP_STANCE || step_state_ == STEP_FORCE_STANCE) {
-        // Aquí se asume avance en X, sin velocidad angular, stance_ratio y frecuencia típicos
-        double linear_velocity_x = used_step_length;
-        double linear_velocity_y = 0.0;
-        double angular_velocity = 0.0;
-        double stance_ratio = 0.8; // Valor típico
-        double step_frequency = 1.0; // Valor típico
-        updateStride(linear_velocity_x, linear_velocity_y, angular_velocity, stance_ratio, step_frequency);
+        updateStride(linear_velocity_x, linear_velocity_y, angular_velocity, stance_ratio, control_frequency);
         double time_input = step_progress_;
         generateStanceControlNodes(1.0);
         Point3D delta_pos = math_utils::quarticBezierDot(stance_nodes_, time_input);
