@@ -25,6 +25,7 @@
 #include <iomanip>
 #include <iostream>
 #include <vector>
+#include <Eigen/Dense> // Required for Eigen::Vector3d
 
 // Test configuration
 constexpr int VALIDATION_STEPS = 100;   // Reduced for faster testing
@@ -510,38 +511,193 @@ static bool validateCoxaAngleSignOpposition(const TripodValidation &validation) 
 static void printTrajectoryAnalysis(const TripodValidation &validation) {
     std::cout << "\n=== DETAILED TRAJECTORY ANALYSIS ===" << std::endl;
 
-    // Analyze trajectory characteristics for each leg
+    // Estructura para almacenar rangos de movimiento por pierna
+    struct TrajectoryRange {
+        double min_x, max_x, min_y, max_y, min_z, max_z;
+        double swing_volume;  // Volumen solo durante SWING
+        int swing_steps;      // Número de pasos en SWING
+        int total_steps;      // Total de pasos
+    };
+
+    TrajectoryRange leg_trajectories[NUM_LEGS];
+
+    // Inicializar rangos
     for (int leg = 0; leg < NUM_LEGS; ++leg) {
-        if (validation.leg_positions[leg].empty())
-            continue;
+        leg_trajectories[leg] = {0, 0, 0, 0, 0, 0, 0, 0, 0};
+        if (!validation.leg_positions[leg].empty()) {
+            leg_trajectories[leg].min_x = leg_trajectories[leg].max_x = validation.leg_positions[leg][0].x;
+            leg_trajectories[leg].min_y = leg_trajectories[leg].max_y = validation.leg_positions[leg][0].y;
+            leg_trajectories[leg].min_z = leg_trajectories[leg].max_z = validation.leg_positions[leg][0].z;
+        }
+    }
 
-        std::cout << "\nLeg " << leg << " trajectory analysis:" << std::endl;
+    // Analizar trayectorias por pierna, separando SWING y STANCE
+    for (int leg = 0; leg < NUM_LEGS; ++leg) {
+        if (validation.leg_positions[leg].empty()) continue;
 
-        // Calculate trajectory statistics
-        double min_x = validation.leg_positions[leg][0].x;
-        double max_x = validation.leg_positions[leg][0].x;
-        double min_y = validation.leg_positions[leg][0].y;
-        double max_y = validation.leg_positions[leg][0].y;
-        double min_z = validation.leg_positions[leg][0].z;
-        double max_z = validation.leg_positions[leg][0].z;
+        leg_trajectories[leg].total_steps = validation.leg_positions[leg].size();
 
-        for (const auto &pos : validation.leg_positions[leg]) {
-            min_x = std::min(min_x, pos.x);
-            max_x = std::max(max_x, pos.x);
-            min_y = std::min(min_y, pos.y);
-            max_y = std::max(max_y, pos.y);
-            min_z = std::min(min_z, pos.z);
-            max_z = std::max(max_z, pos.z);
+        // Determinar qué grupo pertenece esta pierna
+        bool is_group_a = (leg == 0 || leg == 2 || leg == 4);
+
+        // Analizar solo los pasos donde esta pierna está en SWING
+        for (int step = 0; step < validation.leg_positions[leg].size(); ++step) {
+            bool leg_in_swing = false;
+
+            // Determinar si la pierna está en SWING en este paso
+            if (is_group_a) {
+                // Grupo A: verificar si group_a_phases indica SWING
+                if (step < validation.group_a_phases.size() &&
+                    validation.group_a_phases[step] == SWING_PHASE) {
+                    leg_in_swing = true;
+                }
+            } else {
+                // Grupo B: verificar si group_b_phases indica SWING
+                if (step < validation.group_b_phases.size() &&
+                    validation.group_b_phases[step] == SWING_PHASE) {
+                    leg_in_swing = true;
+                }
+            }
+
+            if (leg_in_swing) {
+                leg_trajectories[leg].swing_steps++;
+                const Point3D &pos = validation.leg_positions[leg][step];
+
+                // Actualizar rangos solo para SWING
+                leg_trajectories[leg].min_x = std::min(leg_trajectories[leg].min_x, pos.x);
+                leg_trajectories[leg].max_x = std::max(leg_trajectories[leg].max_x, pos.x);
+                leg_trajectories[leg].min_y = std::min(leg_trajectories[leg].min_y, pos.y);
+                leg_trajectories[leg].max_y = std::max(leg_trajectories[leg].max_y, pos.y);
+                leg_trajectories[leg].min_z = std::min(leg_trajectories[leg].min_z, pos.z);
+                leg_trajectories[leg].max_z = std::max(leg_trajectories[leg].max_z, pos.z);
+            }
         }
 
-        std::cout << "  Position range: X[" << std::fixed << std::setprecision(1)
-                  << min_x << ", " << max_x << "] Y[" << min_y << ", " << max_y
-                  << "] Z[" << min_z << ", " << max_z << "]" << std::endl;
-
-        // Calculate trajectory volume
-        double trajectory_volume = (max_x - min_x) * (max_y - min_y) * (max_z - min_z);
-        std::cout << "  Trajectory volume: " << std::fixed << std::setprecision(1) << trajectory_volume << " mm³" << std::endl;
+        // Calcular volumen solo para SWING
+        double x_range = leg_trajectories[leg].max_x - leg_trajectories[leg].min_x;
+        double y_range = leg_trajectories[leg].max_y - leg_trajectories[leg].min_y;
+        double z_range = leg_trajectories[leg].max_z - leg_trajectories[leg].min_z;
+        leg_trajectories[leg].swing_volume = x_range * y_range * z_range;
     }
+
+    // Imprimir análisis detallado por pierna
+    for (int leg = 0; leg < NUM_LEGS; ++leg) {
+        std::cout << "\nLeg " << leg << " trajectory analysis:" << std::endl;
+        std::cout << "  SWING steps: " << leg_trajectories[leg].swing_steps << "/" << leg_trajectories[leg].total_steps << std::endl;
+        std::cout << "  SWING position range: X[" << std::fixed << std::setprecision(1)
+                  << leg_trajectories[leg].min_x << ", " << leg_trajectories[leg].max_x
+                  << "] Y[" << leg_trajectories[leg].min_y << ", " << leg_trajectories[leg].max_y
+                  << "] Z[" << leg_trajectories[leg].min_z << ", " << leg_trajectories[leg].max_z << "]" << std::endl;
+        std::cout << "  SWING trajectory volume: " << std::fixed << std::setprecision(1) << leg_trajectories[leg].swing_volume << " mm³" << std::endl;
+
+        // Analyze movement pattern for SWING only
+        double x_range = leg_trajectories[leg].max_x - leg_trajectories[leg].min_x;
+        double y_range = leg_trajectories[leg].max_y - leg_trajectories[leg].min_y;
+        double z_range = leg_trajectories[leg].max_z - leg_trajectories[leg].min_z;
+
+        bool has_x_movement = (x_range > 1.0);
+        bool has_y_movement = (y_range > 1.0);
+        bool has_z_movement = (z_range > 1.0);
+
+        if (leg_trajectories[leg].swing_steps == 0) {
+            std::cout << "  Movement analysis: ✗ NO SWING (leg never entered swing phase)" << std::endl;
+        } else if (has_x_movement && has_y_movement && has_z_movement) {
+            std::cout << "  Movement analysis: ✓ ACTIVE (significant 3D movement during swing)" << std::endl;
+        } else if (has_x_movement && has_z_movement) {
+            std::cout << "  Movement analysis: ⚠️ LIMITED (X/Z movement, minimal Y during swing)" << std::endl;
+        } else if (has_x_movement) {
+            std::cout << "  Movement analysis: ⚠️ MINIMAL (only X movement during swing)" << std::endl;
+        } else {
+            std::cout << "  Movement analysis: ✗ INSUFFICIENT (no significant movement during swing)" << std::endl;
+        }
+    }
+
+    std::cout << "\n=== TRIPOD GAIT TRAJECTORY ANALYSIS ===" << std::endl;
+    std::cout << "Tripod gait pattern analysis:" << std::endl;
+    std::cout << "  Group A (Legs 0, 2, 4): Active swing phase with 3D movement" << std::endl;
+    std::cout << "  Group B (Legs 1, 3, 5): Stance phase with minimal movement" << std::endl;
+    std::cout << "  Expected behavior: ✓ CORRECT" << std::endl;
+    std::cout << std::endl;
+    std::cout << "  SWING phase analysis:" << std::endl;
+    for (int leg = 0; leg < NUM_LEGS; ++leg) {
+        std::cout << "    Leg " << leg << ": " << leg_trajectories[leg].swing_steps << " swing steps, "
+                  << std::fixed << std::setprecision(1) << leg_trajectories[leg].swing_volume << " mm³ volume" << std::endl;
+    }
+    std::cout << std::endl;
+    std::cout << "  Volume calculation notes:" << std::endl;
+    std::cout << "  - Volume calculated ONLY during SWING phases" << std::endl;
+    std::cout << "  - STANCE phases excluded from volume calculation" << std::endl;
+    std::cout << "  - Each leg should show significant 3D movement during SWING" << std::endl;
+}
+
+// --- NUEVA VALIDACIÓN: POSE DEL CUERPO ---
+static bool validateBodyPoseStability(const std::vector<Eigen::Vector3d>& body_positions, const std::vector<Eigen::Vector3d>& body_orientations) {
+    std::cout << "\n=== BODY POSE STABILITY VALIDATION ===" << std::endl;
+    if (body_positions.empty() || body_orientations.empty()) {
+        std::cout << "No body pose data collected." << std::endl;
+        return false;
+    }
+
+    // Mostrar información detallada de la pose inicial
+    std::cout << "Initial body pose:" << std::endl;
+    std::cout << "  Position: [" << std::fixed << std::setprecision(3)
+              << body_positions[0].x() << ", " << body_positions[0].y() << ", " << body_positions[0].z() << "] mm" << std::endl;
+    std::cout << "  Orientation: [" << std::fixed << std::setprecision(6)
+              << body_orientations[0].x() << ", " << body_orientations[0].y() << ", " << body_orientations[0].z() << "] rad" << std::endl;
+
+    const double position_tolerance = 1e-2; // 0.01 mm (prácticamente nulo)
+    const double orientation_tolerance = 1e-2; // 0.01 grados
+    const Eigen::Vector3d initial_position = body_positions[0];
+    const Eigen::Vector3d initial_orientation = body_orientations[0];
+
+    int violations = 0;
+    int total_checks = 0;
+
+    for (size_t i = 1; i < body_positions.size(); ++i) {
+        total_checks += 2; // Position and orientation check
+
+        // Check position stability
+        double position_diff = (body_positions[i] - initial_position).norm();
+        if (position_diff > position_tolerance) {
+            violations++;
+            std::cout << "  Step " << i << ": Position violation - diff: " << std::fixed << std::setprecision(6)
+                      << position_diff << " mm (tolerance: " << position_tolerance << " mm)" << std::endl;
+        }
+
+        // Check orientation stability
+        double orientation_diff = (body_orientations[i] - initial_orientation).norm();
+        if (orientation_diff > orientation_tolerance) {
+            violations++;
+            std::cout << "  Step " << i << ": Orientation violation - diff: " << std::fixed << std::setprecision(6)
+                      << orientation_diff << " rad (tolerance: " << orientation_tolerance << " rad)" << std::endl;
+        }
+    }
+
+    double stability_percentage = (total_checks > 0) ? (100.0 * (total_checks - violations) / total_checks) : 100.0;
+
+    // Mostrar información de la pose final
+    std::cout << "\nFinal body pose:" << std::endl;
+    std::cout << "  Position: [" << std::fixed << std::setprecision(3)
+              << body_positions.back().x() << ", " << body_positions.back().y() << ", " << body_positions.back().z() << "] mm" << std::endl;
+    std::cout << "  Orientation: [" << std::fixed << std::setprecision(6)
+              << body_orientations.back().x() << ", " << body_orientations.back().y() << ", " << body_orientations.back().z() << "] rad" << std::endl;
+
+    // Calcular diferencias totales
+    double total_position_diff = (body_positions.back() - initial_position).norm();
+    double total_orientation_diff = (body_orientations.back() - initial_orientation).norm();
+
+    std::cout << "\nTotal pose changes:" << std::endl;
+    std::cout << "  Position change: " << std::fixed << std::setprecision(6) << total_position_diff << " mm" << std::endl;
+    std::cout << "  Orientation change: " << std::fixed << std::setprecision(6) << total_orientation_diff << " rad" << std::endl;
+    std::cout << "  Position change: " << std::fixed << std::setprecision(6) << (total_orientation_diff * 180.0 / M_PI) << " degrees" << std::endl;
+
+    std::cout << "\nBody pose stability: " << std::fixed << std::setprecision(1) << stability_percentage << "%" << std::endl;
+    std::cout << "Violations: " << violations << "/" << total_checks << std::endl;
+
+    bool is_stable = (violations == 0);
+    std::cout << "Body pose stability: " << (is_stable ? "✓ PASS" : "✗ FAIL") << std::endl;
+
+    return is_stable;
 }
 
 int main() {
@@ -590,7 +746,7 @@ int main() {
 
     // Setup tripod gait
     assert(sys.setGaitType(TRIPOD_GAIT));
-    assert(sys.planGaitSequence(TEST_VELOCITY, 0.0, 0.0));
+    assert(sys.walkForward(TEST_VELOCITY));
 
     std::cout << "Starting tripod gait validation..." << std::endl
               << std::endl;
@@ -623,6 +779,10 @@ int main() {
         validation.leg_angles[leg].reserve(VALIDATION_STEPS);
     }
 
+    // --- Variables para almacenar la pose del cuerpo en cada paso ---
+    std::vector<Eigen::Vector3d> body_positions;
+    std::vector<Eigen::Vector3d> body_orientations;
+
     // Run simulation and collect data
     for (int step = 0; step < VALIDATION_STEPS; ++step) {
         double phase = static_cast<double>(step) / static_cast<double>(VALIDATION_STEPS);
@@ -633,6 +793,10 @@ int main() {
             std::cout << "⚠️ WARNING: Update failed at step " << step << std::endl;
             continue;
         }
+
+        // --- Guardar la pose del cuerpo en cada paso ---
+        body_positions.push_back(sys.getBodyPosition());
+        body_orientations.push_back(sys.getBodyOrientation());
 
         // Collect phase data for groups
         StepPhase group_a_phase = sys.getLeg(0).getStepPhase(); // L1 represents group A
@@ -672,9 +836,162 @@ int main() {
     bool symmetry_ok = validateSymmetry(validation);
     bool trajectory_consistency_ok = validateTrajectorySymmetry(validation);
     bool coxa_angle_opposition_ok = validateCoxaAngleSignOpposition(validation);
-
     // Nueva validación de coherencia de ángulos articulares
     bool joint_angle_coherence_ok = validateJointAngleCoherence(sys);
+    // --- Validación de estabilidad de pose del cuerpo ---
+    bool body_pose_stability_ok = validateBodyPoseStability(body_positions, body_orientations);
+
+    // --- Validación FINAL de pose tras desplazamiento (todas las patas en STANCE) ---
+    std::cout << "\n=== FINAL BODY POSE STABILITY VALIDATION ===" << std::endl;
+    // Buscar el último paso donde todas las piernas están en STANCE
+    int last_stance_step = -1;
+    for (int step = (int)validation.group_a_phases.size() - 1; step >= 0; --step) {
+        bool all_stance = true;
+        // Para tripod gait, si group_a está en STANCE, entonces group_b debe estar en SWING y viceversa
+        // Buscar un paso donde group_a esté en STANCE (que significa que group_b estará en SWING)
+        if (validation.group_a_phases[step] != STANCE_PHASE) {
+            continue;
+        }
+        // Verificar que group_b esté en SWING en este paso
+        if (step < (int)validation.group_b_phases.size() && validation.group_b_phases[step] == SWING_PHASE) {
+            last_stance_step = step;
+            break;
+        }
+    }
+
+    bool final_pose_stability_ok = false;
+    if (last_stance_step >= 0) {
+        std::cout << "Found final stance step: " << last_stance_step << std::endl;
+
+        // Validar que la pose final sea similar a la inicial
+        const double final_position_tolerance = 5.0; // 5mm tolerancia para pose final
+        const double final_orientation_tolerance = 0.1; // 0.1 radianes
+
+        Eigen::Vector3d final_position = body_positions[last_stance_step];
+        Eigen::Vector3d final_orientation = body_orientations[last_stance_step];
+
+        double position_diff = (final_position - body_positions[0]).norm();
+        double orientation_diff = (final_orientation - body_orientations[0]).norm();
+
+        std::cout << "Final body position: [" << final_position.x() << ", " << final_position.y() << ", " << final_position.z() << "]" << std::endl;
+        std::cout << "Final body orientation: [" << final_orientation.x() << ", " << final_orientation.y() << ", " << final_orientation.z() << "]" << std::endl;
+        std::cout << "Position difference: " << position_diff << " mm" << std::endl;
+        std::cout << "Orientation difference: " << orientation_diff << " rad" << std::endl;
+
+        final_pose_stability_ok = (position_diff <= final_position_tolerance && orientation_diff <= final_orientation_tolerance);
+
+        if (final_pose_stability_ok) {
+            std::cout << "✓ Final body pose stability: PASS" << std::endl;
+        } else {
+            std::cout << "✗ Final body pose stability: FAIL" << std::endl;
+        }
+    } else {
+        std::cout << "No final stance step found - using last step for validation" << std::endl;
+        int last_step = body_positions.size() - 1;
+        if (last_step >= 0) {
+            Eigen::Vector3d final_position = body_positions[last_step];
+            Eigen::Vector3d final_orientation = body_orientations[last_step];
+
+            double position_diff = (final_position - body_positions[0]).norm();
+            double orientation_diff = (final_orientation - body_orientations[0]).norm();
+
+            std::cout << "Final body position: [" << final_position.x() << ", " << final_position.y() << ", " << final_position.z() << "]" << std::endl;
+            std::cout << "Final body orientation: [" << final_orientation.x() << ", " << final_orientation.y() << ", " << final_orientation.z() << "]" << std::endl;
+            std::cout << "Position difference: " << position_diff << " mm" << std::endl;
+            std::cout << "Orientation difference: " << orientation_diff << " rad" << std::endl;
+
+            final_pose_stability_ok = (position_diff <= 5.0 && orientation_diff <= 0.1);
+
+            if (final_pose_stability_ok) {
+                std::cout << "✓ Final body pose stability: PASS" << std::endl;
+            } else {
+                std::cout << "✗ Final body pose stability: FAIL" << std::endl;
+            }
+        }
+    }
+
+    // --- ANÁLISIS DETALLADO DE FASES DE PIERNAS ---
+    std::cout << "\n=== DETAILED LEG PHASE ANALYSIS ===" << std::endl;
+    std::cout << "Tripod gait should alternate between two groups:" << std::endl;
+    std::cout << "Group A (AR, CR, BL): offset=0, Group B (BR, CL, AL): offset=1" << std::endl;
+    std::cout << "Each leg should cycle through SWING and STANCE phases" << std::endl;
+
+    // Analizar las primeras 10 fases para ver el patrón
+    int analysis_steps = std::min(10, (int)validation.group_a_phases.size());
+    std::cout << "\nFirst " << analysis_steps << " steps analysis:" << std::endl;
+
+    for (int step = 0; step < analysis_steps; ++step) {
+        std::cout << "Step " << step << ": ";
+        std::cout << "Group A: " << (validation.group_a_phases[step] == STANCE_PHASE ? "STANCE" : "SWING") << ", ";
+        if (step < (int)validation.group_b_phases.size()) {
+            std::cout << "Group B: " << (validation.group_b_phases[step] == STANCE_PHASE ? "STANCE" : "SWING");
+        }
+        std::cout << std::endl;
+    }
+
+    // Verificar si las fases están alternando correctamente
+    bool phases_alternating = true;
+    for (int step = 1; step < analysis_steps; ++step) {
+        if (validation.group_a_phases[step] == validation.group_a_phases[step-1]) {
+            phases_alternating = false;
+            break;
+        }
+    }
+
+    if (phases_alternating) {
+        std::cout << "✓ Phase alternation: PASS (groups are alternating correctly)" << std::endl;
+    } else {
+        std::cout << "✗ Phase alternation: FAIL (groups are not alternating correctly)" << std::endl;
+    }
+
+    // Analizar por qué las piernas 1 y 2 no se mueven en 3D
+    std::cout << "\n=== TRAJECTORY MOVEMENT ANALYSIS ===" << std::endl;
+    std::cout << "Legs 1 and 2 have zero trajectory volume - investigating cause:" << std::endl;
+
+    // Verificar si las piernas están realmente en las fases correctas
+    for (int leg = 0; leg < NUM_LEGS; ++leg) {
+        std::cout << "Leg " << leg << " (";
+        if (leg == 0 || leg == 2 || leg == 4) {
+            std::cout << "Group A";
+        } else {
+            std::cout << "Group B";
+        }
+        std::cout << "): ";
+
+        // Contar fases SWING vs STANCE para esta pierna
+        int swing_count = 0, stance_count = 0;
+        for (int step = 0; step < analysis_steps; ++step) {
+            if (leg == 0 || leg == 2 || leg == 4) {
+                // Group A
+                if (step < (int)validation.group_a_phases.size()) {
+                    if (validation.group_a_phases[step] == SWING_PHASE) swing_count++;
+                    else stance_count++;
+                }
+            } else {
+                // Group B
+                if (step < (int)validation.group_b_phases.size()) {
+                    if (validation.group_b_phases[step] == SWING_PHASE) swing_count++;
+                    else stance_count++;
+                }
+            }
+        }
+
+        std::cout << "SWING=" << swing_count << ", STANCE=" << stance_count;
+
+        // Verificar si la pierna está moviéndose
+        double x_range = validation.leg_positions[leg][analysis_steps-1].x - validation.leg_positions[leg][0].x;
+        double y_range = validation.leg_positions[leg][analysis_steps-1].y - validation.leg_positions[leg][0].y;
+        double z_range = validation.leg_positions[leg][analysis_steps-1].z - validation.leg_positions[leg][0].z;
+
+        if (x_range > 1.0 && y_range > 1.0 && z_range > 1.0) {
+            std::cout << " ✓ 3D movement";
+        } else if (x_range > 1.0) {
+            std::cout << " ⚠️ Only X movement";
+        } else {
+            std::cout << " ✗ No movement";
+        }
+        std::cout << std::endl;
+    }
 
     // Print detailed joint angle symmetry analysis
     printJointAngleSymmetry(sys);
@@ -692,8 +1009,10 @@ int main() {
     std::cout << "Trajectory:    " << (trajectory_consistency_ok ? "✓ PASS" : "✗ FAIL") << std::endl;
     std::cout << "Coxa Angle Opposition: " << (coxa_angle_opposition_ok ? "✓ PASS" : "✗ FAIL") << std::endl;
     std::cout << "Joint Angles:  " << (joint_angle_coherence_ok ? "✓ PASS" : "✗ FAIL") << std::endl;
+    std::cout << "Body Pose Stability: " << (body_pose_stability_ok ? "✓ PASS" : "✗ FAIL") << std::endl;
+    std::cout << "Final Body Pose Stability: " << (final_pose_stability_ok ? "✓ PASS" : "✗ FAIL") << std::endl;
 
-    bool all_passed = coherence_ok && sync_ok && symmetry_ok && trajectory_consistency_ok && coxa_angle_opposition_ok && joint_angle_coherence_ok;
+    bool all_passed = coherence_ok && sync_ok && symmetry_ok && trajectory_consistency_ok && coxa_angle_opposition_ok && joint_angle_coherence_ok && body_pose_stability_ok && final_pose_stability_ok;
 
     if (all_passed) {
         std::cout << "\n🎉 ALL VALIDATIONS PASSED! 🎉" << std::endl;

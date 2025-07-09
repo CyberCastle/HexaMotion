@@ -63,47 +63,80 @@ static void printRobotDimensions(const Parameters &p) {
 }
 
 static void printHeader() {
-    std::cout << "Step|";
-    for (int leg = 0; leg < NUM_LEGS; ++leg) {
-        std::cout << "  L" << leg + 1 << "C   L" << leg + 1 << "F   L" << leg + 1 << "T |";
-    }
-    std::cout << " Phase | Status" << std::endl;
-
-    std::cout << "----|";
-    for (int leg = 0; leg < NUM_LEGS; ++leg) {
-        std::cout << "------|------|------|";
-    }
-    std::cout << "-------|-------" << std::endl;
+    std::cout << "=========================================" << std::endl;
+    std::cout << "           TRIPOD GAIT VISUALIZATION" << std::endl;
+    std::cout << "=========================================" << std::endl;
+    std::cout << "Step| Phase | Pattern |" << std::endl;
+    std::cout << "----|-------|---------|" << std::endl;
+    std::cout << "    |       |         |" << std::endl;
+    std::cout << "    |       |         |" << std::endl;
+    std::cout << "    |       |         |" << std::endl;
+    std::cout << "    |       |         |" << std::endl;
+    std::cout << "    |       |         |" << std::endl;
+    std::cout << "    |       |         |" << std::endl;
+    std::cout << "=========================================" << std::endl;
 }
 
 static void printAngles(int step, LocomotionSystem &sys, double phase) {
-    std::cout << std::setw(3) << step << " |";
+    // Clear previous lines and print step info
+    std::cout << "\033[2K"; // Clear line
+    std::cout << std::setw(3) << step << " | " << std::setw(5) << std::setprecision(2) << phase << " | ";
 
-    // Print joint angles for all legs using Leg objects from LocomotionSystem
-    for (int leg = 0; leg < NUM_LEGS; ++leg) {
-        const Leg& leg_obj = sys.getLeg(leg);
-        JointAngles angles = leg_obj.getJointAngles();
-        StepPhase leg_state = leg_obj.getStepPhase();
-        double leg_phase = leg_obj.getGaitPhase();
-        const char *state_str = (leg_state == STANCE_PHASE) ? "STANCE" : (leg_state == SWING_PHASE ? "SWING" : "UNKNOWN");
-        std::cout << std::fixed << std::setw(6) << std::setprecision(1)
-                  << angles.coxa << " " << std::setw(6) << angles.femur << " "
-                  << std::setw(6) << angles.tibia << " | "
-                  << std::setw(3) << (int)(leg_phase * 100) << " " << state_str << " |";
-    }
-
-    // Print gait phase
-    std::cout << std::setw(6) << std::setprecision(2) << phase << " |";
-
-    // Show tripod gait pattern using Leg objects
+    // Show tripod gait pattern
     for (int leg = 0; leg < NUM_LEGS; ++leg) {
         const Leg& leg_obj = sys.getLeg(leg);
         StepPhase state = leg_obj.getStepPhase();
         char symbol = (state == STANCE_PHASE) ? 'S' : ((state == SWING_PHASE) ? 'W' : 'O');
         std::cout << symbol;
     }
+    std::cout << " |" << std::endl;
 
-    std::cout << std::endl;
+    // Print grouped leg information
+    std::cout << "=========================================" << std::endl;
+    std::cout << "           ODD LEGS (L1,L3,L5)           " << std::endl;
+    std::cout << "=========================================" << std::endl;
+    std::cout << "Leg |  Coxa  | Femur  | Tibia  |   X    |   Y    |   Z    | Phase | State" << std::endl;
+    std::cout << "----|--------|--------|--------|--------|--------|--------|-------|-------" << std::endl;
+
+    // Print odd legs (1,3,5)
+    for (int leg : {0, 2, 4}) {
+        const Leg& leg_obj = sys.getLeg(leg);
+        JointAngles angles = leg_obj.getJointAngles();
+        Point3D tip_pos = leg_obj.getCurrentTipPositionGlobal();
+        StepPhase leg_state = leg_obj.getStepPhase();
+        double leg_phase = leg_obj.getGaitPhase();
+        const char *state_str = (leg_state == STANCE_PHASE) ? "STANCE" : (leg_state == SWING_PHASE ? "SWING" : "UNKNOWN");
+
+        std::cout << " L" << leg + 1 << " | " << std::fixed << std::setw(6) << std::setprecision(1)
+                  << angles.coxa * 180.0 / M_PI << " | " << std::setw(6) << angles.femur * 180.0 / M_PI
+                  << " | " << std::setw(6) << angles.tibia * 180.0 / M_PI << " | " << std::setw(6) << tip_pos.x
+                  << " | " << std::setw(6) << tip_pos.y << " | " << std::setw(6) << tip_pos.z
+                  << " | " << std::setw(5) << std::setprecision(1) << (leg_phase * 100) << "% | " << state_str << std::endl;
+    }
+
+    std::cout << "=========================================" << std::endl;
+    std::cout << "          EVEN LEGS (L2,L4,L6)           " << std::endl;
+    std::cout << "=========================================" << std::endl;
+    std::cout << "Leg |  Coxa  | Femur  | Tibia  |   X    |   Y    |   Z    | Phase | State" << std::endl;
+    std::cout << "----|--------|--------|--------|--------|--------|--------|-------|-------" << std::endl;
+
+    // Print even legs (2,4,6)
+    for (int leg : {1, 3, 5}) {
+        const Leg& leg_obj = sys.getLeg(leg);
+        JointAngles angles = leg_obj.getJointAngles();
+        Point3D tip_pos = leg_obj.getCurrentTipPositionGlobal();
+        StepPhase leg_state = leg_obj.getStepPhase();
+        double leg_phase = leg_obj.getGaitPhase();
+        const char *state_str = (leg_state == STANCE_PHASE) ? "STANCE" : (leg_state == SWING_PHASE ? "SWING" : "UNKNOWN");
+
+        std::cout << " L" << leg + 1 << " | " << std::fixed << std::setw(6) << std::setprecision(1)
+                  << angles.coxa * 180.0 / M_PI << " | " << std::setw(6) << angles.femur * 180.0 / M_PI
+                  << " | " << std::setw(6) << angles.tibia * 180.0 / M_PI << " | " << std::setw(6) << tip_pos.x
+                  << " | " << std::setw(6) << tip_pos.y << " | " << std::setw(6) << tip_pos.z
+                  << " | " << std::setw(5) << std::setprecision(1) << (leg_phase * 100) << "% | " << state_str << std::endl;
+    }
+
+    std::cout << "=========================================" << std::endl;
 }
 
 static void printTripodGaitPattern(LocomotionSystem &sys, double phase) {
@@ -241,8 +274,10 @@ int main() {
             successful_updates++;
         }
 
-        // Print angles and gait pattern
-        printAngles(s, sys, phase);
+        // Print angles and gait pattern (show every 10th step for readability)
+        if (s % 10 == 0 || s < 5) {
+            printAngles(s, sys, phase);
+        }
         //printTripodGaitPattern(sys, phase);
         //printProgress(distance_covered, distance);
     }
