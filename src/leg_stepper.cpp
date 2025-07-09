@@ -143,6 +143,9 @@ void LegStepper::updateTipPosition(double step_length, double time_delta, bool r
     double used_step_length = (step_length_ > 0.0) ? step_length_ : step_length;
     target_tip_pose_ = default_tip_pose_ + stride_vector_ * 0.5;
 
+    // Update dynamic timing parameters (OpenSHC equivalent)
+    updateDynamicTiming(used_step_length, time_delta);
+
     // Período de Swing
     if (step_state_ == STEP_SWING) {
         updateStride(used_step_length);
@@ -275,8 +278,10 @@ void LegStepper::forceNormalTouchdown() {
 
 // Nueva API OpenSHC-like
 void LegStepper::updateWithPhase(double local_phase, double step_length, double time_delta) {
-    // Duty factor para trípode (0.5: mitad del ciclo en stance, mitad en swing)
-    constexpr double duty_factor = LEG_STEPPER_DUTY_FACTOR;
+    const auto& config = robot_model_.getParams().dynamic_gait;
+
+    // Use dynamic duty factor from configuration
+    double duty_factor = config.duty_factor;
 
     // Actualizar posiciones de origen si es necesario
     if (step_state_ == STEP_STANCE && local_phase < duty_factor) {
@@ -287,7 +292,7 @@ void LegStepper::updateWithPhase(double local_phase, double step_length, double 
         swing_origin_tip_position_ = leg_.getCurrentTipPositionGlobal();
     }
 
-    // Determinar estado y progreso
+    // Determinar estado y progreso usando configuración dinámica
     if (local_phase < duty_factor) {
         // STANCE
         step_state_ = STEP_STANCE;
@@ -306,4 +311,122 @@ void LegStepper::updateWithPhase(double local_phase, double step_length, double 
 
     // Actualizar la trayectoria y ángulos usando el progreso
     updateTipPosition(step_length, time_delta, false, false);  // Default terrain adaptation values
+}
+
+// Dynamic iteration calculation implementations (OpenSHC equivalent)
+
+int LegStepper::calculateSwingIterations(double step_length, double time_delta) const {
+    const auto& config = robot_model_.getParams().dynamic_gait;
+
+    if (!config.enable_dynamic_iterations) {
+        // Fallback to static calculation
+        return static_cast<int>(config.swing_phase / config.time_delta);
+    }
+
+    // OpenSHC-style dynamic calculation
+    double swing_period = calculateSwingPeriod(step_length);
+    double period = config.step_period;
+
+    // Calculate iterations using OpenSHC formula
+    int iterations = static_cast<int>((swing_period / period) / (config.frequency * time_delta));
+
+    // Apply safety limits
+    iterations = std::max(static_cast<int>(config.min_swing_iterations),
+                         std::min(static_cast<int>(config.max_swing_iterations), iterations));
+
+    return iterations;
+}
+
+int LegStepper::calculateStanceIterations(double step_length, double time_delta) const {
+    const auto& config = robot_model_.getParams().dynamic_gait;
+
+    if (!config.enable_dynamic_iterations) {
+        // Fallback to static calculation
+        return static_cast<int>(config.stance_phase / config.time_delta);
+    }
+
+    // OpenSHC-style dynamic calculation
+    double stance_period = calculateStancePeriod(step_length);
+    double period = config.step_period;
+
+    // Calculate iterations using OpenSHC formula
+    int iterations = static_cast<int>((stance_period / period) / (config.frequency * time_delta));
+
+    // Apply safety limits
+    iterations = std::max(static_cast<int>(config.min_stance_iterations),
+                         std::min(static_cast<int>(config.max_stance_iterations), iterations));
+
+    return iterations;
+}
+
+double LegStepper::calculateSwingPeriod(double step_length) const {
+    const auto& config = robot_model_.getParams().dynamic_gait;
+
+    // Base swing period from configuration
+    double base_period = config.swing_phase;
+
+    // Apply step length scaling (longer steps = longer swing period)
+    double length_factor = std::max(0.5, std::min(2.0, step_length / 50.0)); // Normalize around 50mm
+
+    // Apply swing period factor from configuration
+    double scaled_period = base_period * config.swing_period_factor * length_factor;
+
+    return scaled_period;
+}
+
+double LegStepper::calculateStancePeriod(double step_length) const {
+    const auto& config = robot_model_.getParams().dynamic_gait;
+
+    // Base stance period from configuration
+    double base_period = config.stance_phase;
+
+    // Apply step length scaling (longer steps = longer stance period)
+    double length_factor = std::max(0.5, std::min(2.0, step_length / 50.0)); // Normalize around 50mm
+
+    // Apply stance period factor from configuration
+    double scaled_period = base_period * config.stance_period_factor * length_factor;
+
+    return scaled_period;
+}
+
+void LegStepper::updateDynamicTiming(double step_length, double time_delta) {
+    const auto& config = robot_model_.getParams().dynamic_gait;
+
+    if (config.enable_dynamic_iterations) {
+        // Calculate dynamic timing parameters
+        double swing_period = calculateSwingPeriod(step_length);
+        double stance_period = calculateStancePeriod(step_length);
+
+        // Update timing deltas based on calculated periods
+        swing_delta_t_ = swing_period * time_delta;
+        stance_delta_t_ = stance_period * time_delta;
+    } else {
+        // Use static timing from configuration
+        swing_delta_t_ = config.swing_phase * time_delta;
+        stance_delta_t_ = config.stance_phase * time_delta;
+    }
+}
+
+StepCycle LegStepper::calculateStepCycle(double step_length, double time_delta) const {
+    const auto& config = robot_model_.getParams().dynamic_gait;
+
+    StepCycle cycle;
+
+    // Calculate dynamic iterations
+    cycle.swing_period_ = calculateSwingIterations(step_length, time_delta);
+    cycle.stance_period_ = calculateStanceIterations(step_length, time_delta);
+
+    // Calculate total period
+    cycle.period_ = cycle.swing_period_ + cycle.stance_period_;
+
+    // Calculate phase boundaries
+    cycle.stance_start_ = 0;
+    cycle.stance_end_ = cycle.stance_period_;
+    cycle.swing_start_ = cycle.stance_end_;
+    cycle.swing_end_ = cycle.period_;
+
+    // Set frequency from configuration
+    cycle.frequency_ = config.frequency;
+
+    return cycle;
 }

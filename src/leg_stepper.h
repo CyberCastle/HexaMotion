@@ -119,6 +119,14 @@ public:
     void generateStanceControlNodes(double stride_scaler);
     void forceNormalTouchdown();
 
+    // Dynamic iteration calculation (OpenSHC equivalent)
+    int calculateSwingIterations(double step_length, double time_delta) const;
+    int calculateStanceIterations(double step_length, double time_delta) const;
+    double calculateSwingPeriod(double step_length) const;
+    double calculateStancePeriod(double step_length) const;
+    void updateDynamicTiming(double step_length, double time_delta);
+    StepCycle calculateStepCycle(double step_length, double time_delta) const;
+
     //OpenSHC-like API without WalkController dependency
     void updateWithPhase(double local_phase, double step_length, double time_delta);
 

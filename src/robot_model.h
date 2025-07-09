@@ -121,6 +121,38 @@ struct Parameters {
         double max_height_factor = 0.40f; // 40% maximum step height
     } gait_factors;
 
+    /**
+     * @brief Dynamic gait timing configuration (OpenSHC equivalent)
+     * Controls the calculation of swing and stance iterations based on frequency and time_delta
+     */
+    struct DynamicGaitConfig {
+        // Phase timing parameters (equivalent to OpenSHC's gait.yaml)
+        double stance_phase = 2.0;        // Stance phase duration (OpenSHC default: 2.0)
+        double swing_phase = 2.0;         // Swing phase duration (OpenSHC default: 2.0)
+        double phase_offset = 2.0;        // Phase offset between legs (OpenSHC default: 2.0)
+
+        // Frequency and timing parameters
+        double frequency = 1.0;           // Control frequency (Hz, OpenSHC default: 1.0)
+        double time_delta = 0.01;         // Time step (seconds, OpenSHC default: 0.01)
+
+        // Dynamic iteration calculation parameters
+        bool enable_dynamic_iterations = true;    // Enable OpenSHC-style dynamic iteration calculation
+        double swing_period_factor = 1.0;         // Swing period scaling factor
+        double stance_period_factor = 1.0;        // Stance period scaling factor
+
+        // Iteration limits for safety
+        uint16_t min_swing_iterations = 5;        // Minimum swing iterations
+        uint16_t max_swing_iterations = 100;      // Maximum swing iterations
+        uint16_t min_stance_iterations = 5;       // Minimum stance iterations
+        uint16_t max_stance_iterations = 100;     // Maximum stance iterations
+
+        // Duty factor calculation (OpenSHC equivalent)
+        double duty_factor = 0.5;         // Duty factor (0.5 = 50% stance, 50% swing)
+
+        // Step period calculation
+        double step_period = 4.0;         // Total step period (stance + swing)
+    } dynamic_gait;
+
     // Tipo de gait seleccionado (OpenSHC compatible)
     std::string gait_type;
 };
