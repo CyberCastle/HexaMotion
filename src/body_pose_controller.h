@@ -204,6 +204,14 @@ class BodyPoseController {
     int executeStartupSequence(Leg legs[NUM_LEGS]);
 
     /**
+     * @brief Execute direct startup sequence with simultaneous leg coordination (OpenSHC equivalent)
+     * Uses time_to_start parameter directly as total sequence time
+     * @param legs Array of Leg objects to update
+     * @return Progress percentage (0-100), 100 when complete
+     */
+    int executeDirectStartup(Leg legs[NUM_LEGS]);
+
+    /**
      * @brief Execute shutdown sequence to transition from RUNNING to READY state
      * @param legs Array of Leg objects to update
      * @return Progress percentage (0-100), or -1 if generating sequence

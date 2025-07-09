@@ -13,8 +13,8 @@
 // Internal implementation class to avoid circular dependencies
 class BodyPoseController::LegPoserImpl {
   public:
-    LegPoserImpl(BodyPoseController *controller, int leg_index, Leg &leg)
-        : poser_(controller, nullptr, leg_index, leg) {}
+    LegPoserImpl(int leg_index, Leg &leg)
+        : poser_(leg_index, leg) {}
 
     LegPoser *get() { return &poser_; }
     const LegPoser *get() const { return &poser_; }
@@ -51,8 +51,8 @@ void BodyPoseController::initializeLegPosers(Leg legs[NUM_LEGS]) {
     for (int i = 0; i < NUM_LEGS; i++) {
         // Delete existing poser if any
         delete leg_posers_[i];
-        // Create LegPoser with this BodyPoseController and the corresponding leg
-        leg_posers_[i] = new LegPoserImpl(this, i, legs[i]);
+        // Create LegPoser with the corresponding leg
+        leg_posers_[i] = new LegPoserImpl(i, legs[i]);
     }
 }
 
@@ -81,22 +81,7 @@ bool BodyPoseController::setBodyPose(const Eigen::Vector3d &position, const Eige
 }
 
 bool BodyPoseController::setLegPosition(int leg_index, const Point3D &position, Leg legs[NUM_LEGS]) {
-    // Use LegPoser if available
-    LegPoser *poser = getLegPoser(leg_index);
-    if (poser) {
-        // Use LegPoser's stepToPosition method for smooth movement
-        Pose target_pose(position, Eigen::Vector3d(0, 0, 0));
-        Pose delta_pose(Point3D(0, 0, 0), Eigen::Vector3d(0, 0, 0));
-
-        // Use a reasonable step time and lift height
-        double step_time = 1.0;    // 1 second for pose adjustment
-        double lift_height = 20.0; // 20mm lift height
-
-        int progress = poser->stepToPosition(target_pose, delta_pose, lift_height, step_time, true);
-        return (progress == 100); // 100 means complete
-    }
-
-    // Fallback to direct calculation if LegPoser not available
+    // Always use direct IK calculation for immediate position setting
     // Use current joint angles as starting point for IK (OpenSHC approach)
     JointAngles current_angles = legs[leg_index].getJointAngles();
     JointAngles angles = model.inverseKinematicsCurrentGlobalCoordinates(leg_index, current_angles, position);
@@ -108,8 +93,10 @@ bool BodyPoseController::setLegPosition(int leg_index, const Point3D &position, 
     angles.tibia = model.constrainAngle(angles.tibia, model.getParams().tibia_angle_limits[0],
                                         model.getParams().tibia_angle_limits[1]);
 
+    // Update leg with new joint angles and calculated position
     legs[leg_index].setJointAngles(angles);
-    legs[leg_index].setCurrentTipPositionGlobal(model.forwardKinematicsGlobalCoordinates(leg_index, angles));
+    Point3D calculated_position = model.forwardKinematicsGlobalCoordinates(leg_index, angles);
+    legs[leg_index].setCurrentTipPositionGlobal(calculated_position);
 
     return true;
 }
@@ -326,7 +313,7 @@ bool BodyPoseController::setBodyPoseImmediate(const Eigen::Vector3d &position, c
 }
 
 void BodyPoseController::configureSmoothTrajectory(bool use_current_positions, double interpolation_speed, uint8_t max_steps) {
-    // Note: This method cannot modify const parameters directly
+    // TODO: Note: This method cannot modify const parameters directly
     // The smooth trajectory configuration should be handled at a higher level
     // For now, we'll store the configuration locally
     trajectory_in_progress = false;
@@ -335,24 +322,25 @@ void BodyPoseController::configureSmoothTrajectory(bool use_current_positions, d
 }
 
 bool BodyPoseController::checkBodyPoseLimits(const Eigen::Vector3d &position, const Eigen::Vector3d &orientation) {
-    // OpenSHC-style body pose limit validation
+    // OpenSHC-style body pose limit validation using configured parameters
     // Check if the desired body pose is within configured limits
 
-    // Check height limits (simplified - use reasonable defaults)
-    double min_height = -200.0; // -200mm minimum height
-    double max_height = 200.0;  // 200mm maximum height
-    if (position.z() < min_height || position.z() > max_height) {
+    // Check translation limits using configured max_translation values
+    if (std::abs(position.x()) > body_pose_config.max_translation.x ||
+        std::abs(position.y()) > body_pose_config.max_translation.y ||
+        std::abs(position.z()) > body_pose_config.max_translation.z) {
         return false;
     }
 
-    // Check orientation limits (roll, pitch, yaw) - simplified
-    double max_roll = 30.0;  // 30 degrees max roll
-    double max_pitch = 30.0; // 30 degrees max pitch
-    double max_yaw = 45.0;   // 45 degrees max yaw
+    // Check rotation limits using configured max_rotation values
+    // Convert orientation from degrees to radians for comparison
+    double roll_rad = math_utils::degreesToRadians(orientation.x());
+    double pitch_rad = math_utils::degreesToRadians(orientation.y());
+    double yaw_rad = math_utils::degreesToRadians(orientation.z());
 
-    if (std::abs(orientation.x()) > max_roll ||
-        std::abs(orientation.y()) > max_pitch ||
-        std::abs(orientation.z()) > max_yaw) {
+    if (std::abs(roll_rad) > body_pose_config.max_rotation.roll ||
+        std::abs(pitch_rad) > body_pose_config.max_rotation.pitch ||
+        std::abs(yaw_rad) > body_pose_config.max_rotation.yaw) {
         return false;
     }
 
@@ -514,8 +502,59 @@ int BodyPoseController::executeStartupSequence(Leg legs[NUM_LEGS]) {
         sequence_initialized = true;
     }
 
-    // Execute stepToNewStance for stance transition
-    int progress = stepToNewStance(legs, 30.0, 0.5);
+    // Use stepToNewStance for tripod coordination (OpenSHC style)
+    double step_height = body_pose_config.swing_height; // Use configured swing height
+    double step_time = 1.0 / 1.0; // Default 1Hz step frequency (OpenSHC style)
+    int progress = stepToNewStance(legs, step_height, step_time);
+
+    if (progress == 100) { // Sequence complete
+        sequence_initialized = false;
+        return 100; // PROGRESS_COMPLETE
+    }
+
+    return progress;
+}
+
+// Execute direct startup sequence (simultaneous leg coordination)
+int BodyPoseController::executeDirectStartup(Leg legs[NUM_LEGS]) {
+    static int sequence_step = 0;
+    static bool sequence_initialized = false;
+
+    // Initialize sequence if not done
+    if (!sequence_initialized) {
+        sequence_step = 0;
+        sequence_initialized = true;
+    }
+
+    // Use time_to_start directly as total sequence time (OpenSHC style)
+    double total_time = body_pose_config.time_to_start; // Total time for sequence in seconds
+    double step_height = body_pose_config.swing_height; // Use configured swing height
+
+    // Move all legs simultaneously to standing pose positions
+    int progress = 0;
+    for (int i = 0; i < NUM_LEGS; i++) {
+        if (leg_posers_[i]) {
+            // Get standing pose joint angles
+            const auto &standing_joints = body_pose_config.standing_pose_joints[i];
+            JointAngles target_angles;
+            target_angles.coxa = standing_joints.coxa;
+            target_angles.femur = standing_joints.femur;
+            target_angles.tibia = standing_joints.tibia;
+
+            // Calculate target position from joint angles
+            Point3D target_position = model.forwardKinematicsGlobalCoordinates(i, target_angles);
+
+            int leg_progress = leg_posers_[i]->get()->stepToPosition(target_position, step_height, total_time);
+
+            // Update leg with current position
+            legs[i].setCurrentTipPositionGlobal(leg_posers_[i]->get()->getCurrentPosition());
+            // Use current joint angles as starting point for IK (OpenSHC approach)
+            JointAngles current_angles = legs[i].getJointAngles();
+            legs[i].setJointAngles(model.inverseKinematicsCurrentGlobalCoordinates(i, current_angles, legs[i].getCurrentTipPositionGlobal()));
+
+            progress = std::max(progress, leg_progress);
+        }
+    }
 
     if (progress == 100) { // Sequence complete
         sequence_initialized = false;
@@ -536,7 +575,9 @@ int BodyPoseController::executeShutdownSequence(Leg legs[NUM_LEGS]) {
         sequence_initialized = true;
     }
 
-    // Move legs back to standing pose positions
+    // Move legs back to standing pose positions using configured values
+    double step_height = body_pose_config.swing_height; // Use configured swing height
+    double step_time = 1.0 / 1.0; // Default 1Hz step frequency (OpenSHC style)
     int progress = 0;
     for (int i = 0; i < NUM_LEGS; i++) {
         if (leg_posers_[i]) {
@@ -550,7 +591,7 @@ int BodyPoseController::executeShutdownSequence(Leg legs[NUM_LEGS]) {
             // Calculate target position from joint angles
             Point3D target_position = model.forwardKinematicsGlobalCoordinates(i, target_angles);
 
-            int leg_progress = leg_posers_[i]->get()->stepToPosition(target_position, 30.0, 0.5);
+            int leg_progress = leg_posers_[i]->get()->stepToPosition(target_position, step_height, step_time);
 
             // Update leg with current position
             legs[i].setCurrentTipPositionGlobal(leg_posers_[i]->get()->getCurrentPosition());

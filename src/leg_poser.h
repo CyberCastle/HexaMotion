@@ -7,10 +7,6 @@
 #include <vector>
 #include <memory>
 
-// Forward declarations
-class BodyPoseController;
-class LocomotionSystem;
-
 /**
  * @brief External target structure for leg positioning
  * Equivalent to OpenSHC's ExternalTarget
@@ -55,12 +51,10 @@ class LegPoser {
 public:
     /**
      * @brief Constructor
-     * @param body_pose_controller Pointer to the Body Pose Controller object
-     * @param locomotion_system Pointer to the locomotion system
      * @param leg_index Index of the leg this poser controls
-     * @param leg Reference to the Leg object this poser controls
+     * @param leg Reference to the leg object
      */
-    LegPoser(BodyPoseController* body_pose_controller, LocomotionSystem* locomotion_system, int leg_index, Leg& leg);
+    LegPoser(int leg_index, Leg& leg);
 
     /**
      * @brief Copy constructor
@@ -174,8 +168,6 @@ public:
     }
 
 private:
-    BodyPoseController* body_pose_controller_; //< Pointer to body pose controller object
-    LocomotionSystem* locomotion_system_;    //< Pointer to locomotion system
     int leg_index_;                          //< Index of the leg this poser controls
     Leg& leg_;                               //< Reference to the Leg object this poser controls
 

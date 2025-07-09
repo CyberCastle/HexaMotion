@@ -1,5 +1,4 @@
 #include "leg_poser.h"
-#include "locomotion_system.h"
 #include "hexamotion_constants.h"
 #include "math_utils.h"
 #include <cmath>
@@ -13,10 +12,8 @@
  * It provides smooth transitions for leg positioning using Bezier curves and manages auto-posing.
  */
 
-LegPoser::LegPoser(BodyPoseController* body_pose_controller, LocomotionSystem* locomotion_system, int leg_index, Leg& leg)
-    : body_pose_controller_(body_pose_controller)
-    , locomotion_system_(locomotion_system)
-    , leg_index_(leg_index)
+LegPoser::LegPoser(int leg_index, Leg& leg)
+    : leg_index_(leg_index)
     , leg_(leg)
     , first_iteration_(true)
     , master_iteration_count_(0) {
@@ -43,9 +40,7 @@ LegPoser::LegPoser(BodyPoseController* body_pose_controller, LocomotionSystem* l
 }
 
 LegPoser::LegPoser(const LegPoser* leg_poser)
-    : body_pose_controller_(leg_poser->body_pose_controller_)
-    , locomotion_system_(leg_poser->locomotion_system_)
-    , leg_index_(leg_poser->leg_index_)
+    : leg_index_(leg_poser->leg_index_)
     , leg_(leg_poser->leg_)
     , auto_pose_(leg_poser->auto_pose_)
     , negate_auto_pose_(leg_poser->negate_auto_pose_)
