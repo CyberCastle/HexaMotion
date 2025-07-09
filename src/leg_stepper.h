@@ -105,6 +105,7 @@ public:
     void setSwingHeight(double height) { swing_height_ = height; }
     void setBodyClearance(double clearance) { body_clearance_ = clearance; }
     void setStanceSpanModifier(double modifier) { stance_span_modifier_ = modifier; }
+    void setSwingClearance(const Point3D& clearance) { swing_clearance_ = clearance; }
 
     //Core functionality without WalkController dependency
     void updatePhase(const StepCycle& step);  // StepCycle passed as parameter

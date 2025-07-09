@@ -116,6 +116,12 @@ void WalkController::applyGaitConfigToLegSteppers(const GaitConfiguration &gait_
         leg_stepper->setSwingHeight(gait_config.swing_height);
         leg_stepper->setBodyClearance(gait_config.body_clearance);
         leg_stepper->setStanceSpanModifier(gait_config.stance_span_modifier);
+
+        // Configurar swing_clearance_ basado en swing_height de la marcha
+        // En OpenSHC, swing_clearance_ se inicializa con swing_height en dirección normal al plano de marcha
+        Point3D swing_clearance(0.0, 0.0, gait_config.swing_height);
+        leg_stepper->setSwingClearance(swing_clearance);
+
         // Si hay otros parámetros relevantes, configurarlos aquí
     }
 

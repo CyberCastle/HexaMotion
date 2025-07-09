@@ -34,6 +34,7 @@ LegStepper::LegStepper(int leg_index, const Point3D& identity_tip_pose, Leg& leg
     step_length_ = 0.0;
     swing_height_ = 0.0;
     body_clearance_ = 0.0;
+    swing_clearance_ = Point3D(0.0, 0.0, 0.0);
 
     for (int i = 0; i < 5; ++i) {
         swing_1_nodes_[i] = identity_tip_pose_;
