@@ -191,6 +191,10 @@ void LegStepper::updateTipPosition(double step_length, double time_delta, bool r
 }
 
 void LegStepper::generatePrimarySwingControlNodes() {
+    // If swing_origin_tip_position_ is at (0,0,0), initialize it with the current tip position
+    if (swing_origin_tip_position_.norm() < 1e-6) {
+        swing_origin_tip_position_ = leg_.getCurrentTipPositionGlobal();
+    }
     Point3D mid_tip_position = (swing_origin_tip_position_ + target_tip_pose_) * 0.5;
     // Usar swing_height_ si está configurado
     if (swing_height_ > 0.0) {
@@ -223,6 +227,10 @@ void LegStepper::generatePrimarySwingControlNodes() {
 }
 
 void LegStepper::generateSecondarySwingControlNodes(bool ground_contact) {
+    // If swing_origin_tip_position_ is at (0,0,0), initialize it with the current tip position
+    if (swing_origin_tip_position_.norm() < 1e-6) {
+        swing_origin_tip_position_ = leg_.getCurrentTipPositionGlobal();
+    }
     //Avoid division by zero and use reasonable defaults
     Point3D final_tip_velocity;
     Point3D stance_node_separation;
@@ -255,9 +263,13 @@ void LegStepper::generateSecondarySwingControlNodes(bool ground_contact) {
 }
 
 void LegStepper::generateStanceControlNodes(double stride_scaler) {
+    // If stance_origin_tip_position_ is at (0,0,0), initialize it with the current tip position
+    if (stance_origin_tip_position_.norm() < 1e-6) {
+        stance_origin_tip_position_ = leg_.getCurrentTipPositionGlobal();
+    }
     Point3D stance_node_separation = stride_vector_ * stride_scaler * LEG_STEPPER_STANCE_NODE_SCALER;
 
-    // Nodos de control para curva Bézier cuártica de stance
+    // Control nodes for quartic Bézier stance curve
     stance_nodes_[0] = stance_origin_tip_position_ + stance_node_separation * 0.0;
     stance_nodes_[1] = stance_origin_tip_position_ + stance_node_separation * 1.0;
     stance_nodes_[2] = stance_origin_tip_position_ + stance_node_separation * 2.0;

@@ -4,6 +4,8 @@
 #include "../src/gait_config.h"
 #include "../src/body_pose_config_factory.h"
 #include "../src/body_pose_controller.h"
+#include "../src/walkspace_analyzer.h"
+#include "../src/workspace_validator.h"
 #include "test_stubs.h"
 #include <cassert>
 #include <cmath>
@@ -467,9 +469,13 @@ int main() {
         // Get leg's identity pose for LegStepper initialization
         Point3D identity_pose = leg.getCurrentTipPositionGlobal();
 
-        // Create LegStepper
-        LegStepper stepper(leg_index, identity_pose, leg, model);
-        stepper.setDefaultTipPose(identity_pose);
+            // Create required objects for LegStepper
+    WalkspaceAnalyzer walkspace_analyzer(model);
+    WorkspaceValidator workspace_validator(model);
+
+    // Create LegStepper
+    LegStepper stepper(leg_index, identity_pose, leg, model, &walkspace_analyzer, &workspace_validator);
+    stepper.setDefaultTipPose(identity_pose);
 
         // Debug: Print initial step_state
         StepState initial_step_state = stepper.getStepState();
@@ -504,11 +510,15 @@ int main() {
     // Test coordinated behavior across multiple legs
     std::cout << "\n--- Testing Coordinated Multi-Leg Behavior ---" << std::endl;
 
+    // Create required objects for LegStepper
+    WalkspaceAnalyzer walkspace_analyzer(model);
+    WorkspaceValidator workspace_validator(model);
+
     // Create LegSteppers for all legs (using pointers due to reference members)
     LegStepper *steppers[NUM_LEGS];
     for (int i = 0; i < NUM_LEGS; ++i) {
         Point3D identity_pose = test_legs[i].getCurrentTipPositionGlobal();
-        steppers[i] = new LegStepper(i, identity_pose, test_legs[i], model);
+        steppers[i] = new LegStepper(i, identity_pose, test_legs[i], model, &walkspace_analyzer, &workspace_validator);
 
         // Set different phase offsets for tripod gait
         double phase_offset = (i % 2 == 0) ? 0.0 : 0.5; // Tripod gait pattern
