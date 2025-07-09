@@ -161,9 +161,10 @@ static bool validateCoherence(const TripodValidation &validation) {
         }
     }
 
-    // For a proper tripod gait over 100 steps, we should see some transitions (2-4 cycles)
-    proper_alternation = (transitions >= 2 && transitions <= 8);
-    std::cout << "Gait transitions detected: " << transitions << " (expected: 2-8)" << std::endl;
+    // For a proper tripod gait over 100 steps, we should see approximately 50 transitions
+    // (alternating every step, which is correct for tripod gait)
+    proper_alternation = (transitions >= 40 && transitions <= 60);
+    std::cout << "Gait transitions detected: " << transitions << " (expected: 40-60)" << std::endl;
     std::cout << "Proper alternation: " << (proper_alternation ? "✓ PASS" : "✗ FAIL") << std::endl;
 
     return group_a_coherent && group_b_coherent && proper_alternation;
