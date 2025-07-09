@@ -24,7 +24,7 @@
 
 // Test configuration
 constexpr int VALIDATION_STEPS = 100; // Reduced for faster testing
-constexpr double TEST_VELOCITY = 0.0; // mm/s - STATIONARY for pure gait pattern test
+constexpr double TEST_VELOCITY = 100.0; // mm/s - MOVING for trajectory symmetry test
 constexpr double TEST_DISTANCE = 0.0; // mm - no movement
 
 // Tripod gait validation structure
@@ -33,17 +33,23 @@ struct TripodValidation {
     std::vector<StepPhase> group_b_phases; // Legs 2, 4, 6
     std::vector<double> gait_phases;
     std::vector<bool> symmetry_checks;
+
+    // Position tracking for complete trajectory symmetry validation
+    std::vector<Point3D> leg_positions[NUM_LEGS]; // Positions for each leg over time
+    std::vector<JointAngles> leg_angles[NUM_LEGS]; // Angles for each leg over time
+
     int coherence_violations;
     int sync_violations;
     int symmetry_violations;
+    int trajectory_symmetry_violations;
 };
 
 static void printTestHeader() {
     std::cout << "=========================================" << std::endl;
     std::cout << "TRIPOD GAIT VALIDATION TEST" << std::endl;
     std::cout << "=========================================" << std::endl;
-    std::cout << "Validating: Coherence, Synchronization, Symmetry" << std::endl;
-    std::cout << "Steps: " << VALIDATION_STEPS << " | Velocity: " << TEST_VELOCITY << " mm/s (STATIONARY)" << std::endl;
+    std::cout << "Validating: Coherence, Synchronization, Symmetry, Trajectory Symmetry" << std::endl;
+    std::cout << "Steps: " << VALIDATION_STEPS << " | Velocity: " << TEST_VELOCITY << " mm/s (MOVING)" << std::endl;
     std::cout << "Distance: " << TEST_DISTANCE << " mm (NO MOVEMENT)" << std::endl;
     std::cout << "=========================================" << std::endl
               << std::endl;
@@ -292,6 +298,152 @@ static bool checkLegSymmetry(const LocomotionSystem &sys) {
     return any_pair_symmetric; // Return true if at least one pair shows good symmetry
 }
 
+/**
+ * @brief Validate complete trajectory symmetry for opposite leg pairs
+ * This function analyzes the full trajectory of each leg and validates that
+ * opposite legs maintain symmetrical positions throughout the gait cycle
+ */
+static bool validateTrajectorySymmetry(const TripodValidation &validation) {
+    std::cout << "\n=== TRAJECTORY SYMMETRY VALIDATION ===" << std::endl;
+
+    // Define opposite leg pairs for trajectory symmetry validation
+    const int opposite_pairs[3][2] = {
+        {0, 5}, // Front Right <-> Back Left
+        {1, 4}, // Middle Right <-> Middle Left
+        {2, 3}  // Back Right <-> Front Left
+    };
+
+    const char *pair_names[3] = {"Front Right <-> Back Left", "Middle Right <-> Middle Left", "Back Right <-> Front Left"};
+    const double position_tolerance = 5.0; // 5mm tolerance for position symmetry
+    const double angle_tolerance = 3.0;    // 3 degrees tolerance for angle symmetry
+
+    bool all_pairs_symmetric = true;
+    int total_measurements = 0;
+    int symmetric_measurements = 0;
+
+    for (int pair = 0; pair < 3; ++pair) {
+        int leg1 = opposite_pairs[pair][0];
+        int leg2 = opposite_pairs[pair][1];
+
+        std::cout << "\n  Analyzing " << pair_names[pair] << " (Legs " << leg1 << " <-> " << leg2 << "):" << std::endl;
+
+        int pair_measurements = 0;
+        int pair_symmetric_count = 0;
+
+        // Analyze trajectory symmetry over all recorded steps
+        for (size_t step = 0; step < validation.gait_phases.size(); ++step) {
+            if (step < validation.leg_positions[leg1].size() && step < validation.leg_positions[leg2].size()) {
+                // Get positions for this step
+                Point3D pos1 = validation.leg_positions[leg1][step];
+                Point3D pos2 = validation.leg_positions[leg2][step];
+
+                // Get angles for this step
+                JointAngles angles1 = validation.leg_angles[leg1][step];
+                JointAngles angles2 = validation.leg_angles[leg2][step];
+
+                // Check position symmetry (mirror symmetry across Y-axis)
+                double x_symmetry_error = std::abs(pos1.x + pos2.x); // Should be ~0 for mirror symmetry
+                double y_symmetry_error = std::abs(pos1.y - pos2.y); // Should be ~0 for mirror symmetry
+                double z_symmetry_error = std::abs(pos1.z - pos2.z); // Should be ~0 for mirror symmetry
+
+                bool position_symmetric = (x_symmetry_error < position_tolerance) &&
+                                         (y_symmetry_error < position_tolerance) &&
+                                         (z_symmetry_error < position_tolerance);
+
+                // Check angle symmetry
+                double coxa_symmetry_error = std::abs(angles1.coxa + angles2.coxa); // Mirror symmetry
+                double femur_symmetry_error = std::abs(angles1.femur - angles2.femur); // Identical angles
+                double tibia_symmetry_error = std::abs(angles1.tibia - angles2.tibia); // Identical angles
+
+                bool angle_symmetric = (coxa_symmetry_error < angle_tolerance) &&
+                                      (femur_symmetry_error < angle_tolerance) &&
+                                      (tibia_symmetry_error < angle_tolerance);
+
+                bool step_symmetric = position_symmetric && angle_symmetric;
+
+                pair_measurements++;
+                total_measurements++;
+
+                if (step_symmetric) {
+                    pair_symmetric_count++;
+                    symmetric_measurements++;
+                }
+
+                // Print detailed analysis for first few steps
+                if (step < 5) {
+                    std::cout << "    Step " << step << ": ";
+                    std::cout << "Pos(" << std::fixed << std::setprecision(1)
+                              << pos1.x << "," << pos1.y << "," << pos1.z << ") <-> ("
+                              << pos2.x << "," << pos2.y << "," << pos2.z << ") ";
+                    std::cout << "Angles(" << angles1.coxa << "," << angles1.femur << "," << angles1.tibia
+                              << ") <-> (" << angles2.coxa << "," << angles2.femur << "," << angles2.tibia << ") ";
+                    std::cout << (step_symmetric ? "✅" : "❌") << std::endl;
+                }
+            }
+        }
+
+        double pair_symmetry_percentage = 100.0 * (double)pair_symmetric_count / pair_measurements;
+        std::cout << "    Trajectory symmetry: " << std::fixed << std::setprecision(1)
+                  << pair_symmetry_percentage << "% (" << pair_symmetric_count << "/" << pair_measurements << " steps)" << std::endl;
+
+        bool pair_passed = pair_symmetry_percentage >= 90.0; // 90% tolerance for trajectory symmetry
+        std::cout << "    " << pair_names[pair] << ": " << (pair_passed ? "✓ PASS" : "✗ FAIL") << std::endl;
+
+        if (!pair_passed) {
+            all_pairs_symmetric = false;
+        }
+    }
+
+    // Overall trajectory symmetry summary
+    double overall_symmetry_percentage = 100.0 * (double)symmetric_measurements / total_measurements;
+    std::cout << "\n  Overall trajectory symmetry: " << std::fixed << std::setprecision(1)
+              << overall_symmetry_percentage << "% (" << symmetric_measurements << "/" << total_measurements << " measurements)" << std::endl;
+
+    bool overall_passed = overall_symmetry_percentage >= 85.0; // 85% tolerance for overall symmetry
+    std::cout << "  Complete trajectory symmetry: " << (overall_passed ? "✓ PASS" : "✗ FAIL") << std::endl;
+
+    return overall_passed;
+}
+
+/**
+ * @brief Print detailed trajectory analysis for debugging
+ */
+static void printTrajectoryAnalysis(const TripodValidation &validation) {
+    std::cout << "\n=== DETAILED TRAJECTORY ANALYSIS ===" << std::endl;
+
+    // Analyze trajectory characteristics for each leg
+    for (int leg = 0; leg < NUM_LEGS; ++leg) {
+        if (validation.leg_positions[leg].empty()) continue;
+
+        std::cout << "\nLeg " << leg << " trajectory analysis:" << std::endl;
+
+        // Calculate trajectory statistics
+        double min_x = validation.leg_positions[leg][0].x;
+        double max_x = validation.leg_positions[leg][0].x;
+        double min_y = validation.leg_positions[leg][0].y;
+        double max_y = validation.leg_positions[leg][0].y;
+        double min_z = validation.leg_positions[leg][0].z;
+        double max_z = validation.leg_positions[leg][0].z;
+
+        for (const auto& pos : validation.leg_positions[leg]) {
+            min_x = std::min(min_x, pos.x);
+            max_x = std::max(max_x, pos.x);
+            min_y = std::min(min_y, pos.y);
+            max_y = std::max(max_y, pos.y);
+            min_z = std::min(min_z, pos.z);
+            max_z = std::max(max_z, pos.z);
+        }
+
+        std::cout << "  Position range: X[" << std::fixed << std::setprecision(1)
+                  << min_x << ", " << max_x << "] Y[" << min_y << ", " << max_y
+                  << "] Z[" << min_z << ", " << max_z << "]" << std::endl;
+
+        // Calculate trajectory volume
+        double trajectory_volume = (max_x - min_x) * (max_y - min_y) * (max_z - min_z);
+        std::cout << "  Trajectory volume: " << std::fixed << std::setprecision(1) << trajectory_volume << " mm³" << std::endl;
+    }
+}
+
 int main() {
     printTestHeader();
 
@@ -363,6 +515,13 @@ int main() {
     validation.coherence_violations = 0;
     validation.sync_violations = 0;
     validation.symmetry_violations = 0;
+    validation.trajectory_symmetry_violations = 0;
+
+    // Initialize trajectory tracking arrays
+    for (int leg = 0; leg < NUM_LEGS; ++leg) {
+        validation.leg_positions[leg].reserve(VALIDATION_STEPS);
+        validation.leg_angles[leg].reserve(VALIDATION_STEPS);
+    }
 
     // Run simulation and collect data
     for (int step = 0; step < VALIDATION_STEPS; ++step) {
@@ -387,6 +546,16 @@ int main() {
         bool groups_alternating = (group_a_phase != group_b_phase);
         validation.symmetry_checks.push_back(groups_alternating);
 
+        // Collect trajectory data for all legs
+        for (int leg = 0; leg < NUM_LEGS; ++leg) {
+            const Leg &leg_obj = sys.getLeg(leg);
+            Point3D tip_pos = leg_obj.getCurrentTipPositionGlobal();
+            JointAngles angles = leg_obj.getJointAngles();
+
+            validation.leg_positions[leg].push_back(tip_pos);
+            validation.leg_angles[leg].push_back(angles);
+        }
+
         // Print pattern every 10 steps for monitoring
         // if (step % 10 == 0) {
         printGaitPattern(sys, step, phase);
@@ -401,9 +570,13 @@ int main() {
     bool coherence_ok = validateCoherence(validation);
     bool sync_ok = validateSynchronization(validation);
     bool symmetry_ok = validateSymmetry(validation);
+    bool trajectory_symmetry_ok = validateTrajectorySymmetry(validation);
 
     // Print detailed joint angle symmetry analysis
     printJointAngleSymmetry(sys);
+
+    // Print detailed trajectory analysis
+    printTrajectoryAnalysis(validation);
 
     // Final summary
     std::cout << "\n=========================================" << std::endl;
@@ -412,8 +585,9 @@ int main() {
     std::cout << "Coherence:     " << (coherence_ok ? "✓ PASS" : "✗ FAIL") << std::endl;
     std::cout << "Synchronization: " << (sync_ok ? "✓ PASS" : "✗ FAIL") << std::endl;
     std::cout << "Symmetry:      " << (symmetry_ok ? "✓ PASS" : "✗ FAIL") << std::endl;
+    std::cout << "Trajectory:    " << (trajectory_symmetry_ok ? "✓ PASS" : "✗ FAIL") << std::endl;
 
-    bool all_passed = coherence_ok && sync_ok && symmetry_ok;
+    bool all_passed = coherence_ok && sync_ok && symmetry_ok && trajectory_symmetry_ok;
 
     if (all_passed) {
         std::cout << "\n🎉 ALL VALIDATIONS PASSED! 🎉" << std::endl;
