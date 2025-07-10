@@ -411,8 +411,6 @@ JointAngles RobotModel::calculateTargetFromDefaultStance(int leg, const JointAng
     return inverseKinematicsCurrentGlobalCoordinates(leg, current_angles, default_stance_pose.position);
 }
 
-// ===== NEW: OpenSHC-style Local Coordinate Methods Implementation =====
-
 JointAngles RobotModel::solveIKLocalCoordinates(int leg, const Point3D &global_target,
                                                 const JointAngles &current_angles) const {
     // Transform global target to local leg coordinates (OpenSHC-style)
