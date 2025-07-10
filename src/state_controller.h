@@ -102,18 +102,6 @@ enum SequenceType {
 };
 
 //
-// State transition progress tracking.
-//
-struct TransitionProgress {
-    int current_step = 0;
-    int total_steps = 0;
-    double completion_percentage = 0.0f;
-    bool is_complete = false;
-    bool has_error = false;
-    String error_message = "";
-};
-
-//
 // State machine configuration parameters.
 //
 struct StateMachineConfig {
@@ -394,12 +382,6 @@ class StateController {
     // ==============================
 
     /**
-     * @brief Get the current transition progress.
-     * @return Transition progress information
-     */
-    TransitionProgress getTransitionProgress() const;
-
-    /**
      * @brief Check if the state machine has any errors.
      * @return True if there are errors
      */
@@ -464,7 +446,6 @@ class StateController {
 
     // Transition management
     bool is_transitioning_;
-    TransitionProgress transition_progress_;
     unsigned long transition_start_time_;
 
     // Control inputs

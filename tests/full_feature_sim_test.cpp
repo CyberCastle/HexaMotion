@@ -159,9 +159,6 @@ static void printStateControllerStatus(StateController &stateController, int ste
 
     if (stateController.isTransitioning()) {
         std::cout << "⏳ State transition in progress..." << std::endl;
-        TransitionProgress progress = stateController.getTransitionProgress();
-        std::cout << "Transition Progress: " << progress.current_step << "/" << progress.total_steps
-                  << " (" << progress.completion_percentage << "%)" << std::endl;
     }
 
     std::cout << "═══════════════════════════════════════" << std::endl;

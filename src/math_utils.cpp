@@ -186,6 +186,41 @@ Point3D quaternionToEulerPoint3D(const Eigen::Vector4d &quaternion) {
     return vector3fToPoint3D(euler_vec);
 }
 
+Eigen::Vector4d quaternionSlerp(const Eigen::Vector4d &q1, const Eigen::Vector4d &q2, double t) {
+    // Compute dot product
+    double dot = q1[0] * q2[0] + q1[1] * q2[1] + q1[2] * q2[2] + q1[3] * q2[3];
+
+    // If dot product is negative, take the shorter path by negating one quaternion
+    Eigen::Vector4d q2_adj = q2;
+    if (dot < 0.0) {
+        q2_adj = -q2;
+        dot = -dot;
+    }
+
+    // If quaternions are very close, use linear interpolation to avoid numerical issues
+    if (dot > 0.9995) {
+        Eigen::Vector4d result = q1 + t * (q2_adj - q1);
+        double norm = sqrt(result[0] * result[0] + result[1] * result[1] +
+                           result[2] * result[2] + result[3] * result[3]);
+        if (norm > 0.0) {
+            result = result / norm;
+        }
+        return result;
+    }
+
+    // Calculate angle and perform SLERP
+    double theta_0 = acos(std::abs(dot));
+    double sin_theta_0 = sin(theta_0);
+
+    double theta = theta_0 * t;
+    double sin_theta = sin(theta);
+
+    double s0 = cos(theta) - dot * sin_theta / sin_theta_0;
+    double s1 = sin_theta / sin_theta_0;
+
+    return s0 * q1 + s1 * q2_adj;
+}
+
 double pointToLineDistance(const Point3D &point, const Point3D &line_start, const Point3D &line_end) {
     // Calculate the vector from line_start to line_end
     Point3D line_vec = Point3D(line_end.x - line_start.x, line_end.y - line_start.y, line_end.z - line_start.z);

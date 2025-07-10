@@ -34,8 +34,7 @@ LocomotionSystem::LocomotionSystem(const Parameters &params)
       velocity_controller(nullptr), last_error(NO_ERROR),
       model(params), body_pose_ctrl(nullptr), walk_ctrl(nullptr), admittance_ctrl(nullptr),
       legs{Leg(0, model), Leg(1, model), Leg(2, model), Leg(3, model), Leg(4, model), Leg(5, model)},
-      system_state(SYSTEM_UNKNOWN), startup_in_progress(false), shutdown_in_progress(false),
-      startup_progress(0), shutdown_progress(0) {
+      system_state(SYSTEM_UNKNOWN), startup_in_progress(false), shutdown_in_progress(false) {
 
     // Initialize sensor log timestamp to avoid static local in updateSensorsParallel
     last_sensor_log_time = 0;
@@ -1263,15 +1262,14 @@ bool LocomotionSystem::executeStartupSequence() {
     // Start sequence if not already in progress
     if (!startup_in_progress) {
         startup_in_progress = true;
-        startup_progress = 0;
         system_state = SYSTEM_READY;
     }
 
     // Execute startup sequence using BodyPoseController
-    startup_progress = body_pose_ctrl->executeStartupSequence(legs);
+    bool startup_complete = body_pose_ctrl->executeStartupSequence(legs);
 
     // Check if sequence is complete
-    if (startup_progress == PROGRESS_COMPLETE) {
+    if (startup_complete) {
         startup_in_progress = false;
 
         // Inicializar walk controller para estado RUNNING
@@ -1298,14 +1296,13 @@ bool LocomotionSystem::executeShutdownSequence() {
     // Start sequence if not already in progress
     if (!shutdown_in_progress) {
         shutdown_in_progress = true;
-        shutdown_progress = 0;
     }
 
     // Execute shutdown sequence using BodyPoseController
-    shutdown_progress = body_pose_ctrl->executeShutdownSequence(legs);
+    bool shutdown_complete = body_pose_ctrl->executeShutdownSequence(legs);
 
     // Check if sequence is complete
-    if (shutdown_progress == PROGRESS_COMPLETE) {
+    if (shutdown_complete) {
         shutdown_in_progress = false;
         system_state = SYSTEM_READY;
         return true;

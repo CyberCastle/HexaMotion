@@ -98,7 +98,7 @@ int main() {
     pc.setBodyPoseConfig(getDefaultBodyPoseConfig(p));
 
     // Disable smooth trajectory for deterministic tests
-    pc.configureSmoothTrajectory(false);
+    pc.configureSmoothTrajectory(false, 0.1, 20);
 
     Leg legs[NUM_LEGS] = {Leg(0, model), Leg(1, model), Leg(2, model), Leg(3, model), Leg(4, model), Leg(5, model)};
 

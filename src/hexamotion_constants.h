@@ -87,6 +87,7 @@
 
 // Control system defaults
 #define DEFAULT_CONTROL_FREQUENCY 50.0 // Default control frequency (Hz)
+#define DEFAULT_STEP_FREQUENCY 1.0     // Default step frequency (Hz)
 
 // Velocity scaling and coupling factors
 #define DEFAULT_ANGULAR_SCALING 1.0     // Default angular velocity scaling
@@ -146,6 +147,20 @@
 #define ANGLE_TOLERANCE 0.1f      // Angular tolerance (degrees)
 #define POSITION_TOLERANCE 1.0f   // Position tolerance (mm)
 #define VELOCITY_THRESHOLD 1.0f // Minimum velocity to consider as moving (mm/s)
+
+// ========================================================================
+// AUTO-POSE CONSTANTS (OpenSHC equivalent)
+// ========================================================================
+
+// Auto-pose phase conversion constants
+#define AUTO_POSE_PHASE_CONVERSION_FACTOR 100.0f  // Conversion factor from gait phase (0.0-1.0) to phase (0-100)
+#define AUTO_POSE_GAIT_PHASE_THRESHOLD 0.5f       // Threshold for determining tripod gait group phases
+#define AUTO_POSE_BODY_COMPENSATION_REDUCTION 0.5f // Reduction factor for body-level compensation amplitudes
+
+// Auto-pose default amplitudes (OpenSHC auto_pose.yaml equivalent)
+#define AUTO_POSE_DEFAULT_ROLL_AMPLITUDE 0.015f   // Default roll compensation amplitude (radians)
+#define AUTO_POSE_DEFAULT_PITCH_AMPLITUDE 0.020f  // Default pitch compensation amplitude (radians)
+#define AUTO_POSE_DEFAULT_Z_AMPLITUDE 0.020f      // Default Z compensation amplitude (millimeters)
 
 // ========================================================================
 // SYSTEM STATE CONSTANTS

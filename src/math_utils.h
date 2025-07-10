@@ -60,6 +60,8 @@ Point3D vector3fToPoint3D(const Eigen::Vector3d &vec);
 Eigen::Vector4d eulerPoint3DToQuaternion(const Point3D &euler);
 /** Convert quaternion to Point3D Euler angles (radians). */
 Point3D quaternionToEulerPoint3D(const Eigen::Vector4d &quaternion);
+/** Spherical linear interpolation (SLERP) between two quaternions. */
+Eigen::Vector4d quaternionSlerp(const Eigen::Vector4d &q1, const Eigen::Vector4d &q2, double t);
 
 /** Generic Denavit-Hartenberg transform (angles in radians). */
 template <typename T>

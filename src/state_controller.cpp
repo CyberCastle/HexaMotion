@@ -148,12 +148,13 @@ StateController::StateController(LocomotionSystem &locomotion, const StateMachin
     }
 
     // Initialize transition progress
-    transition_progress_.current_step = 0;
-    transition_progress_.total_steps = 0;
-    transition_progress_.completion_percentage = 0.0f;
-    transition_progress_.is_complete = true;
-    transition_progress_.has_error = false;
-    transition_progress_.error_message = "";
+    // Eliminar inicialización de transition_progress_
+    // transition_progress_.current_step = 0;
+    // transition_progress_.total_steps = 0;
+    // transition_progress_.completion_percentage = 0.0f;
+    // transition_progress_.is_complete = true;
+    // transition_progress_.has_error = false;
+    // transition_progress_.error_message = "";
 
     // Initialize pose controller
     body_pose_controller_ = nullptr;
@@ -496,9 +497,10 @@ bool StateController::changeGait(GaitType gait) {
 // STATUS AND DIAGNOSTICS
 // ==============================
 
-TransitionProgress StateController::getTransitionProgress() const {
-    return transition_progress_;
-}
+// Eliminar método getTransitionProgress()
+// TransitionProgress StateController::getTransitionProgress() const {
+//     return transition_progress_;
+// }
 
 bool StateController::hasErrors() const {
     return has_error_;
@@ -518,9 +520,10 @@ String StateController::getDiagnosticInfo() const {
     info += "  Manual Legs: " + toArduinoString(toString(manual_leg_count_)) + "/" + toArduinoString(toString(config_.max_manual_legs)) + "\n";
     info += "  Transitioning: " + String(is_transitioning_ ? "Yes" : "No") + "\n";
 
-    if (is_transitioning_) {
-        info += "  Transition Progress: " + toArduinoString(toString(transition_progress_.completion_percentage)) + "%\n";
-    }
+    // Eliminar actualizaciones de transition_progress_ en los métodos de transición y reset
+    // if (is_transitioning_) {
+    //     info += "  Transition Progress: " + toArduinoString(toString(transition_progress_.completion_percentage)) + "%\n";
+    // }
 
     if (has_error_) {
         info += "  Error: " + last_error_message_ + "\n";
@@ -588,12 +591,13 @@ void StateController::reset() {
 
     // Reset transition state
     is_transitioning_ = false;
-    transition_progress_.current_step = 0;
-    transition_progress_.total_steps = 0;
-    transition_progress_.completion_percentage = 0.0f;
-    transition_progress_.is_complete = true;
-    transition_progress_.has_error = false;
-    transition_progress_.error_message = "";
+    // Eliminar actualizaciones de transition_progress_ en los métodos de transición y reset
+    // transition_progress_.current_step = 0;
+    // transition_progress_.total_steps = 0;
+    // transition_progress_.completion_percentage = 0.0f;
+    // transition_progress_.is_complete = true;
+    // transition_progress_.has_error = false;
+    // transition_progress_.error_message = "";
 
     // Initialize pose controller
     body_pose_controller_ = nullptr;
@@ -615,8 +619,9 @@ void StateController::updateStateMachine() {
         if (elapsed_time > timeout) {
             setError("State transition timeout");
             is_transitioning_ = false;
-            transition_progress_.has_error = true;
-            transition_progress_.error_message = "Transition timeout";
+            // Eliminar actualizaciones de transition_progress_ en los métodos de transición y reset
+            // transition_progress_.has_error = true;
+            // transition_progress_.error_message = "Transition timeout";
         }
     }
 }
@@ -731,9 +736,9 @@ void StateController::handleRobotStateTransition() {
         return;
     }
 
-    // Update transition progress
-    transition_progress_.completion_percentage = progress;
-    transition_progress_.is_complete = (progress == PROGRESS_COMPLETE);
+    // Eliminar actualizaciones de transition_progress_ en los métodos de transición y reset
+    // transition_progress_.completion_percentage = progress;
+    // transition_progress_.is_complete = (progress == PROGRESS_COMPLETE);
 
     if (progress == PROGRESS_COMPLETE) {
         current_robot_state_ = desired_robot_state_;
@@ -1067,7 +1072,8 @@ void StateController::applyPoseReset() {
 int StateController::executeStartupSequence() {
     // Enhanced startup sequence following OpenSHC patterns using instance members
     if (!startup_transition_initialized_) {
-        transition_progress_.total_steps = startup_transition_step_count_;
+        // Eliminar actualizaciones de transition_progress_ en los métodos de transición y reset
+        // transition_progress_.total_steps = startup_transition_step_count_;
         startup_transition_initialized_ = true;
         startup_step_ = 0;
     }
@@ -1077,20 +1083,23 @@ int StateController::executeStartupSequence() {
     case 0:
         // Step 1: Initialize ready stance
         startup_step_ = 1;
-        transition_progress_.current_step = 1;
+        // Eliminar actualizaciones de transition_progress_ en los métodos de transición y reset
+        // transition_progress_.current_step = 1;
         return 25;
 
     case 1:
         // Step 2: Move to intermediate position (safer transition)
         // Use locomotion system to transition to higher stance
         startup_step_ = 2;
-        transition_progress_.current_step = 2;
+        // Eliminar actualizaciones de transition_progress_ en los métodos de transición y reset
+        // transition_progress_.current_step = 2;
         return 50;
 
     case 2:
         // Step 3: Move to walking height
         startup_step_ = 3;
-        transition_progress_.current_step = 3;
+        // Eliminar actualizaciones de transition_progress_ en los métodos de transición y reset
+        // transition_progress_.current_step = 3;
         return 75;
 
     case 3:
@@ -1099,8 +1108,9 @@ int StateController::executeStartupSequence() {
             // Update default configuration for walking
             startup_step_ = 0; // Reset for next time
             startup_transition_initialized_ = false;
-            transition_progress_.current_step = startup_transition_step_count_;
-            transition_progress_.is_complete = true;
+            // Eliminar actualizaciones de transition_progress_ en los métodos de transición y reset
+            // transition_progress_.current_step = startup_transition_step_count_;
+            // transition_progress_.is_complete = true;
             return 100;
         }
         return 75;
@@ -1128,7 +1138,8 @@ int StateController::executeShutdownSequence() {
             desired_angular_velocity_ = 0.0f;
             return 10; // Stay in shutdown but indicate progress
         }
-        transition_progress_.total_steps = shutdown_transition_step_count_;
+        // Eliminar actualizaciones de transition_progress_ en los métodos de transición y reset
+        // transition_progress_.total_steps = shutdown_transition_step_count_;
         shutdown_transition_initialized_ = true;
         shutdown_step_ = 0;
     }
@@ -1140,13 +1151,15 @@ int StateController::executeShutdownSequence() {
             manual_leg_count_ = 0;
         }
         shutdown_step_ = 1;
-        transition_progress_.current_step = 1;
+        // Eliminar actualizaciones de transition_progress_ en los métodos de transición y reset
+        // transition_progress_.current_step = 1;
         return 33;
 
     case 1:
         // Step 2: Transition to ready height (higher than walking height)
         shutdown_step_ = 2;
-        transition_progress_.current_step = 2;
+        // Eliminar actualizaciones de transition_progress_ en los métodos de transición y reset
+        // transition_progress_.current_step = 2;
         return 66;
 
     case 2:
@@ -1154,8 +1167,9 @@ int StateController::executeShutdownSequence() {
         if (locomotion_system_.setStandingPose()) {
             shutdown_step_ = 0; // Reset for next time
             shutdown_transition_initialized_ = false;
-            transition_progress_.current_step = shutdown_transition_step_count_;
-            transition_progress_.is_complete = true;
+            // Eliminar actualizaciones de transition_progress_ en los métodos de transición y reset
+            // transition_progress_.current_step = shutdown_transition_step_count_;
+            // transition_progress_.is_complete = true;
             return 100;
         }
         return 66;
@@ -1168,16 +1182,19 @@ int StateController::executeShutdownSequence() {
 int StateController::executePackSequence() {
     // Simplified pack sequence using instance member
     if (pack_step_ == 0) {
-        transition_progress_.total_steps = 2;
+        // Eliminar actualizaciones de transition_progress_ en los métodos de transición y reset
+        // transition_progress_.total_steps = 2;
         pack_step_ = 1;
-        transition_progress_.current_step = 1;
+        // Eliminar actualizaciones de transition_progress_ en los métodos de transición y reset
+        // transition_progress_.current_step = 1;
         return 50;
     } else if (pack_step_ == 1) {
         // Move to packed position (standing pose as approximation)
         if (locomotion_system_.setStandingPose()) {
             pack_step_ = 0; // Reset for next time
-            transition_progress_.current_step = 2;
-            transition_progress_.is_complete = true;
+            // Eliminar actualizaciones de transition_progress_ en los métodos de transición y reset
+            // transition_progress_.current_step = 2;
+            // transition_progress_.is_complete = true;
             // Capture packed target joint angles
             for (int i = 0; i < NUM_LEGS; ++i) {
                 packed_target_angles_[i] = locomotion_system_.getJointAngles(i);
@@ -1191,16 +1208,19 @@ int StateController::executePackSequence() {
 int StateController::executeUnpackSequence() {
     // Simplified unpack sequence using instance member
     if (unpack_step_ == 0) {
-        transition_progress_.total_steps = 2;
+        // Eliminar actualizaciones de transition_progress_ en los métodos de transición y reset
+        // transition_progress_.total_steps = 2;
         unpack_step_ = 1;
-        transition_progress_.current_step = 1;
+        // Eliminar actualizaciones de transition_progress_ en los métodos de transición y reset
+        // transition_progress_.current_step = 1;
         return 50;
     } else if (unpack_step_ == 1) {
         // Move to ready position
         if (locomotion_system_.setStandingPose()) {
             unpack_step_ = 0; // Reset for next time
-            transition_progress_.current_step = 2;
-            transition_progress_.is_complete = true;
+            // Eliminar actualizaciones de transition_progress_ en los métodos de transición y reset
+            // transition_progress_.current_step = 2;
+            // transition_progress_.is_complete = true;
             // Capture ready target joint angles
             for (int i = 0; i < NUM_LEGS; ++i) {
                 ready_target_angles_[i] = locomotion_system_.getJointAngles(i);

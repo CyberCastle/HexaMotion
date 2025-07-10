@@ -86,6 +86,7 @@ struct BodyPoseConfiguration {
  */
 struct AutoPoseConfiguration {
     bool enabled;                    //< Enable/disable auto-pose during gait
+    bool tripod_mode_enabled;        //< Enable/disable tripod-specific compensation
     double pose_frequency;           //< Pose frequency (-1.0 = sync with gait cycle)
 
     // Phase configuration for tripod gait

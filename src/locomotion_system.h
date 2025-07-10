@@ -110,8 +110,6 @@ class LocomotionSystem {
     SystemState system_state;
     bool startup_in_progress;
     bool shutdown_in_progress;
-    int startup_progress;
-    int shutdown_progress;
 
     // Último comando de velocidad deseado
     double commanded_linear_velocity_ = 0.0;
