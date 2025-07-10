@@ -589,8 +589,6 @@ class RobotModel {
     JointAngles calculateTargetFromDefaultStance(int leg, const JointAngles &current_angles,
                                                  const Pose &current_pose, const Pose &default_stance_pose) const;
 
-    // ===== NEW: OpenSHC-style Local Coordinate Methods =====
-
     /**
      * @brief Apply inverse kinematics using local leg coordinates (OpenSHC-style)
      * This method follows OpenSHC's approach by transforming global coordinates to local leg frame
@@ -669,7 +667,6 @@ class RobotModel {
                                                    const Point3D &global_current_pose,
                                                    const JointAngles &current_angles) const;
 
-    // ===== GLOBAL COORDINATE METHODS (Original HexaMotion approach) =====
 
   private:
     Parameters params;

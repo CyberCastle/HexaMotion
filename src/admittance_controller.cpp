@@ -256,10 +256,6 @@ bool AdmittanceController::checkStability(const Point3D leg_pos[NUM_LEGS], const
     return contacts >= 3;
 }
 
-// ==============================
-// DERIVATIVE-BASED INTEGRATION USING math_utils
-// ==============================
-
 Point3D AdmittanceController::integrateDerivatives(int leg_index) {
     if (leg_index < 0 || leg_index >= NUM_LEGS) {
         return Point3D(0, 0, 0);

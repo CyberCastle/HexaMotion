@@ -625,8 +625,6 @@ bool WalkspaceAnalyzer::isPositionReachableWithWorkplane(int leg_index, const Po
     return position_radius <= max_radius;
 }
 
-// ===== NEW METHODS FOR RUNTIME ANALYSIS CONTROL =====
-
 std::string WalkspaceAnalyzer::getAnalysisInfoString() const {
     std::stringstream ss;
 

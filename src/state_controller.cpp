@@ -134,9 +134,6 @@ String toArduinoString(const std::string &str) {
 }
 } // namespace
 
-// ==============================
-// CONSTRUCTOR & DESTRUCTOR
-// ==============================
 
 StateController::StateController(LocomotionSystem &locomotion, const StateMachineConfig &config)
     : locomotion_system_(locomotion), config_(config), current_system_state_(SystemState::SYSTEM_PACKED), current_robot_state_(RobotState::ROBOT_UNKNOWN), current_walk_state_(WalkState::WALK_STOPPED), current_posing_mode_(PosingMode::POSING_NONE), current_cruise_control_mode_(CruiseControlMode::CRUISE_CONTROL_OFF), current_pose_reset_mode_(PoseResetMode::POSE_RESET_NONE), desired_system_state_(SystemState::SYSTEM_PACKED), desired_robot_state_(RobotState::ROBOT_UNKNOWN), manual_leg_count_(0), is_transitioning_(false), desired_linear_velocity_(Eigen::Vector2d::Zero()), desired_angular_velocity_(0.0f), desired_body_position_(Eigen::Vector3d::Zero()), desired_body_orientation_(Eigen::Vector3d::Zero()), cruise_velocity_(Eigen::Vector3d::Zero()), cruise_start_time_(0), cruise_end_time_(0), last_update_time_(0), dt_(0.02f), has_error_(false), is_initialized_(false), startup_step_(0), startup_transition_initialized_(false), startup_transition_step_count_(4), shutdown_step_(0), shutdown_transition_initialized_(false), shutdown_transition_step_count_(3), pack_step_(0), unpack_step_(0) {
@@ -171,10 +168,6 @@ StateController::~StateController() {
         body_pose_controller_.reset();
     }
 }
-
-// ==============================
-// INITIALIZATION
-// ==============================
 
 bool StateController::initialize(const BodyPoseConfiguration &pose_config) {
     logDebug("Initializing StateController...");
@@ -229,10 +222,6 @@ bool StateController::initialize(const BodyPoseConfiguration &pose_config) {
     return true;
 }
 
-// ==============================
-// MAIN UPDATE LOOP
-// ==============================
-
 void StateController::update(double dt) {
     if (!is_initialized_) {
         return;
@@ -263,10 +252,6 @@ void StateController::update(double dt) {
         updatePoseControl();
     }
 }
-
-// ==============================
-// STATE ACCESSORS & SETTERS
-// ==============================
 
 bool StateController::requestSystemState(SystemState new_state) {
     if (new_state == current_system_state_) {
@@ -370,10 +355,6 @@ bool StateController::setPoseResetMode(PoseResetMode mode) {
     return true;
 }
 
-// ==============================
-// LEG CONTROL
-// ==============================
-
 bool StateController::setLegState(int leg_index, LegState state) {
     if (leg_index < 0 || leg_index >= NUM_LEGS) {
         setError("Invalid leg index: " + toArduinoString(toString(leg_index)));
@@ -415,10 +396,6 @@ LegState StateController::getLegState(int leg_index) const {
 int StateController::getManualLegCount() const {
     return manual_leg_count_;
 }
-
-// ==============================
-// VELOCITY AND POSE CONTROL
-// ==============================
 
 void StateController::setDesiredVelocity(const Eigen::Vector2d &linear_velocity, double angular_velocity) {
     desired_linear_velocity_ = linear_velocity;
@@ -472,10 +449,6 @@ bool StateController::setDesiredBodyOrientation(const Eigen::Vector3d &orientati
     return true;
 }
 
-// ==============================
-// GAIT CONTROL
-// ==============================
-
 bool StateController::changeGait(GaitType gait) {
     if (current_robot_state_ != RobotState::ROBOT_RUNNING) {
         setError("Cannot change gait when robot is not in RUNNING state");
@@ -493,9 +466,7 @@ bool StateController::changeGait(GaitType gait) {
     return locomotion_system_.setGaitType(gait);
 }
 
-// ==============================
-// STATUS AND DIAGNOSTICS
-// ==============================
+
 
 // Eliminar método getTransitionProgress()
 // TransitionProgress StateController::getTransitionProgress() const {
@@ -602,10 +573,6 @@ void StateController::reset() {
     // Initialize pose controller
     body_pose_controller_ = nullptr;
 }
-
-// ==============================
-// PRIVATE METHODS
-// ==============================
 
 void StateController::updateStateMachine() {
     // Handle system state transitions
@@ -1057,9 +1024,6 @@ void StateController::applyPoseReset() {
     }
 }
 
-// ==============================
-// SEQUENCE EXECUTION METHODS
-// ==============================
 /**
  * @brief Execute startup sequence to transition from ready to running state.
  *
@@ -1231,10 +1195,6 @@ int StateController::executeUnpackSequence() {
     return 50;
 }
 
-// ==============================
-// STATE DETECTION METHODS
-// ==============================
-
 bool StateController::isRobotPacked() const {
     // Check if robot is in packed state based on body position and orientation
     Eigen::Vector3d current_position = locomotion_system_.getBodyPosition();
@@ -1324,10 +1284,6 @@ bool StateController::isValidStateTransition(RobotState current_state, RobotStat
         return false;
     }
 }
-
-// ==============================
-// UTILITY METHODS
-// ==============================
 
 void StateController::setError(const String &message) {
     has_error_ = true;

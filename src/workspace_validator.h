@@ -239,8 +239,6 @@ class WorkspaceValidator {
      */
     Point3D constrainToGeometricWorkspace(int leg_index, const Point3D &target) const;
 
-    // ===== MIGRATED FROM LegCollisionAvoidance =====
-
     /**
      * @brief Calculate minimum safe hexagon radius to prevent leg collisions
      * @param leg_reach Maximum reach of each leg
