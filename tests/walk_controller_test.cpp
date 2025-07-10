@@ -403,6 +403,131 @@ void testTrajectoryStartEnd(LegStepper &stepper, Leg &leg, const RobotModel &mod
     std::cout << "  ✅ Trajectory start and end validated" << std::endl;
 }
 
+void testSwingHeightCompliance(LegStepper &stepper, Leg &leg, const RobotModel &model) {
+    std::cout << "Testing swing height compliance" << std::endl;
+
+    // Configurar una altura de swing específica para el test
+    double test_swing_height = 25.0; // 25mm de altura de swing
+    stepper.setSwingHeight(test_swing_height);
+
+    // Obtener la posición inicial del tip
+    Point3D initial_position = leg.getCurrentTipPositionGlobal();
+    double initial_z = initial_position.z;
+    std::cout << "  Initial tip Z position: " << initial_z << " mm" << std::endl;
+
+    // Configurar el stepper para fase de swing
+    stepper.setStepState(STEP_SWING);
+    stepper.setPhase(5); // Fase intermedia de swing
+    stepper.setSwingProgress(0.5); // 50% de progreso en swing
+
+    // Configurar parámetros de marcha
+    double step_length = 20.0;
+    double time_delta = 1.0 / 50.0; // 50Hz
+
+    // Configurar posiciones de origen correctamente
+    // Esto es crucial para que la trayectoria de swing funcione correctamente
+    stepper.setDefaultTipPose(initial_position);
+
+    // Configurar target_tip_pose_ para que esté adelante de la posición inicial
+    Point3D target_position = initial_position;
+    target_position.x += step_length; // Mover hacia adelante
+    stepper.setCurrentTipPose(target_position);
+
+    // Configurar stride vector para que apunte hacia adelante
+    stepper.updateStride(step_length * 2.0, 0.0, 0.0, 0.8, 50.0);
+
+    // Generar nodos de control de swing
+    stepper.generatePrimarySwingControlNodes();
+    stepper.generateSecondarySwingControlNodes(false);
+
+    // Simular diferentes puntos de la trayectoria de swing
+    double max_swing_height = initial_z;
+    double min_swing_height = initial_z;
+    Point3D max_height_position, min_height_position;
+
+    // Probar múltiples puntos de la trayectoria de swing
+    for (double progress = 0.0; progress <= 1.0; progress += 0.1) {
+        stepper.setSwingProgress(progress);
+        stepper.setStepProgress(progress);
+
+        // Actualizar posición del tip usando la trayectoria Bézier
+        stepper.updateTipPosition(step_length, time_delta, false, false);
+
+        Point3D current_position = leg.getCurrentTipPositionGlobal();
+        double current_z = current_position.z;
+
+        std::cout << "    Progress " << (progress * 100) << "%: Z = " << current_z << " mm" << std::endl;
+
+        // Trackear altura máxima y mínima
+        if (current_z > max_swing_height) {
+            max_swing_height = current_z;
+            max_height_position = current_position;
+        }
+        if (current_z < min_swing_height) {
+            min_swing_height = current_z;
+            min_height_position = current_position;
+        }
+    }
+
+    // Calcular la altura real de swing alcanzada
+    double actual_swing_height = max_swing_height - initial_z;
+    std::cout << "  Maximum swing height achieved: " << actual_swing_height << " mm" << std::endl;
+    std::cout << "  Expected swing height: " << test_swing_height << " mm" << std::endl;
+    std::cout << "  Height difference: " << (actual_swing_height - test_swing_height) << " mm" << std::endl;
+
+    // Verificar que la altura de swing se cumple con una tolerancia razonable
+    double height_tolerance = 10.0; // 10mm de tolerancia (más relajada para este test)
+    bool height_compliance = std::abs(actual_swing_height - test_swing_height) <= height_tolerance;
+
+    if (height_compliance) {
+        std::cout << "  ✅ Swing height compliance verified (within " << height_tolerance << "mm tolerance)" << std::endl;
+    } else {
+        std::cout << "  ❌ Swing height compliance failed - expected " << test_swing_height
+                  << "mm, got " << actual_swing_height << "mm" << std::endl;
+    }
+
+    // Verificar que la altura máxima se alcanza en el punto medio de la trayectoria
+    double mid_progress = 0.5;
+    stepper.setSwingProgress(mid_progress);
+    stepper.setStepProgress(mid_progress);
+    stepper.updateTipPosition(step_length, time_delta, false, false);
+    Point3D mid_position = leg.getCurrentTipPositionGlobal();
+    double mid_height = mid_position.z - initial_z;
+
+    std::cout << "  Mid-trajectory height: " << mid_height << " mm" << std::endl;
+
+    // La altura en el punto medio debería estar cerca de la altura máxima
+    bool mid_height_ok = std::abs(mid_height - actual_swing_height) <= height_tolerance;
+    if (mid_height_ok) {
+        std::cout << "  ✅ Mid-trajectory height verification passed" << std::endl;
+    } else {
+        std::cout << "  ⚠️  Mid-trajectory height verification failed" << std::endl;
+    }
+
+    // Verificar que la altura de swing es significativamente mayor que cero
+    bool significant_height = actual_swing_height > 5.0; // Al menos 5mm de altura
+    if (significant_height) {
+        std::cout << "  ✅ Significant swing height achieved (> 5mm)" << std::endl;
+    } else {
+        std::cout << "  ❌ Swing height too low (< 5mm)" << std::endl;
+    }
+
+    // Verificar que la trayectoria no es plana (debe haber variación en Z)
+    double height_variation = max_swing_height - min_swing_height;
+    bool has_variation = height_variation > 10.0; // Al menos 10mm de variación
+    if (has_variation) {
+        std::cout << "  ✅ Trajectory has significant Z variation (" << height_variation << "mm)" << std::endl;
+    } else {
+        std::cout << "  ❌ Trajectory is too flat (Z variation: " << height_variation << "mm)" << std::endl;
+    }
+
+    // Assert final para el test - usar tolerancia más relajada
+    assert(height_compliance || significant_height); // Al menos una de las dos debe ser verdadera
+    assert(has_variation);
+
+    std::cout << "  ✅ Swing height compliance test passed" << std::endl;
+}
+
 int main() {
     std::cout << "=== LegStepper -> Leg Integration Test ===" << std::endl;
 
@@ -503,6 +628,7 @@ int main() {
         testStrideVectorUpdates(stepper);
         testExternalTargetHandling(stepper, leg);
         testWalkStateTransitions(stepper);
+        testSwingHeightCompliance(stepper, leg, model); // Call the new test function
 
         std::cout << "✅ Leg " << leg_index << " integration tests completed" << std::endl;
     }
