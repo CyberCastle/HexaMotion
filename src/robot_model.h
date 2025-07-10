@@ -617,17 +617,6 @@ class RobotModel {
                                    const JointAngles &current_angles) const;
 
     /**
-     * @brief Get symmetric stance positions in local leg coordinates (OpenSHC-style)
-     * This method returns stance positions that are perfectly symmetric in local coordinates,
-     * avoiding the asymmetry introduced by global-to-local transformations.
-     *
-     * @param stance_radius Radius of the stance circle in millimeters
-     * @param stance_height Height of the stance in millimeters
-     * @return Array of stance positions in local coordinates for each leg
-     */
-    std::array<Point3D, NUM_LEGS> getSymmetricStancePositionsLocalCoordinates(double stance_radius, double stance_height) const;
-
-    /**
      * @brief Transform global position to local leg coordinates (OpenSHC-style)
      * This method transforms a position from global robot coordinates to local leg coordinates,
      * following OpenSHC's getPoseJointFrame approach.

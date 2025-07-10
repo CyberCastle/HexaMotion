@@ -422,18 +422,6 @@ JointAngles RobotModel::solveIKLocalCoordinates(int leg, const Point3D &global_t
     return solveIK(leg, local_target, current_angles);
 }
 
-std::array<Point3D, NUM_LEGS> RobotModel::getSymmetricStancePositionsLocalCoordinates(double stance_radius, double stance_height) const {
-    std::array<Point3D, NUM_LEGS> local_positions;
-
-    // All legs get the same local position - this ensures perfect symmetry
-    // The stance_radius represents the distance from leg base to tip in local coordinates
-    for (int i = 0; i < NUM_LEGS; i++) {
-        local_positions[i] = Point3D(stance_radius, 0.0, -stance_height);
-    }
-
-    return local_positions;
-}
-
 Point3D RobotModel::transformGlobalToLocalCoordinates(int leg, const Point3D &global_position,
                                                       const JointAngles &current_angles) const {
     // Create pose from global position
