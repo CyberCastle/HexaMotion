@@ -231,6 +231,7 @@ VelocityLimits::WorkspaceConfig WalkController::getWorkspaceConfig() const {
     return velocity_limits_.getWorkspaceConfig();
 }
 
+// TODO: Use defines
 // --- WalkController Methods Implementation ---
 void WalkController::init() {
     time_delta_ = 0.01; // 10ms default
@@ -430,6 +431,7 @@ void WalkController::updateWalk(const Point3D &linear_velocity_input, double ang
     }
 }
 
+// TODO: Use defines
 void WalkController::updateWalkPlane() {
     std::vector<double> raw_A;
     std::vector<double> raw_B;
@@ -489,6 +491,7 @@ Point3D WalkController::calculateOdometry(double time_period) {
     return rotated_delta;
 }
 
+// TODO: Use defines
 void WalkController::generateWalkspace() {
     // Implement full walkspace calculation like OpenSHC
     walkspace_.clear();
@@ -669,6 +672,7 @@ bool WalkController::checkTerrainConditions() const {
     return false;
 }
 
+// TODO: Use defines
 Point3D WalkController::calculateDefaultStancePosition(int leg_index) {
     const auto &params = model.getParams();
 
