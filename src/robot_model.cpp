@@ -205,9 +205,16 @@ Point3D RobotModel::getAnalyticLegBasePosition(int leg_index) const {
 }
 
 Point3D RobotModel::getDHLegBasePosition(int leg_index) const {
-    // Use the same calculation as getAnalyticLegBasePosition for consistency
-    // Both methods should return the same result since they use the same parameters
-    return getAnalyticLegBasePosition(leg_index);
+    // Calculate base position using DH transform matrix
+    // Apply only the base transform (row 0) without joint angles
+    Eigen::Matrix4d base_transform = math_utils::dhTransform<double>(
+        dh_transforms[leg_index][0][0],  // a0 = hexagon_radius
+        dh_transforms[leg_index][0][1],  // alpha0 = 0
+        dh_transforms[leg_index][0][2],  // d1 = 0
+        dh_transforms[leg_index][0][3]); // theta0 = BASE_THETA_OFFSETS[leg_index]
+
+    // Extract position from the transform matrix
+    return Point3D{base_transform(0, 3), base_transform(1, 3), base_transform(2, 3)};
 }
 
 double RobotModel::getLegBaseAngleOffset(int leg_index) const {
@@ -491,8 +498,6 @@ Point3D RobotModel::calculatePositionDeltaLocalCoordinates(int leg, const Point3
     // Calculate delta in local coordinates
     return local_desired_pose - local_current_pose;
 }
-
-// ===== NEW: Intelligent Initial Angle Estimation =====
 
 JointAngles RobotModel::estimateInitialAngles(int leg, const Point3D &target_position) const {
     // Transform target to leg coordinate system for analysis
