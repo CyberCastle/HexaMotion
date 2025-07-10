@@ -276,20 +276,35 @@ bool LocomotionSystem::setLegJointAngles(int leg, const JointAngles &q) {
 
 // Gait planner
 bool LocomotionSystem::setGaitType(GaitType gait) {
-    if (!walk_ctrl) return false;
-    const Parameters& params = model.getParams();
+    if (!walk_ctrl)
+        return false;
+    const Parameters &params = model.getParams();
+
+    bool result = false;
+
     switch (gait) {
-        case TRIPOD_GAIT:
-            return walk_ctrl->setGaitByName("tripod_gait");
-        case WAVE_GAIT:
-            return walk_ctrl->setGaitByName("wave_gait");
-        case RIPPLE_GAIT:
-            return walk_ctrl->setGaitByName("ripple_gait");
-        case METACHRONAL_GAIT:
-            return walk_ctrl->setGaitByName("metachronal_gait");
-        default:
-            return false;
+    case TRIPOD_GAIT:
+        result = walk_ctrl->setGaitByName("tripod_gait");
+        break;
+    case WAVE_GAIT:
+        result = walk_ctrl->setGaitByName("wave_gait");
+        break;
+    case RIPPLE_GAIT:
+        result = walk_ctrl->setGaitByName("ripple_gait");
+        break;
+    case METACHRONAL_GAIT:
+        result = walk_ctrl->setGaitByName("metachronal_gait");
+        break;
+    default:
+        return false;
     }
+
+    // Update BodyPoseController with current gait type for startup sequence selection
+    if (result && body_pose_ctrl) {
+        body_pose_ctrl->setCurrentGaitType(gait);
+    }
+
+    return result;
 }
 
 // Gait sequence planning - ARCHITECTURE: Use WalkController with LegStepper

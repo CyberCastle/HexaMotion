@@ -20,6 +20,9 @@ model_test: model_test.cpp ../src/math_utils.cpp ../src/robot_model.cpp
 pose_controller_test: pose_controller_test.cpp ../src/body_pose_controller.cpp ../src/robot_model.cpp ../src/math_utils.cpp ../src/body_pose_config_factory.cpp ../src/leg.cpp ../src/leg_poser.cpp
 	$(CXX) $(CXXFLAGS) $^ -o $@
 
+body_pose_controller_gait_test: body_pose_controller_gait_test.cpp ../src/body_pose_controller.cpp ../src/robot_model.cpp ../src/math_utils.cpp ../src/body_pose_config_factory.cpp ../src/leg.cpp ../src/leg_poser.cpp
+	$(CXX) $(CXXFLAGS) $^ -o $@
+
 leg_poser_bezier_test: leg_poser_bezier_test.cpp ../src/leg_poser.cpp ../src/robot_model.cpp ../src/math_utils.cpp ../src/leg.cpp
 	$(CXX) $(CXXFLAGS) $^ -o $@
 

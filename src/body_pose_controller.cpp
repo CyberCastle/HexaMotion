@@ -28,7 +28,7 @@ class BodyPoseController::LegPoserImpl {
 
 BodyPoseController::BodyPoseController(RobotModel &m, const BodyPoseConfiguration &config)
     : model(m), body_pose_config(config), auto_pose_enabled(true), trajectory_in_progress(false),
-      trajectory_progress(0.0), trajectory_step_count(0) {
+      trajectory_progress(0.0), trajectory_step_count(0), current_gait_type_(TRIPOD_GAIT) {
 
     // Initialize leg posers
     for (int i = 0; i < NUM_LEGS; i++) {
@@ -444,10 +444,32 @@ bool BodyPoseController::executeStartupSequence(Leg legs[NUM_LEGS]) {
         sequence_initialized = true;
     }
 
-    // Use stepToNewStance for tripod coordination (OpenSHC style)
+    // OpenSHC Architecture Compliance:
+    // According to OpenSHC documentation and implementation:
+    // - stepToNewStance() is exclusively for tripod gait coordination
+    //   "The stepping motion is coordinated such that half of the legs execute the step at any one time
+    //    (for a hexapod this results in a Tripod stepping coordination)"
+    // - directStartup() is for all other gaits (wave, ripple, metachronal, etc.)
+    //   "moves them in a linear trajectory directly from their current tip position to its default tip position...
+    //    The joint states for each leg are saved for the default tip position and then the joint moved
+    //    independently from initial position to saved default positions"
+
     double step_height = body_pose_config.swing_height;
     double step_time = 1.0 / DEFAULT_STEP_FREQUENCY; // Default 1Hz step frequency
-    bool complete = stepToNewStance(legs, step_height, step_time);
+
+    // Check if we're using tripod gait - stepToNewStance is only for tripod gait
+    bool use_tripod_coordination = (current_gait_type_ == TRIPOD_GAIT);
+
+    bool complete;
+    if (use_tripod_coordination) {
+        // Use stepToNewStance for tripod gait coordination (OpenSHC style)
+        // This coordinates legs in two groups of 3, moving one group at a time
+        complete = stepToNewStance(legs, step_height, step_time);
+    } else {
+        // Use executeDirectStartup for wave, ripple, metachronal, and other gaits (OpenSHC style)
+        // This provides simultaneous leg coordination (all legs move together)
+        complete = executeDirectStartup(legs);
+    }
 
     if (complete) {
         sequence_initialized = false;

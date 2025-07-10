@@ -1,6 +1,6 @@
-#include "walk_controller.h"
 #include "leg.h"
 #include "test_stubs.h"
+#include "walk_controller.h"
 #include <cassert>
 #include <cmath>
 #include <iostream>
@@ -76,15 +76,6 @@ int main() {
     assert(metachronal_stepper);
     std::cout << "Metachronal phase offset L0: " << metachronal_stepper->getPhaseOffset() << std::endl;
     assert(metachronal_stepper->getPhaseOffset() >= 0.0 && metachronal_stepper->getPhaseOffset() <= 1.0);
-
-    // Test available gait names
-    auto available_gaits = wc.getAvailableGaitNames();
-    assert(!available_gaits.empty());
-    std::cout << "Available gaits: ";
-    for (const auto& gait : available_gaits) {
-        std::cout << gait << " ";
-    }
-    std::cout << std::endl;
 
     // Test velocity limits
     auto limits = wc.getVelocityLimits();

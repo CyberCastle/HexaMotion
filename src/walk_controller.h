@@ -174,12 +174,6 @@ class WalkController {
     std::string getCurrentGaitName() const { return current_gait_config_.gait_name; }
 
     /**
-     * @brief Get all available gait names
-     * @return Vector of available gait names
-     */
-    std::vector<std::string> getAvailableGaitNames() const;
-
-    /**
      * @brief Apply gait configuration to leg steppers
      * @param gait_config The gait configuration to apply
      */

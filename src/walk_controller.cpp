@@ -64,8 +64,6 @@ bool WalkController::setGaitConfiguration(const GaitConfiguration &gait_config) 
     // Apply the configuration to all leg steppers
     applyGaitConfigToLegSteppers(gait_config);
 
-
-
     // Update gait selection config
     gait_selection_config_.current_gait = gait_config.gait_name;
 
@@ -90,12 +88,6 @@ bool WalkController::setGaitByName(const std::string &gait_name) {
     }
     // Apply the gait configuration
     return setGaitConfiguration(gait_config);
-}
-
-std::vector<std::string> WalkController::getAvailableGaitNames() const {
-    // Return available gait names from factory
-    std::vector<std::string> names = {"tripod_gait", "wave_gait", "ripple_gait", "metachronal_gait", "adaptive_gait"};
-    return names;
 }
 
 void WalkController::applyGaitConfigToLegSteppers(const GaitConfiguration &gait_config) {
@@ -392,7 +384,7 @@ void WalkController::updateWalk(const Point3D &linear_velocity_input, double ang
         // Calculate local phase using step cycle and leg offset
         int current_phase = leg_stepper->getPhase();
         double local_phase = static_cast<double>(current_phase) /
-                              static_cast<double>(current_gait_config_.step_cycle.period_);
+                             static_cast<double>(current_gait_config_.step_cycle.period_);
         // Usar los parámetros de marcha de GaitConfiguration
         leg_stepper->updateWithPhase(local_phase, current_gait_config_.step_length, time_delta_);
     }

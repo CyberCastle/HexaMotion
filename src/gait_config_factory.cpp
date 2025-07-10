@@ -46,7 +46,7 @@ GaitConfiguration createWaveGaitConfig(const Parameters &params) {
     // Velocity limits parameters (unified configuration)
     config.stance_ratio = (double)config.phase_config.stance_phase / total_phase;
     config.swing_ratio = (double)config.phase_config.swing_phase / total_phase;
-    config.time_to_max_stride = 2.0; // Default conservative value for wave gait
+    config.time_to_max_stride = 2.0;   // Default conservative value for wave gait
     config.stance_span_modifier = 0.0; // OpenSHC: configurable, por defecto 0.0
 
     config.description = "Wave gait: Most stable gait with sequential leg movement";
@@ -88,7 +88,7 @@ GaitConfiguration createTripodGaitConfig(const Parameters &params) {
     // Velocity limits parameters (unified configuration)
     config.stance_ratio = (double)config.phase_config.stance_phase / total_phase;
     config.swing_ratio = (double)config.phase_config.swing_phase / total_phase;
-    config.time_to_max_stride = 1.5; // Faster than wave gait
+    config.time_to_max_stride = 1.5;   // Faster than wave gait
     config.stance_span_modifier = 0.0; // OpenSHC: configurable, por defecto 0.0
 
     config.description = "Tripod gait: Balanced speed and stability with alternating tripods";
@@ -133,7 +133,7 @@ GaitConfiguration createRippleGaitConfig(const Parameters &params) {
     config.max_velocity = 150.0;                        // Faster movement
     config.stability_factor = 0.60;                     // Moderate stability
     config.supports_rough_terrain = false;              // Less suitable for rough terrain
-    config.stance_span_modifier = 0.0; // OpenSHC: configurable, por defecto 0.0
+    config.stance_span_modifier = 0.0;                  // OpenSHC: configurable, por defecto 0.0
 
     // Velocity limits parameters (unified configuration)
     config.stance_ratio = (double)config.phase_config.stance_phase / total_phase;
