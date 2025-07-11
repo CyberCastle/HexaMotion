@@ -37,32 +37,34 @@ RobotModel::RobotModel(const Parameters &p) : params(p) {
 
 void RobotModel::initializeDH() {
 
-    // Initialize default DH parameters if custom parameters are not used
+    // Initialize default DH parameters if custom parameters are not used.
+    // The analytic model pitches the femur and tibia about the Y axis. We
+    // replicate that behavior by later applying dhTransformY on rows 2 and 3.
     if (!params.use_custom_dh_parameters) {
         for (int l = 0; l < NUM_LEGS; ++l) {
-            // ── Fila 0: base rígida ───────────────────────────
+            // ── Row 0: fixed base ────────────────────────────
             dh_transforms[l][0][0] = params.hexagon_radius; // a0 = 200mm
             dh_transforms[l][0][1] = 0.0f;                  // alpha0
             dh_transforms[l][0][2] = 0.0f;                  // d1
-            dh_transforms[l][0][3] = BASE_THETA_OFFSETS[l]; // θ0  (fijo)
+            dh_transforms[l][0][3] = BASE_THETA_OFFSETS[l]; // θ0 (fixed)
 
-            // ── Fila 1: servo yaw + coxa ─────────────────────
+            // ── Row 1: yaw servo + coxa ─────────────────────
             dh_transforms[l][1][0] = params.coxa_length;    // a1 = 50
             dh_transforms[l][1][1] = 0.0f;                  // alpha1
             dh_transforms[l][1][2] = 0.0f;                  // d2
-            dh_transforms[l][1][3] = 0.0f;                  // θ1 offset (suma ψ)
+            dh_transforms[l][1][3] = 0.0f;                  // θ1 offset (adds ψ)
 
-            // ── Fila 2: servo femur-pitch ────────────────────
+            // ── Row 2: femur pitch servo ────────────────────
             dh_transforms[l][2][0] = params.femur_length;   // a2 = 101
             dh_transforms[l][2][1] = 0.0f;                  // alpha2
             dh_transforms[l][2][2] = 0.0f;                  // d3
-            dh_transforms[l][2][3] = 0.0f;                  // θ2 offset (suma θ₁)
+            dh_transforms[l][2][3] = 0.0f;                  // θ2 offset (adds θ₁)
 
-            // ── Fila 3: servo knee-pitch + tibia ─────────────
+            // ── Row 3: knee pitch servo + tibia ─────────────
             dh_transforms[l][3][0] = 0.0f;                  // a3
             dh_transforms[l][3][1] = 0.0f;                  // alpha3
             dh_transforms[l][3][2] = -params.tibia_length;  // d4 = -208
-            dh_transforms[l][3][3] = 0.0f;                  // θ3 offset (suma θ₂)
+            dh_transforms[l][3][3] = 0.0f;                  // θ3 offset (adds θ₂)
         }
     } else {
         // Copy custom DH parameters provided in params.dh_parameters
@@ -239,7 +241,9 @@ Eigen::Matrix4d RobotModel::legTransform(int leg_index, const JointAngles &q) co
 
     const double joint_rad[DOF_PER_LEG] = {q.coxa, q.femur, q.tibia};
 
-    // Apply joint transforms
+    // Apply joint transforms.
+    // Femur and tibia joints pitch about the Y axis, so rows 2 and 3 use
+    // dhTransformY instead of the standard Z-axis version.
     for (int j = 1; j <= DOF_PER_LEG; ++j) {
         double a = dh_transforms[leg_index][j][0];      // link length
         double alpha = dh_transforms[leg_index][j][1];  // twist angle
@@ -302,7 +306,8 @@ std::vector<Eigen::Matrix4d> RobotModel::buildDHTransforms(int leg, const JointA
 
     const double joint_rad[DOF_PER_LEG] = {q.coxa, q.femur, q.tibia};
 
-    // Build transforms step by step using DH parameters
+    // Build transforms step by step using DH parameters.
+    // As above, pitch joints require the Y-axis transform variant.
     for (int j = 1; j <= DOF_PER_LEG; ++j) {
         double a = dh_transforms[leg][j][0];      // link length
         double alpha = dh_transforms[leg][j][1];  // twist angle

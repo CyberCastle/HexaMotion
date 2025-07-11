@@ -96,6 +96,9 @@ Eigen::Matrix<T, 4, 4> dhTransform(T a, T alpha, T d, T theta) {
 
 template <typename T>
 Eigen::Matrix<T, 4, 4> dhTransformY(T a, T alpha, T d, T theta) {
+
+    // Similar to dhTransform but rotates around the Y axis. This matches
+    // the analytic model where femur and tibia joints pitch about Y.
     Eigen::Matrix<T, 4, 4> R_y = Eigen::Matrix<T, 4, 4>::Identity();
     R_y.block(0, 0, 3, 3) =
         Eigen::AngleAxis<T>(theta, Eigen::Matrix<T, 3, 1>::UnitY()).toRotationMatrix();

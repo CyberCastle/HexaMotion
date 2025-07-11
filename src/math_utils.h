@@ -67,7 +67,13 @@ Eigen::Vector4d quaternionSlerp(const Eigen::Vector4d &q1, const Eigen::Vector4d
 template <typename T>
 Eigen::Matrix<T, 4, 4> dhTransform(T a, T alpha, T d, T theta);
 
-/** Generic DH transform with rotation around the Y axis (angles in radians). */
+/**
+ * @brief Generic DH transform rotating about the Y axis.
+ *
+ * This variant is used for joints that pitch instead of yaw so the
+ * kinematic chain matches the analytic leg model.
+ * @tparam T Floating point type.
+ */
 template <typename T>
 Eigen::Matrix<T, 4, 4> dhTransformY(T a, T alpha, T d, T theta);
 
