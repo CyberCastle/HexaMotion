@@ -338,7 +338,7 @@ int main() {
     std::cout << "  - Limitaciones reales de articulaciones aplicadas" << std::endl;
     std::cout << "  - Coxa: ±65°, Fémur: ±75°, Tibia: ±45°" << std::endl;
     std::cout << "  - Disposición hexagonal con BASE_THETA_OFFSETS" << std::endl;
-    std::cout << "  - Altura objetivo: 120mm (altura nominal del robot)" << std::endl;
+    std::cout << "  - Altura objetivo: 208mm (altura nominal del robot)" << std::endl;
     std::cout << "Leyenda:" << std::endl;
     std::cout << "  - H_Error: Error de altura respecto al objetivo (mm)" << std::endl;
     std::cout << "  - T_Angle: Ángulo de la tibia respecto al suelo (°)" << std::endl;

@@ -62,7 +62,7 @@ Parameters createTestParameters() {
     params.hexagon_radius = 120.0;
     params.coxa_length = 50.0;
     params.femur_length = 80.0;
-    params.tibia_length = 120.0;
+    params.tibia_length = 208.0;
     params.robot_height = 80.0;
     params.control_frequency = 100.0;
 

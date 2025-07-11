@@ -44,7 +44,7 @@ class ManualBodyPoseController {
 
         BodyPoseState() : body_position(0, 0, 0), body_rotation(0, 0, 0),
                       body_quaternion(1, 0, 0, 0), // Identity quaternion
-                      body_height(120.0f), pose_blend_factor(1.0f),
+                      body_height(208.0f), pose_blend_factor(1.0f),
                       pose_active(false), use_quaternion(false) {
             for (int i = 0; i < NUM_LEGS; i++) {
                 leg_positions[i] = Point3D(0, 0, 0);

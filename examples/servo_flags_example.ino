@@ -159,8 +159,8 @@ void setup() {
     params.hexagon_radius = 100.0f;
     params.coxa_length = 40.0f;
     params.femur_length = 80.0f;
-    params.tibia_length = 120.0f;
-    params.robot_height = 120.0f;
+    params.tibia_length = 208.0f;
+    params.robot_height = 208.0f;
     params.control_frequency = 50.0f;
     params.default_servo_speed = 1.0f;
 

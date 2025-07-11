@@ -15,7 +15,7 @@ int main() {
     params.coxa_length = 50.0;
     params.femur_length = 101.0;
     params.tibia_length = 208.0;
-    params.robot_height = 120.0;
+    params.robot_height = 208.0;
     params.robot_weight = 6.5;
     params.center_of_mass = Eigen::Vector3d(0.0, 0.0, 0.0);
     params.coxa_angle_limits[0] = -90.0;

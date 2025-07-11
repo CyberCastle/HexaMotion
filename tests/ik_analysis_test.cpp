@@ -13,7 +13,7 @@ int main() {
     p.coxa_length = 50;
     p.femur_length = 101;
     p.tibia_length = 208;
-    p.robot_height = 120;
+    p.robot_height = 208;
     p.control_frequency = 50;
     p.coxa_angle_limits[0] = -65;
     p.coxa_angle_limits[1] = 65;
@@ -210,7 +210,7 @@ int main() {
         Point3D(300.0, 0.0, -200.0),    // Forward position
         Point3D(200.0, 100.0, -150.0),  // Diagonal position
         Point3D(150.0, -50.0, -180.0),  // Side position
-        Point3D(250.0, 0.0, -120.0)     // Higher position
+        Point3D(250.0, 0.0, -208.0)     // Higher position
     };
 
     for (size_t i = 0; i < test_targets.size(); ++i) {

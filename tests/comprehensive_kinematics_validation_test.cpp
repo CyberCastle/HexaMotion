@@ -361,7 +361,7 @@ class ComprehensiveKinematicsValidator {
                 Point3D(-100, 0, -80), // Backward reach
                 Point3D(0, 100, -80),  // Side reach
                 Point3D(0, -100, -80), // Opposite side reach
-                Point3D(80, 80, -120), // Diagonal reach
+                Point3D(80, 80, -208), // Diagonal reach
                 Point3D(0, 0, -60)     // High position
             };
 
@@ -514,7 +514,7 @@ int main() {
         p.coxa_length = 50;
         p.femur_length = 101;
         p.tibia_length = 208;
-        p.robot_height = 120;
+        p.robot_height = 208;
         p.control_frequency = 50;
         p.coxa_angle_limits[0] = -65;
         p.coxa_angle_limits[1] = 65;

@@ -225,7 +225,7 @@ void ManualPoseController::initializeDefaultPresets() {
     pose_presets_["neutral"] = neutral_pose;
 
     PoseState high_pose;
-    high_pose.body_height = 120.0f;
+    high_pose.body_height = 208.0f;
     pose_presets_["high"] = high_pose;
 
     PoseState low_pose;

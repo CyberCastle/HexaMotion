@@ -711,7 +711,7 @@ int main() {
     assert(p.coxa_length == 50.0f);
     assert(p.femur_length == 101.0f);
     assert(p.tibia_length == 208.0f);
-    assert(p.robot_height == 120.0f);
+    assert(p.robot_height == 208.0f);
     assert(p.control_frequency == 50.0f);
 
     // Initialize locomotion system

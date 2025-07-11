@@ -30,7 +30,7 @@ private:
         p.coxa_length = 50;
         p.femur_length = 101;
         p.tibia_length = 208;
-        p.robot_height = 120;
+        p.robot_height = 208;
         p.robot_weight = 6.5;
         p.control_frequency = 50;
         p.coxa_angle_limits[0] = -65;
@@ -60,7 +60,7 @@ private:
         double radius = 200.0; // hexagon radius
         double x = radius * cos(math_utils::degreesToRadians(angle));
         double y = radius * sin(math_utils::degreesToRadians(angle));
-        return Point3D(x, y, -120.0); // robot height
+        return Point3D(x, y, -208.0); // robot height
     }
 };
 

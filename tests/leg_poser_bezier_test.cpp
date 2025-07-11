@@ -14,7 +14,7 @@ int main() {
     p.coxa_length = 50;
     p.femur_length = 101;
     p.tibia_length = 208;
-    p.robot_height = 120;
+    p.robot_height = 208;
     p.control_frequency = 50;
     p.coxa_angle_limits[0] = -65;
     p.coxa_angle_limits[1] = 65;
@@ -42,7 +42,7 @@ int main() {
 
     // Test 2: Set target position and test Bezier trajectory
     std::cout << "\n--- Test 2: Bezier Trajectory Test ---" << std::endl;
-    Point3D target_pos(50, 0, -120); // Move 50mm forward
+    Point3D target_pos(50, 0, -208); // Move 50mm forward
     double step_height = 30; // 30mm lift height
     double step_time = 2.0; // 2 seconds
 
@@ -98,7 +98,7 @@ int main() {
     leg_poser.resetStepToPosition();
     leg.setCurrentTipPositionGlobal(initial_pos);
 
-    Point3D target_pos2(0, 30, -120); // Move 30mm to the side
+    Point3D target_pos2(0, 30, -208); // Move 30mm to the side
     double step_height2 = 20; // 20mm lift height
     double step_time2 = 1.5; // 1.5 seconds
 

@@ -25,7 +25,7 @@ int main() {
     Parameters robot_params;
     robot_params.coxa_length = 50.0f;
     robot_params.femur_length = 80.0f;
-    robot_params.tibia_length = 120.0f;
+    robot_params.tibia_length = 208.0f;
 
     RobotModel model(robot_params);
 

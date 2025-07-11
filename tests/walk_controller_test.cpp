@@ -310,7 +310,7 @@ void testExternalTargetHandling(LegStepper &stepper, Leg &leg) {
 
     // Set external target
     LegStepperExternalTarget target;
-    target.position = Point3D(50.0, 30.0, 120.0);
+            target.position = Point3D(50.0, 30.0, 208.0);
     target.swing_clearance = 15.0;
     target.frame_id = "robot_frame";
     target.defined = true;
@@ -537,7 +537,7 @@ int main() {
     p.coxa_length = 50;
     p.femur_length = 101;
     p.tibia_length = 208;
-    p.robot_height = 120;
+    p.robot_height = 208;
     p.control_frequency = 50;
     p.coxa_angle_limits[0] = -65;
     p.coxa_angle_limits[1] = 65;
