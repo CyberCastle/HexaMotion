@@ -67,8 +67,21 @@ Eigen::Vector4d quaternionSlerp(const Eigen::Vector4d &q1, const Eigen::Vector4d
 template <typename T>
 Eigen::Matrix<T, 4, 4> dhTransform(T a, T alpha, T d, T theta);
 
+/**
+ * @brief Generic DH transform rotating about the Y axis.
+ *
+ * This variant is used for joints that pitch instead of yaw so the
+ * kinematic chain matches the analytic leg model.
+ * @tparam T Floating point type.
+ */
+template <typename T>
+Eigen::Matrix<T, 4, 4> dhTransformY(T a, T alpha, T d, T theta);
+
 /** Float-specialized DH transform for backwards compatibility. */
 Eigen::Matrix4d dhTransform(double a, double alpha, double d, double theta);
+
+/** Float-specialized DH transform with Y-axis rotation. */
+Eigen::Matrix4d dhTransformY(double a, double alpha, double d, double theta);
 
 /**
  * @brief Evaluate a quadratic Bezier curve.
