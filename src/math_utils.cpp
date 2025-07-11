@@ -94,11 +94,35 @@ Eigen::Matrix<T, 4, 4> dhTransform(T a, T alpha, T d, T theta) {
     return transform;
 }
 
+template <typename T>
+Eigen::Matrix<T, 4, 4> dhTransformY(T a, T alpha, T d, T theta) {
+    Eigen::Matrix<T, 4, 4> R_y = Eigen::Matrix<T, 4, 4>::Identity();
+    R_y.block(0, 0, 3, 3) =
+        Eigen::AngleAxis<T>(theta, Eigen::Matrix<T, 3, 1>::UnitY()).toRotationMatrix();
+
+    Eigen::Matrix<T, 4, 4> T_z = Eigen::Matrix<T, 4, 4>::Identity();
+    T_z(2, 3) = d;
+
+    Eigen::Matrix<T, 4, 4> T_x = Eigen::Matrix<T, 4, 4>::Identity();
+    T_x(0, 3) = a;
+
+    Eigen::Matrix<T, 4, 4> R_x = Eigen::Matrix<T, 4, 4>::Identity();
+    R_x.block(0, 0, 3, 3) =
+        Eigen::AngleAxis<T>(alpha, Eigen::Matrix<T, 3, 1>::UnitX()).toRotationMatrix();
+
+    return R_y * T_z * T_x * R_x;
+}
+
 // Explicit instantiations for common precisions
 template Eigen::Matrix4d dhTransform<double>(double, double, double, double);
+template Eigen::Matrix4d dhTransformY<double>(double, double, double, double);
 
 Eigen::Matrix4d dhTransform(double a, double alpha, double d, double theta) {
     return dhTransform<double>(a, alpha, d, theta);
+}
+
+Eigen::Matrix4d dhTransformY(double a, double alpha, double d, double theta) {
+    return dhTransformY<double>(a, alpha, d, theta);
 }
 
 Eigen::Vector3d quaternionToEuler(const Eigen::Vector4d &quaternion) {

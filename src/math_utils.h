@@ -67,8 +67,15 @@ Eigen::Vector4d quaternionSlerp(const Eigen::Vector4d &q1, const Eigen::Vector4d
 template <typename T>
 Eigen::Matrix<T, 4, 4> dhTransform(T a, T alpha, T d, T theta);
 
+/** Generic DH transform with rotation around the Y axis (angles in radians). */
+template <typename T>
+Eigen::Matrix<T, 4, 4> dhTransformY(T a, T alpha, T d, T theta);
+
 /** Float-specialized DH transform for backwards compatibility. */
 Eigen::Matrix4d dhTransform(double a, double alpha, double d, double theta);
+
+/** Float-specialized DH transform with Y-axis rotation. */
+Eigen::Matrix4d dhTransformY(double a, double alpha, double d, double theta);
 
 /**
  * @brief Evaluate a quadratic Bezier curve.
