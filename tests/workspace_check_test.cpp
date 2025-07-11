@@ -11,7 +11,7 @@ int main() {
     p.coxa_length = 50;
     p.femur_length = 101;
     p.tibia_length = 208;
-    p.robot_height = 120;
+    p.robot_height = 208;
     p.control_frequency = 50;
     p.coxa_angle_limits[0] = -65;
     p.coxa_angle_limits[1] = 65;
@@ -46,7 +46,7 @@ int main() {
 
     // Test with different targets that should be reachable
     std::vector<Point3D> test_targets = {
-        Point3D(120.0, 0.0, -150.0), // Forward position
+        Point3D(208.0, 0.0, -150.0), // Forward position
         Point3D(100.0, 0.0, -180.0), // Forward, lower
         Point3D(80.0, 0.0, -160.0),  // Similar to problematic but centered
         Point3D(60.0, 0.0, -140.0),  // Closer, higher

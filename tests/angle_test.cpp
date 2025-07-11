@@ -13,7 +13,7 @@ int main() {
     p.coxa_length = 50;
     p.femur_length = 101;
     p.tibia_length = 208;
-    p.robot_height = 120;
+    p.robot_height = 208;
     p.coxa_angle_limits[0] = -90;
     p.coxa_angle_limits[1] = 90;
     p.femur_angle_limits[0] = -90;
@@ -27,7 +27,7 @@ int main() {
     DummyServo servos;
     // Create a default pose configuration
     BodyPoseConfiguration pose_config(p);
-    pose_config.body_clearance = 120.0;
+    pose_config.body_clearance = 208.0;
     sys.initialize(&imu, &fsr, &servos, pose_config);
 
     std::cout << "\n=== Test Individual Joint Effects ===" << std::endl;

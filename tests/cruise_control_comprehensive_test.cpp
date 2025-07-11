@@ -48,7 +48,7 @@ class CruiseControlComprehensiveTest {
         params.coxa_length = 50;
         params.femur_length = 101;
         params.tibia_length = 208;
-        params.robot_height = 120;
+        params.robot_height = 208;
         params.control_frequency = 50;
         params.coxa_angle_limits[0] = -65;
         params.coxa_angle_limits[1] = 65;

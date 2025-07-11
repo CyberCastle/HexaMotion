@@ -93,7 +93,7 @@ void testWorkspaceValidatorIntegration() {
     assert_test(params.coxa_length == 50.0f, "Coxa length should be 50mm");
     assert_test(params.femur_length == 101.0f, "Femur length should be 101mm");
     assert_test(params.tibia_length == 208.0f, "Tibia length should be 208mm");
-    assert_test(params.robot_height == 120.0f, "Robot height should be 120mm");
+    assert_test(params.robot_height == 208.0f, "Robot height should be 208mm");
     assert_test(params.control_frequency == 50.0f, "Control frequency should be 50Hz");
 
     RobotModel model(params);
@@ -106,7 +106,7 @@ void testWorkspaceValidatorIntegration() {
 
     // Test 1: Basic validation
     std::cout << "Test 1: Basic validation..." << std::endl;
-    Point3D test_position(100.0f, 0.0f, -120.0f);
+    Point3D test_position(100.0f, 0.0f, -208.0f);
     Point3D dummy_positions[NUM_LEGS];
     for (int i = 0; i < NUM_LEGS; i++) {
         dummy_positions[i] = Point3D(0, 0, 0);

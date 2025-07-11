@@ -27,7 +27,7 @@ public:
 
         BodyPoseState()
             : position(0, 0, 0), euler_angles(0, 0, 0), quaternion(1, 0, 0, 0),
-              height(120.0), use_quaternion(false), blend_factor(1.0), pose_active(false) {}
+              height(0.0), use_quaternion(false), blend_factor(1.0), pose_active(false) {}
     };
 
     /**
@@ -58,7 +58,7 @@ public:
         double time_to_start;                //< The time to complete a direct start up
 
         BodyPoseConfig()
-            : body_clearance(120.0), swing_height(0.02), gravity_aligned_tips(false),
+            : body_clearance(208.0), swing_height(0.02), gravity_aligned_tips(false),
               force_symmetric_pose(false), auto_pose_type("default"), start_up_sequence(false), time_to_start(2.0) {}
     };
 

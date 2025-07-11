@@ -1,8 +1,8 @@
 #ifndef BODY_POSE_CONFIG_FACTORY_H
 #define BODY_POSE_CONFIG_FACTORY_H
 
-#include "robot_model.h"
 #include "body_pose_config.h"
+#include "robot_model.h"
 
 /**
  * @file body_pose_config_factory.h
@@ -11,6 +11,16 @@
  * This module separates the pose configuration creation logic from the data structures,
  * allowing pose_controller to only depend on data structures defined in pose_config.h
  */
+
+/**
+ * @brief Estructura para ángulos calculados por IK analítico (OpenSHC)
+ */
+struct CalculatedServoAngles {
+    double coxa;  // coxa servo angle (degrees)
+    double femur; // femur servo angle (degrees)
+    double tibia; // tibia servo angle (degrees)
+    bool valid;   // solution validity flag
+};
 
 /**
  * @brief Calculate hexagonal leg stance positions based on robot parameters
@@ -71,5 +81,13 @@ AutoPoseConfiguration createConservativeAutoPoseConfiguration(const Parameters &
  * @return High-speed auto-pose configuration with increased amplitudes
  */
 AutoPoseConfiguration createHighSpeedAutoPoseConfiguration(const Parameters &params);
+
+/**
+ * @brief Calcula los ángulos de servo para una altura dada usando IK analítico (OpenSHC)
+ * @param target_height_mm Altura objetivo en milímetros
+ * @param params Parámetros del robot
+ * @return Ángulos de servo calculados (estructura CalculatedServoAngles)
+ */
+CalculatedServoAngles calculateServoAnglesForHeight(double target_height_mm, const Parameters &params);
 
 #endif // BODY_POSE_CONFIG_FACTORY_H

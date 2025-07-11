@@ -82,7 +82,7 @@ void setup() {
     params.coxa_length = 50;       // 50mm coxa
     params.femur_length = 101;     // 101mm femur
     params.tibia_length = 208;     // 208mm tibia
-    params.robot_height = 120;     // 120mm height
+    params.robot_height = 208;     // 208mm height
     params.control_frequency = 50; // 50Hz control
 
     // Set joint angle limits

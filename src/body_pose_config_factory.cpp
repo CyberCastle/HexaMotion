@@ -14,7 +14,7 @@
  * - Configuration matches OpenSHC's default.yaml structure
  *
  * Physical robot characteristics from AGENTS.md:
- * - Robot height: 120 mm
+ * - Robot height: 208 mm
  * - Body hexagon radius: 200 mm
  * - Coxa length: 50 mm
  * - Femur length: 101 mm
@@ -54,15 +54,7 @@ std::array<LegStancePosition, NUM_LEGS> calculateHexagonalStancePositions(const 
  * @return Calculated individual servo angles or default values if no solution
  *         is found.
  */
-struct CalculatedServoAngles {
-    double coxa;  // coxa servo angle (degrees)
-    double femur; // femur servo angle (degrees)
-    double tibia; // tibia servo angle (degrees)
-    bool valid;   // solution validity flag
-};
-
-CalculatedServoAngles calculateServoAnglesForHeight(double target_height_mm,
-                                                   const Parameters &params) {
+CalculatedServoAngles calculateServoAnglesForHeight(double target_height_mm, const Parameters &params) {
     CalculatedServoAngles best{0.0, 0.0, 0.0, false};
     double bestErr = std::numeric_limits<double>::infinity();
 
@@ -127,32 +119,33 @@ CalculatedServoAngles calculateServoAnglesForHeight(double target_height_mm,
  * the femur remains horizontal, in line with the coxa. The tibia, on the other hand,
  * remains vertical, perpendicular to the ground. This allows the robot to stand stably by default."
  * However, with 0° angles, the robot height would be 208mm (full tibia length).
- * To achieve the target height of 120mm, we calculate the optimal joint angles.
+ * To achieve the target height of 208mm, we calculate the optimal joint angles.
  *
- * For the given robot dimensions (coxa=50mm, femur=101mm, tibia=208mm, height=120mm),
+ * For the given robot dimensions (coxa=50mm, femur=101mm, tibia=208mm, height=208mm),
  * the proper standing configuration should be symmetric across all legs.
  * @return Array of standing pose joint configurations
  */
 std::array<StandingPoseJoints, NUM_LEGS> getDefaultStandingPoseJoints(const Parameters &params) {
     std::array<StandingPoseJoints, NUM_LEGS> joints{};
 
-    // Build a temporary model to reuse the kinematics functions
-    RobotModel model(params);
-    auto stance_positions = calculateHexagonalStancePositions(params);
+    // Calculate servo angles analytically to guarantee the desired height
+    CalculatedServoAngles calc =
+        calculateServoAnglesForHeight(params.robot_height, params);
 
     for (int i = 0; i < NUM_LEGS; i++) {
-        Point3D target(stance_positions[i].x, stance_positions[i].y, -params.robot_height);
-        JointAngles angles = model.inverseKinematicsGlobalCoordinates(i, target);
-
-        if (model.checkJointLimits(i, angles)) {
-            joints[i].coxa = angles.coxa;
-            joints[i].femur = angles.femur;
-            joints[i].tibia = angles.tibia;
+        if (calc.valid) {
+            joints[i].coxa = 0.0; // Coxa angle is 0° for radial alignment
+            joints[i].femur = math_utils::degreesToRadians(calc.femur);
+            joints[i].tibia = math_utils::degreesToRadians(calc.tibia);
         } else {
-            // Fallback to neutral configuration in radians
-            joints[i].coxa = 0.0;
-            joints[i].femur = math_utils::degreesToRadians(30.0);
-            joints[i].tibia = math_utils::degreesToRadians(20.0);
+            // Fallback to a neutral configuration
+            // Fine-tuned angles that achieve exactly -208mm height:
+            // femur=0°, tibia=0° gives FK_Z = -208.0mm (error = 0.0mm)
+            // This is the precise configuration for the target robot height
+            // calculated with finetune_angles_test.cpp
+            joints[i].coxa = 0.0; // Coxa angle is 0° for radial alignment
+            joints[i].femur = math_utils::degreesToRadians(0.0);
+            joints[i].tibia = math_utils::degreesToRadians(0.0);
         }
     }
 
@@ -176,14 +169,14 @@ BodyPoseConfiguration createPoseConfiguration(const Parameters &params, const st
     config.time_to_start = 6.0f;      // Match OpenSHC default.yaml
 
     // OpenSHC equivalent body clearance and swing parameters
-    config.body_clearance = params.robot_height;        // Body clearance in millimeters
-    config.swing_height = 20.0f;                        // Default 20mm swing height (OpenSHC typical)
+    config.body_clearance = params.robot_height; // Body clearance in millimeters
+    config.swing_height = 20.0f;                 // Default 20mm swing height (OpenSHC typical)
 
     // OpenSHC equivalent pose limits (from default.yaml)
-    config.max_translation = {25.0f, 25.0f, 25.0f};    // 25mm translation limits
-    config.max_rotation = {0.250f, 0.250f, 0.250f};    // 0.25 radian rotation limits
-    config.max_translation_velocity = 50.0f;            // 50mm/s velocity limit
-    config.max_rotation_velocity = 0.200f;              // 0.2 rad/s rotation limit
+    config.max_translation = {25.0f, 25.0f, 25.0f}; // 25mm translation limits
+    config.max_rotation = {0.250f, 0.250f, 0.250f}; // 0.25 radian rotation limits
+    config.max_translation_velocity = 50.0f;        // 50mm/s velocity limit
+    config.max_rotation_velocity = 0.200f;          // 0.2 rad/s rotation limit
 
     // OpenSHC equivalent pose control flags
     config.gravity_aligned_tips = false;          // Match OpenSHC default.yaml
@@ -264,23 +257,23 @@ AutoPoseConfiguration createAutoPoseConfiguration(const Parameters &params) {
 
     // OpenSHC auto_pose.yaml equivalent settings
     config.enabled = true;
-    config.pose_frequency = -1.0;  // Synchronize with gait cycle
+    config.pose_frequency = -1.0; // Synchronize with gait cycle
 
     // Tripod gait phase configuration (OpenSHC equivalent)
-    config.pose_phase_starts = {1, 3};  // Phase starts for compensation
-    config.pose_phase_ends = {3, 1};    // Phase ends for compensation
+    config.pose_phase_starts = {1, 3}; // Phase starts for compensation
+    config.pose_phase_ends = {3, 1};   // Phase ends for compensation
 
     // Auto-pose amplitudes (from OpenSHC auto_pose.yaml)
-    config.roll_amplitudes = {-0.015, 0.015};    // Roll compensation (radians)
-    config.pitch_amplitudes = {0.000, 0.000};    // Pitch compensation (radians)
-    config.yaw_amplitudes = {0.000, 0.000};      // Yaw compensation (radians)
-    config.x_amplitudes = {0.000, 0.000};        // X translation (millimeters)
-    config.y_amplitudes = {0.000, 0.000};        // Y translation (millimeters)
-    config.z_amplitudes = {20.0, 20.0};          // Z translation (millimeters)
+    config.roll_amplitudes = {-0.015, 0.015}; // Roll compensation (radians)
+    config.pitch_amplitudes = {0.000, 0.000}; // Pitch compensation (radians)
+    config.yaw_amplitudes = {0.000, 0.000};   // Yaw compensation (radians)
+    config.x_amplitudes = {0.000, 0.000};     // X translation (millimeters)
+    config.y_amplitudes = {0.000, 0.000};     // Y translation (millimeters)
+    config.z_amplitudes = {20.0, 20.0};       // Z translation (millimeters)
 
     // Tripod group configuration
-    config.tripod_group_a_legs = {0, 2, 4};  // AR, CR, BL
-    config.tripod_group_b_legs = {1, 3, 5};  // BR, CL, AL
+    config.tripod_group_a_legs = {0, 2, 4}; // AR, CR, BL
+    config.tripod_group_b_legs = {1, 3, 5}; // BR, CL, AL
 
     return config;
 }
@@ -294,8 +287,8 @@ AutoPoseConfiguration createConservativeAutoPoseConfiguration(const Parameters &
     AutoPoseConfiguration config = createAutoPoseConfiguration(params);
 
     // Reduced amplitudes for conservative operation
-    config.roll_amplitudes = {-0.010, 0.010};    // Reduced roll compensation
-    config.z_amplitudes = {15.0, 15.0};          // Reduced Z compensation (millimeters)
+    config.roll_amplitudes = {-0.010, 0.010}; // Reduced roll compensation
+    config.z_amplitudes = {15.0, 15.0};       // Reduced Z compensation (millimeters)
 
     return config;
 }
@@ -309,8 +302,8 @@ AutoPoseConfiguration createHighSpeedAutoPoseConfiguration(const Parameters &par
     AutoPoseConfiguration config = createAutoPoseConfiguration(params);
 
     // Increased amplitudes for high-speed operation
-    config.roll_amplitudes = {-0.020, 0.020};    // Increased roll compensation
-    config.z_amplitudes = {25.0, 25.0};          // Increased Z compensation (millimeters)
+    config.roll_amplitudes = {-0.020, 0.020}; // Increased roll compensation
+    config.z_amplitudes = {25.0, 25.0};       // Increased Z compensation (millimeters)
 
     return config;
 }

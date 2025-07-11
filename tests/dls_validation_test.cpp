@@ -33,7 +33,7 @@ int main() {
         JointAngles{0.0f, -45.0f, 90.0f},   // Original failing case
         JointAngles{30.0f, -30.0f, 60.0f},  // Moderate angles
         JointAngles{-45.0f, 45.0f, -90.0f}, // Negative angles
-        JointAngles{0.0f, -60.0f, 120.0f},  // More extreme bending
+        JointAngles{0.0f, -60.0f, 208.0f},  // More extreme bending
         JointAngles{90.0f, 0.0f, 0.0f},     // Pure rotation
         JointAngles{0.0f, 0.0f, 0.0f},      // Straight leg
         JointAngles{-30.0f, -75.0f, 135.0f} // Near limits

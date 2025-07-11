@@ -278,7 +278,7 @@ Parameters createBasicParameters() {
     params.coxa_length = 50.0f;     // mm
     params.femur_length = 101.0f;   // mm
     params.tibia_length = 208.0f;   // mm
-    params.robot_height = 120.0f;   // mm
+    params.robot_height = 208.0f;   // mm
 
     // Joint limits
     params.coxa_angle_limits[0] = -65.0f;  // degrees
