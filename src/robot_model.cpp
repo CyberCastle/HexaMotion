@@ -188,8 +188,7 @@ JointAngles RobotModel::inverseKinematicsCurrentGlobalCoordinates(int leg, const
 }
 
 Point3D RobotModel::forwardKinematicsGlobalCoordinates(int leg_index, const JointAngles &angles) const {
-    // Forward kinematics: compute full DH transform chain
-    // Use double precision for improved stability
+    // Forward kinematics using analytic leg model
     Eigen::Matrix4d transform = legTransform(leg_index, angles);
     return Point3D{transform(0, 3), transform(1, 3), transform(2, 3)};
 }
@@ -224,83 +223,101 @@ double RobotModel::getLegBaseAngleOffset(int leg_index) const {
 }
 
 Eigen::Matrix4d RobotModel::legTransform(int leg_index, const JointAngles &q) const {
-    // Base transform from DH parameters (body center to leg mount)
-    Eigen::Matrix4d T = math_utils::dhTransform<double>(
-        dh_transforms[leg_index][0][0],
-        dh_transforms[leg_index][0][1],
-        dh_transforms[leg_index][0][2],
-        dh_transforms[leg_index][0][3]);
+    const double base_angle = BASE_THETA_OFFSETS[leg_index];
 
-    const double joint_rad[DOF_PER_LEG] = {q.coxa, q.femur, q.tibia};
+    Eigen::Matrix4d T = Eigen::Matrix4d::Identity();
+    T.block<3, 3>(0, 0) =
+        Eigen::AngleAxisd(base_angle, Eigen::Vector3d::UnitZ()).toRotationMatrix();
+    T(0, 3) = params.hexagon_radius * cos(base_angle);
+    T(1, 3) = params.hexagon_radius * sin(base_angle);
 
-    // Apply joint transforms
-    for (int j = 1; j <= DOF_PER_LEG; ++j) {
-        double a = dh_transforms[leg_index][j][0];      // link length
-        double alpha = dh_transforms[leg_index][j][1];  // twist angle
-        double d = dh_transforms[leg_index][j][2];      // link offset
-        double theta0 = dh_transforms[leg_index][j][3]; // joint offset
-        double theta = theta0 + joint_rad[j - 1];       // total joint angle
-        T *= math_utils::dhTransform<double>(a, alpha, d, theta);
-    }
+    Eigen::Matrix4d R_coxa = Eigen::Matrix4d::Identity();
+    R_coxa.block<3, 3>(0, 0) =
+        Eigen::AngleAxisd(q.coxa, Eigen::Vector3d::UnitZ()).toRotationMatrix();
+    Eigen::Matrix4d T_coxa = Eigen::Matrix4d::Identity();
+    T_coxa(0, 3) = params.coxa_length;
 
+    Eigen::Matrix4d R_femur = Eigen::Matrix4d::Identity();
+    R_femur.block<3, 3>(0, 0) =
+        Eigen::AngleAxisd(q.femur, Eigen::Vector3d::UnitY()).toRotationMatrix();
+    Eigen::Matrix4d T_femur = Eigen::Matrix4d::Identity();
+    T_femur(0, 3) = params.femur_length;
+
+    Eigen::Matrix4d R_tibia = Eigen::Matrix4d::Identity();
+    R_tibia.block<3, 3>(0, 0) =
+        Eigen::AngleAxisd(q.tibia, Eigen::Vector3d::UnitY()).toRotationMatrix();
+    Eigen::Matrix4d T_tibia = Eigen::Matrix4d::Identity();
+    T_tibia(2, 3) = -params.tibia_length;
+
+    T = T * R_coxa * T_coxa * R_femur * T_femur * R_tibia * T_tibia;
     return T;
 }
 
 Eigen::Matrix3d RobotModel::calculateJacobian(int leg, const JointAngles &q, const Point3D &) const {
-    // Calculate Jacobian from DH matrices along the kinematic chain
-    // Based on syropod_highlevel_controller implementation
+    // Numerical Jacobian computation using forward kinematics
+    const double delta = JACOBIAN_DELTA;
 
-    // Build transforms step by step using DH parameters
-    std::vector<Eigen::Matrix4d> transforms = buildDHTransforms(leg, q);
+    Point3D base = forwardKinematicsGlobalCoordinates(leg, q);
 
-    // End-effector transform
-    Eigen::Matrix4d T_final = transforms[DOF_PER_LEG];
+    JointAngles qd = q;
+    qd.coxa += delta;
+    Point3D p_dx = forwardKinematicsGlobalCoordinates(leg, qd);
+    qd = q;
+    qd.femur += delta;
+    Point3D p_dy = forwardKinematicsGlobalCoordinates(leg, qd);
+    qd = q;
+    qd.tibia += delta;
+    Point3D p_dz = forwardKinematicsGlobalCoordinates(leg, qd);
 
-    // End-effector position
-    Eigen::Vector3d pe = T_final.block<3, 1>(0, 3);
-
-    // Initialize Jacobian matrix (3x3 for position only)
     Eigen::Matrix3d jacobian;
-
-    // First joint (base joint) - use standard z-axis
-    Eigen::Vector3d z0(0.0, 0.0, 1.0);
-    Eigen::Vector3d p0 = transforms[0].block<3, 1>(0, 3);
-    jacobian.col(0) = (z0.cross(pe - p0)).cast<double>();
-
-    // Remaining joints
-    for (int j = 1; j < DOF_PER_LEG; ++j) {
-        Eigen::Vector3d zj = transforms[j].block<3, 1>(0, 2); // z-axis of joint j
-        Eigen::Vector3d pj = transforms[j].block<3, 1>(0, 3); // position of joint j
-        jacobian.col(j) = (zj.cross(pe - pj)).cast<double>();
-    }
+    jacobian.col(0) = Eigen::Vector3d((p_dx.x - base.x) / delta,
+                                      (p_dx.y - base.y) / delta,
+                                      (p_dx.z - base.z) / delta);
+    jacobian.col(1) = Eigen::Vector3d((p_dy.x - base.x) / delta,
+                                      (p_dy.y - base.y) / delta,
+                                      (p_dy.z - base.z) / delta);
+    jacobian.col(2) = Eigen::Vector3d((p_dz.x - base.x) / delta,
+                                      (p_dz.y - base.y) / delta,
+                                      (p_dz.z - base.z) / delta);
 
     return jacobian;
 }
 
 // Helper method to build DH transforms for a leg
 std::vector<Eigen::Matrix4d> RobotModel::buildDHTransforms(int leg, const JointAngles &q) const {
-    // Base transform for this leg
-    Eigen::Matrix4d T_base = math_utils::dhTransform<double>(
-        dh_transforms[leg][0][0],
-        dh_transforms[leg][0][1],
-        dh_transforms[leg][0][2],
-        dh_transforms[leg][0][3]);
-
     std::vector<Eigen::Matrix4d> transforms(DOF_PER_LEG + 1);
-    transforms[0] = T_base;
 
-    const double joint_rad[DOF_PER_LEG] = {q.coxa, q.femur, q.tibia};
+    const double base_angle = BASE_THETA_OFFSETS[leg];
+    Eigen::Matrix4d T = Eigen::Matrix4d::Identity();
+    T.block<3, 3>(0, 0) =
+        Eigen::AngleAxisd(base_angle, Eigen::Vector3d::UnitZ()).toRotationMatrix();
+    T(0, 3) = params.hexagon_radius * cos(base_angle);
+    T(1, 3) = params.hexagon_radius * sin(base_angle);
+    transforms[0] = T;
 
-    // Build transforms step by step using DH parameters
-    for (int j = 1; j <= DOF_PER_LEG; ++j) {
-        double a = dh_transforms[leg][j][0];      // link length
-        double alpha = dh_transforms[leg][j][1];  // twist angle
-        double d = dh_transforms[leg][j][2];      // link offset
-        double theta0 = dh_transforms[leg][j][3]; // joint offset
-        double theta = theta0 + joint_rad[j - 1]; // total joint angle
-        transforms[j] = transforms[j - 1] *
-                        math_utils::dhTransform<double>(a, alpha, d, theta);
-    }
+    Eigen::Matrix4d R_coxa = Eigen::Matrix4d::Identity();
+    R_coxa.block<3, 3>(0, 0) =
+        Eigen::AngleAxisd(q.coxa, Eigen::Vector3d::UnitZ()).toRotationMatrix();
+    Eigen::Matrix4d T_coxa = Eigen::Matrix4d::Identity();
+    T_coxa(0, 3) = params.coxa_length;
+    T = T * R_coxa * T_coxa;
+    transforms[1] = T;
+
+    Eigen::Matrix4d R_femur = Eigen::Matrix4d::Identity();
+    R_femur.block<3, 3>(0, 0) =
+        Eigen::AngleAxisd(q.femur, Eigen::Vector3d::UnitY()).toRotationMatrix();
+    Eigen::Matrix4d T_femur = Eigen::Matrix4d::Identity();
+    T_femur(0, 3) = params.femur_length;
+    T = T * R_femur * T_femur;
+    transforms[2] = T;
+
+    Eigen::Matrix4d R_tibia = Eigen::Matrix4d::Identity();
+    R_tibia.block<3, 3>(0, 0) =
+        Eigen::AngleAxisd(q.tibia, Eigen::Vector3d::UnitY()).toRotationMatrix();
+    Eigen::Matrix4d T_tibia = Eigen::Matrix4d::Identity();
+    T_tibia(2, 3) = -params.tibia_length;
+    T = T * R_tibia * T_tibia;
+    transforms[3] = T;
 
     return transforms;
 }
