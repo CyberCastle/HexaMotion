@@ -46,23 +46,23 @@ void RobotModel::initializeDH() {
             dh_transforms[l][0][2] = 0.0f;                  // d1
             dh_transforms[l][0][3] = BASE_THETA_OFFSETS[l]; // θ0  (fijo)
 
-            // ── Fila 1: servo yaw ─────────────────────────────
-            dh_transforms[l][1][0] = 0.0f;                              // a1
-            dh_transforms[l][1][1] = 90.0f * DEGREES_TO_RADIANS_FACTOR; // alpha1 (+90°)
-            dh_transforms[l][1][2] = 0.0f;                              // d2
-            dh_transforms[l][1][3] = 0.0f;                              // θ1 offset (suma ψ)
+            // ── Fila 1: servo yaw + coxa ─────────────────────
+            dh_transforms[l][1][0] = params.coxa_length;    // a1 = 50
+            dh_transforms[l][1][1] = 0.0f;                  // alpha1
+            dh_transforms[l][1][2] = 0.0f;                  // d2
+            dh_transforms[l][1][3] = 0.0f;                  // θ1 offset (suma ψ)
 
-            // ── Fila 2: servo hip-pitch + coxa ───────────────
-            dh_transforms[l][2][0] = params.coxa_length;                // a2 = 50
-            dh_transforms[l][2][1] = 90.0f * DEGREES_TO_RADIANS_FACTOR; // alpha2 (+90°)
-            dh_transforms[l][2][2] = 0.0f;                              // d3
-            dh_transforms[l][2][3] = 0.0f;                              // θ2 offset (suma θ₁)
+            // ── Fila 2: servo femur-pitch ────────────────────
+            dh_transforms[l][2][0] = params.femur_length;   // a2 = 101
+            dh_transforms[l][2][1] = 0.0f;                  // alpha2
+            dh_transforms[l][2][2] = 0.0f;                  // d3
+            dh_transforms[l][2][3] = 0.0f;                  // θ2 offset (suma θ₁)
 
             // ── Fila 3: servo knee-pitch + tibia ─────────────
-            dh_transforms[l][3][0] = params.femur_length; // a3 = 101
-            dh_transforms[l][3][1] = 0.0f;                // alpha3
-            dh_transforms[l][3][2] = params.tibia_length; // d4 = 208
-            dh_transforms[l][3][3] = 0.0f;                // θ3 offset (suma θ₂)
+            dh_transforms[l][3][0] = 0.0f;                  // a3
+            dh_transforms[l][3][1] = 0.0f;                  // alpha3
+            dh_transforms[l][3][2] = -params.tibia_length;  // d4 = -208
+            dh_transforms[l][3][3] = 0.0f;                  // θ3 offset (suma θ₂)
         }
     } else {
         // Copy custom DH parameters provided in params.dh_parameters
@@ -246,39 +246,44 @@ Eigen::Matrix4d RobotModel::legTransform(int leg_index, const JointAngles &q) co
         double d = dh_transforms[leg_index][j][2];      // link offset
         double theta0 = dh_transforms[leg_index][j][3]; // joint offset
         double theta = theta0 + joint_rad[j - 1];       // total joint angle
-        T *= math_utils::dhTransform<double>(a, alpha, d, theta);
+        if (j >= 2) {
+            T *= math_utils::dhTransformY<double>(a, alpha, d, theta);
+        } else {
+            T *= math_utils::dhTransform<double>(a, alpha, d, theta);
+        }
     }
 
     return T;
 }
 
 Eigen::Matrix3d RobotModel::calculateJacobian(int leg, const JointAngles &q, const Point3D &) const {
-    // Calculate Jacobian from DH matrices along the kinematic chain
-    // Based on syropod_highlevel_controller implementation
+    // Numerical Jacobian computation using DH-based forward kinematics
+    const double delta = JACOBIAN_DELTA;
 
-    // Build transforms step by step using DH parameters
-    std::vector<Eigen::Matrix4d> transforms = buildDHTransforms(leg, q);
+    Point3D base = forwardKinematicsGlobalCoordinates(leg, q);
 
-    // End-effector transform
-    Eigen::Matrix4d T_final = transforms[DOF_PER_LEG];
+    JointAngles qd = q;
+    qd.coxa += delta;
+    Point3D p_dx = forwardKinematicsGlobalCoordinates(leg, qd);
 
-    // End-effector position
-    Eigen::Vector3d pe = T_final.block<3, 1>(0, 3);
+    qd = q;
+    qd.femur += delta;
+    Point3D p_dy = forwardKinematicsGlobalCoordinates(leg, qd);
 
-    // Initialize Jacobian matrix (3x3 for position only)
+    qd = q;
+    qd.tibia += delta;
+    Point3D p_dz = forwardKinematicsGlobalCoordinates(leg, qd);
+
     Eigen::Matrix3d jacobian;
-
-    // First joint (base joint) - use standard z-axis
-    Eigen::Vector3d z0(0.0, 0.0, 1.0);
-    Eigen::Vector3d p0 = transforms[0].block<3, 1>(0, 3);
-    jacobian.col(0) = (z0.cross(pe - p0)).cast<double>();
-
-    // Remaining joints
-    for (int j = 1; j < DOF_PER_LEG; ++j) {
-        Eigen::Vector3d zj = transforms[j].block<3, 1>(0, 2); // z-axis of joint j
-        Eigen::Vector3d pj = transforms[j].block<3, 1>(0, 3); // position of joint j
-        jacobian.col(j) = (zj.cross(pe - pj)).cast<double>();
-    }
+    jacobian.col(0) = Eigen::Vector3d((p_dx.x - base.x) / delta,
+                                      (p_dx.y - base.y) / delta,
+                                      (p_dx.z - base.z) / delta);
+    jacobian.col(1) = Eigen::Vector3d((p_dy.x - base.x) / delta,
+                                      (p_dy.y - base.y) / delta,
+                                      (p_dy.z - base.z) / delta);
+    jacobian.col(2) = Eigen::Vector3d((p_dz.x - base.x) / delta,
+                                      (p_dz.y - base.y) / delta,
+                                      (p_dz.z - base.z) / delta);
 
     return jacobian;
 }
@@ -304,8 +309,13 @@ std::vector<Eigen::Matrix4d> RobotModel::buildDHTransforms(int leg, const JointA
         double d = dh_transforms[leg][j][2];      // link offset
         double theta0 = dh_transforms[leg][j][3]; // joint offset
         double theta = theta0 + joint_rad[j - 1]; // total joint angle
-        transforms[j] = transforms[j - 1] *
-                        math_utils::dhTransform<double>(a, alpha, d, theta);
+        if (j >= 2) {
+            transforms[j] = transforms[j - 1] *
+                            math_utils::dhTransformY<double>(a, alpha, d, theta);
+        } else {
+            transforms[j] = transforms[j - 1] *
+                            math_utils::dhTransform<double>(a, alpha, d, theta);
+        }
     }
 
     return transforms;
