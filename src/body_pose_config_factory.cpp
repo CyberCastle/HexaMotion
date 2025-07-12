@@ -25,19 +25,40 @@
 /**
  * @brief Calculate hexagonal leg stance positions based on robot parameters
  * Following OpenSHC's stance positioning approach from default.yaml
+ * Uses DH parameter-based forward kinematics for accurate stance positioning
+ *
+ * Based on AGENTS.md physical characteristics:
+ * - Robot height: 208 mm (with all angles at 0°)
+ * - Body hexagon radius: 200 mm
+ * - Coxa length: 50 mm
+ * - Femur length: 101 mm
+ * - Tibia length: 208 mm
+ *
  * @param params Robot parameters containing dimensions and joint limits.
  * @return Array of calculated stance positions in millimeters
  */
 std::array<LegStancePosition, NUM_LEGS> calculateHexagonalStancePositions(const Parameters &params) {
     std::array<LegStancePosition, NUM_LEGS> positions;
-    double total_radius_mm = params.hexagon_radius + params.coxa_length;
-    // Create a temporary RobotModel to get leg base positions
+
+    // Create a temporary RobotModel to use DH-based calculations
     RobotModel temp_model(params);
+
+    // Calculate stance positions using DH-based forward kinematics
+    // For stance positions, we use 0° angles (neutral position) as per AGENTS.md
+    // "Physically, if the robot has all servo angles at 0°, the femur remains horizontal,
+    // in line with the coxa. The tibia, on the other hand, remains vertical, perpendicular to the ground."
+    JointAngles neutral_angles(0.0, 0.0, 0.0); // All angles at 0° for neutral stance
+
     for (int i = 0; i < NUM_LEGS; i++) {
-        Point3D base_pos = temp_model.getLegBasePosition(i);
-        positions[i].x = base_pos.x + params.coxa_length * cos(atan2(base_pos.y, base_pos.x));
-        positions[i].y = base_pos.y + params.coxa_length * sin(atan2(base_pos.y, base_pos.x));
+        // Use DH-based forward kinematics to calculate the foot position
+        // This gives us the exact position where the foot would be with 0° angles
+        Point3D foot_position = temp_model.forwardKinematicsGlobalCoordinates(i, neutral_angles);
+
+        // Store the stance position (x, y coordinates only, z is the height)
+        positions[i].x = foot_position.x;
+        positions[i].y = foot_position.y;
     }
+
     return positions;
 }
 
