@@ -38,137 +38,78 @@ bool isTibiaPerpendicularToGround(const RobotModel &model, int leg, const JointA
     return std::abs(angle - 90.0) <= tolerance_deg;
 }
 
-// Encuentra los mejores ángulos para una altura dada del robot usando fuerza bruta
+// Encuentra los mejores ángulos para una altura dada usando un buscador numérico
 std::vector<AngleSolution> findOptimalAnglesForHeight(const RobotModel &model, double target_height,
                                                       double height_tolerance = 1.0) {
     std::vector<AngleSolution> solutions;
     const Parameters &p = model.getParams();
 
-    std::cout << "Buscando soluciones para altura " << target_height << "mm..." << std::endl;
+    std::cout << "Buscando solución optimizada para altura " << target_height << "mm..." << std::endl;
     std::cout << "Limitaciones reales del robot (AGENTS.md):" << std::endl;
     std::cout << "Rango coxa: [" << p.coxa_angle_limits[0] << "°, " << p.coxa_angle_limits[1] << "°]" << std::endl;
     std::cout << "Rango fémur: [" << p.femur_angle_limits[0] << "°, " << p.femur_angle_limits[1] << "°]" << std::endl;
     std::cout << "Rango tibia: [" << p.tibia_angle_limits[0] << "°, " << p.tibia_angle_limits[1] << "°]" << std::endl;
 
-    int total_combinations = 0;
-    int valid_combinations = 0;
+    // Conversión de límites a radianes
+    double femur_min = p.femur_angle_limits[0] * M_PI / 180.0;
+    double femur_max = p.femur_angle_limits[1] * M_PI / 180.0;
+    double tibia_min = p.tibia_angle_limits[0] * M_PI / 180.0;
+    double tibia_max = p.tibia_angle_limits[1] * M_PI / 180.0;
 
-    // Estrategia de fuerza bruta: recorrer solo fémur y tibia (coxa = 30°)
-    double femur_step = 0.1; // Paso más pequeño para mayor precisión
-    double tibia_step = 0.1;
-    double coxa_deg = 30.0; // Coxa fija en 30°
+    double coxa_deg = 30.0; // Coxa fija
 
-    // Queremos la altura minima, entonces evaluamos desde el limite inferior hasta 0, lo que implica que el fémur esté apuntado hacia arriba.
-    for (double femur_deg = p.femur_angle_limits[0]; femur_deg <= 0; femur_deg += femur_step) {
-        // Queremos la altura mñinima, entonces evaluamos desde 0 hasta el limite superior de la tibia.
-        for (double tibia_deg = 0; tibia_deg <= p.tibia_angle_limits[1]; tibia_deg += tibia_step) {
-            total_combinations++;
+    // Estimación inicial cercana al rango medio
+    JointAngles angles(coxa_deg * M_PI / 180.0, 0.0, 0.0);
 
-            JointAngles test_angles(coxa_deg * M_PI / 180.0,
-                                    femur_deg * M_PI / 180.0,
-                                    tibia_deg * M_PI / 180.0);
+    auto cost = [&](const JointAngles &q) {
+        Point3D fk = model.forwardKinematicsGlobalCoordinates(0, q);
+        double h_err = std::abs(std::abs(fk.z) - target_height);
+        double t_angle = getTibiaAngleToGround(model, 0, q);
+        double o_err = t_angle - 90.0;
+        return h_err * h_err + o_err * o_err;
+    };
 
-            // Calcular posición global
-            Point3D fk_result = model.forwardKinematicsGlobalCoordinates(0, test_angles);
-            // Comparar magnitud de altura con target
-            // Error de altura: magnitud de Z contra altura objetivo
-            double height_error = std::abs(std::abs(fk_result.z) - target_height);
+    auto clamp = [&](JointAngles &q) {
+        q.femur = model.constrainAngle(q.femur, femur_min, femur_max);
+        q.tibia = model.constrainAngle(q.tibia, tibia_min, tibia_max);
+    };
 
-            // Solo considerar si la altura está dentro de la tolerancia
-            if (height_error <= height_tolerance) {
-                // printf("Coxa: %.2f°, Femur: %.2f°, Tibia: %.2f° -> Pos: (%.2f, %.2f, %.2f), Error: %.2fmm\n",
-                //        coxa_deg, femur_deg, tibia_deg,
-                //        fk_result.x, fk_result.y, fk_result.z, height_error);
-                double tibia_angle = getTibiaAngleToGround(model, 0, test_angles);
-                bool is_perpendicular = isTibiaPerpendicularToGround(model, 0, test_angles, 0.0); // Tolerancia aumentada
+    const double eps = 0.001; // Paso para gradiente numérico
+    const double lr = 0.5;    // Tasa de aprendizaje
+    for (int i = 0; i < 200; ++i) {
+        double base_cost = cost(angles);
 
-                // Solo guardar si la tibia está perpendicular
-                if (is_perpendicular) {
-                    AngleSolution solution;
-                    solution.femur_deg = femur_deg;
-                    solution.tibia_deg = tibia_deg;
-                    solution.coxa_deg = coxa_deg;
-                    solution.global_position = fk_result;
-                    solution.height_error = height_error;
-                    solution.tibia_angle = tibia_angle;
-                    solution.score = 10.0 * height_error + std::abs(tibia_angle - 90.0);
+        JointAngles q_fp = angles;
+        q_fp.femur += eps;
+        double grad_f = (cost(q_fp) - base_cost) / eps;
 
-                    solutions.push_back(solution);
-                    valid_combinations++;
-                }
-            }
+        JointAngles q_tp = angles;
+        q_tp.tibia += eps;
+        double grad_t = (cost(q_tp) - base_cost) / eps;
+
+        angles.femur -= lr * grad_f;
+        angles.tibia -= lr * grad_t;
+        clamp(angles);
+
+        if (std::sqrt(base_cost) <= height_tolerance) {
+            break;
         }
     }
 
-    std::cout << "Evaluadas " << total_combinations << " combinaciones, encontradas "
-              << valid_combinations << " válidas" << std::endl;
+    Point3D fk_res = model.forwardKinematicsGlobalCoordinates(0, angles);
+    double height_error = std::abs(std::abs(fk_res.z) - target_height);
+    double tibia_angle = getTibiaAngleToGround(model, 0, angles);
 
-    // Refinar las mejores soluciones con búsqueda más fina
-    if (!solutions.empty()) {
-        std::sort(solutions.begin(), solutions.end(),
-                  [](const AngleSolution &a, const AngleSolution &b) {
-                      return a.score < b.score;
-                  });
+    AngleSolution sol;
+    sol.femur_deg = angles.femur * 180.0 / M_PI;
+    sol.tibia_deg = angles.tibia * 180.0 / M_PI;
+    sol.coxa_deg = coxa_deg;
+    sol.global_position = fk_res;
+    sol.height_error = height_error;
+    sol.tibia_angle = tibia_angle;
+    sol.score = 10.0 * height_error + std::abs(tibia_angle - 90.0);
 
-        std::cout << "Refinando las mejores soluciones..." << std::endl;
-
-        // Tomar las mejores 3 soluciones y refinarlas (reducido por rangos más pequeños)
-        std::vector<AngleSolution> refined_solutions;
-        for (int i = 0; i < std::min(3, (int)solutions.size()); i++) {
-            const AngleSolution &base = solutions[i];
-
-            // Búsqueda fina alrededor de la mejor solución (solo fémur y tibia)
-            for (double df = -2.0; df <= 2.0; df += 0.5) {
-                for (double dt = -2.0; dt <= 2.0; dt += 0.5) {
-                    double new_femur = base.femur_deg + df;
-                    double new_tibia = base.tibia_deg + dt;
-                    double new_coxa = 0.0; // Coxa fija en 0°
-
-                    if (new_femur >= p.femur_angle_limits[0] && new_femur <= p.femur_angle_limits[1] &&
-                        new_tibia >= p.tibia_angle_limits[0] && new_tibia <= p.tibia_angle_limits[1]) {
-
-                        JointAngles test_angles(new_coxa * M_PI / 180.0,
-                                                new_femur * M_PI / 180.0,
-                                                new_tibia * M_PI / 180.0);
-
-                        Point3D fk_result = model.forwardKinematicsGlobalCoordinates(0, test_angles);
-                        // Error de altura: magnitud de Z contra altura objetivo
-                        double height_error = std::abs(std::abs(fk_result.z) - target_height);
-
-                        if (height_error <= height_tolerance) {
-                            double tibia_angle = getTibiaAngleToGround(model, 0, test_angles);
-                            bool is_perpendicular = isTibiaPerpendicularToGround(model, 0, test_angles, 3.0);
-
-                            if (is_perpendicular) {
-                                AngleSolution solution;
-                                solution.femur_deg = new_femur;
-                                solution.tibia_deg = new_tibia;
-                                solution.coxa_deg = new_coxa;
-                                solution.global_position = fk_result;
-                                solution.height_error = height_error;
-                                solution.tibia_angle = tibia_angle;
-                                solution.score = 10.0 * height_error + std::abs(tibia_angle - 90.0);
-
-                                refined_solutions.push_back(solution);
-                            }
-                        }
-                    }
-                }
-            }
-        }
-
-        // Combinar y reordenar todas las soluciones
-        solutions.insert(solutions.end(), refined_solutions.begin(), refined_solutions.end());
-
-        std::cout << "Refinamiento completado. Total de soluciones: " << solutions.size() << std::endl;
-    }
-
-    // Ordenar por puntuación final
-    std::sort(solutions.begin(), solutions.end(),
-              [](const AngleSolution &a, const AngleSolution &b) {
-                  return a.score < b.score;
-              });
-
+    solutions.push_back(sol);
     return solutions;
 }
 
@@ -277,7 +218,7 @@ int main() {
             continue;
         }
 
-        std::cout << "Encontradas " << solutions.size() << " soluciones válidas" << std::endl;
+        std::cout << "Solución encontrada" << std::endl;
 
         // Usar la mejor solución para calcular las 6 patas
         const AngleSolution &best_solution = solutions[0];
