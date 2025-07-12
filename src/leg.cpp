@@ -50,13 +50,13 @@ void Leg::setJointAngle(int joint_index, double angle) {
     }
 }
 
-bool Leg::setCurrentTipPositionGlobal(const Point3D &position) {
+bool Leg::setCurrentTipPositionGlobal(const RobotModel &model, const Point3D &position) {
     // Store the target position
     Point3D target = position;
 
     // Check if target is reachable
     double distance = sqrt(target.x * target.x + target.y * target.y + target.z * target.z);
-    double max_reach = 300.0; // Approximate max reach for hexapod
+    double max_reach = getLegReach(model.getParams());
 
     if (distance > max_reach) {
         return false; // Target too far
@@ -65,11 +65,6 @@ bool Leg::setCurrentTipPositionGlobal(const Point3D &position) {
     // Update tip position (IK will be calculated when needed)
     tip_position_ = target;
     return true;
-}
-
-void Leg::updateForwardKinematics(const RobotModel &model) {
-    // Calculate tip position from current joint angles
-    updateTipPosition(model);
 }
 
 bool Leg::updateInverseKinematics(const RobotModel &model, const Point3D &target_position) {
@@ -165,7 +160,7 @@ void Leg::initialize(const RobotModel &model, const Pose &default_stance) {
     tip_position_ = stance_tip;
 
     // Update FK to ensure consistency
-    updateForwardKinematics(model);
+    updateTipPosition(model);
 }
 
 void Leg::reset(const RobotModel &model) {
@@ -179,7 +174,7 @@ void Leg::reset(const RobotModel &model) {
     resetFSRHistory();
 
     // Update FK
-    updateForwardKinematics(model);
+    updateTipPosition(model);
 }
 
 double Leg::getLegReach(const Parameters &params) const {
@@ -219,7 +214,7 @@ bool Leg::applyIK(const RobotModel &model) {
     setJointAngles(new_angles);
 
     // Update forward kinematics to synchronize current tip position
-    updateForwardKinematics(model);
+    updateTipPosition(model);
 
     // Check if IK was successful (tip position matches desired)
     double ik_error = math_utils::distance(tip_position_, desired_tip_position_);
@@ -237,8 +232,7 @@ void Leg::calculateBasePosition(const RobotModel &model) {
 
 void Leg::updateTipPosition(const RobotModel &model) {
     // Calculate tip position from current joint angles using FK
-    Point3D new_tip = model.forwardKinematicsGlobalCoordinates(leg_id_, joint_angles_);
-    tip_position_ = new_tip;
+    tip_position_ = model.forwardKinematicsGlobalCoordinates(leg_id_, joint_angles_);
 }
 
 // ===== FSR CONTACT HISTORY METHODS =====

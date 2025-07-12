@@ -1,10 +1,10 @@
-#include "../src/body_pose_controller.h"
 #include "../src/body_pose_config_factory.h"
-#include "../src/robot_model.h"
+#include "../src/body_pose_controller.h"
 #include "../src/leg.h"
-#include <iostream>
-#include <iomanip>
+#include "../src/robot_model.h"
 #include <cmath>
+#include <iomanip>
+#include <iostream>
 
 int main() {
     std::cout << std::fixed << std::setprecision(6);
@@ -35,13 +35,12 @@ int main() {
     // Create leg objects
     Leg legs[NUM_LEGS] = {
         Leg(0, model), Leg(1, model), Leg(2, model),
-        Leg(3, model), Leg(4, model), Leg(5, model)
-    };
+        Leg(3, model), Leg(4, model), Leg(5, model)};
 
     // Initialize legs with default stance
     for (int i = 0; i < NUM_LEGS; ++i) {
         legs[i].initialize(model, Pose::Identity());
-        legs[i].updateForwardKinematics(model);
+        legs[i].updateTipPosition(model);
     }
 
     std::cout << "=== BodyPoseController IK Test ===" << std::endl;
@@ -93,8 +92,8 @@ int main() {
 
             // Verify that angles changed (should use current angles as starting point)
             double angle_change = std::abs(new_angles.coxa - current_angles.coxa) +
-                                std::abs(new_angles.femur - current_angles.femur) +
-                                std::abs(new_angles.tibia - current_angles.tibia);
+                                  std::abs(new_angles.femur - current_angles.femur) +
+                                  std::abs(new_angles.tibia - current_angles.tibia);
 
             if (angle_change < 0.001) {
                 std::cout << "  ⚠️  WARNING: No angle change detected - IK may not be working properly" << std::endl;
@@ -134,8 +133,8 @@ int main() {
         Point3D new_pos = legs[i].getCurrentTipPositionGlobal();
 
         double angle_change = std::abs(new_angles.coxa - original_angles[i].coxa) +
-                            std::abs(new_angles.femur - original_angles[i].femur) +
-                            std::abs(new_angles.tibia - original_angles[i].tibia);
+                              std::abs(new_angles.femur - original_angles[i].femur) +
+                              std::abs(new_angles.tibia - original_angles[i].tibia);
 
         std::cout << "Leg " << i << ":" << std::endl;
         std::cout << "  New position: (" << new_pos.x << ", " << new_pos.y << ", " << new_pos.z << ")" << std::endl;

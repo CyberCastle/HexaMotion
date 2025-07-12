@@ -1,10 +1,10 @@
 #ifndef LEG_POSER_H
 #define LEG_POSER_H
 
-#include "robot_model.h"
 #include "leg.h"
-#include <vector>
+#include "robot_model.h"
 #include <memory>
+#include <vector>
 
 // Use existing Pose from robot_model.h
 
@@ -29,20 +29,20 @@ struct ExternalTarget {
  * No progress tracking - that's handled by LocomotionSystem.
  */
 class LegPoser {
-public:
+  public:
     /**
      * @brief Constructor
      * @param leg_index Index of the leg this poser controls
      * @param leg Reference to the leg object
      * @param robot_model Reference to the robot model for parameter access
      */
-    LegPoser(int leg_index, Leg& leg, RobotModel& robot_model);
+    LegPoser(int leg_index, Leg &leg, RobotModel &robot_model);
 
     /**
      * @brief Copy constructor
      * @param leg_poser Pointer to the Leg Poser object to be copied from
      */
-    LegPoser(const LegPoser* leg_poser);
+    LegPoser(const LegPoser *leg_poser);
 
     // Accessors
     inline int getLegIndex() const { return leg_index_; }
@@ -56,13 +56,13 @@ public:
     inline bool getLegCompletedStep() const { return leg_completed_step_; }
 
     // Modifiers
-    inline void setCurrentTipPose(const Pose& current) {
-        leg_.setCurrentTipPositionGlobal(current.position);
+    inline void setCurrentTipPose(const RobotModel &model, const Pose &current) {
+        leg_.setCurrentTipPositionGlobal(model, current.position);
         current_tip_pose_ = current;
     }
-    inline void setTargetTipPose(const Pose& target) { target_tip_pose_ = target; }
-    inline void setExternalTarget(const ExternalTarget& target) { external_target_ = target; }
-    inline void setAutoPose(const Pose& auto_pose) { auto_pose_ = auto_pose; }
+    inline void setTargetTipPose(const Pose &target) { target_tip_pose_ = target; }
+    inline void setExternalTarget(const ExternalTarget &target) { external_target_ = target; }
+    inline void setAutoPose(const Pose &auto_pose) { auto_pose_ = auto_pose; }
     inline void setLegCompletedStep(bool complete) { leg_completed_step_ = complete; }
 
     /**
@@ -82,8 +82,8 @@ public:
      * @param apply_delta A bool defining if a position offset value should be applied to the target tip position
      * @return true if step is complete, false if still in progress
      */
-    bool stepToPosition(const Pose& target_tip_pose, const Pose& target_pose,
-                       double lift_height, double time_to_step, bool apply_delta = true);
+    bool stepToPosition(const Pose &target_tip_pose, const Pose &target_pose,
+                        double lift_height, double time_to_step, bool apply_delta = true);
 
     /**
      * @brief Sets the leg specific auto pose from the default auto pose
@@ -95,7 +95,7 @@ public:
      * @brief Set target position for leg movement
      * @param target_position Target position in world coordinates
      */
-    void setTargetPosition(const Point3D& target_position) {
+    inline void setTargetPosition(const Point3D &target_position) {
         target_tip_pose_ = Pose(target_position, Eigen::Vector3d(0, 0, 0));
     }
 
@@ -122,19 +122,19 @@ public:
      * @param step_time Time for the step transition
      * @return true if step is complete, false if still in progress
      */
-    bool stepToPosition(const Point3D& target_position, double step_height, double step_time) {
+    bool stepToPosition(const Point3D &target_position, double step_height, double step_time) {
         Pose target_pose(target_position, Eigen::Vector3d(0, 0, 0));
         return stepToPosition(target_pose, Pose::Identity(), step_height, step_time, false);
     }
 
-private:
+  private:
     /**
      * @brief Generate control nodes for primary swing bezier curve
      * @param origin_pos Origin position
      * @param target_pos Target position
      * @param lift_height Lift height for the trajectory
      */
-    void generatePrimarySwingControlNodes(const Point3D& origin_pos, const Point3D& target_pos, double lift_height);
+    void generatePrimarySwingControlNodes(const Point3D &origin_pos, const Point3D &target_pos, double lift_height);
 
     /**
      * @brief Generate control nodes for secondary swing bezier curve
@@ -142,31 +142,31 @@ private:
      * @param target_pos Target position
      * @param lift_height Lift height for the trajectory
      */
-    void generateSecondarySwingControlNodes(const Point3D& origin_pos, const Point3D& target_pos, double lift_height);
+    void generateSecondarySwingControlNodes(const Point3D &origin_pos, const Point3D &target_pos, double lift_height);
 
-private:
-    int leg_index_;                          //< Index of the leg this poser controls
-    Leg& leg_;                               //< Reference to the Leg object this poser controls
-    RobotModel& robot_model_;                //< Reference to the robot model for parameter access
+  private:
+    int leg_index_;           //< Index of the leg this poser controls
+    Leg &leg_;                //< Reference to the Leg object this poser controls
+    RobotModel &robot_model_; //< Reference to the robot model for parameter access
 
-    Pose auto_pose_;                         //< Leg specific auto pose
-    bool first_iteration_ = true;            //< Flag denoting if an iterating function is on it's first iteration
-    int master_iteration_count_ = 0;         //< Master iteration count used in generating time input for bezier curves
+    Pose auto_pose_;                 //< Leg specific auto pose
+    bool first_iteration_ = true;    //< Flag denoting if an iterating function is on it's first iteration
+    int master_iteration_count_ = 0; //< Master iteration count used in generating time input for bezier curves
 
-    Pose origin_tip_pose_;                   //< Origin tip pose used in bezier curve equations
-    Pose current_tip_pose_;                  //< Current tip pose
-    Pose target_tip_pose_;                   //< Target tip pose used in bezier curve equations
-    ExternalTarget external_target_;         //< Externally set target tip pose object
+    Pose origin_tip_pose_;           //< Origin tip pose used in bezier curve equations
+    Pose current_tip_pose_;          //< Current tip pose
+    Pose target_tip_pose_;           //< Target tip pose used in bezier curve equations
+    ExternalTarget external_target_; //< Externally set target tip pose object
 
-    bool leg_completed_step_ = false;        //< Flag denoting if leg has completed its required step in a sequence
+    bool leg_completed_step_ = false; //< Flag denoting if leg has completed its required step in a sequence
 
     // Bezier control nodes (5 nodes for quartic curves)
-    Point3D control_nodes_primary_[5];       //< Control nodes for primary swing bezier curve
-    Point3D control_nodes_secondary_[5];     //< Control nodes for secondary swing bezier curve
+    Point3D control_nodes_primary_[5];   //< Control nodes for primary swing bezier curve
+    Point3D control_nodes_secondary_[5]; //< Control nodes for secondary swing bezier curve
 
     // Constants
-    static constexpr double JOINT_TOLERANCE = 0.01;  // rad
-    static constexpr double TIP_TOLERANCE = 0.01;    // m
+    static constexpr double JOINT_TOLERANCE = 0.01; // rad
+    static constexpr double TIP_TOLERANCE = 0.01;   // m
 };
 
 #endif // LEG_POSER_H

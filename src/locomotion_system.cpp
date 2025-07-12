@@ -257,7 +257,7 @@ bool LocomotionSystem::setLegJointAngles(int leg, const JointAngles &q) {
 
     // Update both joint angles and leg positions in a single atomic operation
     legs[leg].setJointAngles(clamped_angles); // Update leg object
-    legs[leg].updateForwardKinematics(model); // Update leg position based on new angles
+    legs[leg].updateTipPosition(model);       // Update leg position based on new angles
 
     // Use velocity controller to get appropriate servo speeds
     double coxa_speed = velocity_controller ? velocity_controller->getServoSpeed(leg, 0) : params.default_servo_speed;

@@ -1,8 +1,8 @@
 #include "leg_poser.h"
 #include "hexamotion_constants.h"
 #include "math_utils.h"
-#include <cmath>
 #include <algorithm>
+#include <cmath>
 
 /**
  * @file leg_poser.cpp
@@ -12,13 +12,8 @@
  * It provides smooth transitions for leg positioning using Bezier curves.
  */
 
-
-LegPoser::LegPoser(int leg_index, Leg& leg, RobotModel& robot_model)
-    : leg_index_(leg_index)
-    , leg_(leg)
-    , robot_model_(robot_model)
-    , first_iteration_(true)
-    , master_iteration_count_(0) {
+LegPoser::LegPoser(int leg_index, Leg &leg, RobotModel &robot_model)
+    : leg_index_(leg_index), leg_(leg), robot_model_(robot_model), first_iteration_(true), master_iteration_count_(0) {
 
     // Initialize poses
     auto_pose_ = Pose();
@@ -37,18 +32,8 @@ LegPoser::LegPoser(int leg_index, Leg& leg, RobotModel& robot_model)
     }
 }
 
-LegPoser::LegPoser(const LegPoser* leg_poser)
-    : leg_index_(leg_poser->leg_index_)
-    , leg_(leg_poser->leg_)
-    , robot_model_(leg_poser->robot_model_)
-    , auto_pose_(leg_poser->auto_pose_)
-    , first_iteration_(leg_poser->first_iteration_)
-    , master_iteration_count_(leg_poser->master_iteration_count_)
-    , origin_tip_pose_(leg_poser->origin_tip_pose_)
-    , current_tip_pose_(leg_poser->current_tip_pose_)
-    , target_tip_pose_(leg_poser->target_tip_pose_)
-    , external_target_(leg_poser->external_target_)
-    , leg_completed_step_(leg_poser->leg_completed_step_) {
+LegPoser::LegPoser(const LegPoser *leg_poser)
+    : leg_index_(leg_poser->leg_index_), leg_(leg_poser->leg_), robot_model_(leg_poser->robot_model_), auto_pose_(leg_poser->auto_pose_), first_iteration_(leg_poser->first_iteration_), master_iteration_count_(leg_poser->master_iteration_count_), origin_tip_pose_(leg_poser->origin_tip_pose_), current_tip_pose_(leg_poser->current_tip_pose_), target_tip_pose_(leg_poser->target_tip_pose_), external_target_(leg_poser->external_target_), leg_completed_step_(leg_poser->leg_completed_step_) {
 
     // Copy Bezier control nodes
     for (int i = 0; i < 5; i++) {
@@ -57,9 +42,9 @@ LegPoser::LegPoser(const LegPoser* leg_poser)
     }
 }
 
-bool LegPoser::stepToPosition(const Pose& target_tip_pose, const Pose& target_pose,
-                           double lift_height, double time_to_step, bool apply_delta) {
-        // Store origin pose on first iteration
+bool LegPoser::stepToPosition(const Pose &target_tip_pose, const Pose &target_pose,
+                              double lift_height, double time_to_step, bool apply_delta) {
+    // Store origin pose on first iteration
     if (first_iteration_) {
         origin_tip_pose_ = getCurrentTipPose();
         target_tip_pose_ = target_tip_pose;
@@ -88,8 +73,8 @@ bool LegPoser::stepToPosition(const Pose& target_tip_pose, const Pose& target_po
     // Calculate position delta
     Point3D position_delta = origin_pos - target_pos;
     double distance = std::sqrt(position_delta.x * position_delta.x +
-                               position_delta.y * position_delta.y +
-                               position_delta.z * position_delta.z);
+                                position_delta.y * position_delta.y +
+                                position_delta.z * position_delta.z);
 
     // If no significant movement needed and no lift height, complete immediately
     if (distance < TIP_TOLERANCE && lift_height == 0.0) {
@@ -127,7 +112,7 @@ bool LegPoser::stepToPosition(const Pose& target_tip_pose, const Pose& target_po
 
     // Update current tip pose
     current_tip_pose_ = Pose(new_tip_position, Eigen::Vector3d(0, 0, 0));
-    leg_.setCurrentTipPositionGlobal(new_tip_position);
+    leg_.setCurrentTipPositionGlobal(robot_model_, current_tip_pose_.position);
 
     // Check if step is complete
     if (master_iteration_count_ >= num_iterations) {
@@ -152,7 +137,7 @@ void LegPoser::updateAutoPose(int phase) {
     double phase_ratio = static_cast<double>(phase) / 100.0;
 
     // Get robot parameters for compensation calculations
-    const auto& params = robot_model_.getParams();
+    const auto &params = robot_model_.getParams();
     double body_clearance = params.robot_height;
     double hexagon_radius = params.hexagon_radius;
 
@@ -177,7 +162,7 @@ void LegPoser::updateAutoPose(int phase) {
     double y_compensation = 0.0;
 
     // Calculate leg position relative to body center
-    Point3D leg_base_pos = robot_model_.getAnalyticLegBasePosition(leg_index_);
+    Point3D leg_base_pos = robot_model_.getLegBasePosition(leg_index_);
     double leg_angle = robot_model_.getLegBaseAngleOffset(leg_index_);
 
     // Roll compensation based on leg position (Y-axis variation)
@@ -210,12 +195,11 @@ void LegPoser::updateAutoPose(int phase) {
     double compensation_magnitude = std::sqrt(
         (compensated_position.x - default_stance_pos.x) * (compensated_position.x - default_stance_pos.x) +
         (compensated_position.y - default_stance_pos.y) * (compensated_position.y - default_stance_pos.y) +
-        (compensated_position.z - default_stance_pos.z) * (compensated_position.z - default_stance_pos.z)
-    );
+        (compensated_position.z - default_stance_pos.z) * (compensated_position.z - default_stance_pos.z));
 
     // Only apply compensation if it's above a minimum threshold to avoid jitter
     if (compensation_magnitude > 0.5) { // 0.5mm threshold
-        leg_.setCurrentTipPositionGlobal(auto_pose_.position);
+        leg_.setCurrentTipPositionGlobal(robot_model_, auto_pose_.position);
 
         // Recalculate joint angles for the new position using current angles as starting point
         JointAngles current_angles = leg_.getJointAngles();
@@ -224,17 +208,17 @@ void LegPoser::updateAutoPose(int phase) {
 
         // Apply joint limits to ensure safety
         new_angles.coxa = robot_model_.constrainAngle(new_angles.coxa,
-            params.coxa_angle_limits[0], params.coxa_angle_limits[1]);
+                                                      params.coxa_angle_limits[0], params.coxa_angle_limits[1]);
         new_angles.femur = robot_model_.constrainAngle(new_angles.femur,
-            params.femur_angle_limits[0], params.femur_angle_limits[1]);
+                                                       params.femur_angle_limits[0], params.femur_angle_limits[1]);
         new_angles.tibia = robot_model_.constrainAngle(new_angles.tibia,
-            params.tibia_angle_limits[0], params.tibia_angle_limits[1]);
+                                                       params.tibia_angle_limits[0], params.tibia_angle_limits[1]);
 
         leg_.setJointAngles(new_angles);
     }
 }
 
-void LegPoser::generatePrimarySwingControlNodes(const Point3D& origin_pos, const Point3D& target_pos, double lift_height) {
+void LegPoser::generatePrimarySwingControlNodes(const Point3D &origin_pos, const Point3D &target_pos, double lift_height) {
     // Calculate midpoint for the swing trajectory
     Point3D mid_pos = (origin_pos + target_pos) * 0.5;
     mid_pos.z = origin_pos.z + lift_height; // Apply lift height at midpoint
@@ -251,7 +235,7 @@ void LegPoser::generatePrimarySwingControlNodes(const Point3D& origin_pos, const
     control_nodes_primary_[4] = mid_pos;
 }
 
-void LegPoser::generateSecondarySwingControlNodes(const Point3D& origin_pos, const Point3D& target_pos, double lift_height) {
+void LegPoser::generateSecondarySwingControlNodes(const Point3D &origin_pos, const Point3D &target_pos, double lift_height) {
     // Calculate midpoint for the swing trajectory
     Point3D mid_pos = (origin_pos + target_pos) * 0.5;
     mid_pos.z = origin_pos.z + lift_height; // Apply lift height at midpoint

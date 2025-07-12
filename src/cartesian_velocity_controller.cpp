@@ -43,7 +43,7 @@ bool CartesianVelocityController::updateServoSpeeds(double linear_velocity_x, do
     for (int leg = 0; leg < NUM_LEGS; ++leg) {
         // Calculate leg-specific compensation
         double leg_compensation = calculateLegSpeedCompensation(leg, linear_velocity_x,
-                                                               linear_velocity_y, angular_velocity);
+                                                                linear_velocity_y, angular_velocity);
 
         // Base speed from robot parameters
         const Parameters &params = model_.getParams();
@@ -85,7 +85,7 @@ bool CartesianVelocityController::updateServoSpeeds(double linear_velocity_x, do
 
             if (joint_config) {
                 double workspace_constrained_speed = applyWorkspaceConstraints(leg, joint,
-                                                                              joint_config->getEffectiveSpeed());
+                                                                               joint_config->getEffectiveSpeed());
                 // Update the velocity scaling to match workspace constraints
                 if (joint_config->base_speed > 0.0f) {
                     joint_config->velocity_scaling = workspace_constrained_speed / joint_config->base_speed;
@@ -166,7 +166,7 @@ void CartesianVelocityController::setVelocityControlEnabled(bool enable) {
 
 double CartesianVelocityController::getCurrentVelocityMagnitude() const {
     double linear_magnitude = std::sqrt(current_linear_vx_ * current_linear_vx_ +
-                                       current_linear_vy_ * current_linear_vy_);
+                                        current_linear_vy_ * current_linear_vy_);
     double angular_magnitude = std::abs(current_angular_velocity_);
 
     // Combine linear and angular velocities with appropriate weighting
@@ -213,7 +213,7 @@ double CartesianVelocityController::calculateLinearVelocityScale(double velocity
 
     // Apply scaling with configured parameters
     double scale = velocity_scaling_.minimum_speed_ratio +
-                  (velocity_scaling_.maximum_speed_ratio - velocity_scaling_.minimum_speed_ratio) * velocity_ratio;
+                   (velocity_scaling_.maximum_speed_ratio - velocity_scaling_.minimum_speed_ratio) * velocity_ratio;
 
     return std::clamp<double>(scale, velocity_scaling_.minimum_speed_ratio,
                               velocity_scaling_.maximum_speed_ratio);
@@ -261,13 +261,13 @@ double CartesianVelocityController::calculateGaitSpeedAdjustment(GaitType gait) 
 }
 
 double CartesianVelocityController::calculateLegSpeedCompensation(int leg_index, double linear_vx,
-                                                                 double linear_vy, double angular_vel) const {
+                                                                  double linear_vy, double angular_vel) const {
     if (leg_index < 0 || leg_index >= NUM_LEGS) {
         return SERVO_SPEED_DEFAULT;
     }
 
     // Get leg position in robot frame
-    Point3D base_pos = model_.getAnalyticLegBasePosition(leg_index);
+    Point3D base_pos = model_.getLegBasePosition(leg_index);
     double leg_x = base_pos.x; // Keep in mm
     double leg_y = base_pos.y; // Keep in mm
 

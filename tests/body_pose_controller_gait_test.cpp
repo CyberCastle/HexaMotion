@@ -39,7 +39,7 @@ int main() {
         Leg(3, model), Leg(4, model), Leg(5, model)};
     for (int i = 0; i < NUM_LEGS; i++) {
         legs[i].setJointAngles(JointAngles(0, 0, 0));
-        legs[i].setCurrentTipPositionGlobal(Point3D(100, 100, -150));
+        legs[i].setCurrentTipPositionGlobal(model, Point3D(100, 100, -150));
     }
 
     // Initialize leg posers

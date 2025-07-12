@@ -551,7 +551,7 @@ class RobotModel {
     Pose getPoseLegFrame(int leg_index, const JointAngles &joint_angles, const Pose &robot_frame_pose = Pose::Identity()) const;
 
     /** Get the DH position of the leg base (without joint transformations) */
-    Point3D getDHLegBasePosition(int leg_index) const;
+    Point3D getLegBasePosition(int leg_index) const;
 
     /** Get the base angle offset for a specific leg in radians */
     double getLegBaseAngleOffset(int leg_index) const;

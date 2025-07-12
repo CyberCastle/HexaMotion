@@ -40,22 +40,22 @@ void RobotModel::initializeDH() {
             dh_transforms[l][0][3] = BASE_THETA_OFFSETS[l]; // θ0 (fixed)
 
             // ── Row 1: yaw servo + coxa ─────────────────────
-            dh_transforms[l][1][0] = params.coxa_length;    // a1 = 50
-            dh_transforms[l][1][1] = 0.0f;                  // alpha1
-            dh_transforms[l][1][2] = 0.0f;                  // d2
-            dh_transforms[l][1][3] = 0.0f;                  // θ1 offset (adds ψ)
+            dh_transforms[l][1][0] = params.coxa_length; // a1 = 50
+            dh_transforms[l][1][1] = 0.0f;               // alpha1
+            dh_transforms[l][1][2] = 0.0f;               // d2
+            dh_transforms[l][1][3] = 0.0f;               // θ1 offset (adds ψ)
 
             // ── Row 2: femur pitch servo ────────────────────
-            dh_transforms[l][2][0] = params.femur_length;   // a2 = 101
-            dh_transforms[l][2][1] = 0.0f;                  // alpha2
-            dh_transforms[l][2][2] = 0.0f;                  // d3
-            dh_transforms[l][2][3] = 0.0f;                  // θ2 offset (adds θ₁)
+            dh_transforms[l][2][0] = params.femur_length; // a2 = 101
+            dh_transforms[l][2][1] = 0.0f;                // alpha2
+            dh_transforms[l][2][2] = 0.0f;                // d3
+            dh_transforms[l][2][3] = 0.0f;                // θ2 offset (adds θ₁)
 
             // ── Row 3: knee pitch servo + tibia ─────────────
-            dh_transforms[l][3][0] = 0.0f;                  // a3
-            dh_transforms[l][3][1] = 0.0f;                  // alpha3
-            dh_transforms[l][3][2] = -params.tibia_length;  // d4 = -208
-            dh_transforms[l][3][3] = 0.0f;                  // θ3 offset (adds θ₂)
+            dh_transforms[l][3][0] = 0.0f;                 // a3
+            dh_transforms[l][3][1] = 0.0f;                 // alpha3
+            dh_transforms[l][3][2] = -params.tibia_length; // d4 = -208
+            dh_transforms[l][3][3] = 0.0f;                 // θ3 offset (adds θ₂)
         }
     } else {
         // Copy custom DH parameters provided in params.dh_parameters
@@ -187,7 +187,7 @@ Point3D RobotModel::forwardKinematicsGlobalCoordinates(int leg_index, const Join
     return Point3D{transform(0, 3), transform(1, 3), transform(2, 3)};
 }
 
-Point3D RobotModel::getDHLegBasePosition(int leg_index) const {
+Point3D RobotModel::getLegBasePosition(int leg_index) const {
     // Calculate base position using DH transform matrix
     // Apply only the base transform (row 0) without joint angles
     Eigen::Matrix4d base_transform = math_utils::dhTransform<double>(

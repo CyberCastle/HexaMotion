@@ -354,7 +354,7 @@ class KinematicsValidator {
 
         // Obtener posición de la base de la pierna
         JointAngles zero_angles(0, 0, 0);
-        Point3D base_global = model->getDHLegBasePosition(0);
+        Point3D base_global = model->getLegBasePosition(0);
 
         for (double h = min_height; h <= max_height; h += 5.0) {
             // Target en la misma posición X,Y que la base, pero con la altura deseada

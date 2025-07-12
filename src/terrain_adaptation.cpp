@@ -244,7 +244,7 @@ void TerrainAdaptation::detectTouchdownEvents(int leg_index, const FSRData &fsr_
 
         // Calculate foot position using workspace scaling
         const Parameters &p = model_.getParams();
-        Point3D base_pos = model_.getAnalyticLegBasePosition(leg_index);
+        Point3D base_pos = model_.getLegBasePosition(leg_index);
         double base_x = base_pos.x;
         double base_y = base_pos.y;
         double base_angle = model_.getLegBaseAngleOffset(leg_index);
@@ -318,7 +318,7 @@ void TerrainAdaptation::updateGravityEstimation(const IMUData &imu_data) {
 
         // Use lighter filtering for processed absolute data
         gravity_estimate_ = alpha * 1.5 * gravity_estimate_ +
-                           (DEFAULT_ANGULAR_SCALING - alpha * 1.5) * accel_gravity;
+                            (DEFAULT_ANGULAR_SCALING - alpha * 1.5) * accel_gravity;
     } else {
         // Fallback to traditional method with raw acceleration
         // Convert acceleration to gravity estimate (negate because gravity points down)

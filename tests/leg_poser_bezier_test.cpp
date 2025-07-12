@@ -1,9 +1,9 @@
+#include "../src/leg.h"
 #include "../src/leg_poser.h"
 #include "../src/robot_model.h"
-#include "../src/leg.h"
-#include <iostream>
-#include <iomanip>
 #include <cmath>
+#include <iomanip>
+#include <iostream>
 
 int main() {
     std::cout << std::fixed << std::setprecision(6);
@@ -28,7 +28,7 @@ int main() {
     // Create leg object
     Leg leg(0, model);
     leg.initialize(model, Pose::Identity());
-    leg.updateForwardKinematics(model);
+    leg.updateTipPosition(model);
 
     // Create LegPoser
     LegPoser leg_poser(0, leg, model);
@@ -43,8 +43,8 @@ int main() {
     // Test 2: Set target position and test Bezier trajectory
     std::cout << "\n--- Test 2: Bezier Trajectory Test ---" << std::endl;
     Point3D target_pos(50, 0, -208); // Move 50mm forward
-    double step_height = 30; // 30mm lift height
-    double step_time = 2.0; // 2 seconds
+    double step_height = 30;         // 30mm lift height
+    double step_time = 2.0;          // 2 seconds
 
     std::cout << "Target position: (" << target_pos.x << ", " << target_pos.y << ", " << target_pos.z << ")" << std::endl;
     std::cout << "Step height: " << step_height << "mm" << std::endl;
@@ -77,8 +77,8 @@ int main() {
     Point3D final_pos = leg_poser.getCurrentPosition();
     Point3D position_error = final_pos - target_pos;
     double error_distance = std::sqrt(position_error.x * position_error.x +
-                                     position_error.y * position_error.y +
-                                     position_error.z * position_error.z);
+                                      position_error.y * position_error.y +
+                                      position_error.z * position_error.z);
 
     std::cout << "Final position: (" << final_pos.x << ", " << final_pos.y << ", " << final_pos.z << ")" << std::endl;
     std::cout << "Target position: (" << target_pos.x << ", " << target_pos.y << ", " << target_pos.z << ")" << std::endl;
@@ -96,11 +96,11 @@ int main() {
 
     // Reset for new test
     leg_poser.resetStepToPosition();
-    leg.setCurrentTipPositionGlobal(initial_pos);
+    leg.setCurrentTipPositionGlobal(model, initial_pos);
 
     Point3D target_pos2(0, 30, -208); // Move 30mm to the side
-    double step_height2 = 20; // 20mm lift height
-    double step_time2 = 1.5; // 1.5 seconds
+    double step_height2 = 20;         // 20mm lift height
+    double step_time2 = 1.5;          // 1.5 seconds
 
     std::cout << "New target: (" << target_pos2.x << ", " << target_pos2.y << ", " << target_pos2.z << ")" << std::endl;
     std::cout << "New step height: " << step_height2 << "mm" << std::endl;
@@ -117,8 +117,8 @@ int main() {
     Point3D final_pos2 = leg_poser.getCurrentPosition();
     Point3D position_error2 = final_pos2 - target_pos2;
     double error_distance2 = std::sqrt(position_error2.x * position_error2.x +
-                                      position_error2.y * position_error2.y +
-                                      position_error2.z * position_error2.z);
+                                       position_error2.y * position_error2.y +
+                                       position_error2.z * position_error2.z);
 
     std::cout << "Final position: (" << final_pos2.x << ", " << final_pos2.y << ", " << final_pos2.z << ")" << std::endl;
     std::cout << "Position error: " << error_distance2 << "mm" << std::endl;
@@ -127,9 +127,9 @@ int main() {
 
     // Summary
     std::cout << "\n=== Test Summary ===" << std::endl;
-    bool test1_passed = error_distance < 5.0; // Within 5mm tolerance
+    bool test1_passed = error_distance < 5.0;  // Within 5mm tolerance
     bool test2_passed = error_distance2 < 5.0; // Within 5mm tolerance
-    bool test3_passed = step_complete; // Step completed successfully
+    bool test3_passed = step_complete;         // Step completed successfully
 
     std::cout << "Test 1 (Forward movement): " << (test1_passed ? "PASSED" : "FAILED") << std::endl;
     std::cout << "Test 2 (Side movement): " << (test2_passed ? "PASSED" : "FAILED") << std::endl;

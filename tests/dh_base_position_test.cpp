@@ -1,13 +1,14 @@
-#include <iostream>
-#include <iomanip>
-#include <cmath>
-#include "../src/robot_model.h"
 #include "../src/hexamotion_constants.h"
+#include "../src/robot_model.h"
+#include <cmath>
+#include <iomanip>
+#include <iostream>
 
 using namespace std;
 
 int main() {
-    cout << "=== DH Base Position Validation Test ===" << endl << endl;
+    cout << "=== DH Base Position Validation Test ===" << endl
+         << endl;
 
     // Create robot model with default parameters
     Parameters params;
@@ -37,12 +38,12 @@ int main() {
     bool all_tests_passed = true;
 
     for (int leg = 0; leg < NUM_LEGS; ++leg) {
-        Point3D dh_base = model.getDHLegBasePosition(leg);
+        Point3D dh_base = model.getLegBasePosition(leg);
         Point3D analytic_base = model.getAnalyticLegBasePosition(leg);
 
         double error = sqrt(pow(dh_base.x - analytic_base.x, 2) +
-                           pow(dh_base.y - analytic_base.y, 2) +
-                           pow(dh_base.z - analytic_base.z, 2));
+                            pow(dh_base.y - analytic_base.y, 2) +
+                            pow(dh_base.z - analytic_base.z, 2));
 
         cout << "Leg " << leg << ":" << endl;
         cout << "  DH Base:      (" << fixed << setprecision(3) << dh_base.x
@@ -60,11 +61,11 @@ int main() {
         cout << endl;
     }
 
-        cout << "--- Test: DH Base Position with Zero Joint Angles ---" << endl;
+    cout << "--- Test: DH Base Position with Zero Joint Angles ---" << endl;
 
     for (int leg = 0; leg < NUM_LEGS; ++leg) {
         JointAngles zero_angles(0.0, 0.0, 0.0);
-        Point3D dh_base = model.getDHLegBasePosition(leg);
+        Point3D dh_base = model.getLegBasePosition(leg);
         Point3D fk_base = model.forwardKinematicsGlobalCoordinates(leg, zero_angles);
 
         // With zero joint angles, the FK should include:
@@ -78,8 +79,8 @@ int main() {
         double expected_z = -params.tibia_length; // Full leg extension down
 
         double error = sqrt(pow(fk_base.x - expected_x, 2) +
-                           pow(fk_base.y - expected_y, 2) +
-                           pow(fk_base.z - expected_z, 2));
+                            pow(fk_base.y - expected_y, 2) +
+                            pow(fk_base.z - expected_z, 2));
 
         cout << "Leg " << leg << ":" << endl;
         cout << "  DH Base:      (" << fixed << setprecision(3) << dh_base.x
@@ -107,8 +108,7 @@ int main() {
         -150.0 * DEGREES_TO_RADIANS_FACTOR,
         150.0 * DEGREES_TO_RADIANS_FACTOR,
         90.0 * DEGREES_TO_RADIANS_FACTOR,
-        30.0 * DEGREES_TO_RADIANS_FACTOR
-    };
+        30.0 * DEGREES_TO_RADIANS_FACTOR};
 
     for (int leg = 0; leg < NUM_LEGS; ++leg) {
         double dh_angle = model.getLegBaseAngleOffset(leg);

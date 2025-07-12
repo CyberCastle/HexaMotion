@@ -256,8 +256,6 @@ void WorkspaceValidator::updateAngularScaling(double scaling) {
     // For now, angular scaling is handled in getScalingFactors()
 }
 
-
-
 double WorkspaceValidator::calculateSafeHexagonRadius(double leg_reach, double safety_margin) {
     // For a hexagon with 60° between legs, we need to ensure that adjacent leg
     // workspaces don't overlap. Using the law of cosines:
@@ -332,7 +330,7 @@ bool WorkspaceValidator::adjustForCollisionAvoidance(int leg_index, Point3D &tar
     }
 
     // Calculate leg base position
-    Point3D base_pos = model_.getAnalyticLegBasePosition(leg_index);
+    Point3D base_pos = model_.getLegBasePosition(leg_index);
     double base_x = base_pos.x;
     double base_y = base_pos.y;
 
@@ -364,14 +362,12 @@ bool WorkspaceValidator::adjustForCollisionAvoidance(int leg_index, Point3D &tar
     return false;
 }
 
-// Implementation of missing methods
-
 Point3D WorkspaceValidator::getLegBase(int leg_index) const {
     if (leg_index < 0 || leg_index >= NUM_LEGS) {
         return Point3D{0.0f, 0.0f, 0.0f};
     }
 
-    return model_.getAnalyticLegBasePosition(leg_index);
+    return model_.getLegBasePosition(leg_index);
 }
 
 bool WorkspaceValidator::checkJointLimits(int leg_index, const Point3D &target_position) const {

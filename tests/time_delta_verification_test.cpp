@@ -1,9 +1,9 @@
+#include "../src/leg.h"
 #include "../src/leg_poser.h"
 #include "../src/robot_model.h"
-#include "../src/leg.h"
-#include <iostream>
-#include <iomanip>
 #include <cmath>
+#include <iomanip>
+#include <iostream>
 
 int main() {
     std::cout << std::fixed << std::setprecision(6);
@@ -36,7 +36,7 @@ int main() {
         // Create leg object
         Leg leg(0, model);
         leg.initialize(model, Pose::Identity());
-        leg.updateForwardKinematics(model);
+        leg.updateTipPosition(model);
 
         // Create LegPoser
         LegPoser leg_poser(0, leg, model);

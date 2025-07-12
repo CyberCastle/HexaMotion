@@ -247,7 +247,7 @@ void WalkController::init() {
         int leg_index = leg_stepper->getLegIndex();
 
         // Calculate stance position based on leg geometry
-        Point3D base_pos = model.getAnalyticLegBasePosition(leg_index);
+        Point3D base_pos = model.getLegBasePosition(leg_index);
         double base_x = base_pos.x;
         double base_y = base_pos.y;
         double base_angle = model.getLegBaseAngleOffset(leg_index);
@@ -510,7 +510,7 @@ void WalkController::generateWalkspace() {
 
         for (int leg = 0; leg < NUM_LEGS; leg++) {
             // Get leg base position
-            Point3D base_pos = model.getAnalyticLegBasePosition(leg);
+            Point3D base_pos = model.getLegBasePosition(leg);
             double base_x = base_pos.x;
             double base_y = base_pos.y;
             double base_angle = model.getLegBaseAngleOffset(leg);
@@ -677,7 +677,7 @@ Point3D WalkController::calculateDefaultStancePosition(int leg_index) {
     const auto &params = model.getParams();
 
     // Use the same base positions as the main model
-    Point3D base_pos = model.getAnalyticLegBasePosition(leg_index);
+    Point3D base_pos = model.getLegBasePosition(leg_index);
     double base_x = base_pos.x;
     double base_y = base_pos.y;
     double leg_reach = params.coxa_length + params.femur_length + params.tibia_length;

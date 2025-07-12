@@ -1,9 +1,9 @@
-#include "../src/leg_stepper.h"
-#include "../src/walk_controller.h"
-#include "../src/gait_config_factory.h"
-#include "../src/gait_config.h"
 #include "../src/body_pose_config_factory.h"
 #include "../src/body_pose_controller.h"
+#include "../src/gait_config.h"
+#include "../src/gait_config_factory.h"
+#include "../src/leg_stepper.h"
+#include "../src/walk_controller.h"
 #include "../src/walkspace_analyzer.h"
 #include "../src/workspace_validator.h"
 #include "test_stubs.h"
@@ -310,7 +310,7 @@ void testExternalTargetHandling(LegStepper &stepper, Leg &leg) {
 
     // Set external target
     LegStepperExternalTarget target;
-            target.position = Point3D(50.0, 30.0, 208.0);
+    target.position = Point3D(50.0, 30.0, 208.0);
     target.swing_clearance = 15.0;
     target.frame_id = "robot_frame";
     target.defined = true;
@@ -417,7 +417,7 @@ void testSwingHeightCompliance(LegStepper &stepper, Leg &leg, const RobotModel &
 
     // Configurar el stepper para fase de swing
     stepper.setStepState(STEP_SWING);
-    stepper.setPhase(5); // Fase intermedia de swing
+    stepper.setPhase(5);           // Fase intermedia de swing
     stepper.setSwingProgress(0.5); // 50% de progreso en swing
 
     // Configurar parámetros de marcha
@@ -431,7 +431,7 @@ void testSwingHeightCompliance(LegStepper &stepper, Leg &leg, const RobotModel &
     // Configurar target_tip_pose_ para que esté adelante de la posición inicial
     Point3D target_position = initial_position;
     target_position.x += step_length; // Mover hacia adelante
-    stepper.setCurrentTipPose(target_position);
+    stepper.setCurrentTipPose(model, target_position);
 
     // Configurar stride vector para que apunte hacia adelante
     stepper.updateStride(step_length * 2.0, 0.0, 0.0, 0.8, 50.0);
@@ -555,7 +555,7 @@ int main() {
 
     for (int i = 0; i < NUM_LEGS; ++i) {
         test_legs[i].initialize(model, Pose::Identity());
-        test_legs[i].updateForwardKinematics(model);
+        test_legs[i].updateTipPosition(model);
     }
 
     // Configure standing pose using BodyPoseController
@@ -594,13 +594,13 @@ int main() {
         // Get leg's identity pose for LegStepper initialization
         Point3D identity_pose = leg.getCurrentTipPositionGlobal();
 
-            // Create required objects for LegStepper
-    WalkspaceAnalyzer walkspace_analyzer(model);
-    WorkspaceValidator workspace_validator(model);
+        // Create required objects for LegStepper
+        WalkspaceAnalyzer walkspace_analyzer(model);
+        WorkspaceValidator workspace_validator(model);
 
-    // Create LegStepper
-    LegStepper stepper(leg_index, identity_pose, leg, model, &walkspace_analyzer, &workspace_validator);
-    stepper.setDefaultTipPose(identity_pose);
+        // Create LegStepper
+        LegStepper stepper(leg_index, identity_pose, leg, model, &walkspace_analyzer, &workspace_validator);
+        stepper.setDefaultTipPose(identity_pose);
 
         // Debug: Print initial step_state
         StepState initial_step_state = stepper.getStepState();

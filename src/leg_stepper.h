@@ -1,8 +1,8 @@
 #ifndef LEG_STEPPER_H
 #define LEG_STEPPER_H
 
-#include "robot_model.h"
 #include "leg.h"
+#include "robot_model.h"
 #include "walkspace_analyzer.h"
 #include "workspace_validator.h"
 
@@ -27,24 +27,24 @@ enum StepState {
  * @brief Step cycle timing parameters (OpenSHC equivalent)
  */
 struct StepCycle {
-    double frequency_;      //< Step frequency in Hz
-    int period_;           //< Total step cycle length in iterations
-    int swing_period_;     //< Swing period length in iterations
-    int stance_period_;    //< Stance period length in iterations
-    int stance_end_;       //< Iteration when stance period ends
-    int swing_start_;      //< Iteration when swing period starts
-    int swing_end_;        //< Iteration when swing period ends
-    int stance_start_;     //< Iteration when stance period starts
+    double frequency_;  //< Step frequency in Hz
+    int period_;        //< Total step cycle length in iterations
+    int swing_period_;  //< Swing period length in iterations
+    int stance_period_; //< Stance period length in iterations
+    int stance_end_;    //< Iteration when stance period ends
+    int swing_start_;   //< Iteration when swing period starts
+    int swing_end_;     //< Iteration when swing period ends
+    int stance_start_;  //< Iteration when stance period starts
 };
 
 /**
  * @brief External target for leg positioning (OpenSHC equivalent)
  */
 struct LegStepperExternalTarget {
-    Point3D position;           //< Target position
-    double swing_clearance;     //< Swing clearance height
-    std::string frame_id;       //< Reference frame ID
-    bool defined = false;       //< Whether target is defined
+    Point3D position;       //< Target position
+    double swing_clearance; //< Swing clearance height
+    std::string frame_id;   //< Reference frame ID
+    bool defined = false;   //< Whether target is defined
 };
 
 /**
@@ -53,10 +53,10 @@ struct LegStepperExternalTarget {
  * ✅ CORRECTED: LegStepper is now independent and does NOT depend on WalkController
  */
 class LegStepper {
-public:
+  public:
     // Modificar el constructor para aceptar los validadores
-    LegStepper(int leg_index, const Point3D& identity_tip_pose, Leg& leg, RobotModel& robot_model,
-               WalkspaceAnalyzer* walkspace_analyzer, WorkspaceValidator* workspace_validator);
+    LegStepper(int leg_index, const Point3D &identity_tip_pose, Leg &leg, RobotModel &robot_model,
+               WalkspaceAnalyzer *walkspace_analyzer, WorkspaceValidator *workspace_validator);
 
     // Accessors
     int getLegIndex() const { return leg_index_; }
@@ -66,7 +66,7 @@ public:
     Point3D getDefaultTipPose() const { return default_tip_pose_; }
     Point3D getIdentityTipPose() const { return identity_tip_pose_; }
     Point3D getTargetTipPose() const { return target_tip_pose_; }
-    WalkState getWalkState() const { return current_walk_state_; }  // Internal state
+    WalkState getWalkState() const { return current_walk_state_; } // Internal state
     Point3D getWalkPlane() const { return walk_plane_; }
     Point3D getWalkPlaneNormal() const { return walk_plane_normal_; }
     StepState getStepState() const { return step_state_; }
@@ -86,35 +86,35 @@ public:
     LegStepperExternalTarget getExternalDefault() const { return external_default_; }
 
     // Modifiers
-    void setCurrentTipPose(const Point3D& pose) { leg_.setCurrentTipPositionGlobal(pose); }
-    void setDefaultTipPose(const Point3D& pose) { default_tip_pose_ = pose; }
+    void setCurrentTipPose(const RobotModel &model, const Point3D &pose) { leg_.setCurrentTipPositionGlobal(model, pose); }
+    void setDefaultTipPose(const Point3D &pose) { default_tip_pose_ = pose; }
     void setStepState(StepState state) { step_state_ = state; }
     void setPhase(int phase) { phase_ = phase; }
     void setSwingProgress(double progress) { swing_progress_ = progress; }
     void setStanceProgress(double progress) { stance_progress_ = progress; }
     void setStepProgress(double progress) { step_progress_ = progress; }
     void setPhaseOffset(double offset) { leg_.setPhaseOffset(offset); }
-    void setSwingOriginTipVelocity(const Point3D& velocity) { swing_origin_tip_velocity_ = velocity; }
+    void setSwingOriginTipVelocity(const Point3D &velocity) { swing_origin_tip_velocity_ = velocity; }
     void setCompletedFirstStep(bool completed) { completed_first_step_ = completed; }
     void setAtCorrectPhase(bool at_correct) { at_correct_phase_ = at_correct; }
     void setTouchdownDetection(bool detection) { touchdown_detection_ = detection; }
-    void setExternalTarget(const LegStepperExternalTarget& target) { external_target_ = target; }
-    void setExternalDefault(const LegStepperExternalTarget& default_pos) { external_default_ = default_pos; }
-    void setWalkState(WalkState state) { current_walk_state_ = state; }  // Set by WalkController
+    void setExternalTarget(const LegStepperExternalTarget &target) { external_target_ = target; }
+    void setExternalDefault(const LegStepperExternalTarget &default_pos) { external_default_ = default_pos; }
+    void setWalkState(WalkState state) { current_walk_state_ = state; } // Set by WalkController
     void setStepLength(double length) { step_length_ = length; }
     void setSwingHeight(double height) { swing_height_ = height; }
     void setBodyClearance(double clearance) { body_clearance_ = clearance; }
     void setStanceSpanModifier(double modifier) { stance_span_modifier_ = modifier; }
-    void setSwingClearance(const Point3D& clearance) { swing_clearance_ = clearance; }
+    void setSwingClearance(const Point3D &clearance) { swing_clearance_ = clearance; }
 
-    //Core functionality without WalkController dependency
-    void updatePhase(const StepCycle& step);  // StepCycle passed as parameter
-    void iteratePhase(const StepCycle& step);  // StepCycle passed as parameter
-    void updateStepState(const StepCycle& step);  // StepCycle passed as parameter
+    // Core functionality without WalkController dependency
+    void updatePhase(const StepCycle &step);     // StepCycle passed as parameter
+    void iteratePhase(const StepCycle &step);    // StepCycle passed as parameter
+    void updateStepState(const StepCycle &step); // StepCycle passed as parameter
     void updateStride(double linear_velocity_x, double linear_velocity_y, double angular_velocity, double stance_ratio, double step_frequency);
     Point3D calculateStanceSpanChange();
     void updateDefaultTipPosition();
-    void updateTipPosition(double step_length, double time_delta, bool rough_terrain_mode, bool force_normal_touchdown);  // Parameters passed
+    void updateTipPosition(double step_length, double time_delta, bool rough_terrain_mode, bool force_normal_touchdown); // Parameters passed
     void generatePrimarySwingControlNodes();
     void generateSecondarySwingControlNodes(bool ground_contact);
     void generateStanceControlNodes(double stride_scaler);
@@ -128,18 +128,18 @@ public:
     void updateDynamicTiming(double step_length, double time_delta);
     StepCycle calculateStepCycle(double step_length, double time_delta) const;
 
-    //OpenSHC-like API without WalkController dependency
+    // OpenSHC-like API without WalkController dependency
     void updateWithPhase(double local_phase, double step_length, double time_delta);
 
-private:
+  private:
     int leg_index_;
-    Leg& leg_;
-    RobotModel& robot_model_;  // Store robot model for kinematics
+    Leg &leg_;
+    RobotModel &robot_model_; // Store robot model for kinematics
     Point3D identity_tip_pose_;
     Point3D default_tip_pose_;
     Point3D origin_tip_pose_;
     Point3D target_tip_pose_;
-    Point3D current_tip_pose_;       //< Current tip pose calculated by stepper
+    Point3D current_tip_pose_; //< Current tip pose calculated by stepper
 
     // Walking state
     Point3D walk_plane_;
@@ -159,7 +159,7 @@ private:
     double swing_progress_;
     double step_progress_;
     StepState step_state_;
-    WalkState current_walk_state_;  // Internal walk state
+    WalkState current_walk_state_; // Internal walk state
 
     // Timing
     double swing_delta_t_;
@@ -179,8 +179,8 @@ private:
     double body_clearance_ = 0.0;
     double stance_span_modifier_ = 0.0;
 
-    WalkspaceAnalyzer* walkspace_analyzer_ = nullptr;
-    WorkspaceValidator* workspace_validator_ = nullptr;
+    WalkspaceAnalyzer *walkspace_analyzer_ = nullptr;
+    WorkspaceValidator *workspace_validator_ = nullptr;
 };
 
 #endif // LEG_STEPPER_H

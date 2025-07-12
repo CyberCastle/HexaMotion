@@ -34,7 +34,7 @@ std::array<LegStancePosition, NUM_LEGS> calculateHexagonalStancePositions(const 
     // Create a temporary RobotModel to get leg base positions
     RobotModel temp_model(params);
     for (int i = 0; i < NUM_LEGS; i++) {
-        Point3D base_pos = temp_model.getAnalyticLegBasePosition(i);
+        Point3D base_pos = temp_model.getLegBasePosition(i);
         positions[i].x = base_pos.x + params.coxa_length * cos(atan2(base_pos.y, base_pos.x));
         positions[i].y = base_pos.y + params.coxa_length * sin(atan2(base_pos.y, base_pos.x));
     }
