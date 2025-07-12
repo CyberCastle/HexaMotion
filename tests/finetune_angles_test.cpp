@@ -20,6 +20,17 @@ struct AngleSolution {
                       tibia_angle(0), score(999) {}
 };
 
+// Estructura para almacenar información de una pata
+struct LegConfiguration {
+    int leg_index;
+    double base_angle_deg;
+    JointAngles joint_angles;
+    Point3D global_position;
+    double height_error;
+    double tibia_angle;
+    double score;
+};
+
 // Calcula el ángulo de la tibia respecto al suelo (plano XY)
 double getTibiaAngleToGround(const RobotModel &model, int leg, const JointAngles &angles) {
     Eigen::Matrix4d transform = model.legTransform(leg, angles);
@@ -36,6 +47,29 @@ double getTibiaAngleToGround(const RobotModel &model, int leg, const JointAngles
 bool isTibiaPerpendicularToGround(const RobotModel &model, int leg, const JointAngles &angles, double tolerance_deg = 2.0) {
     double angle = getTibiaAngleToGround(model, leg, angles);
     return std::abs(angle - 90.0) <= tolerance_deg;
+}
+
+// Valida la configuración de una pata usando cinemática inversa
+bool validateLegConfigurationWithIK(const RobotModel &model, const LegConfiguration &config,
+                                    double tolerance_mm = 1.0) {
+    // Obtener la posición objetivo desde la configuración
+    Point3D target_position = config.global_position;
+    JointAngles target_angles = config.joint_angles;
+
+    // Aplicar cinemática inversa para obtener ángulos calculados
+    Point3D target = model.forwardKinematicsGlobalCoordinates(config.leg_index, target_angles);
+    JointAngles ik = model.inverseKinematicsCurrentGlobalCoordinates(config.leg_index, target_angles, target);
+    // Calcular la posición usando los ángulos IK
+    Point3D fk = model.forwardKinematicsGlobalCoordinates(config.leg_index, ik);
+
+    // Calcular error de posición
+    double position_error = std::sqrt(
+        std::pow(target.x - fk.x, 2) +
+        std::pow(target.y - fk.y, 2) +
+        std::pow(target.z - fk.z, 2));
+
+    // Verificar si la solución es válida
+    return position_error <= tolerance_mm;
 }
 
 // Encuentra los mejores ángulos para una altura dada del robot usando fuerza bruta
@@ -56,12 +90,12 @@ std::vector<AngleSolution> findOptimalAnglesForHeight(const RobotModel &model, d
     // Estrategia de fuerza bruta: recorrer solo fémur y tibia (coxa = 30°)
     double femur_step = 0.1; // Paso más pequeño para mayor precisión
     double tibia_step = 0.1;
-    double coxa_deg = 30.0; // Coxa fija en 30°
+    double coxa_deg = 0.0; // Coxa fija en 0°
 
     // Queremos la altura minima, entonces evaluamos desde el limite inferior hasta 0, lo que implica que el fémur esté apuntado hacia arriba.
-    for (double femur_deg = p.femur_angle_limits[0]; femur_deg <= 0; femur_deg += femur_step) {
+    for (double femur_deg = p.femur_angle_limits[0]; femur_deg <= 1; femur_deg += femur_step) {
         // Queremos la altura mñinima, entonces evaluamos desde 0 hasta el limite superior de la tibia.
-        for (double tibia_deg = 0; tibia_deg <= p.tibia_angle_limits[1]; tibia_deg += tibia_step) {
+        for (double tibia_deg = -1; tibia_deg <= p.tibia_angle_limits[1]; tibia_deg += tibia_step) {
             total_combinations++;
 
             JointAngles test_angles(coxa_deg * M_PI / 180.0,
@@ -76,9 +110,7 @@ std::vector<AngleSolution> findOptimalAnglesForHeight(const RobotModel &model, d
 
             // Solo considerar si la altura está dentro de la tolerancia
             if (height_error <= height_tolerance) {
-                // printf("Coxa: %.2f°, Femur: %.2f°, Tibia: %.2f° -> Pos: (%.2f, %.2f, %.2f), Error: %.2fmm\n",
-                //        coxa_deg, femur_deg, tibia_deg,
-                //        fk_result.x, fk_result.y, fk_result.z, height_error);
+
                 double tibia_angle = getTibiaAngleToGround(model, 0, test_angles);
                 bool is_perpendicular = isTibiaPerpendicularToGround(model, 0, test_angles, 0.0); // Tolerancia aumentada
 
@@ -106,7 +138,7 @@ std::vector<AngleSolution> findOptimalAnglesForHeight(const RobotModel &model, d
     // Refinar las mejores soluciones con búsqueda más fina
     if (!solutions.empty()) {
         std::sort(solutions.begin(), solutions.end(),
-                  [](const AngleSolution &a, const AngleSolution &b) {
+                  [](AngleSolution &a, AngleSolution &b) {
                       return a.score < b.score;
                   });
 
@@ -115,7 +147,7 @@ std::vector<AngleSolution> findOptimalAnglesForHeight(const RobotModel &model, d
         // Tomar las mejores 3 soluciones y refinarlas (reducido por rangos más pequeños)
         std::vector<AngleSolution> refined_solutions;
         for (int i = 0; i < std::min(3, (int)solutions.size()); i++) {
-            const AngleSolution &base = solutions[i];
+            AngleSolution &base = solutions[i];
 
             // Búsqueda fina alrededor de la mejor solución (solo fémur y tibia)
             for (double df = -2.0; df <= 2.0; df += 0.5) {
@@ -165,35 +197,24 @@ std::vector<AngleSolution> findOptimalAnglesForHeight(const RobotModel &model, d
 
     // Ordenar por puntuación final
     std::sort(solutions.begin(), solutions.end(),
-              [](const AngleSolution &a, const AngleSolution &b) {
+              [](AngleSolution &a, AngleSolution &b) {
                   return a.score < b.score;
               });
 
     return solutions;
 }
 
-// Estructura para almacenar información de una pata
-struct LegConfiguration {
-    int leg_index;
-    double base_angle_deg;
-    JointAngles joint_angles;
-    Point3D global_position;
-    double height_error;
-    double tibia_angle;
-    double score;
-};
-
 // Calcula las configuraciones para las 6 patas usando los offsets angulares de BASE_THETA_OFFSETS
 std::vector<LegConfiguration> calculateAllLegsConfiguration(const RobotModel &model, double target_height,
-                                                            const AngleSolution &base_solution) {
+                                                            AngleSolution &base_solution) {
     std::vector<LegConfiguration> leg_configs;
 
     // Offsets angulares para cada pata (BASE_THETA_OFFSETS en grados)
     const double BASE_THETA_OFFSETS_DEG[6] = {-30.0, -90.0, -150.0, 150.0, 90.0, 30.0};
 
     std::cout << "\nCalculando configuraciones para las 6 patas:" << std::endl;
-    std::cout << "Pata | Base°  | Coxa° | Femur° | Tibia° | Pos_X   | Pos_Y   | Pos_Z   | H_Error | T_Angle" << std::endl;
-    std::cout << "-----|--------|-------|--------|--------|---------|---------|---------|---------|--------" << std::endl;
+    std::cout << "Pata | Coxa° | Femur° | Tibia° | Pos_X   | Pos_Y   | Pos_Z   | H_Error | T_Angle" << std::endl;
+    std::cout << "-----|-------|--------|--------|---------|---------|---------|---------|--------" << std::endl;
 
     for (int leg = 0; leg < 6; leg++) {
         LegConfiguration config;
@@ -218,10 +239,9 @@ std::vector<LegConfiguration> calculateAllLegsConfiguration(const RobotModel &mo
 
         // Mostrar información de la pata
         std::cout << std::setw(4) << leg << " | "
-                  << std::setw(6) << std::fixed << std::setprecision(1) << config.base_angle_deg << " | "
-                  << std::setw(5) << std::setprecision(1) << base_solution.coxa_deg << " | "
-                  << std::setw(6) << std::setprecision(1) << base_solution.femur_deg << " | "
-                  << std::setw(6) << std::setprecision(1) << base_solution.tibia_deg << " | "
+                  << std::setw(5) << std::setprecision(2) << base_solution.coxa_deg << " | "
+                  << std::setw(6) << std::setprecision(2) << base_solution.femur_deg << " | "
+                  << std::setw(6) << std::setprecision(2) << base_solution.tibia_deg << " | "
                   << std::setw(7) << std::setprecision(2) << config.global_position.x << " | "
                   << std::setw(7) << std::setprecision(2) << config.global_position.y << " | "
                   << std::setw(7) << std::setprecision(2) << config.global_position.z << " | "
@@ -246,7 +266,7 @@ int main() {
     p.coxa_angle_limits[1] = 65;
     p.femur_angle_limits[0] = -75;
     p.femur_angle_limits[1] = 75;
-    p.tibia_angle_limits[0] = 50;
+    p.tibia_angle_limits[0] = -50;
     p.tibia_angle_limits[1] = 50;
 
     RobotModel model(p);
@@ -261,7 +281,7 @@ int main() {
     std::cout << "  - Altura robot: " << p.robot_height << "mm" << std::endl;
 
     // Definir las alturas objetivo a probar - ajustadas para las limitaciones reales
-    std::vector<double> target_heights = {140.0, 208.0}; // Rango de alturas a probar
+    std::vector<double> target_heights = {140.0}; // Rango de alturas a probar
 
     for (double target_height : target_heights) {
         std::cout << "\n"
@@ -280,7 +300,7 @@ int main() {
         std::cout << "Encontradas " << solutions.size() << " soluciones válidas" << std::endl;
 
         // Usar la mejor solución para calcular las 6 patas
-        const AngleSolution &best_solution = solutions[0];
+        AngleSolution &best_solution = solutions[0];
 
         std::cout << "\n--- MEJOR SOLUCIÓN PARA PATA DE REFERENCIA ---" << std::endl;
         std::cout << "Ángulos articulares:" << std::endl;
@@ -298,6 +318,20 @@ int main() {
 
         // Calcular configuraciones para las 6 patas
         std::vector<LegConfiguration> all_legs = calculateAllLegsConfiguration(model, target_height, best_solution);
+
+        // Validar las configuraciones con cinemática inversa
+        std::cout << "\n--- VALIDACIÓN CON CINEMÁTICA INVERSA ---" << std::endl;
+        int patas_validadas = 0;
+        for (const auto &leg_config : all_legs) {
+            bool ik_valid = validateLegConfigurationWithIK(model, leg_config, 1.0);
+            if (ik_valid) {
+                patas_validadas++;
+            }
+            std::cout << "Pata " << leg_config.leg_index << " (offset " << leg_config.base_angle_deg << "°): ";
+            std::cout << "IK: " << (ik_valid ? "PASÓ" : "FALLÓ")
+                      << std::endl;
+        }
+        std::cout << "Total: " << patas_validadas << "/6 patas validadas" << std::endl;
 
         // Calcular estadísticas
         double avg_height_error = 0.0;
