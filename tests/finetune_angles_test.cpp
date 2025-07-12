@@ -54,12 +54,14 @@ std::vector<AngleSolution> findOptimalAnglesForHeight(const RobotModel &model, d
     int valid_combinations = 0;
 
     // Estrategia de fuerza bruta: recorrer solo fémur y tibia (coxa = 30°)
-    double femur_step = 1.0; // Paso más pequeño para mayor precisión
-    double tibia_step = 1.0;
+    double femur_step = 0.1; // Paso más pequeño para mayor precisión
+    double tibia_step = 0.1;
     double coxa_deg = 30.0; // Coxa fija en 30°
 
-    for (double femur_deg = p.femur_angle_limits[0]; femur_deg <= p.femur_angle_limits[1]; femur_deg += femur_step) {
-        for (double tibia_deg = p.tibia_angle_limits[0]; tibia_deg <= p.tibia_angle_limits[1]; tibia_deg += tibia_step) {
+    // Queremos la altura minima, entonces evaluamos desde el limite inferior hasta 0, lo que implica que el fémur esté apuntado hacia arriba.
+    for (double femur_deg = p.femur_angle_limits[0]; femur_deg <= 0; femur_deg += femur_step) {
+        // Queremos la altura mñinima, entonces evaluamos desde 0 hasta el limite superior de la tibia.
+        for (double tibia_deg = 0; tibia_deg <= p.tibia_angle_limits[1]; tibia_deg += tibia_step) {
             total_combinations++;
 
             JointAngles test_angles(coxa_deg * M_PI / 180.0,
@@ -74,26 +76,26 @@ std::vector<AngleSolution> findOptimalAnglesForHeight(const RobotModel &model, d
 
             // Solo considerar si la altura está dentro de la tolerancia
             if (height_error <= height_tolerance) {
-                printf("Coxa: %.2f°, Femur: %.2f°, Tibia: %.2f° -> Pos: (%.2f, %.2f, %.2f), Error: %.2fmm\n",
-                       coxa_deg, femur_deg, tibia_deg,
-                       fk_result.x, fk_result.y, fk_result.z, height_error);
-                // double tibia_angle = getTibiaAngleToGround(model, 0, test_angles);
-                // bool is_perpendicular = isTibiaPerpendicularToGround(model, 0, test_angles, 10.0); // Tolerancia aumentada
+                // printf("Coxa: %.2f°, Femur: %.2f°, Tibia: %.2f° -> Pos: (%.2f, %.2f, %.2f), Error: %.2fmm\n",
+                //        coxa_deg, femur_deg, tibia_deg,
+                //        fk_result.x, fk_result.y, fk_result.z, height_error);
+                double tibia_angle = getTibiaAngleToGround(model, 0, test_angles);
+                bool is_perpendicular = isTibiaPerpendicularToGround(model, 0, test_angles, 0.0); // Tolerancia aumentada
 
-                // // Solo guardar si la tibia está perpendicular
-                // if (is_perpendicular) {
-                //     AngleSolution solution;
-                //     solution.femur_deg = femur_deg;
-                //     solution.tibia_deg = tibia_deg;
-                //     solution.coxa_deg = coxa_deg;
-                //     solution.global_position = fk_result;
-                //     solution.height_error = height_error;
-                //     solution.tibia_angle = tibia_angle;
-                //     solution.score = 10.0 * height_error + std::abs(tibia_angle - 90.0);
+                // Solo guardar si la tibia está perpendicular
+                if (is_perpendicular) {
+                    AngleSolution solution;
+                    solution.femur_deg = femur_deg;
+                    solution.tibia_deg = tibia_deg;
+                    solution.coxa_deg = coxa_deg;
+                    solution.global_position = fk_result;
+                    solution.height_error = height_error;
+                    solution.tibia_angle = tibia_angle;
+                    solution.score = 10.0 * height_error + std::abs(tibia_angle - 90.0);
 
-                //     solutions.push_back(solution);
-                //     valid_combinations++;
-                // }
+                    solutions.push_back(solution);
+                    valid_combinations++;
+                }
             }
         }
     }
@@ -244,13 +246,13 @@ int main() {
     p.coxa_angle_limits[1] = 65;
     p.femur_angle_limits[0] = -75;
     p.femur_angle_limits[1] = 75;
-    p.tibia_angle_limits[0] = -45;
-    p.tibia_angle_limits[1] = 45;
+    p.tibia_angle_limits[0] = 50;
+    p.tibia_angle_limits[1] = 50;
 
     RobotModel model(p);
 
     std::cout << std::fixed << std::setprecision(2);
-    std::cout << "=== BÚSQUEDA DE ÁNGULOS ÓPTIMOS PARA ALTURA ESPECÍFICA ===" << std::endl;
+    std::cout << "=== BÚSQUEDA DE ÁNGULOS ÓPTIMOS PARA ALTURA MÍNIMA ESPECÍFICA ===" << std::endl;
     std::cout << "Parámetros del robot:" << std::endl;
     std::cout << "  - Radio hexágono: " << p.hexagon_radius << "mm" << std::endl;
     std::cout << "  - Longitud coxa: " << p.coxa_length << "mm" << std::endl;
@@ -259,7 +261,7 @@ int main() {
     std::cout << "  - Altura robot: " << p.robot_height << "mm" << std::endl;
 
     // Definir las alturas objetivo a probar - ajustadas para las limitaciones reales
-    std::vector<double> target_heights = {208}; // Rango de alturas a probar
+    std::vector<double> target_heights = {140.0, 208.0}; // Rango de alturas a probar
 
     for (double target_height : target_heights) {
         std::cout << "\n"
@@ -330,20 +332,6 @@ int main() {
                   << (verification.y - best_solution.global_position.y) << ", "
                   << (verification.z - best_solution.global_position.z) << ")" << std::endl;
     }
-
-    std::cout << "\n"
-              << std::string(80, '=') << std::endl;
-    std::cout << "ANÁLISIS COMPLETADO" << std::endl;
-    std::cout << "Configuración del robot según AGENTS.md:" << std::endl;
-    std::cout << "  - Limitaciones reales de articulaciones aplicadas" << std::endl;
-    std::cout << "  - Coxa: ±65°, Fémur: ±75°, Tibia: ±45°" << std::endl;
-    std::cout << "  - Disposición hexagonal con BASE_THETA_OFFSETS" << std::endl;
-    std::cout << "  - Altura objetivo: 208mm (altura nominal del robot)" << std::endl;
-    std::cout << "Leyenda:" << std::endl;
-    std::cout << "  - H_Error: Error de altura respecto al objetivo (mm)" << std::endl;
-    std::cout << "  - T_Angle: Ángulo de la tibia respecto al suelo (°)" << std::endl;
-    std::cout << "  - Base°: Offset angular de la pata en el hexágono (°)" << std::endl;
-    std::cout << "  - Todas las patas mantienen la tibia perpendicular al suelo (90° ±3°)" << std::endl;
 
     return 0;
 }
