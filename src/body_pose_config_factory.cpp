@@ -2,7 +2,6 @@
 #include "hexamotion_constants.h"
 #include "math_utils.h"
 #include <cmath>
-#include <limits>
 
 /**
  * @file pose_config_factory.cpp
@@ -76,58 +75,33 @@ std::array<LegStancePosition, NUM_LEGS> calculateHexagonalStancePositions(const 
  *         is found.
  */
 CalculatedServoAngles calculateServoAnglesForHeight(double target_height_mm, const Parameters &params) {
-    CalculatedServoAngles best{0.0, 0.0, 0.0, false};
-    double bestErr = std::numeric_limits<double>::infinity();
+    CalculatedServoAngles result{0.0, 0.0, 0.0, false};
 
-    // Ranges based on servo limits (already in degrees, convert to radians for calculations)
-    const double alphaMin = math_utils::degreesToRadians(params.femur_angle_limits[0]);
-    const double alphaMax = math_utils::degreesToRadians(params.femur_angle_limits[1]);
-    const double betaMin = math_utils::degreesToRadians(params.tibia_angle_limits[0]);
-    const double betaMax = math_utils::degreesToRadians(params.tibia_angle_limits[1]);
-    const double dBeta = math_utils::degreesToRadians(0.1);
-
-    const double A = params.coxa_length;
     const double B = params.femur_length;
     const double C = params.tibia_length;
 
-    // Sweep the tibia angle to search for a valid configuration
-    for (double beta = betaMin; beta <= betaMax; beta += dBeta) {
-        double sum = A + B * std::cos(beta);
-        double discriminant = sum * sum - (target_height_mm * target_height_mm - C * C);
-        if (discriminant < 0.0)
-            continue;
+    // Analytic geometry for a vertical tibia:
+    // H = C + B * sin(femur_angle)
+    double ratio = (target_height_mm - C) / B;
+    if (ratio < -1.0 || ratio > 1.0)
+        return result;
 
-        double sqrtD = std::sqrt(discriminant);
-        // Evaluate both quadratic roots for alpha
-        for (int sign : {-1, 1}) {
-            double t = (-sum + sign * sqrtD) / (target_height_mm + C);
-            double alpha = 2.0 * std::atan(t);
-            if (alpha < alphaMin || alpha > alphaMax)
-                continue;
+    double femur_rad = std::asin(ratio);
+    double femur_deg = math_utils::radiansToDegrees(femur_rad);
+    double tibia_deg = -femur_deg; // Keep tibia vertical
 
-            // Measure deviation from a perfectly vertical tibia
-            double err = std::fabs(alpha + beta);
-            if (err >= bestErr)
-                continue;
+    // Check servo limits
+    if (femur_deg < params.femur_angle_limits[0] ||
+        femur_deg > params.femur_angle_limits[1])
+        return result;
+    if (tibia_deg < params.tibia_angle_limits[0] ||
+        tibia_deg > params.tibia_angle_limits[1])
+        return result;
 
-            double theta1 = math_utils::radiansToDegrees(alpha - beta);
-            double theta2 = math_utils::radiansToDegrees(-beta);
-
-            // Skip solutions that exceed servo limits
-            if (theta1 < params.femur_angle_limits[0] ||
-                theta1 > params.femur_angle_limits[1])
-                continue;
-            if (theta2 < params.tibia_angle_limits[0] ||
-                theta2 > params.tibia_angle_limits[1])
-                continue;
-
-            // Keep the best solution found so far
-            bestErr = err;
-            best = {0.0, theta1, theta2, true};
-        }
-    }
-
-    return best;
+    result.femur = femur_deg;
+    result.tibia = tibia_deg;
+    result.valid = true;
+    return result;
 }
 
 /**
