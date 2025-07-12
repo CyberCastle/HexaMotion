@@ -10,6 +10,14 @@
  * Centralizing these constants improves maintainability and consistency.
  */
 
+#include <cmath>
+#ifndef M_PI
+#define M_PI 3.14159265358979323846
+#endif
+
+#define NUM_LEGS 6
+#define DEGREES_TO_RADIANS_FACTOR (M_PI / 180.0f)
+
 // ========================================================================
 // VELOCITY CONTROL CONSTANTS
 // ========================================================================
@@ -67,7 +75,6 @@
 #define TIBIA_ANGLE_MAX 45.0f  // Maximum tibia angle (degrees)
 
 // Robot geometry angles
-#define LEG_ANGLE_SPACING 60.0f // Angular spacing between hexapod legs (degrees)
 #define FULL_ROTATION 360.0f    // Full rotation in degrees
 
 // Inverse kinematics starting poses (degrees)
@@ -88,11 +95,12 @@
 
 // Control system defaults
 #define DEFAULT_CONTROL_FREQUENCY 50.0 // Default control frequency (Hz)
+#define DEFAULT_STEP_FREQUENCY 1.0     // Default step frequency (Hz)
 
 // Velocity scaling and coupling factors
 #define DEFAULT_ANGULAR_SCALING 1.0     // Default angular velocity scaling
 #define ANGULAR_LINEAR_COUPLING 0.3     // Coupling factor between angular and linear velocity
-#define ANGULAR_ACCELERATION_FACTOR 2.0 // Angular acceleration multiplier
+#define ANGULAR_ACCELERATION_FACTOR 2000.0 // Angular acceleration threshold (mm/s²)
 #define WORKSPACE_SCALING_FACTOR 0.5    // Workspace scaling factor
 #define WALKSPACE_SCALING_FACTOR 0.7    // Walkspace scaling factor
 #define MIN_SERVO_VELOCITY 0.1          // Minimum servo velocity (10% of max)
@@ -108,7 +116,7 @@
 #define RADIANS_TO_DEGREES_FACTOR (180.0f / M_PI) // Conversion factor radians to degrees
 
 // Physics constants
-#define GRAVITY_ACCELERATION 9.80665f // Standard gravity acceleration (m/s²) - BIPM definition
+#define GRAVITY_ACCELERATION 9806.65f // Standard gravity acceleration (mm/s²) - BIPM definition
                                       // Reference: https://en.wikipedia.org/wiki/Standard_gravity
 
 // Sampling and analysis constants
@@ -118,19 +126,11 @@
 // INVERSE KINEMATICS CONSTANTS
 // ========================================================================
 
-// DLS (Damped Least Squares) IK parameters
+// DLS (Damped Least Squares) IK parameters (OpenSHC-style)
 #define IK_DLS_COEFFICIENT 0.02f       // Damping factor for numerical stability in DLS method
 #define IK_TOLERANCE 1.0f              // Position tolerance for IK convergence (1mm)
 #define IK_DEFAULT_MAX_ITERATIONS 30   // Default maximum iterations for IK solver
-#define IK_HIGH_DAMPING 0.1f           // High damping factor for singular configurations
-#define IK_STAGNATION_THRESHOLD 0.001f // Threshold for detecting stagnation in IK iteration
-#define IK_STAGNATION_COUNT_MAX 5      // Maximum stagnation count before trying next start
-#define IK_SINGULAR_THRESHOLD 1e-6f    // Determinant threshold for detecting singular configurations
-
-// IK workspace safety margins
-#define IK_MIN_REACH_MARGIN 0.9f    // Safety margin for minimum reach (90% of theoretical)
-#define IK_MAX_REACH_MARGIN 1.02f   // Safety margin for maximum reach (102% of theoretical)
-#define IK_STEP_SIZE_REDUCTION 0.5f // Step size reduction factor for singular configurations
+#define IK_MAX_ANGLE_STEP 5.0f         // Maximum angle change per IK iteration (degrees)
 
 // Workspace analysis parameters
 #define WORKSPACE_RESOLUTION 10 // Discretization resolution for workspace analysis
@@ -154,6 +154,64 @@
 #define FLOAT_TOLERANCE 1e-6f     // Standard floating point tolerance
 #define ANGLE_TOLERANCE 0.1f      // Angular tolerance (degrees)
 #define POSITION_TOLERANCE 1.0f   // Position tolerance (mm)
-#define VELOCITY_THRESHOLD 0.001f // Minimum velocity to consider as moving
+#define VELOCITY_THRESHOLD 1.0f // Minimum velocity to consider as moving (mm/s)
+
+// ========================================================================
+// AUTO-POSE CONSTANTS (OpenSHC equivalent)
+// ========================================================================
+
+// Auto-pose phase conversion constants
+#define AUTO_POSE_PHASE_CONVERSION_FACTOR 100.0f  // Conversion factor from gait phase (0.0-1.0) to phase (0-100)
+#define AUTO_POSE_GAIT_PHASE_THRESHOLD 0.5f       // Threshold for determining tripod gait group phases
+#define AUTO_POSE_BODY_COMPENSATION_REDUCTION 0.5f // Reduction factor for body-level compensation amplitudes
+
+// Auto-pose default amplitudes (OpenSHC auto_pose.yaml equivalent)
+#define AUTO_POSE_DEFAULT_ROLL_AMPLITUDE 0.015f   // Default roll compensation amplitude (radians)
+#define AUTO_POSE_DEFAULT_PITCH_AMPLITUDE 0.020f  // Default pitch compensation amplitude (radians)
+#define AUTO_POSE_DEFAULT_Z_AMPLITUDE 0.020f      // Default Z compensation amplitude (millimeters)
+
+// ========================================================================
+// SYSTEM STATE CONSTANTS
+// ========================================================================
+
+// System states (OpenSHC equivalent)
+enum SystemState {
+    SYSTEM_UNKNOWN = 0,  // Unknown state
+    SYSTEM_PACKED = 1,   // Robot is packed/disabled
+    SYSTEM_READY = 2,    // Robot is ready but not walking
+    SYSTEM_RUNNING = 3   // Robot is running/walking
+};
+
+// Startup sequence constants
+#define STARTUP_SEQUENCE_TIME 6.0f      // Time for startup sequence (seconds)
+#define SHUTDOWN_SEQUENCE_TIME 4.0f     // Time for shutdown sequence (seconds)
+#define STANCE_TRANSITION_HEIGHT 30.0f  // Height for stance transition (mm)
+#define STANCE_TRANSITION_TIME 0.5f     // Time for stance transition (seconds)
+
+// Progress constants
+#define PROGRESS_COMPLETE 100    // Sequence completed
+#define PROGRESS_GENERATING -1   // Sequence is being generated
+
+#define LEG_STEPPER_DUTY_FACTOR 0.5
+#define LEG_STEPPER_FLOAT_TOLERANCE 1e-6f
+#define LEG_STEPPER_MAX_SWING_VELOCITY 100.0
+#define LEG_STEPPER_DEFAULT_NODE_SEPARATION 0.05
+#define LEG_STEPPER_DEFAULT_TOUCHDOWN_VELOCITY -0.2
+#define LEG_STEPPER_STANCE_NODE_SCALER -0.25
+#define LEG_STEPPER_SWING_LATERAL_SHIFT 10.0
+#define LEG_STEPPER_SWING_NODE_SCALER 0.25
+#define LEG_STEPPER_TOUCHDOWN_NODE_MULTIPLIER 4.0
+#define LEG_STEPPER_TOUCHDOWN_INTERPOLATION 0.5
+
+// Per-leg base orientation offsets in radians - symmetric for opposite leg pairs
+// Pairs: (0,3)=(-30°,30°), (1,4)=(-90°,90°), (2,5)=(-150°,150°)
+// This matches the DH parameter orientation
+const double BASE_THETA_OFFSETS[NUM_LEGS] = {
+    -30.0 * DEGREES_TO_RADIANS_FACTOR,
+    -90.0 * DEGREES_TO_RADIANS_FACTOR,
+    -150.0 * DEGREES_TO_RADIANS_FACTOR,
+    150.0 * DEGREES_TO_RADIANS_FACTOR,
+    90.0 * DEGREES_TO_RADIANS_FACTOR,
+    30.0 * DEGREES_TO_RADIANS_FACTOR};
 
 #endif // HEXAMOTION_CONSTANTS_H

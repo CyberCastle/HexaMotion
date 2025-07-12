@@ -12,7 +12,7 @@ int main() {
     p.coxa_length = 50;
     p.femur_length = 101;
     p.tibia_length = 208;
-    p.robot_height = 120;
+    p.robot_height = 208;
     p.coxa_angle_limits[0] = -90;
     p.coxa_angle_limits[1] = 90;
     p.femur_angle_limits[0] = -90;
@@ -30,7 +30,8 @@ int main() {
     DummyIMU imu;
     DummyFSR fsr;
     DummyServo servos;
-    sys.initialize(&imu, &fsr, &servos);
+    // PoseConfiguration pose_config; // Elimina o reemplaza por una construcción válida con parámetros
+    sys.initialize(&imu, &fsr, &servos, pose_config);
 
     // Test basic leg 0 geometry
     std::cout << "\n=== Leg 0 FK Analysis ===" << std::endl;

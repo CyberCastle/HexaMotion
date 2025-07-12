@@ -134,8 +134,7 @@ int main() {
         for (int i = 0; i < 100 && controller.isTransitioning(); ++i) {
             controller.update(0.02f);
             if (i % 25 == 0) {
-                TransitionProgress progress = controller.getTransitionProgress();
-                std::cout << "Transition progress: " << progress.current_step << "/" << progress.total_steps << " (" << progress.completion_percentage << "%)" << std::endl;
+                // Eliminar cualquier referencia a TransitionProgress y getTransitionProgress
             }
         }
 

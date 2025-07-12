@@ -86,7 +86,7 @@ void AdmittanceController::setDynamicStiffness(bool enabled, double swing_scaler
     load_stiffness_scaler_ = load_scaler;
 }
 
-void AdmittanceController::updateStiffness(const LegState leg_states[NUM_LEGS],
+void AdmittanceController::updateStiffness(const StepPhase leg_states[NUM_LEGS],
                                            const Point3D leg_positions[NUM_LEGS],
                                            double step_clearance) {
     if (!dynamic_stiffness_enabled_)
@@ -187,7 +187,7 @@ Point3D AdmittanceController::calculateAcceleration(const AdmittanceParams &para
     return total_force * (DEFAULT_ANGULAR_SCALING / params.virtual_mass);
 }
 
-double AdmittanceController::calculateStiffnessScale(int leg_index, LegState leg_state,
+double AdmittanceController::calculateStiffnessScale(int leg_index, StepPhase leg_state,
                                                     const Point3D &leg_position) {
     if (leg_state != SWING_PHASE)
         return 1.0f;
@@ -241,7 +241,7 @@ bool AdmittanceController::maintainOrientation(const Point3D &target, Point3D &c
     return true;
 }
 
-bool AdmittanceController::checkStability(const Point3D leg_pos[NUM_LEGS], const LegState leg_states[NUM_LEGS]) {
+bool AdmittanceController::checkStability(const Point3D leg_pos[NUM_LEGS], const StepPhase leg_states[NUM_LEGS]) {
     if (!fsr_)
         return true;
 
@@ -255,10 +255,6 @@ bool AdmittanceController::checkStability(const Point3D leg_pos[NUM_LEGS], const
     }
     return contacts >= 3;
 }
-
-// ==============================
-// DERIVATIVE-BASED INTEGRATION USING math_utils
-// ==============================
 
 Point3D AdmittanceController::integrateDerivatives(int leg_index) {
     if (leg_index < 0 || leg_index >= NUM_LEGS) {

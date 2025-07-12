@@ -1,5 +1,5 @@
-#include "HexaModel.h"
 #include "math_utils.h"
+#include "robot_model.h"
 #include <cmath>
 #include <iostream>
 #include <vector>
@@ -20,14 +20,8 @@ int main() {
     params.tibia_angle_limits[0] = -180.0f;
     params.tibia_angle_limits[1] = 180.0f;
 
-    // Initialize DH parameters to zero (will use default)
-    for (int l = 0; l < NUM_LEGS; ++l) {
-        for (int j = 0; j < DOF_PER_LEG + 1; ++j) {
-            for (int k = 0; k < 4; ++k) {
-                params.dh_parameters[l][j][k] = 0.0f;
-            }
-        }
-    }
+    // Use default DH parameters (RobotModel will initialize them automatically)
+    params.use_custom_dh_parameters = false;
 
     RobotModel model(params);
 
@@ -66,7 +60,7 @@ int main() {
                   << config.coxa << "°, " << config.femur << "°, " << config.tibia << "°)" << std::endl;
 
         // Forward kinematics to get target position
-        Point3D target = model.forwardKinematics(0, config);
+        Point3D target = model.forwardKinematicsGlobalCoordinates(0, config);
         std::cout << "  Target position: (" << target.x << ", " << target.y << ", " << target.z << ")" << std::endl;
 
         // Check reachability
@@ -76,8 +70,8 @@ int main() {
         double base_x = 200.0f;
         double base_y = 0.0f;
         double distance_from_base = sqrt((target.x - base_x) * (target.x - base_x) +
-                                        (target.y - base_y) * (target.y - base_y) +
-                                        target.z * target.z);
+                                         (target.y - base_y) * (target.y - base_y) +
+                                         target.z * target.z);
 
         std::cout << "  Distance from origin: " << distance_from_origin << "mm" << std::endl;
         std::cout << "  Distance from leg base: " << distance_from_base << "mm" << std::endl;
@@ -102,12 +96,12 @@ int main() {
         std::cout << "\nTesting position at distance " << dist << "mm from leg base:" << std::endl;
         std::cout << "  Position: (" << test_pos.x << ", " << test_pos.y << ", " << test_pos.z << ")" << std::endl;
 
-        JointAngles ik_result = model.inverseKinematics(0, test_pos);
-        Point3D fk_verify = model.forwardKinematics(0, ik_result);
+        JointAngles ik_result = model.inverseKinematicsGlobalCoordinates(0, test_pos);
+        Point3D fk_verify = model.forwardKinematicsGlobalCoordinates(0, ik_result);
 
         double error = sqrt(pow(test_pos.x - fk_verify.x, 2) +
-                           pow(test_pos.y - fk_verify.y, 2) +
-                           pow(test_pos.z - fk_verify.z, 2));
+                            pow(test_pos.y - fk_verify.y, 2) +
+                            pow(test_pos.z - fk_verify.z, 2));
 
         std::cout << "  IK result: (" << ik_result.coxa << "°, " << ik_result.femur << "°, " << ik_result.tibia << "°)" << std::endl;
         std::cout << "  FK verify: (" << fk_verify.x << ", " << fk_verify.y << ", " << fk_verify.z << ")" << std::endl;

@@ -1,4 +1,4 @@
-#include "../src/HexaModel.h" // for LegState enum
+#include "robot_model.h" // for StepPhase enum
 #include "../src/admittance_controller.h"
 #include "test_stubs.h"
 #include <cassert>
@@ -10,7 +10,7 @@ int main() {
     p.coxa_length = 50;
     p.femur_length = 101;
     p.tibia_length = 208;
-    p.robot_height = 120;
+    p.robot_height = 208;
     p.height_offset = 0;
     p.control_frequency = 50;
 
@@ -21,7 +21,7 @@ int main() {
     Point3D target(0, 0, 0);
     Point3D current(0, 0, 0);
     assert(ac.maintainOrientation(target, current, 0.1f));
-    LegState states[NUM_LEGS];
+    StepPhase states[NUM_LEGS];
     Point3D legs[NUM_LEGS];
     for (int i = 0; i < NUM_LEGS; i++) {
         states[i] = STANCE_PHASE;

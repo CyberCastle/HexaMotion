@@ -6,15 +6,6 @@
 #include <iostream>
 #include <vector>
 
-void printGaitOffsets(const std::string &gait_name, const double offsets[NUM_LEGS]) {
-    std::cout << "\n"
-              << gait_name << " Gait Phase Offsets:" << std::endl;
-    for (int i = 0; i < NUM_LEGS; ++i) {
-        std::cout << "  Leg " << i << ": " << std::fixed << std::setprecision(3)
-                  << offsets[i] << std::endl;
-    }
-}
-
 bool validateTripodGait(LocomotionSystem &sys) {
     std::cout << "\n=== VALIDATING TRIPOD GAIT ===" << std::endl;
 
@@ -69,7 +60,8 @@ bool validateGaitImplementation(GaitType gait, const std::string &name,
     DummyFSR fsr;
     DummyServo servos;
 
-    assert(sys.initialize(&imu, &fsr, &servos));
+    PoseConfiguration pose_config;
+    assert(sys.initialize(&imu, &fsr, &servos, pose_config));
     assert(sys.calibrateSystem());
     assert(sys.setGaitType(gait));
 
@@ -102,7 +94,8 @@ int main() {
     DummyFSR fsr;
     DummyServo servos;
 
-    assert(sys.initialize(&imu, &fsr, &servos));
+    PoseConfiguration pose_config;
+    assert(sys.initialize(&imu, &fsr, &servos, pose_config));
     assert(sys.calibrateSystem());
 
     int passed_tests = 0;

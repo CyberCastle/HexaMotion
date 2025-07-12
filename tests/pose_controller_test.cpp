@@ -1,5 +1,5 @@
-#include "../src/pose_config_factory.h"
-#include "../src/pose_controller.h"
+#include "../src/body_pose_config_factory.h"
+#include "../src/body_pose_controller.h"
 #include "test_stubs.h"
 #include <cassert>
 #include <iostream>
@@ -17,7 +17,7 @@ This library provides locomotion control for a hexapod robot based on the Arduin
 
 ## Test Parameters
 
-robot height: 120 mm
+robot height: 208 mm
 robot weight: 6.5 Kg
 body hexagon radius: 200 mm.
 coxa length: 50 mm
@@ -32,7 +32,7 @@ p.hexagon_radius = 200;
 p.coxa_length = 50;
 p.femur_length = 101;
 p.tibia_length = 208;
-p.robot_height = 120;
+p.robot_height = 208;
 p.robot_weight = 6.5;
 p.control_frequency = 50;
 p.coxa_angle_limits[0] = -65;
@@ -51,7 +51,7 @@ int main() {
     p.coxa_length = 50;
     p.femur_length = 101;
     p.tibia_length = 208;
-    p.robot_height = 120;
+    p.robot_height = 208;
     p.robot_weight = 6.5; // Required for OpenSHC-style pose limit calculations
     p.height_offset = 0;
     p.control_frequency = 50;
@@ -66,68 +66,72 @@ int main() {
     DummyServo servos;
 
     // Create default configuration using factory (proper approach)
-    PoseConfiguration default_config = getDefaultPoseConfig(p);
-    PoseController pc(model, &servos, default_config);
+    BodyPoseConfiguration default_config = getDefaultBodyPoseConfig(p);
+    BodyPoseController pc(model, default_config);
 
     // Test OpenSHC-style configuration modes
     std::cout << "=== Testing OpenSHC-style Pose Configuration ===" << std::endl;
 
     // Test current default configuration
-    const auto &current_default = pc.getPoseConfig();
-    std::cout << "Default config - Body clearance: " << current_default.body_clearance * 1000.0f << "mm, "
-              << "Swing height: " << current_default.swing_height * 1000.0f << "mm" << std::endl;
-    std::cout << "Max translation: X=" << current_default.max_translation.x * 1000.0f << "mm, "
-              << "Y=" << current_default.max_translation.y * 1000.0f << "mm, "
-              << "Z=" << current_default.max_translation.z * 1000.0f << "mm" << std::endl;
+    const auto &current_default = pc.getBodyPoseConfig();
+    std::cout << "Default config - Body clearance: " << current_default.body_clearance << "mm, "
+              << "Swing height: " << current_default.swing_height << "mm" << std::endl;
+    std::cout << "Max translation: X=" << current_default.max_translation.x << "mm, "
+              << "Y=" << current_default.max_translation.y << "mm, "
+              << "Z=" << current_default.max_translation.z << "mm" << std::endl;
 
     // Test conservative configuration using factory
-    PoseConfiguration conservative_config = getConservativePoseConfig(p);
-    pc.setPoseConfig(conservative_config);
-    const auto &current_conservative = pc.getPoseConfig();
-    std::cout << "Conservative config - Body clearance: " << current_conservative.body_clearance * 1000.0f << "mm, "
-              << "Swing height: " << current_conservative.swing_height * 1000.0f << "mm" << std::endl;
+    BodyPoseConfiguration conservative_config = getConservativeBodyPoseConfig(p);
+    pc.setBodyPoseConfig(conservative_config);
+    const auto &current_conservative = pc.getBodyPoseConfig();
+    std::cout << "Conservative config - Body clearance: " << current_conservative.body_clearance << "mm, "
+              << "Swing height: " << current_conservative.swing_height << "mm" << std::endl;
 
     // Test high-speed configuration using factory
-    PoseConfiguration high_speed_config = getHighSpeedPoseConfig(p);
-    pc.setPoseConfig(high_speed_config);
-    const auto &current_high_speed = pc.getPoseConfig();
-    std::cout << "High-speed config - Body clearance: " << current_high_speed.body_clearance * 1000.0f << "mm, "
-              << "Swing height: " << current_high_speed.swing_height * 1000.0f << "mm" << std::endl;
+    BodyPoseConfiguration high_speed_config = getHighSpeedBodyPoseConfig(p);
+    pc.setBodyPoseConfig(high_speed_config);
+    const auto &current_high_speed = pc.getBodyPoseConfig();
+    std::cout << "High-speed config - Body clearance: " << current_high_speed.body_clearance << "mm, "
+              << "Swing height: " << current_high_speed.swing_height << "mm" << std::endl;
 
     // Reset to default for pose tests using factory
-    pc.setPoseConfig(getDefaultPoseConfig(p));
+    pc.setBodyPoseConfig(getDefaultBodyPoseConfig(p));
 
     // Disable smooth trajectory for deterministic tests
-    pc.configureSmoothTrajectory(false);
+    pc.configureSmoothTrajectory(false, 0.1, 20);
 
-    Point3D legs[NUM_LEGS];
-    JointAngles joints[NUM_LEGS];
+    Leg legs[NUM_LEGS] = {Leg(0, model), Leg(1, model), Leg(2, model), Leg(3, model), Leg(4, model), Leg(5, model)};
 
     std::cout << "\n=== Testing OpenSHC-style Pose Calculations ===" << std::endl;
 
     // Test default pose using OpenSHC-style configuration
-    pc.initializeDefaultPose(legs, joints);
+    pc.initializeDefaultPose(legs);
     std::cout << "Default Pose Leg Positions (using OpenSHC config):" << std::endl;
     for (int i = 0; i < NUM_LEGS; ++i) {
-        std::cout << "Leg " << i << ": X=" << legs[i].x << "mm, Y=" << legs[i].y << "mm, Z=" << legs[i].z << "mm" << std::endl;
+        Point3D pos = legs[i].getCurrentTipPositionGlobal();
+        std::cout << "Leg " << i << ": X=" << pos.x << "mm, Y=" << pos.y << "mm, Z=" << pos.z << "mm" << std::endl;
     }
 
     // Test standing pose
-    if (!pc.setStandingPose(legs, joints)) {
+    if (!pc.setStandingPose(legs)) {
         std::cerr << "Error: setStandingPose failed" << std::endl;
         return -1;
     }
     std::cout << "\nStanding Pose Joint Angles (degrees):" << std::endl;
     for (int i = 0; i < NUM_LEGS; ++i) {
-        std::cout << "Leg " << i << ": Coxa=" << joints[i].coxa << ", Femur=" << joints[i].femur << ", Tibia=" << joints[i].tibia << std::endl;
+        JointAngles angles = legs[i].getJointAngles();
+        std::cout << "Leg " << i << ": Coxa=" << math_utils::radiansToDegrees(angles.coxa)
+                  << "°, Femur=" << math_utils::radiansToDegrees(angles.femur)
+                  << "°, Tibia=" << math_utils::radiansToDegrees(angles.tibia) << "°" << std::endl;
     }
+
     // Test body pose with limits (OpenSHC-style limit checking)
     std::cout << "\n=== Testing OpenSHC-style Pose Limits ===" << std::endl;
 
     Eigen::Vector3d small_translation(5.0f, 5.0f, 0.0f); // 5mm translation
     Eigen::Vector3d small_rotation(2.0f, 2.0f, 2.0f);    // 2 degree rotation
 
-    if (pc.setBodyPose(small_translation, small_rotation, legs, joints)) {
+    if (pc.setBodyPose(small_translation, small_rotation, legs)) {
         std::cout << "Small body pose change: SUCCESS (within limits)" << std::endl;
     } else {
         std::cout << "Small body pose change: FAILED (unexpected)" << std::endl;
@@ -137,7 +141,7 @@ int main() {
     Eigen::Vector3d large_translation(100.0f, 100.0f, 100.0f); // 100mm translation (should exceed limits)
     Eigen::Vector3d large_rotation(30.0f, 30.0f, 30.0f);       // 30 degree rotation (should exceed limits)
 
-    if (!pc.setBodyPose(large_translation, large_rotation, legs, joints)) {
+    if (!pc.setBodyPose(large_translation, large_rotation, legs)) {
         std::cout << "Large body pose change: CORRECTLY REJECTED (exceeds limits)" << std::endl;
     } else {
         std::cout << "Large body pose change: INCORRECTLY ACCEPTED (should exceed limits)" << std::endl;

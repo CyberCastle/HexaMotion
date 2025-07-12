@@ -117,13 +117,13 @@ bool TerrainAdaptation::hasTouchdownDetection(int leg_index) const {
     return false;
 }
 
-Point3D TerrainAdaptation::adaptTrajectoryForTerrain(int leg_index, const Point3D &base_trajectory,
-                                                     LegState leg_state, double swing_progress) {
+Point3D TerrainAdaptation::adaptTrajectoryForTerrain(int leg_index, const Point3D &trajectory,
+                                                     StepPhase leg_state, double swing_progress) {
     if (!rough_terrain_mode_ || leg_index < 0 || leg_index >= NUM_LEGS) {
-        return base_trajectory;
+        return trajectory;
     }
 
-    Point3D adapted_trajectory = base_trajectory;
+    Point3D adapted_trajectory = trajectory;
 
     // Apply external target if defined
     if (external_targets_[leg_index].defined && leg_state == SWING_PHASE) {
@@ -132,9 +132,9 @@ Point3D TerrainAdaptation::adaptTrajectoryForTerrain(int leg_index, const Point3
 
         // Interpolate towards external target
         double blend_factor = swing_progress;
-        adapted_trajectory.x = base_trajectory.x * (DEFAULT_ANGULAR_SCALING - blend_factor) + target.position.x * blend_factor;
-        adapted_trajectory.y = base_trajectory.y * (DEFAULT_ANGULAR_SCALING - blend_factor) + target.position.y * blend_factor;
-        adapted_trajectory.z = base_trajectory.z * (DEFAULT_ANGULAR_SCALING - blend_factor) + target.position.z * blend_factor;
+        adapted_trajectory.x = trajectory.x * (DEFAULT_ANGULAR_SCALING - blend_factor) + target.position.x * blend_factor;
+        adapted_trajectory.y = trajectory.y * (DEFAULT_ANGULAR_SCALING - blend_factor) + target.position.y * blend_factor;
+        adapted_trajectory.z = trajectory.z * (DEFAULT_ANGULAR_SCALING - blend_factor) + target.position.z * blend_factor;
 
         // Apply swing clearance
         if (swing_progress > 0.2 && swing_progress < 0.8) {
@@ -243,10 +243,11 @@ void TerrainAdaptation::detectTouchdownEvents(int leg_index, const FSRData &fsr_
         auto scaling_factors = workspace_validator_->getScalingFactors();
 
         // Calculate foot position using workspace scaling
-        const Parameters &params = model_.getParams();
-        double base_angle = leg_index * LEG_ANGLE_SPACING;
-        double base_x = params.hexagon_radius * cos(math_utils::degreesToRadians(base_angle));
-        double base_y = params.hexagon_radius * sin(math_utils::degreesToRadians(base_angle));
+        const Parameters &p = model_.getParams();
+        Point3D base_pos = model_.getLegBasePosition(leg_index);
+        double base_x = base_pos.x;
+        double base_y = base_pos.y;
+        double base_angle = model_.getLegBaseAngleOffset(leg_index);
 
         // Use scaling instead of hardcoded 65%
         double safe_reach = bounds.max_radius * scaling_factors.workspace_scale;
@@ -254,7 +255,7 @@ void TerrainAdaptation::detectTouchdownEvents(int leg_index, const FSRData &fsr_
         Point3D foot_position;
         foot_position.x = base_x + safe_reach * cos(math_utils::degreesToRadians(base_angle));
         foot_position.y = base_y + safe_reach * sin(math_utils::degreesToRadians(base_angle));
-        foot_position.z = -params.robot_height;
+        foot_position.z = -p.robot_height;
 
         // Configure step plane with detected position and current walk plane normal
         step_plane.position = foot_position;
@@ -317,7 +318,7 @@ void TerrainAdaptation::updateGravityEstimation(const IMUData &imu_data) {
 
         // Use lighter filtering for processed absolute data
         gravity_estimate_ = alpha * 1.5 * gravity_estimate_ +
-                           (DEFAULT_ANGULAR_SCALING - alpha * 1.5) * accel_gravity;
+                            (DEFAULT_ANGULAR_SCALING - alpha * 1.5) * accel_gravity;
     } else {
         // Fallback to traditional method with raw acceleration
         // Convert acceleration to gravity estimate (negate because gravity points down)
@@ -455,7 +456,7 @@ void TerrainAdaptation::updateAdvancedTerrainAnalysis(const IMUData &imu_data) {
         double motion_magnitude = linear_accel.norm();
 
         // Detect significant dynamic motion that affects terrain analysis
-        if (motion_magnitude > ANGULAR_ACCELERATION_FACTOR) { // m/s² threshold for significant motion
+        if (motion_magnitude > ANGULAR_ACCELERATION_FACTOR) { // mm/s² threshold for significant motion
             // Reduce confidence in terrain detection during high acceleration
             for (int i = 0; i < NUM_LEGS; i++) {
                 step_planes_[i].confidence *= 0.8;

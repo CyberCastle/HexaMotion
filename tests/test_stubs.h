@@ -1,7 +1,7 @@
 #ifndef TEST_STUBS_H
 #define TEST_STUBS_H
 
-#include "../src/HexaModel.h"
+#include "robot_model.h"
 #include <cmath>
 #include <iostream>
 #include <random>
@@ -285,7 +285,7 @@ inline Parameters createDefaultParameters() {
     params.coxa_length = 50.0f;
     params.femur_length = 101.0f;
     params.tibia_length = 208.0f;
-    params.robot_height = 120.0f;
+    params.robot_height = 208.0f;
     params.robot_weight = 2.0f;
     params.center_of_mass = Eigen::Vector3d(0, 0, 0);
     params.coxa_angle_limits[0] = -65.0f;

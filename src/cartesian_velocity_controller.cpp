@@ -43,7 +43,7 @@ bool CartesianVelocityController::updateServoSpeeds(double linear_velocity_x, do
     for (int leg = 0; leg < NUM_LEGS; ++leg) {
         // Calculate leg-specific compensation
         double leg_compensation = calculateLegSpeedCompensation(leg, linear_velocity_x,
-                                                               linear_velocity_y, angular_velocity);
+                                                                linear_velocity_y, angular_velocity);
 
         // Base speed from robot parameters
         const Parameters &params = model_.getParams();
@@ -85,7 +85,7 @@ bool CartesianVelocityController::updateServoSpeeds(double linear_velocity_x, do
 
             if (joint_config) {
                 double workspace_constrained_speed = applyWorkspaceConstraints(leg, joint,
-                                                                              joint_config->getEffectiveSpeed());
+                                                                               joint_config->getEffectiveSpeed());
                 // Update the velocity scaling to match workspace constraints
                 if (joint_config->base_speed > 0.0f) {
                     joint_config->velocity_scaling = workspace_constrained_speed / joint_config->base_speed;
@@ -166,13 +166,13 @@ void CartesianVelocityController::setVelocityControlEnabled(bool enable) {
 
 double CartesianVelocityController::getCurrentVelocityMagnitude() const {
     double linear_magnitude = std::sqrt(current_linear_vx_ * current_linear_vx_ +
-                                       current_linear_vy_ * current_linear_vy_);
+                                        current_linear_vy_ * current_linear_vy_);
     double angular_magnitude = std::abs(current_angular_velocity_);
 
     // Combine linear and angular velocities with appropriate weighting
     // Angular velocity is weighted by typical robot radius for dimensional consistency
     const Parameters &params = model_.getParams();
-    double angular_linear_equiv = angular_magnitude * (params.hexagon_radius / 1000.0f); // Convert mm to m
+    double angular_linear_equiv = angular_magnitude * params.hexagon_radius; // Keep in mm
 
     return linear_magnitude + angular_linear_equiv * 0.5f; // Angular contributes 50% to total
 }
@@ -201,19 +201,19 @@ double CartesianVelocityController::calculateLinearVelocityScale(double velocity
 
     // Map velocity magnitude to speed scaling using the robot's maximum velocity as reference
     const Parameters &params = model_.getParams();
-    double max_velocity_ms = params.max_velocity / 1000.0f; // Convert mm/s to m/s
+    double max_velocity_mmps = params.max_velocity; // Keep in mm/s
 
-    if (max_velocity_ms < VELOCITY_THRESHOLD) {
+    if (max_velocity_mmps < VELOCITY_THRESHOLD) {
         return SERVO_SPEED_DEFAULT; // Default scaling if max velocity not properly set
     }
 
     // Calculate linear scaling: higher velocity = higher servo speed
-    double velocity_ratio = velocity_magnitude / max_velocity_ms;
+    double velocity_ratio = velocity_magnitude / max_velocity_mmps;
     velocity_ratio = std::clamp<double>(velocity_ratio, 0.0, SERVO_SPEED_DEFAULT);
 
     // Apply scaling with configured parameters
     double scale = velocity_scaling_.minimum_speed_ratio +
-                  (velocity_scaling_.maximum_speed_ratio - velocity_scaling_.minimum_speed_ratio) * velocity_ratio;
+                   (velocity_scaling_.maximum_speed_ratio - velocity_scaling_.minimum_speed_ratio) * velocity_ratio;
 
     return std::clamp<double>(scale, velocity_scaling_.minimum_speed_ratio,
                               velocity_scaling_.maximum_speed_ratio);
@@ -226,7 +226,7 @@ double CartesianVelocityController::calculateAngularVelocityScale(double angular
 
     // Map angular velocity to speed scaling using the robot's maximum angular velocity as reference
     const Parameters &params = model_.getParams();
-    double max_angular_velocity_rads = math_utils::degreesToRadians(params.max_angular_velocity);
+    double max_angular_velocity_rads = params.max_angular_velocity; // Already in rad/s
 
     if (max_angular_velocity_rads < VELOCITY_THRESHOLD) {
         return SERVO_SPEED_DEFAULT; // Default scaling if max angular velocity not properly set
@@ -261,19 +261,15 @@ double CartesianVelocityController::calculateGaitSpeedAdjustment(GaitType gait) 
 }
 
 double CartesianVelocityController::calculateLegSpeedCompensation(int leg_index, double linear_vx,
-                                                                 double linear_vy, double angular_vel) const {
+                                                                  double linear_vy, double angular_vel) const {
     if (leg_index < 0 || leg_index >= NUM_LEGS) {
         return SERVO_SPEED_DEFAULT;
     }
 
     // Get leg position in robot frame
-    const Parameters &params = model_.getParams();
-    double leg_angle_deg = leg_index * LEG_ANGLE_SPACING; // Hexapod legs spaced 60° apart
-    double leg_angle_rad = math_utils::degreesToRadians(leg_angle_deg);
-
-    // Leg position relative to robot center
-    double leg_x = params.hexagon_radius * std::cos(leg_angle_rad) / 1000.0f; // Convert to meters
-    double leg_y = params.hexagon_radius * std::sin(leg_angle_rad) / 1000.0f;
+    Point3D base_pos = model_.getLegBasePosition(leg_index);
+    double leg_x = base_pos.x; // Keep in mm
+    double leg_y = base_pos.y; // Keep in mm
 
     // Calculate the velocity of this leg due to body motion
     // Linear motion: all legs move at same speed
@@ -289,7 +285,7 @@ double CartesianVelocityController::calculateLegSpeedCompensation(int leg_index,
 
     // Scale servo speed based on leg velocity demand
     // Higher demand = higher servo speed
-    double max_expected_velocity = 0.5f; // m/s - typical maximum leg velocity
+    double max_expected_velocity = 500.0f; // mm/s - typical maximum leg velocity
     double velocity_ratio =
         std::clamp<double>(total_leg_velocity / max_expected_velocity, 0.0,
                            SERVO_SPEED_DEFAULT);

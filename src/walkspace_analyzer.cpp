@@ -3,10 +3,31 @@
 #include "math_utils.h"
 #include <algorithm>
 #include <cmath>
+#include <iomanip>
 #include <iostream>
+#include <sstream>
 
 WalkspaceAnalyzer::WalkspaceAnalyzer(RobotModel &model, ComputeConfig config)
-    : model_(model), config_(config) {
+    : model_(model), config_(config), analysis_enabled_(true), total_analysis_time_(0.0) {
+    // Initialize analysis info structure
+    analysis_info_.analysis_enabled = true;
+    analysis_info_.analysis_count = 0;
+    analysis_info_.last_analysis_time = 0;
+    analysis_info_.average_analysis_time_ms = 0.0;
+    analysis_info_.total_analysis_time_ms = 0.0;
+    analysis_info_.min_analysis_time_ms = 1e6;
+    analysis_info_.max_analysis_time_ms = 0.0;
+    analysis_info_.overall_stability_score = 0.0;
+    analysis_info_.walkspace_map_generated = false;
+    last_analysis_timestamp_ = 0;
+
+    // Calculate workspace bounds for each leg
+    for (int i = 0; i < NUM_LEGS; i++) {
+        calculateLegWorkspaceBounds(i);
+    }
+
+    // Generate initial walkspace
+    generateWalkspace();
 }
 
 void WalkspaceAnalyzer::initialize() {
@@ -57,11 +78,15 @@ void WalkspaceAnalyzer::generateWalkspace() {
             min_radius = std::min(min_radius, projected_reach);
         }
 
-        walkspace_map_[bearing] = std::max(min_radius, 0.0f);
+        walkspace_map_[bearing] = std::max(min_radius, 0.0);
     }
 
     // Ensure symmetry (OpenSHC equivalent)
     walkspace_map_[360] = walkspace_map_[0];
+
+    // Update analysis info
+    analysis_info_.walkspace_map_generated = true;
+    analysis_info_.walkspace_radii = walkspace_map_;
 }
 
 bool WalkspaceAnalyzer::isPositionReachable(int leg_index, const Point3D &position) {
@@ -88,6 +113,15 @@ bool WalkspaceAnalyzer::isPositionReachable(int leg_index, const Point3D &positi
 }
 
 WalkspaceAnalyzer::WalkspaceResult WalkspaceAnalyzer::analyzeWalkspace(const Point3D leg_positions[NUM_LEGS]) {
+    // Check if analysis is enabled
+    if (!analysis_enabled_) {
+        // Return cached result if analysis is disabled
+        return analysis_info_.current_result;
+    }
+
+    // Record start time for performance tracking
+    unsigned long start_time = millis();
+
     WalkspaceResult result;
 
     // Calculate center of mass
@@ -109,6 +143,15 @@ WalkspaceAnalyzer::WalkspaceResult WalkspaceAnalyzer::analyzeWalkspace(const Poi
         double radius = entry.second;
         result.reachable_area += M_PI * radius * radius / walkspace_map_.size();
     }
+
+    // Calculate analysis time
+    unsigned long analysis_time = millis() - start_time;
+
+    // Update analysis information
+    updateAnalysisInfo(result, analysis_time);
+
+    // Update timestamp
+    last_analysis_timestamp_ = millis();
 
     return result;
 }
@@ -170,8 +213,8 @@ void WalkspaceAnalyzer::generateWalkspaceForLeg(int leg_index) {
     // Generates multiple height layers (workplanes) for complete 3D workspace
     if (config_.precision == PRECISION_HIGH) {
         // OpenSHC algorithm parameters
-        const int WORKSPACE_LAYERS = 10;         // Height layers (from OpenSHC)
-        const int BEARING_STEP = 45;             // 45° steps = 8 directions (from OpenSHC)
+        const int WORKSPACE_LAYERS = 10;          // Height layers (from OpenSHC)
+        const int BEARING_STEP = 45;              // 45° steps = 8 directions (from OpenSHC)
         const double MAX_POSITION_DELTA = 0.005f; // 5mm increments (optimized for speed)
         const double MAX_WORKSPACE_RADIUS = 0.3f; // 300mm max radius
 
@@ -267,7 +310,9 @@ void WalkspaceAnalyzer::generateWalkspaceForLeg(int leg_index) {
 
 bool WalkspaceAnalyzer::detailedReachabilityCheck(int leg_index, const Point3D &position) {
     // Use inverse kinematics to check reachability
-    JointAngles angles = model_.inverseKinematics(leg_index, position);
+    // For validation purposes, use zero angles as starting point
+    JointAngles zero_angles(0, 0, 0);
+    JointAngles angles = model_.inverseKinematicsCurrentGlobalCoordinates(leg_index, zero_angles, position);
     return model_.checkJointLimits(leg_index, angles);
 }
 
@@ -578,4 +623,152 @@ bool WalkspaceAnalyzer::isPositionReachableWithWorkplane(int leg_index, const Po
     // Check if position is within reachable radius
     double position_radius = sqrt(position.x * position.x + position.y * position.y);
     return position_radius <= max_radius;
+}
+
+std::string WalkspaceAnalyzer::getAnalysisInfoString() const {
+    std::stringstream ss;
+
+    ss << "=== Walkspace Analysis Information ===\n";
+    ss << "Analysis Enabled: " << (analysis_info_.analysis_enabled ? "YES" : "NO") << "\n";
+    ss << "Analysis Count: " << analysis_info_.analysis_count << "\n";
+    ss << "Last Analysis Time: " << analysis_info_.last_analysis_time << " ms\n";
+    ss << "Average Analysis Time: " << std::fixed << std::setprecision(2)
+       << analysis_info_.average_analysis_time_ms << " ms\n";
+    ss << "Min/Max Analysis Time: " << std::fixed << std::setprecision(2)
+       << analysis_info_.min_analysis_time_ms << "/" << analysis_info_.max_analysis_time_ms << " ms\n";
+    ss << "Total Analysis Time: " << std::fixed << std::setprecision(2)
+       << analysis_info_.total_analysis_time_ms << " ms\n";
+    ss << "Walkspace Map Generated: " << (analysis_info_.walkspace_map_generated ? "YES" : "NO") << "\n";
+    ss << "Overall Stability Score: " << std::fixed << std::setprecision(3)
+       << analysis_info_.overall_stability_score << "\n";
+
+    if (analysis_info_.current_result.is_stable) {
+        ss << "Current Status: STABLE (margin: " << std::fixed << std::setprecision(1)
+           << analysis_info_.current_result.stability_margin << " mm)\n";
+    } else {
+        ss << "Current Status: UNSTABLE (margin: " << std::fixed << std::setprecision(1)
+           << analysis_info_.current_result.stability_margin << " mm)\n";
+    }
+
+    ss << "Reachable Area: " << std::fixed << std::setprecision(1)
+       << analysis_info_.current_result.reachable_area << " mm²\n";
+
+    ss << "\nLeg Reachability Scores:\n";
+    for (const auto &leg_score : analysis_info_.leg_reachability) {
+        ss << "  Leg " << leg_score.first << ": " << std::fixed << std::setprecision(3)
+           << leg_score.second << "\n";
+    }
+
+    return ss.str();
+}
+
+void WalkspaceAnalyzer::resetAnalysisStats() {
+    analysis_info_.analysis_count = 0;
+    analysis_info_.average_analysis_time_ms = 0.0;
+    analysis_info_.total_analysis_time_ms = 0.0;
+    analysis_info_.min_analysis_time_ms = 1e6;
+    analysis_info_.max_analysis_time_ms = 0.0;
+    total_analysis_time_ = 0.0;
+    analysis_info_.last_analysis_time = 0;
+}
+
+void WalkspaceAnalyzer::updateAnalysisInfo(const WalkspaceResult &result, unsigned long analysis_time_ms) {
+    // Update current result
+    analysis_info_.current_result = result;
+
+    // Update timing statistics
+    analysis_info_.last_analysis_time = analysis_time_ms;
+    analysis_info_.analysis_count++;
+    total_analysis_time_ += analysis_time_ms;
+    analysis_info_.average_analysis_time_ms = total_analysis_time_ / analysis_info_.analysis_count;
+    analysis_info_.total_analysis_time_ms = total_analysis_time_;
+
+    // Update min/max times
+    if (analysis_time_ms < analysis_info_.min_analysis_time_ms) {
+        analysis_info_.min_analysis_time_ms = analysis_time_ms;
+    }
+    if (analysis_time_ms > analysis_info_.max_analysis_time_ms) {
+        analysis_info_.max_analysis_time_ms = analysis_time_ms;
+    }
+
+    // Update leg bounds
+    for (int i = 0; i < NUM_LEGS; i++) {
+        analysis_info_.leg_bounds[i] = leg_workspace_[i];
+    }
+
+    // Calculate leg reachability scores
+    Point3D dummy_positions[NUM_LEGS];
+    for (int i = 0; i < NUM_LEGS; i++) {
+        // Use current leg positions if available, otherwise use dummy positions
+        dummy_positions[i] = Point3D(0, 0, 0);
+    }
+
+    for (int i = 0; i < NUM_LEGS; i++) {
+        analysis_info_.leg_reachability[i] = calculateLegReachability(i, dummy_positions);
+    }
+
+    // Calculate overall stability score
+    analysis_info_.overall_stability_score = calculateOverallStabilityScore(result);
+
+    // Update timestamp
+    analysis_info_.last_analysis_time = millis();
+}
+
+double WalkspaceAnalyzer::calculateLegReachability(int leg_index, const Point3D leg_positions[NUM_LEGS]) const {
+    if (leg_index >= NUM_LEGS) {
+        return 0.0;
+    }
+
+    // Calculate reachability based on current leg position and workspace bounds
+    const WorkspaceBounds &bounds = leg_workspace_[leg_index];
+
+    // Get current leg position
+    Point3D current_pos = leg_positions[leg_index];
+
+    // Calculate distance from leg origin
+    JointAngles zero_angles(0, 0, 0);
+    Pose leg_origin_pose = model_.getPoseRobotFrame(leg_index, zero_angles, Pose::Identity());
+    Point3D leg_origin = leg_origin_pose.position;
+
+    Point3D relative_pos = current_pos - leg_origin;
+    double distance = math_utils::magnitude(relative_pos);
+
+    // Calculate reachability score (0-1)
+    double reach_range = bounds.max_radius - bounds.min_radius;
+    if (reach_range <= 0) {
+        return 0.0;
+    }
+
+    double normalized_distance = (distance - bounds.min_radius) / reach_range;
+    return std::clamp<double>(normalized_distance, 0.0, 1.0);
+}
+
+double WalkspaceAnalyzer::calculateOverallStabilityScore(const WalkspaceResult &result) const {
+    // Calculate overall stability score based on multiple factors
+
+    // Factor 1: Stability margin (0-1)
+    double margin_score = std::clamp<double>(result.stability_margin / 50.0, 0.0, 1.0);
+
+    // Factor 2: Support polygon area (0-1)
+    double polygon_area = 0.0;
+    if (result.support_polygon.size() >= 3) {
+        // Calculate polygon area using shoelace formula
+        for (size_t i = 0; i < result.support_polygon.size(); i++) {
+            size_t j = (i + 1) % result.support_polygon.size();
+            polygon_area += result.support_polygon[i].x * result.support_polygon[j].y;
+            polygon_area -= result.support_polygon[j].x * result.support_polygon[i].y;
+        }
+        polygon_area = std::abs(polygon_area) / 2.0;
+    }
+
+    // Normalize polygon area (assume maximum reasonable area of 10000 mm²)
+    double polygon_score = std::clamp<double>(polygon_area / 10000.0, 0.0, 1.0);
+
+    // Factor 3: Reachable area (0-1)
+    double area_score = std::clamp<double>(result.reachable_area / 50000.0, 0.0, 1.0);
+
+    // Combine factors with weights
+    double overall_score = (margin_score * 0.5) + (polygon_score * 0.3) + (area_score * 0.2);
+
+    return std::clamp<double>(overall_score, 0.0, 1.0);
 }

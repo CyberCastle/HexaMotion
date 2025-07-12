@@ -1,5 +1,5 @@
 #include "Arduino.h"
-#include "HexaModel.h"
+#include "robot_model.h"
 #include <iostream>
 
 int main() {
@@ -20,14 +20,8 @@ int main() {
     params.tibia_angle_limits[0] = -180.0f;
     params.tibia_angle_limits[1] = 180.0f;
 
-    // Initialize DH parameters to zero (will use default)
-    for (int l = 0; l < NUM_LEGS; ++l) {
-        for (int j = 0; j < DOF_PER_LEG + 1; ++j) {
-            for (int k = 0; k < 4; ++k) {
-                params.dh_parameters[l][j][k] = 0.0f;
-            }
-        }
-    }
+    // Use default DH parameters (RobotModel will initialize them automatically)
+    // Note: This test uses custom DH parameters for validation, but initializes them to defaults
 
     RobotModel model(params);
 
@@ -39,7 +33,7 @@ int main() {
         JointAngles{0.0f, -45.0f, 90.0f},   // Original failing case
         JointAngles{30.0f, -30.0f, 60.0f},  // Moderate angles
         JointAngles{-45.0f, 45.0f, -90.0f}, // Negative angles
-        JointAngles{0.0f, -60.0f, 120.0f},  // More extreme bending
+        JointAngles{0.0f, -60.0f, 208.0f},  // More extreme bending
         JointAngles{90.0f, 0.0f, 0.0f},     // Pure rotation
         JointAngles{0.0f, 0.0f, 0.0f},      // Straight leg
         JointAngles{-30.0f, -75.0f, 135.0f} // Near limits
@@ -57,7 +51,7 @@ int main() {
         Point3D target = model.forwardKinematics(0, original);
 
         // Inverse kinematics
-        JointAngles ik_result = model.inverseKinematics(0, target);
+        JointAngles ik_result = model.inverseKinematicsGlobalCoordinates(0, target);
 
         // Verify with forward kinematics
         Point3D fk_verify = model.forwardKinematics(0, ik_result);

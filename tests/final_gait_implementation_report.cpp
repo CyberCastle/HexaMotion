@@ -21,8 +21,9 @@ void demonstrateGaitImplementation(GaitType gait, const std::string &name) {
     DummyIMU imu;
     DummyFSR fsr;
     DummyServo servos;
+    PoseConfiguration pose_config;
 
-    assert(sys.initialize(&imu, &fsr, &servos));
+    assert(sys.initialize(&imu, &fsr, &servos, pose_config));
     assert(sys.calibrateSystem());
     assert(sys.setGaitType(gait));
 

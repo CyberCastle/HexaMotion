@@ -1,4 +1,4 @@
-#include "../src/HexaModel.h"
+#include "robot_model.h"
 #include <cassert>
 #include <iostream>
 
@@ -11,7 +11,7 @@ int main() {
     p.coxa_length = 50;
     p.femur_length = 101;
     p.tibia_length = 208;
-    p.robot_height = 120;
+    p.robot_height = 208;
     p.height_offset = 0;
     p.control_frequency = 50;
     RobotModel model_ok(p);

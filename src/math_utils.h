@@ -31,6 +31,11 @@ double distance(const Point3D &p1, const Point3D &p2);
 /** Calculate perpendicular distance from point to line segment. */
 double pointToLineDistance(const Point3D &point, const Point3D &line_start, const Point3D &line_end);
 
+/** Cross product of two 3D vectors. */
+Point3D crossProduct(const Point3D &a, const Point3D &b);
+/** Project a vector onto another vector. */
+Point3D projectVector(const Point3D &vector, const Point3D &onto);
+
 /** Rotation matrix about X axis (angle in radians). */
 Eigen::Matrix3d rotationMatrixX(double angle);
 /** Rotation matrix about Y axis (angle in radians). */
@@ -55,13 +60,28 @@ Point3D vector3fToPoint3D(const Eigen::Vector3d &vec);
 Eigen::Vector4d eulerPoint3DToQuaternion(const Point3D &euler);
 /** Convert quaternion to Point3D Euler angles (radians). */
 Point3D quaternionToEulerPoint3D(const Eigen::Vector4d &quaternion);
+/** Spherical linear interpolation (SLERP) between two quaternions. */
+Eigen::Vector4d quaternionSlerp(const Eigen::Vector4d &q1, const Eigen::Vector4d &q2, double t);
 
 /** Generic Denavit-Hartenberg transform (angles in radians). */
 template <typename T>
 Eigen::Matrix<T, 4, 4> dhTransform(T a, T alpha, T d, T theta);
 
+/**
+ * @brief Generic DH transform rotating about the Y axis.
+ *
+ * This variant is used for joints that pitch instead of yaw so the
+ * kinematic chain matches the analytic leg model.
+ * @tparam T Floating point type.
+ */
+template <typename T>
+Eigen::Matrix<T, 4, 4> dhTransformY(T a, T alpha, T d, T theta);
+
 /** Float-specialized DH transform for backwards compatibility. */
 Eigen::Matrix4d dhTransform(double a, double alpha, double d, double theta);
+
+/** Float-specialized DH transform with Y-axis rotation. */
+Eigen::Matrix4d dhTransformY(double a, double alpha, double d, double theta);
 
 /**
  * @brief Evaluate a quadratic Bezier curve.
@@ -96,9 +116,9 @@ inline T cubicBezier(const T *points, double t) {
 template <class T>
 inline T cubicBezierDot(const T *points, double t) {
     double s = 1.0 - t;
-    return 3.0 * s * s * (points[1] - points[0]) +
-           6.0 * s * t * (points[2] - points[1]) +
-           3.0 * t * t * (points[3] - points[2]);
+    return (points[1] - points[0]) * (3.0 * s * s) +
+           (points[2] - points[1]) * (6.0 * s * t) +
+           (points[3] - points[2]) * (3.0 * t * t);
 }
 
 /**
@@ -120,10 +140,53 @@ inline T quarticBezier(const T *points, double t) {
 template <class T>
 inline T quarticBezierDot(const T *points, double t) {
     double s = 1.0 - t;
-    return 4.0 * s * s * s * (points[1] - points[0]) +
-           12.0 * s * s * t * (points[2] - points[1]) +
-           12.0 * s * t * t * (points[3] - points[2]) +
-           4.0 * t * t * t * (points[4] - points[3]);
+    return (points[1] - points[0]) * (4.0 * s * s * s) +
+           (points[2] - points[1]) * (12.0 * s * s * t) +
+           (points[3] - points[2]) * (12.0 * s * t * t) +
+           (points[4] - points[3]) * (4.0 * t * t * t);
+}
+
+/**
+ * @brief Smooth step function for interpolation (OpenSHC equivalent)
+ * Provides smooth interpolation with zero derivatives at endpoints
+ * @param control_input The linear control input from 0.0 to 1.0
+ * @return The output of the control input run through a smoothStep function
+ */
+inline double smoothStep(double control_input) {
+    return (6.0 * pow(control_input, 5) - 15.0 * pow(control_input, 4) + 10.0 * pow(control_input, 3));
+}
+
+/**
+ * @brief Linear interpolation between two values
+ * @param origin The origin value
+ * @param target The target value
+ * @param control_input The interpolation factor (0.0 to 1.0)
+ * @return The interpolated value
+ */
+template <class T>
+inline T interpolate(const T& origin, const T& target, double control_input) {
+    return (1.0 - control_input) * origin + control_input * target;
+}
+
+/**
+ * @brief Clamp a value between min and max
+ * @param value The value to clamp
+ * @param min_value Minimum value
+ * @param max_value Maximum value
+ * @return Clamped value
+ */
+template <class T>
+inline T clamped(T value, T min_value, T max_value) {
+    return std::max(min_value, std::min(max_value, value));
+}
+
+/**
+ * @brief Round to nearest integer
+ * @param x The value to round
+ * @return Rounded integer
+ */
+inline int roundToInt(double x) {
+    return (x >= 0) ? static_cast<int>(x + 0.5) : -static_cast<int>(0.5 - x);
 }
 
 /**
@@ -131,8 +194,8 @@ inline T quarticBezierDot(const T *points, double t) {
  */
 template <typename T>
 struct StateVector {
-    T position; ///< Position component
-    T velocity; ///< Velocity component
+    T position; //< Position component
+    T velocity; //< Velocity component
 
     StateVector() = default;
     StateVector(const T &pos, const T &vel) : position(pos), velocity(vel) {}
@@ -151,11 +214,22 @@ struct StateVector {
  * @tparam T Vector type (Point3D, Eigen::Vector3d, etc.)
  * @param state Current state vector [position, velocity]
  * @param t Current time
- * @param params User-defined parameters
- * @return Derivative vector [velocity, acceleration]
+ * @return Derivative of the state vector
  */
 template <typename T>
 using DerivativeFunction = StateVector<T> (*)(const StateVector<T> &state, double t, void *params);
+
+/**
+ * @brief Solve least squares for plane equation z = ax + by + c
+ * @param raw_A Array of x,y coordinates [x1,y1,x2,y2,...]
+ * @param raw_B Array of z coordinates [z1,z2,...]
+ * @param num_points Number of points (length of raw_B array)
+ * @param a Output coefficient for x
+ * @param b Output coefficient for y
+ * @param c Output constant term
+ * @return true if solution found, false if matrix is singular
+ */
+bool solveLeastSquaresPlane(const double* raw_A, const double* raw_B, int num_points, double& a, double& b, double& c);
 
 /**
  * @brief Runge-Kutta 4th order integration for differential equations

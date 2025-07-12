@@ -1,7 +1,7 @@
 #ifndef TERRAIN_ADAPTATION_H
 #define TERRAIN_ADAPTATION_H
 
-#include "HexaModel.h"
+#include "robot_model.h"
 #include <ArduinoEigen.h>
 #include <memory>
 #include <vector>
@@ -26,11 +26,11 @@ class TerrainAdaptation {
      * @brief External target structure for terrain-aware stepping
      */
     struct ExternalTarget {
-        Point3D position;        ///< Target tip position
-        double swing_clearance;   ///< Height clearance during swing
-        std::string frame_id;    ///< Reference frame ID
-        unsigned long timestamp; ///< Request timestamp
-        bool defined;            ///< Whether target is valid
+        Point3D position;        //< Target tip position
+        double swing_clearance;   //< Height clearance during swing
+        std::string frame_id;    //< Reference frame ID
+        unsigned long timestamp; //< Request timestamp
+        bool defined;            //< Whether target is valid
 
         ExternalTarget() : position(0, 0, 0), swing_clearance(0),
                            frame_id(""), timestamp(0), defined(false) {}
@@ -40,10 +40,10 @@ class TerrainAdaptation {
      * @brief Step plane detection structure
      */
     struct StepPlane {
-        Point3D position; ///< Step surface position
-        Point3D normal;   ///< Step surface normal vector
-        bool valid;       ///< Whether detection is valid
-        double confidence; ///< Detection confidence (0-1)
+        Point3D position; //< Step surface position
+        Point3D normal;   //< Step surface normal vector
+        bool valid;       //< Whether detection is valid
+        double confidence; //< Detection confidence (0-1)
 
         StepPlane() : position(0, 0, 0), normal(0, 0, 1), valid(false), confidence(0) {}
     };
@@ -52,10 +52,10 @@ class TerrainAdaptation {
      * @brief Walk plane estimation structure
      */
     struct WalkPlane {
-        Eigen::Vector3d coeffs; ///< Plane coefficients [a,b,c] for ax+by+c=z
-        Eigen::Vector3d normal; ///< Plane normal vector
-        bool valid;             ///< Whether estimation is valid
-        double confidence;       ///< Estimation confidence (0-1)
+        Eigen::Vector3d coeffs; //< Plane coefficients [a,b,c] for ax+by+c=z
+        Eigen::Vector3d normal; //< Plane normal vector
+        bool valid;             //< Whether estimation is valid
+        double confidence;       //< Estimation confidence (0-1)
 
         WalkPlane() : coeffs(0, 0, 0), normal(0, 0, 1), valid(false), confidence(0) {}
     };
@@ -68,9 +68,9 @@ class TerrainAdaptation {
     bool gravity_aligned_tips_;
 
     // Terrain detection parameters
-    double touchdown_threshold_; ///< FSR threshold for touchdown detection
-    double liftoff_threshold_;   ///< FSR threshold for liftoff detection
-    double step_depth_;          ///< Depth to probe for reactive terrain detection
+    double touchdown_threshold_; //< FSR threshold for touchdown detection
+    double liftoff_threshold_;   //< FSR threshold for liftoff detection
+    double step_depth_;          //< Depth to probe for reactive terrain detection
 
     // Walk plane estimation
     WalkPlane current_walk_plane_;
@@ -119,6 +119,18 @@ class TerrainAdaptation {
      * @param enabled Whether tips should align with gravity
      */
     void setGravityAlignedTips(bool enabled) { gravity_aligned_tips_ = enabled; }
+
+    /**
+     * @brief Check if rough terrain mode is enabled
+     * @return True if rough terrain mode is active
+     */
+    bool isRoughTerrainModeEnabled() const { return rough_terrain_mode_; }
+
+    /**
+     * @brief Check if force normal touchdown is enabled
+     * @return True if force normal touchdown is active
+     */
+    bool isForceNormalTouchdownEnabled() const { return force_normal_touchdown_; }
 
     /**
      * @brief Set FSR touchdown threshold
@@ -206,13 +218,13 @@ class TerrainAdaptation {
     /**
      * @brief Adapt foot trajectory for terrain-aware stepping
      * @param leg_index Leg index (0-5)
-     * @param base_trajectory Base trajectory from gait controller
+     * @param trajectory Base trajectory from gait controller
      * @param leg_state Current leg state
      * @param swing_progress Swing phase progress (0-1)
      * @return Terrain-adapted trajectory
      */
-    Point3D adaptTrajectoryForTerrain(int leg_index, const Point3D &base_trajectory,
-                                      LegState leg_state, double swing_progress);
+    Point3D adaptTrajectoryForTerrain(int leg_index, const Point3D &trajectory,
+                                     StepPhase leg_state, double swing_progress);
 
     /**
      * @brief Check if target position is reachable within terrain constraints

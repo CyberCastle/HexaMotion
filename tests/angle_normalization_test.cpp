@@ -1,4 +1,4 @@
-#include "HexaModel.h"
+#include "robot_model.h"
 #include <iomanip>
 #include <iostream>
 #include <vector>
@@ -9,7 +9,7 @@ int main() {
     p.coxa_length = 50;
     p.femur_length = 101;
     p.tibia_length = 208;
-    p.robot_height = 120;
+    p.robot_height = 208;
     p.coxa_angle_limits[0] = -65;
     p.coxa_angle_limits[1] = 65;
     p.femur_angle_limits[0] = -75;
@@ -74,7 +74,7 @@ int main() {
         std::cout << "  Local target: (" << local_target.x << ", " << local_target.y << ", " << local_target.z << ")" << std::endl;
         std::cout << "  Distance from leg base: " << target_distance << "mm (max: 359mm)" << std::endl;
 
-        JointAngles angles = model.inverseKinematics(0, target);
+        JointAngles angles = model.inverseKinematicsGlobalCoordinates(0, target);
         std::cout << "  IK result: (" << angles.coxa << "°, " << angles.femur << "°, " << angles.tibia << "°)" << std::endl;
 
         // Check joint limits

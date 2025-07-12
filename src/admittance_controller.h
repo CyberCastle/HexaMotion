@@ -1,7 +1,7 @@
 #ifndef ADMITTANCE_CONTROLLER_H
 #define ADMITTANCE_CONTROLLER_H
 
-#include "HexaModel.h"
+#include "robot_model.h"
 #include "precision_config.h"
 #include <memory>
 #include <vector>
@@ -26,13 +26,13 @@ class AdmittanceController {
      * @brief Admittance parameters for virtual leg model
      */
     struct AdmittanceParams {
-        double virtual_mass;      ///< Virtual mass (kg)
-        double virtual_damping;   ///< Damping coefficient
-        double virtual_stiffness; ///< Spring stiffness
-        Point3D velocity;        ///< Current velocity
-        Point3D acceleration;    ///< Current acceleration
-        Point3D applied_force;   ///< Applied force
-        Point3D position_delta;  ///< Position change from admittance
+        double virtual_mass;      //< Virtual mass (kg)
+        double virtual_damping;   //< Damping coefficient
+        double virtual_stiffness; //< Spring stiffness
+        Point3D velocity;        //< Current velocity
+        Point3D acceleration;    //< Current acceleration
+        Point3D applied_force;   //< Applied force
+        Point3D position_delta;  //< Position change from admittance
 
         AdmittanceParams() : virtual_mass(0.5f), virtual_damping(2.0f),
                              virtual_stiffness(100.0f), velocity(0, 0, 0),
@@ -43,11 +43,11 @@ class AdmittanceController {
      * @brief Parameters for derivative function in admittance equation
      */
     struct AdmittanceDerivativeParams {
-        double mass;             ///< Virtual mass
-        double damping;          ///< Damping coefficient
-        double stiffness;        ///< Spring stiffness
-        Point3D external_force; ///< External force applied
-        Point3D equilibrium;    ///< Equilibrium position
+        double mass;             //< Virtual mass
+        double damping;          //< Damping coefficient
+        double stiffness;        //< Spring stiffness
+        Point3D external_force; //< External force applied
+        Point3D equilibrium;    //< Equilibrium position
 
         AdmittanceDerivativeParams() : mass(0.5f), damping(2.0f), stiffness(100.0f),
                                        external_force(0, 0, 0), equilibrium(0, 0, 0) {}
@@ -57,9 +57,9 @@ class AdmittanceController {
      * @brief ODE integration methods
      */
     enum IntegrationMethod {
-        EULER_METHOD,  ///< First-order Euler (fastest)
-        RUNGE_KUTTA_2, ///< Second-order RK (balanced)
-        RUNGE_KUTTA_4  ///< Fourth-order RK (most accurate)
+        EULER_METHOD,  //< First-order Euler (fastest)
+        RUNGE_KUTTA_2, //< Second-order RK (balanced)
+        RUNGE_KUTTA_4  //< Fourth-order RK (most accurate)
     };
 
     /**
@@ -69,7 +69,7 @@ class AdmittanceController {
         AdmittanceParams params;
         Point3D equilibrium_position;
         bool active;
-        double stiffness_scale; ///< Dynamic stiffness scaling
+        double stiffness_scale; //< Dynamic stiffness scaling
 
         LegAdmittanceState() : equilibrium_position(0, 0, 0), active(true), stiffness_scale(1.0f) {}
     };
@@ -147,7 +147,7 @@ class AdmittanceController {
      * @param leg_positions Current leg positions
      * @param step_clearance Current step clearance
      */
-    void updateStiffness(const LegState leg_states[NUM_LEGS],
+    void updateStiffness(const StepPhase leg_states[NUM_LEGS],
                          const Point3D leg_positions[NUM_LEGS],
                          double step_clearance);
 
@@ -198,7 +198,7 @@ class AdmittanceController {
      * @param leg_states Leg state for each leg.
      * @return True if the robot is considered stable.
      */
-    bool checkStability(const Point3D leg_pos[NUM_LEGS], const LegState leg_states[NUM_LEGS]);
+    bool checkStability(const Point3D leg_pos[NUM_LEGS], const StepPhase leg_states[NUM_LEGS]);
 
   private:
     void selectIntegrationMethod();
@@ -222,7 +222,7 @@ class AdmittanceController {
     double current_time_;
 
     // Dynamic stiffness calculation
-    double calculateStiffnessScale(int leg_index, LegState leg_state,
+    double calculateStiffnessScale(int leg_index, StepPhase leg_state,
                                   const Point3D &leg_position);
     void updateAdjacentLegStiffness(int swing_leg_index, double load_scaling);
 };

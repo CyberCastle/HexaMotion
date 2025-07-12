@@ -236,7 +236,7 @@ void initializeParameters() {
     robotParams.hexagon_radius = 150.0f;
     robotParams.coxa_length = 50.0f;
     robotParams.femur_length = 100.0f;
-    robotParams.tibia_length = 120.0f;
+            robotParams.tibia_length = 208.0f;
     robotParams.robot_height = 80.0f;
     robotParams.robot_weight = 2.5f;
     robotParams.control_frequency = 50;

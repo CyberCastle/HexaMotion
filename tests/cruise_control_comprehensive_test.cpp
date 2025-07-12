@@ -12,6 +12,7 @@
 
 #include "../src/locomotion_system.h"
 #include "../src/state_controller.h"
+#include "../src/body_pose_config_factory.h"
 #include "test_stubs.h"
 #include <cassert>
 #include <chrono>
@@ -28,12 +29,13 @@ class CruiseControlComprehensiveTest {
     MockServo servo;
     int test_count = 0;
     int passed_tests = 0;
+    BodyPoseConfiguration pose_config;
 
   public:
-    CruiseControlComprehensiveTest() {
+    CruiseControlComprehensiveTest() : pose_config(getDefaultBodyPoseConfig(createDefaultParameters())) {
         setupParameters();
         locomotion = new LocomotionSystem(params);
-        locomotion->initialize(&imu, &fsr, &servo);
+        locomotion->initialize(&imu, &fsr, &servo, pose_config);
         state_controller = nullptr; // Initialize to nullptr
     }
 
@@ -46,7 +48,7 @@ class CruiseControlComprehensiveTest {
         params.coxa_length = 50;
         params.femur_length = 101;
         params.tibia_length = 208;
-        params.robot_height = 120;
+        params.robot_height = 208;
         params.control_frequency = 50;
         params.coxa_angle_limits[0] = -65;
         params.coxa_angle_limits[1] = 65;
@@ -100,7 +102,7 @@ class CruiseControlComprehensiveTest {
             state_controller = nullptr;
         }
         state_controller = new StateController(*locomotion, config);
-        state_controller->initialize();
+        state_controller->initialize(pose_config);
     }
 
     void cleanupStateController() {
@@ -149,7 +151,7 @@ class CruiseControlComprehensiveTest {
 
         StateMachineConfig config;
         state_controller = new StateController(*locomotion, config);
-        state_controller->initialize();
+        state_controller->initialize(pose_config);
 
         // Test getCruiseVelocity() method
         Eigen::Vector3d test_velocity(120.0f, -30.0f, 25.0f);
@@ -179,7 +181,7 @@ class CruiseControlComprehensiveTest {
         StateMachineConfig config_with_limit;
         config_with_limit.cruise_control_time_limit = 2.0f; // 2 seconds
         state_controller = new StateController(*locomotion, config_with_limit);
-        state_controller->initialize();
+        state_controller->initialize(pose_config);
 
         // Enable cruise control
         Eigen::Vector3d velocity(80.0f, 0.0f, 10.0f);
@@ -204,7 +206,7 @@ class CruiseControlComprehensiveTest {
         StateMachineConfig config_unlimited;
         config_unlimited.cruise_control_time_limit = 0.0f; // Unlimited
         state_controller = new StateController(*locomotion, config_unlimited);
-        state_controller->initialize();
+        state_controller->initialize(pose_config);
 
         state_controller->setCruiseControlMode(CRUISE_CONTROL_ON, velocity);
         assert_near(state_controller->getCruiseRemainingTime(), 0.0f, 0.01f,
@@ -220,7 +222,7 @@ class CruiseControlComprehensiveTest {
 
         StateMachineConfig config;
         state_controller = new StateController(*locomotion, config);
-        state_controller->initialize();
+        state_controller->initialize(pose_config);
 
         // Set desired velocities
         Eigen::Vector2d linear_vel(75.0f, -25.0f);
@@ -251,10 +253,10 @@ class CruiseControlComprehensiveTest {
 
         StateMachineConfig config;
         state_controller = new StateController(*locomotion, config);
-        state_controller->initialize();
+        state_controller->initialize(pose_config);
 
         // Prepare robot for operational state
-        state_controller->requestSystemState(SYSTEM_OPERATIONAL);
+        state_controller->requestSystemState(SYSTEM_RUNNING);
         state_controller->requestRobotState(ROBOT_RUNNING);
         for (int i = 0; i < 10; i++) {
             state_controller->update(0.02f);
@@ -294,7 +296,7 @@ class CruiseControlComprehensiveTest {
         StateMachineConfig disabled_config;
         disabled_config.enable_cruise_control = false;
         state_controller = new StateController(*locomotion, disabled_config);
-        state_controller->initialize();
+        state_controller->initialize(pose_config);
 
         Eigen::Vector3d velocity(50.0f, 25.0f, 10.0f);
         assert_test(!state_controller->setCruiseControlMode(CRUISE_CONTROL_ON, velocity),
@@ -308,7 +310,7 @@ class CruiseControlComprehensiveTest {
         StateMachineConfig short_limit_config;
         short_limit_config.cruise_control_time_limit = 0.5f; // 500ms
         state_controller = new StateController(*locomotion, short_limit_config);
-        state_controller->initialize();
+        state_controller->initialize(pose_config);
 
         state_controller->setCruiseControlMode(CRUISE_CONTROL_ON, velocity);
         double remaining = state_controller->getCruiseRemainingTime();
@@ -322,7 +324,7 @@ class CruiseControlComprehensiveTest {
 
         StateMachineConfig config;
         state_controller = new StateController(*locomotion, config);
-        state_controller->initialize();
+        state_controller->initialize(pose_config);
 
         // Test very small velocity (should be treated as zero)
         Eigen::Vector3d tiny_velocity(0.0001f, 0.0001f, 0.0001f);
@@ -352,7 +354,7 @@ class CruiseControlComprehensiveTest {
         StateMachineConfig config;
         config.cruise_control_time_limit = 5.0f; // Equivalent to OpenSHC cruise_control_time_limit
         state_controller = new StateController(*locomotion, config);
-        state_controller->initialize();
+        state_controller->initialize(pose_config);
 
         // Test equivalent behavior: force specific velocity vs capture current velocity
 

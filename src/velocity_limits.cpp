@@ -7,6 +7,7 @@
  */
 
 #include "velocity_limits.h"
+#include "gait_config.h"
 #include "hexamotion_constants.h"
 #include "math_utils.h"
 #include "workspace_validator.h"
@@ -55,10 +56,33 @@ void VelocityLimits::generateLimits(const GaitConfig &gait_config) {
     // Calculate overshoot compensation using workspace data
     calculateOvershoot(gait_config);
 
-    // Generate limits for all bearings (0-359 degrees) using validation
+    // Para cada dirección (bearing), calcular límites de velocidad y aceleración
     for (int bearing = 0; bearing < 360; ++bearing) {
-        pimpl_->limit_map_.limits[bearing] = calculateLimitsForBearing(
-            static_cast<double>(bearing), gait_config);
+        double walkspace_radius = pimpl_->workspace_config_.walkspace_radius;
+        double on_ground_ratio = gait_config.stance_ratio;
+        double step_frequency = gait_config.frequency;
+        double stance_duration = on_ground_ratio / step_frequency;
+
+        // Maximum linear speed based on step length and frequency
+        double max_step_length = walkspace_radius * 2.0;                    // Maximum step length
+        double max_linear_speed = (max_step_length * step_frequency) / 2.0; // Average speed
+
+        // Maximum angular speed based on stance radius
+        double stance_radius = walkspace_radius * 0.8; // Effective stance radius
+        double max_angular_speed = max_linear_speed / stance_radius;
+
+        // Acceleration limits based on step timing
+        double time_to_max_stride = gait_config.time_to_max_stride;
+        double max_linear_acceleration = max_linear_speed / time_to_max_stride;
+        double max_angular_acceleration = max_angular_speed / time_to_max_stride;
+
+        // Crear y asignar los límites
+        LimitValues limits;
+        limits.linear_x = max_linear_speed;
+        limits.linear_y = max_linear_speed;
+        limits.angular_z = max_angular_speed;
+        limits.acceleration = max_linear_acceleration;
+        pimpl_->limit_map_.limits[bearing] = limits;
     }
 }
 
@@ -68,6 +92,19 @@ VelocityLimits::LimitValues VelocityLimits::getLimit(double bearing_degrees) con
 
     // Use interpolation for smooth transitions between discrete bearing values
     return interpolateLimits(normalized_bearing);
+}
+
+// Unified configuration interface overloads
+void VelocityLimits::generateLimits(const GaitConfiguration &gait_config) {
+    // Convert unified configuration to internal format
+    GaitConfig internal_config;
+    internal_config.frequency = gait_config.step_frequency;
+    internal_config.stance_ratio = gait_config.getStanceRatio();
+    internal_config.swing_ratio = gait_config.getSwingRatio();
+    internal_config.time_to_max_stride = gait_config.time_to_max_stride;
+
+    // Use existing implementation
+    generateLimits(internal_config);
 }
 
 void VelocityLimits::calculateWorkspace(const GaitConfig &gait_config) {
@@ -97,6 +134,18 @@ void VelocityLimits::calculateWorkspace(const GaitConfig &gait_config) {
         std::max(pimpl_->workspace_config_.walkspace_radius, 0.05);
     pimpl_->workspace_config_.stance_radius =
         std::max(pimpl_->workspace_config_.stance_radius, 0.03);
+}
+
+void VelocityLimits::calculateWorkspace(const GaitConfiguration &gait_config) {
+    // Convert unified configuration to internal format
+    GaitConfig internal_config;
+    internal_config.frequency = gait_config.step_frequency;
+    internal_config.stance_ratio = gait_config.getStanceRatio();
+    internal_config.swing_ratio = gait_config.getSwingRatio();
+    internal_config.time_to_max_stride = gait_config.time_to_max_stride;
+
+    // Use existing implementation
+    calculateWorkspace(internal_config);
 }
 
 VelocityLimits::LimitValues VelocityLimits::scaleVelocityLimits(
@@ -206,6 +255,18 @@ void VelocityLimits::updateGaitParameters(const GaitConfig &gait_config) {
     generateLimits(gait_config);
 }
 
+void VelocityLimits::updateGaitParameters(const GaitConfiguration &gait_config) {
+    // Convert unified configuration to internal format
+    GaitConfig internal_config;
+    internal_config.frequency = gait_config.step_frequency;
+    internal_config.stance_ratio = gait_config.getStanceRatio();
+    internal_config.swing_ratio = gait_config.getSwingRatio();
+    internal_config.time_to_max_stride = gait_config.time_to_max_stride;
+
+    // Use existing implementation
+    generateLimits(internal_config);
+}
+
 const VelocityLimits::WorkspaceConfig &VelocityLimits::getWorkspaceConfig() const {
     return pimpl_->workspace_config_;
 }
@@ -268,7 +329,7 @@ double VelocityLimits::calculateBearing(double vx, double vy) {
 }
 
 double VelocityLimits::calculateMaxLinearSpeed(double walkspace_radius,
-                                              double on_ground_ratio, double frequency) const {
+                                               double on_ground_ratio, double frequency) const {
     // Use simplified OpenSHC-equivalent calculation with constraints
     if (on_ground_ratio <= 0.0 || frequency <= 0.0 || walkspace_radius <= 0.0) {
         return 0.0;
@@ -287,7 +348,7 @@ double VelocityLimits::calculateMaxLinearSpeed(double walkspace_radius,
     max_speed *= scaling_factors.velocity_scale;
 
     // Apply reasonable limits to prevent extreme values
-    return std::min(max_speed, 5.0); // Cap at 5 m/s for safety
+    return std::min(max_speed, 5000.0); // Cap at 5000 mm/s for safety
 }
 
 double VelocityLimits::calculateMaxAngularSpeed(double max_linear_speed, double stance_radius) const {
@@ -319,7 +380,7 @@ double VelocityLimits::calculateMaxAcceleration(double max_speed, double time_to
     max_accel *= scaling_factors.acceleration_scale;
 
     // Apply reasonable limits to prevent extreme values
-    return std::min(max_accel, 10.0); // Cap at 10 m/s² for safety
+    return std::min(max_accel, 10000.0); // Cap at 10000 mm/s² for safety
 }
 
 VelocityLimits::LimitValues VelocityLimits::calculateLimitsForBearing(
@@ -343,14 +404,14 @@ VelocityLimits::LimitValues VelocityLimits::calculateLimitsForBearing(
 
     // Calculate limits based on the most constraining constraints
     double max_linear_speed = calculateMaxLinearSpeed(min_effective_radius,
-                                                     gait_config.stance_ratio,
-                                                     gait_config.frequency);
+                                                      gait_config.stance_ratio,
+                                                      gait_config.frequency);
 
     double max_angular_speed = calculateMaxAngularSpeed(max_linear_speed,
-                                                       pimpl_->workspace_config_.stance_radius);
+                                                        pimpl_->workspace_config_.stance_radius);
 
     double max_acceleration = calculateMaxAcceleration(max_linear_speed,
-                                                      gait_config.time_to_max_stride);
+                                                       gait_config.time_to_max_stride);
 
     // Create limit values using constraints
     LimitValues limits;
@@ -378,10 +439,34 @@ void VelocityLimits::setSafetyMargin(double margin) {
 }
 
 void VelocityLimits::setAngularVelocityScaling(double scaling) {
-    pimpl_->angular_velocity_scaling_ = scaling;
+    pimpl_->angular_velocity_scaling_ = std::clamp<double>(scaling, 0.1, 2.0);
+}
 
-    // Update validator angular scaling
-    pimpl_->workspace_validator_->updateAngularScaling(scaling);
+Point3D VelocityLimits::calculateStrideVector(double linear_velocity_x, double linear_velocity_y,
+                                             double angular_velocity, const Point3D& current_tip_position,
+                                             double stance_ratio, double step_frequency) {
+    // OpenSHC equivalent stride vector calculation
+
+    // 1. Linear stride vector (OpenSHC: stride_vector_linear)
+    Point3D stride_vector_linear(linear_velocity_x, linear_velocity_y, 0.0);
+
+    // 2. Angular stride vector (OpenSHC: angular_velocity.cross(radius))
+    // Get radius by projecting current tip position to XY plane (OpenSHC: getRejection)
+    Point3D radius = current_tip_position;
+    radius.z = 0.0; // Project to XY plane (equivalent to getRejection)
+
+    // Calculate angular stride vector using cross product
+    // For 2D case: cross(angular_velocity * k, radius) = (-angular_velocity * radius.y, angular_velocity * radius.x, 0)
+    Point3D stride_vector_angular(-angular_velocity * radius.y, angular_velocity * radius.x, 0.0);
+
+    // 3. Combination (OpenSHC: stride_vector_linear + stride_vector_angular)
+    Point3D stride_vector = stride_vector_linear + stride_vector_angular;
+
+    // 4. Scaling by stance ratio and frequency (OpenSHC: stride_vector_ *= (on_ground_ratio / step.frequency_))
+    double scaling_factor = stance_ratio / step_frequency;
+    stride_vector = stride_vector * scaling_factor;
+
+    return stride_vector;
 }
 
 double VelocityLimits::getOvershootX() const {

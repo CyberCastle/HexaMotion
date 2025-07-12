@@ -44,14 +44,18 @@
 #ifndef LOCOMOTION_SYSTEM_H
 #define LOCOMOTION_SYSTEM_H
 
-#include "HexaModel.h"
+#include "robot_model.h"
 #include "admittance_controller.h"
 #include "cartesian_velocity_controller.h"
-#include "pose_controller.h"
+#include "body_pose_controller.h"
 #include "walk_controller.h"
+#include "leg.h"
 #include <Arduino.h>
 #include <ArduinoEigen.h>
 #include <math.h>
+
+// Forward declarations
+class WalkController;
 
 // Main locomotion system class
 class LocomotionSystem {
@@ -66,7 +70,8 @@ class LocomotionSystem {
         STABILITY_ERROR = 5,
         PARAMETER_ERROR = 6,
         SENSOR_ERROR = 7,       // General sensor communication error
-        SERVO_BLOCKED_ERROR = 8 // Servo blocked by status flags
+        SERVO_BLOCKED_ERROR = 8, // Servo blocked by status flags
+        STATE_ERROR = 9         // System state error
     };
 
   private:
@@ -81,21 +86,7 @@ class LocomotionSystem {
     // System states
     Eigen::Vector3d body_position;      // Body position [x,y,z]
     Eigen::Vector3d body_orientation;   // Body orientation [roll,pitch,yaw]
-    Point3D leg_positions[NUM_LEGS];    // Leg positions
-    JointAngles joint_angles[NUM_LEGS]; // Joint angles
-    LegState leg_states[NUM_LEGS];      // Leg states
-
-    // Gait control
-    GaitType current_gait;
-    double gait_phase;
-    double step_height;
-    double step_length;
-
-    // Gait-specific parameters
-    double stance_duration;             // Stance phase duration (0-1)
-    double swing_duration;              // Swing phase duration (0-1)
-    double cycle_frequency;             // Gait cycle frequency (Hz)
-    double leg_phase_offsets[NUM_LEGS]; // Phase offset per leg
+    Leg legs[NUM_LEGS];                 // Leg objects containing all leg data
 
     // Control variables
     bool system_enabled;
@@ -109,15 +100,20 @@ class LocomotionSystem {
     ErrorCode last_error;
 
     RobotModel model;
-    PoseController *pose_ctrl;
+    BodyPoseController *body_pose_ctrl;
     WalkController *walk_ctrl;
     AdmittanceController *admittance_ctrl;
-    // FSR contact history for updateLegStates filtering
-    double fsr_contact_history[NUM_LEGS][3];
-    // Circular buffer index for FSR history
-    int fsr_history_index;
     // Last log time for sensor update profiling
     unsigned long last_sensor_log_time;
+
+    // System state management
+    SystemState system_state;
+    bool startup_in_progress;
+    bool shutdown_in_progress;
+
+    // Último comando de velocidad deseado
+    double commanded_linear_velocity_ = 0.0;
+    double commanded_angular_velocity_ = 0.0;
 
     Point3D transformWorldToBody(const Point3D &p_world) const;
     bool setLegJointAngles(int leg_index, const JointAngles &q);
@@ -143,7 +139,7 @@ class LocomotionSystem {
      * @param pose_config Pose configuration for the robot.
      * @return True on successful initialization.
      */
-    bool initialize(IIMUInterface *imu, IFSRInterface *fsr, IServoInterface *servo, const PoseConfiguration &pose_config);
+    bool initialize(IIMUInterface *imu, IFSRInterface *fsr, IServoInterface *servo, const BodyPoseConfiguration &body_pose_config);
 
     /**
      * @brief Run calibration sequence for sensors and servos.
@@ -189,10 +185,21 @@ class LocomotionSystem {
     bool setGaitType(GaitType gait);
     /** Plan the next gait step from desired velocities. */
     bool planGaitSequence(double velocity_x, double velocity_y, double angular_velocity);
-    /** Update internal gait phase counters. */
-    void updateGaitPhase();
+
     /** Compute foot trajectory for a leg at given phase. */
     Point3D calculateFootTrajectory(int leg_index, double phase);
+
+    // State management (OpenSHC equivalent)
+    /** Execute startup sequence to transition from READY to RUNNING state */
+    bool executeStartupSequence();
+    /** Execute shutdown sequence to transition from RUNNING to READY state */
+    bool executeShutdownSequence();
+    /** Check if startup sequence is in progress */
+    bool isStartupInProgress() const { return startup_in_progress; }
+    /** Check if shutdown sequence is in progress */
+    bool isShutdownInProgress() const { return shutdown_in_progress; }
+    /** Get current system state */
+    SystemState getSystemState() const { return system_state; }
 
     // Locomotion control
     /** Start walking forward indefinitely. */
@@ -258,19 +265,22 @@ class LocomotionSystem {
     IServoInterface *getServoInterface() { return servo_interface; }
     Eigen::Vector3d getBodyPosition() const { return body_position; }
     Eigen::Vector3d getBodyOrientation() const { return body_orientation; }
-    LegState getLegState(int leg_index) const { return leg_states[leg_index]; }
-    JointAngles getJointAngles(int leg_index) const { return joint_angles[leg_index]; }
-    JointAngles getCurrentAngles(int leg_index) const { return joint_angles[leg_index]; }
-    Point3D getLegPosition(int leg_index) const { return leg_positions[leg_index]; }
-    double getStepHeight() const { return step_height; }
-    double getStepLength() const;
+    StepPhase getLegState(int leg_index) const { return legs[leg_index].getStepPhase(); }
+    JointAngles getJointAngles(int leg_index) const { return legs[leg_index].getJointAngles(); }
+    Point3D getLegPosition(int leg_index) const { return legs[leg_index].getCurrentTipPositionGlobal(); }
+
+    // Leg access methods
+    /** Get leg object by index. */
+    const Leg& getLeg(int leg_index) const { return legs[leg_index]; }
+    /** Get leg object by index (mutable). */
+    Leg& getLeg(int leg_index) { return legs[leg_index]; }
 
     // Setters
     /** Replace the current parameter set. */
     bool setParameters(const Parameters &new_params);
     /** Set the control loop frequency. */
     bool setControlFrequency(double frequency);
-    /** Configure step height and length. */
+    /** Configure step height and length (delegated to WalkController). */
     bool setStepParameters(double height, double length);
 
     // Smooth trajectory configuration (OpenSHC-style movement)
@@ -309,25 +319,28 @@ class LocomotionSystem {
     /** Execute a basic hardware self-test. */
     bool performSelfTest();
 
+    // Getter for WalkController
+    WalkController* getWalkController() { return walk_ctrl; }
+
+    // Gait control
+    /** Start walking with specified gait type and velocities. */
+    bool startWalking(GaitType gait_type, double velocity_x, double velocity_y, double angular_velocity);
+    /** Stop walking and return to standing pose. */
+    bool stopWalking();
+
+    // Update model (OpenSHC architecture)
+    void updateModel();
+
   private:
     // Helper methods
     double constrainAngle(double angle, double min_angle, double max_angle);
     bool validateParameters();
-    void initializeDefaultPose();
-    void updateStepParameters();
     bool checkJointLimits(int leg_index, const JointAngles &angles);
     double calculateLegReach() const;
 
     // Adaptive control
     void adaptGaitToTerrain();
-    void adjustStepParameters();
     void compensateForSlope();
-
-    // Advanced gait methods
-    void updateMetachronalPattern();
-    void updateAdaptivePattern();
-    bool shouldAdaptGaitPattern();
-    void calculateAdaptivePhaseOffsets();
 };
 
 #include "math_utils.h"

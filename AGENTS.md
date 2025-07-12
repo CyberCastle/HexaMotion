@@ -15,6 +15,7 @@ This library provides locomotion control for a hexapod robot based on the Arduin
 
 ## Development
 
+-   Don't create arduino examples.
 -   Clone the repository with all submodules.
 -   Implementation files live exclusively in the `src` and `include` directories.
 -   The `tests` folder only contains code for validating fixes.
@@ -40,7 +41,7 @@ Each test executable can be run individually.
 
 These are the characteristics of a real robot, used to test this library.
 
--   robot height: 120 mm
+-   robot height: 208 mm (with all angles in local position equals to 0º)
 -   robot weight: 6.5 Kg
 -   body hexagon radius: 200 mm.
 -   coxa length: 50 mm
@@ -50,7 +51,7 @@ These are the characteristics of a real robot, used to test this library.
 -   tibia length: 208 mm
 -   tibia weight: 200 g
 
-**Note:** Physically, if the robot has all servo angles at 0°, the femur remains horizontal, in line with the coxa. The tibia, on the other hand, remains vertical, perpendicular to the ground. This allows the robot to stand stably by default when all angles are at 0°.
+**Note:** Physically, if the robot has all servo angles at 0°, the femur remains horizontal, in line with the coxa. The tibia, on the other hand, remains vertical, perpendicular to the ground. This allows the robot to stand stably by default when all angles are at 0°. Due to the aforementioned peculiarity, the robot's body will be positioned at z = -208, this value being the length of the tibia equal to the default height.
 
 ### Test Parameters
 
@@ -62,7 +63,7 @@ p.hexagon_radius = 200;
 p.coxa_length = 50;
 p.femur_length = 101;
 p.tibia_length = 208;
-p.robot_height = 120;
+p.robot_height = 208;
 p.control_frequency = 50;
 p.coxa_angle_limits[0] = -65;
 p.coxa_angle_limits[1] = 65;

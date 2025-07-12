@@ -1,6 +1,6 @@
 #include "workspace_validator.h"
-#include "HexaModel.h"
 #include "math_utils.h"
+#include "robot_model.h"
 #include <algorithm>
 #include <cmath>
 #include <limits>
@@ -66,7 +66,7 @@ bool WorkspaceValidator::isReachable(int leg_index, const Point3D &target_positi
 }
 
 double WorkspaceValidator::checkCollisionRisk(int leg_index, const Point3D &target_position,
-                                             const Point3D current_leg_positions[NUM_LEGS]) const {
+                                              const Point3D current_leg_positions[NUM_LEGS]) const {
     // Get adjacent leg indices
     int left_adjacent = (leg_index + NUM_LEGS - 1) % NUM_LEGS;
     int right_adjacent = (leg_index + 1) % NUM_LEGS;
@@ -135,10 +135,19 @@ WorkspaceValidator::getWorkspaceBounds(int leg_index) const {
 
     // Calculate theoretical reach limits
     double total_leg_length = params.coxa_length + params.femur_length + params.tibia_length;
+    double theoretical_min = std::abs(params.femur_length - params.tibia_length);
 
     // Apply safety factors from configuration
     bounds.max_radius = total_leg_length * config_.safety_margin_factor;
     bounds.min_radius = params.coxa_length * config_.minimum_reach_factor;
+
+    // Set reach values (same as radius values for compatibility)
+    bounds.max_reach = bounds.max_radius;
+    bounds.min_reach = bounds.min_radius;
+
+    // Set preferred reach values (using the theoretical minimum calculation)
+    bounds.preferred_max_reach = total_leg_length * config_.safety_margin_factor;
+    bounds.preferred_min_reach = theoretical_min * config_.minimum_reach_factor;
 
     // Height bounds (assuming ground level operation)
     bounds.min_height = leg_base.z - total_leg_length;
@@ -163,7 +172,7 @@ WorkspaceValidator::calculateVelocityConstraints(int leg_index, double bearing_d
 
     // Calculate effective workspace radius based on bearing
     Point3D leg_base = getLegBase(leg_index);
-    double leg_angle = leg_index * LEG_ANGLE_SPACING;
+    double leg_angle = model_.getLegBaseAngleOffset(leg_index) * RADIANS_TO_DEGREES_FACTOR;
     double bearing_offset = std::abs(bearing_degrees - leg_angle);
     if (bearing_offset > 180.0f) {
         bearing_offset = 360.0f - bearing_offset;
@@ -242,12 +251,10 @@ void WorkspaceValidator::updateSafetyMargin(double margin) {
 }
 
 void WorkspaceValidator::updateAngularScaling(double scaling) {
-    // Store angular scaling in configuration for future use
+    // TODO:Store angular scaling in configuration for future use
     // Note: This could be extended to modify a stored scaling factor if needed
     // For now, angular scaling is handled in getScalingFactors()
 }
-
-// ===== MIGRATED FROM LegCollisionAvoidance =====
 
 double WorkspaceValidator::calculateSafeHexagonRadius(double leg_reach, double safety_margin) {
     // For a hexagon with 60° between legs, we need to ensure that adjacent leg
@@ -323,9 +330,9 @@ bool WorkspaceValidator::adjustForCollisionAvoidance(int leg_index, Point3D &tar
     }
 
     // Calculate leg base position
-    double base_angle = leg_index * LEG_ANGLE_SPACING;
-    double base_x = hexagon_radius * cos(base_angle * M_PI / 180.0f);
-    double base_y = hexagon_radius * sin(base_angle * M_PI / 180.0f);
+    Point3D base_pos = model_.getLegBasePosition(leg_index);
+    double base_x = base_pos.x;
+    double base_y = base_pos.y;
 
     double dx = target_position.x - base_x;
     double dy = target_position.y - base_y;
@@ -355,20 +362,12 @@ bool WorkspaceValidator::adjustForCollisionAvoidance(int leg_index, Point3D &tar
     return false;
 }
 
-// Implementation of missing methods
-
 Point3D WorkspaceValidator::getLegBase(int leg_index) const {
     if (leg_index < 0 || leg_index >= NUM_LEGS) {
         return Point3D{0.0f, 0.0f, 0.0f};
     }
 
-    const Parameters &params = model_.getParams();
-    double angle_rad = math_utils::degreesToRadians(leg_index * LEG_ANGLE_SPACING_DEGREES);
-
-    return Point3D{
-        params.hexagon_radius * cos(angle_rad),
-        params.hexagon_radius * sin(angle_rad),
-        0.0f};
+    return model_.getLegBasePosition(leg_index);
 }
 
 bool WorkspaceValidator::checkJointLimits(int leg_index, const Point3D &target_position) const {
@@ -376,14 +375,20 @@ bool WorkspaceValidator::checkJointLimits(int leg_index, const Point3D &target_p
         return false;
     }
 
-    // Calculate inverse kinematics and check if joint angles are within limits
+    // Calcular la cinemática inversa y comprobar si los ángulos articulares están dentro de los límites
     try {
-        JointAngles angles = model_.inverseKinematics(leg_index, target_position);
+        // Para validación, usar ángulos cero como punto de partida
+        JointAngles zero_angles(0, 0, 0);
+        JointAngles angles = model_.inverseKinematicsCurrentGlobalCoordinates(leg_index, zero_angles, target_position);
 
-        // Basic joint limit checks (these would be robot-specific)
-        const double COXA_MIN = -45.0f, COXA_MAX = 45.0f;
-        const double FEMUR_MIN = -90.0f, FEMUR_MAX = 90.0f;
-        const double TIBIA_MIN = -135.0f, TIBIA_MAX = 45.0f;
+        // Usar los límites de los parámetros de configuración
+        const Parameters &params = model_.getParams();
+        const double COXA_MIN = params.coxa_angle_limits[0];
+        const double COXA_MAX = params.coxa_angle_limits[1];
+        const double FEMUR_MIN = params.femur_angle_limits[0];
+        const double FEMUR_MAX = params.femur_angle_limits[1];
+        const double TIBIA_MIN = params.tibia_angle_limits[0];
+        const double TIBIA_MAX = params.tibia_angle_limits[1];
 
         return (angles.coxa >= COXA_MIN && angles.coxa <= COXA_MAX &&
                 angles.femur >= FEMUR_MIN && angles.femur <= FEMUR_MAX &&
@@ -425,4 +430,47 @@ Point3D WorkspaceValidator::constrainToGeometricWorkspace(int leg_index, const P
     constrained.z = leg_base.z + (target_position.z - leg_base.z) * scale;
 
     return constrained;
+}
+
+double WorkspaceValidator::calculateLimitProximity(int leg_index, const JointAngles &joint_angles) const {
+    if (leg_index < 0 || leg_index >= NUM_LEGS) {
+        return 1.0; // Safe default
+    }
+
+    const Parameters &params = model_.getParams();
+
+    // Convert angle limits from degrees to radians
+    double coxa_min_rad = params.coxa_angle_limits[0] * M_PI / 180.0;
+    double coxa_max_rad = params.coxa_angle_limits[1] * M_PI / 180.0;
+    double femur_min_rad = params.femur_angle_limits[0] * M_PI / 180.0;
+    double femur_max_rad = params.femur_angle_limits[1] * M_PI / 180.0;
+    double tibia_min_rad = params.tibia_angle_limits[0] * M_PI / 180.0;
+    double tibia_max_rad = params.tibia_angle_limits[1] * M_PI / 180.0;
+
+    // Calculate limit proximity (OpenSHC-style)
+    // (1.0 = furthest possible from limit, 0.0 = equal to limit)
+    double min_limit_proximity = 1.0;
+
+    // Check coxa joint
+    double coxa_min_diff = abs(coxa_min_rad - joint_angles.coxa);
+    double coxa_max_diff = abs(coxa_max_rad - joint_angles.coxa);
+    double coxa_half_range = (coxa_max_rad - coxa_min_rad) / 2.0;
+    double coxa_proximity = coxa_half_range != 0 ? std::min(coxa_min_diff, coxa_max_diff) / coxa_half_range : 1.0;
+    min_limit_proximity = std::min(coxa_proximity, min_limit_proximity);
+
+    // Check femur joint
+    double femur_min_diff = abs(femur_min_rad - joint_angles.femur);
+    double femur_max_diff = abs(femur_max_rad - joint_angles.femur);
+    double femur_half_range = (femur_max_rad - femur_min_rad) / 2.0;
+    double femur_proximity = femur_half_range != 0 ? std::min(femur_min_diff, femur_max_diff) / femur_half_range : 1.0;
+    min_limit_proximity = std::min(femur_proximity, min_limit_proximity);
+
+    // Check tibia joint
+    double tibia_min_diff = abs(tibia_min_rad - joint_angles.tibia);
+    double tibia_max_diff = abs(tibia_max_rad - joint_angles.tibia);
+    double tibia_half_range = (tibia_max_rad - tibia_min_rad) / 2.0;
+    double tibia_proximity = tibia_half_range != 0 ? std::min(tibia_min_diff, tibia_max_diff) / tibia_half_range : 1.0;
+    min_limit_proximity = std::min(tibia_proximity, min_limit_proximity);
+
+    return min_limit_proximity;
 }

@@ -1,6 +1,7 @@
 #include "state_controller.h"
+#include "locomotion_system.h"
 #include "hexamotion_constants.h"
-#include "pose_config_factory.h"
+#include "body_pose_config_factory.h"
 
 /**
  * @file state_controller.cpp
@@ -12,10 +13,12 @@
 namespace {
 std::string toString(SystemState state) {
     switch (state) {
-    case SystemState::SYSTEM_SUSPENDED:
-        return "SYSTEM_SUSPENDED";
-    case SystemState::SYSTEM_OPERATIONAL:
-        return "SYSTEM_OPERATIONAL";
+    case SystemState::SYSTEM_PACKED:
+        return "SYSTEM_PACKED";
+    case SystemState::SYSTEM_READY:
+        return "SYSTEM_READY";
+    case SystemState::SYSTEM_RUNNING:
+        return "SYSTEM_RUNNING";
     default:
         return "UNKNOWN";
     }
@@ -98,15 +101,15 @@ std::string toString(CruiseControlMode mode) {
     }
 }
 
-std::string toString(AdvancedLegState state) {
+std::string toString(LegState state) {
     switch (state) {
-    case AdvancedLegState::LEG_WALKING:
+    case LegState::LEG_WALKING:
         return "LEG_WALKING";
-    case AdvancedLegState::LEG_MANUAL:
+    case LegState::LEG_MANUAL:
         return "LEG_MANUAL";
-    case AdvancedLegState::LEG_WALKING_TO_MANUAL:
+    case LegState::LEG_WALKING_TO_MANUAL:
         return "LEG_WALKING_TO_MANUAL";
-    case AdvancedLegState::LEG_MANUAL_TO_WALKING:
+    case LegState::LEG_MANUAL_TO_WALKING:
         return "LEG_MANUAL_TO_WALKING";
     default:
         return "UNKNOWN";
@@ -131,29 +134,27 @@ String toArduinoString(const std::string &str) {
 }
 } // namespace
 
-// ==============================
-// CONSTRUCTOR & DESTRUCTOR
-// ==============================
 
 StateController::StateController(LocomotionSystem &locomotion, const StateMachineConfig &config)
-    : locomotion_system_(locomotion), config_(config), current_system_state_(SystemState::SYSTEM_SUSPENDED), current_robot_state_(RobotState::ROBOT_UNKNOWN), current_walk_state_(WalkState::WALK_STOPPED), current_posing_mode_(PosingMode::POSING_NONE), current_cruise_control_mode_(CruiseControlMode::CRUISE_CONTROL_OFF), current_pose_reset_mode_(PoseResetMode::POSE_RESET_NONE), desired_system_state_(SystemState::SYSTEM_SUSPENDED), desired_robot_state_(RobotState::ROBOT_UNKNOWN), manual_leg_count_(0), is_transitioning_(false), desired_linear_velocity_(Eigen::Vector2d::Zero()), desired_angular_velocity_(0.0f), desired_body_position_(Eigen::Vector3d::Zero()), desired_body_orientation_(Eigen::Vector3d::Zero()), cruise_velocity_(Eigen::Vector3d::Zero()), cruise_start_time_(0), cruise_end_time_(0), last_update_time_(0), dt_(0.02f), has_error_(false), is_initialized_(false), startup_step_(0), startup_transition_initialized_(false), startup_transition_step_count_(4), shutdown_step_(0), shutdown_transition_initialized_(false), shutdown_transition_step_count_(3), pack_step_(0), unpack_step_(0) {
+    : locomotion_system_(locomotion), config_(config), current_system_state_(SystemState::SYSTEM_PACKED), current_robot_state_(RobotState::ROBOT_UNKNOWN), current_walk_state_(WalkState::WALK_STOPPED), current_posing_mode_(PosingMode::POSING_NONE), current_cruise_control_mode_(CruiseControlMode::CRUISE_CONTROL_OFF), current_pose_reset_mode_(PoseResetMode::POSE_RESET_NONE), desired_system_state_(SystemState::SYSTEM_PACKED), desired_robot_state_(RobotState::ROBOT_UNKNOWN), manual_leg_count_(0), is_transitioning_(false), desired_linear_velocity_(Eigen::Vector2d::Zero()), desired_angular_velocity_(0.0f), desired_body_position_(Eigen::Vector3d::Zero()), desired_body_orientation_(Eigen::Vector3d::Zero()), cruise_velocity_(Eigen::Vector3d::Zero()), cruise_start_time_(0), cruise_end_time_(0), last_update_time_(0), dt_(0.02f), has_error_(false), is_initialized_(false), startup_step_(0), startup_transition_initialized_(false), startup_transition_step_count_(4), shutdown_step_(0), shutdown_transition_initialized_(false), shutdown_transition_step_count_(3), pack_step_(0), unpack_step_(0) {
 
     // Initialize leg states
     for (int i = 0; i < NUM_LEGS; i++) {
-        leg_states_[i] = AdvancedLegState::LEG_WALKING;
+        leg_states_[i] = LegState::LEG_WALKING;
         leg_tip_velocities_[i] = Eigen::Vector3d::Zero();
     }
 
     // Initialize transition progress
-    transition_progress_.current_step = 0;
-    transition_progress_.total_steps = 0;
-    transition_progress_.completion_percentage = 0.0f;
-    transition_progress_.is_complete = true;
-    transition_progress_.has_error = false;
-    transition_progress_.error_message = "";
+    // Eliminar inicialización de transition_progress_
+    // transition_progress_.current_step = 0;
+    // transition_progress_.total_steps = 0;
+    // transition_progress_.completion_percentage = 0.0f;
+    // transition_progress_.is_complete = true;
+    // transition_progress_.has_error = false;
+    // transition_progress_.error_message = "";
 
     // Initialize pose controller
-    pose_controller_ = nullptr;
+    body_pose_controller_ = nullptr;
 }
 
 StateController::~StateController() {
@@ -163,16 +164,12 @@ StateController::~StateController() {
     }
 
     // Clean up pose controller
-    if (pose_controller_) {
-        pose_controller_.reset();
+    if (body_pose_controller_) {
+        body_pose_controller_.reset();
     }
 }
 
-// ==============================
-// INITIALIZATION
-// ==============================
-
-bool StateController::initialize(const PoseConfiguration &pose_config) {
+bool StateController::initialize(const BodyPoseConfiguration &pose_config) {
     logDebug("Initializing StateController...");
 
     // Check if locomotion system is available
@@ -203,19 +200,18 @@ bool StateController::initialize(const PoseConfiguration &pose_config) {
     desired_robot_state_ = current_robot_state_;
 
     // Initialize system state
-    current_system_state_ = SystemState::SYSTEM_OPERATIONAL;
-    desired_system_state_ = SystemState::SYSTEM_OPERATIONAL;
+    current_system_state_ = SystemState::SYSTEM_RUNNING;
+    desired_system_state_ = SystemState::SYSTEM_RUNNING;
 
     // Initialize pose controller (equivalent to OpenSHC poser_)
     try {
-        pose_controller_ = std::make_unique<PoseController>(locomotion_system_.getRobotModel(),
-                                                            locomotion_system_.getServoInterface(),
-                                                            pose_config);
+                body_pose_controller_ = std::make_unique<BodyPoseController>(locomotion_system_.getRobotModel(),
+                                                                                                                       pose_config);
         logDebug("PoseController initialized successfully");
     } catch (const std::exception &e) {
-        pose_controller_.reset();
-        logError("Failed to initialize PoseController: " + String(e.what()));
-        setError("PoseController initialization failed");
+        body_pose_controller_.reset();
+        logError("Failed to initialize BodyPoseController: " + String(e.what()));
+        setError("BodyPoseController initialization failed");
         return false;
     }
 
@@ -225,10 +221,6 @@ bool StateController::initialize(const PoseConfiguration &pose_config) {
     logDebug("StateController initialized successfully");
     return true;
 }
-
-// ==============================
-// MAIN UPDATE LOOP
-// ==============================
 
 void StateController::update(double dt) {
     if (!is_initialized_) {
@@ -260,10 +252,6 @@ void StateController::update(double dt) {
         updatePoseControl();
     }
 }
-
-// ==============================
-// STATE ACCESSORS & SETTERS
-// ==============================
 
 bool StateController::requestSystemState(SystemState new_state) {
     if (new_state == current_system_state_) {
@@ -367,11 +355,7 @@ bool StateController::setPoseResetMode(PoseResetMode mode) {
     return true;
 }
 
-// ==============================
-// LEG CONTROL
-// ==============================
-
-bool StateController::setLegState(int leg_index, AdvancedLegState state) {
+bool StateController::setLegState(int leg_index, LegState state) {
     if (leg_index < 0 || leg_index >= NUM_LEGS) {
         setError("Invalid leg index: " + toArduinoString(toString(leg_index)));
         return false;
@@ -383,7 +367,7 @@ bool StateController::setLegState(int leg_index, AdvancedLegState state) {
     }
 
     // Check manual leg limit
-    if (state == AdvancedLegState::LEG_MANUAL && leg_states_[leg_index] != AdvancedLegState::LEG_MANUAL) {
+    if (state == LegState::LEG_MANUAL && leg_states_[leg_index] != LegState::LEG_MANUAL) {
         if (manual_leg_count_ >= config_.max_manual_legs) {
             setError("Maximum number of manual legs (" + toArduinoString(toString(config_.max_manual_legs)) + ") already reached");
             return false;
@@ -391,9 +375,9 @@ bool StateController::setLegState(int leg_index, AdvancedLegState state) {
     }
 
     // Update manual leg count
-    if (leg_states_[leg_index] == AdvancedLegState::LEG_MANUAL && state != AdvancedLegState::LEG_MANUAL) {
+    if (leg_states_[leg_index] == LegState::LEG_MANUAL && state != LegState::LEG_MANUAL) {
         manual_leg_count_--;
-    } else if (leg_states_[leg_index] != AdvancedLegState::LEG_MANUAL && state == AdvancedLegState::LEG_MANUAL) {
+    } else if (leg_states_[leg_index] != LegState::LEG_MANUAL && state == LegState::LEG_MANUAL) {
         manual_leg_count_++;
     }
 
@@ -402,9 +386,9 @@ bool StateController::setLegState(int leg_index, AdvancedLegState state) {
     return true;
 }
 
-AdvancedLegState StateController::getLegState(int leg_index) const {
+LegState StateController::getLegState(int leg_index) const {
     if (leg_index < 0 || leg_index >= NUM_LEGS) {
-        return AdvancedLegState::LEG_WALKING; // Default safe state
+        return LegState::LEG_WALKING; // Default safe state
     }
     return leg_states_[leg_index];
 }
@@ -412,10 +396,6 @@ AdvancedLegState StateController::getLegState(int leg_index) const {
 int StateController::getManualLegCount() const {
     return manual_leg_count_;
 }
-
-// ==============================
-// VELOCITY AND POSE CONTROL
-// ==============================
 
 void StateController::setDesiredVelocity(const Eigen::Vector2d &linear_velocity, double angular_velocity) {
     desired_linear_velocity_ = linear_velocity;
@@ -469,10 +449,6 @@ bool StateController::setDesiredBodyOrientation(const Eigen::Vector3d &orientati
     return true;
 }
 
-// ==============================
-// GAIT CONTROL
-// ==============================
-
 bool StateController::changeGait(GaitType gait) {
     if (current_robot_state_ != RobotState::ROBOT_RUNNING) {
         setError("Cannot change gait when robot is not in RUNNING state");
@@ -490,13 +466,12 @@ bool StateController::changeGait(GaitType gait) {
     return locomotion_system_.setGaitType(gait);
 }
 
-// ==============================
-// STATUS AND DIAGNOSTICS
-// ==============================
 
-TransitionProgress StateController::getTransitionProgress() const {
-    return transition_progress_;
-}
+
+// Eliminar método getTransitionProgress()
+// TransitionProgress StateController::getTransitionProgress() const {
+//     return transition_progress_;
+// }
 
 bool StateController::hasErrors() const {
     return has_error_;
@@ -516,9 +491,10 @@ String StateController::getDiagnosticInfo() const {
     info += "  Manual Legs: " + toArduinoString(toString(manual_leg_count_)) + "/" + toArduinoString(toString(config_.max_manual_legs)) + "\n";
     info += "  Transitioning: " + String(is_transitioning_ ? "Yes" : "No") + "\n";
 
-    if (is_transitioning_) {
-        info += "  Transition Progress: " + toArduinoString(toString(transition_progress_.completion_percentage)) + "%\n";
-    }
+    // Eliminar actualizaciones de transition_progress_ en los métodos de transición y reset
+    // if (is_transitioning_) {
+    //     info += "  Transition Progress: " + toArduinoString(toString(transition_progress_.completion_percentage)) + "%\n";
+    // }
 
     if (has_error_) {
         info += "  Error: " + last_error_message_ + "\n";
@@ -561,19 +537,19 @@ void StateController::reset() {
     logDebug("Resetting StateController");
 
     // Reset to initial states
-    current_system_state_ = SystemState::SYSTEM_SUSPENDED;
+    current_system_state_ = SystemState::SYSTEM_PACKED;
     current_robot_state_ = RobotState::ROBOT_UNKNOWN;
     current_walk_state_ = WalkState::WALK_STOPPED;
     current_posing_mode_ = PosingMode::POSING_NONE;
     current_cruise_control_mode_ = CruiseControlMode::CRUISE_CONTROL_OFF;
     current_pose_reset_mode_ = PoseResetMode::POSE_RESET_NONE;
 
-    desired_system_state_ = SystemState::SYSTEM_SUSPENDED;
+    desired_system_state_ = SystemState::SYSTEM_PACKED;
     desired_robot_state_ = RobotState::ROBOT_UNKNOWN;
 
     // Reset leg states
     for (int i = 0; i < NUM_LEGS; i++) {
-        leg_states_[i] = AdvancedLegState::LEG_WALKING;
+        leg_states_[i] = LegState::LEG_WALKING;
         leg_tip_velocities_[i] = Eigen::Vector3d::Zero();
     }
     manual_leg_count_ = 0;
@@ -586,20 +562,17 @@ void StateController::reset() {
 
     // Reset transition state
     is_transitioning_ = false;
-    transition_progress_.current_step = 0;
-    transition_progress_.total_steps = 0;
-    transition_progress_.completion_percentage = 0.0f;
-    transition_progress_.is_complete = true;
-    transition_progress_.has_error = false;
-    transition_progress_.error_message = "";
+    // Eliminar actualizaciones de transition_progress_ en los métodos de transición y reset
+    // transition_progress_.current_step = 0;
+    // transition_progress_.total_steps = 0;
+    // transition_progress_.completion_percentage = 0.0f;
+    // transition_progress_.is_complete = true;
+    // transition_progress_.has_error = false;
+    // transition_progress_.error_message = "";
 
     // Initialize pose controller
-    pose_controller_ = nullptr;
+    body_pose_controller_ = nullptr;
 }
-
-// ==============================
-// PRIVATE METHODS
-// ==============================
 
 void StateController::updateStateMachine() {
     // Handle system state transitions
@@ -613,8 +586,9 @@ void StateController::updateStateMachine() {
         if (elapsed_time > timeout) {
             setError("State transition timeout");
             is_transitioning_ = false;
-            transition_progress_.has_error = true;
-            transition_progress_.error_message = "Transition timeout";
+            // Eliminar actualizaciones de transition_progress_ en los métodos de transición y reset
+            // transition_progress_.has_error = true;
+            // transition_progress_.error_message = "Transition timeout";
         }
     }
 }
@@ -625,18 +599,23 @@ void StateController::handleSystemStateTransition() {
     }
 
     switch (desired_system_state_) {
-    case SystemState::SYSTEM_SUSPENDED:
-        // Stop all motion and suspend operations
+    case SystemState::SYSTEM_PACKED:
+        // Stop all motion and pack operations
         emergencyStop();
-        current_system_state_ = SystemState::SYSTEM_SUSPENDED;
-        logDebug("System suspended");
+        current_system_state_ = SystemState::SYSTEM_PACKED;
+        logDebug("System packed");
         break;
 
-    case SystemState::SYSTEM_OPERATIONAL:
+    case SystemState::SYSTEM_READY:
         // Resume normal operations
-        current_system_state_ = SystemState::SYSTEM_OPERATIONAL;
+        current_system_state_ = SystemState::SYSTEM_READY;
         clearError();
-        logDebug("System operational");
+        logDebug("System ready");
+        break;
+
+    case SystemState::SYSTEM_RUNNING:
+        // System is running - full operation
+        current_system_state_ = SystemState::SYSTEM_RUNNING;
         break;
 
     default:
@@ -724,9 +703,9 @@ void StateController::handleRobotStateTransition() {
         return;
     }
 
-    // Update transition progress
-    transition_progress_.completion_percentage = progress;
-    transition_progress_.is_complete = (progress == PROGRESS_COMPLETE);
+    // Eliminar actualizaciones de transition_progress_ en los métodos de transición y reset
+    // transition_progress_.completion_percentage = progress;
+    // transition_progress_.is_complete = (progress == PROGRESS_COMPLETE);
 
     if (progress == PROGRESS_COMPLETE) {
         current_robot_state_ = desired_robot_state_;
@@ -783,17 +762,17 @@ void StateController::updateWalkState() {
 void StateController::handleLegStateTransitions() {
     for (int i = 0; i < NUM_LEGS; i++) {
         switch (leg_states_[i]) {
-        case AdvancedLegState::LEG_WALKING_TO_MANUAL:
+        case LegState::LEG_WALKING_TO_MANUAL:
             // Transition logic for walking to manual
             if (current_walk_state_ == WalkState::WALK_STOPPED) {
-                leg_states_[i] = AdvancedLegState::LEG_MANUAL;
+                leg_states_[i] = LegState::LEG_MANUAL;
                 logDebug("Leg " + toArduinoString(toString(i)) + " transitioned to MANUAL");
             }
             break;
 
-        case AdvancedLegState::LEG_MANUAL_TO_WALKING:
+        case LegState::LEG_MANUAL_TO_WALKING:
             // Transition logic for manual to walking
-            leg_states_[i] = AdvancedLegState::LEG_WALKING;
+            leg_states_[i] = LegState::LEG_WALKING;
             manual_leg_count_--;
             logDebug("Leg " + toArduinoString(toString(i)) + " transitioned to WALKING");
             break;
@@ -905,8 +884,8 @@ void StateController::updatePoseControl() {
 }
 
 void StateController::applyBodyPositionControl(bool enable_x, bool enable_y, bool enable_z) {
-    if (!pose_controller_) {
-        logError("PoseController not initialized - cannot apply body position control");
+    if (!body_pose_controller_) {
+        logError("BodyPoseController not initialized - cannot apply body position control");
         return;
     }
 
@@ -939,8 +918,8 @@ void StateController::applyBodyPositionControl(bool enable_x, bool enable_y, boo
 }
 
 void StateController::applyBodyOrientationControl(bool enable_roll, bool enable_pitch, bool enable_yaw) {
-    if (!pose_controller_) {
-        logError("PoseController not initialized - cannot apply body orientation control");
+    if (!body_pose_controller_) {
+        logError("BodyPoseController not initialized - cannot apply body orientation control");
         return;
     }
 
@@ -973,8 +952,8 @@ void StateController::applyBodyOrientationControl(bool enable_roll, bool enable_
 }
 
 void StateController::applyPoseReset() {
-    if (!pose_controller_) {
-        logError("PoseController not initialized - cannot apply pose reset");
+    if (!body_pose_controller_) {
+        logError("BodyPoseController not initialized - cannot apply pose reset");
         return;
     }
 
@@ -1045,9 +1024,6 @@ void StateController::applyPoseReset() {
     }
 }
 
-// ==============================
-// SEQUENCE EXECUTION METHODS
-// ==============================
 /**
  * @brief Execute startup sequence to transition from ready to running state.
  *
@@ -1060,7 +1036,8 @@ void StateController::applyPoseReset() {
 int StateController::executeStartupSequence() {
     // Enhanced startup sequence following OpenSHC patterns using instance members
     if (!startup_transition_initialized_) {
-        transition_progress_.total_steps = startup_transition_step_count_;
+        // Eliminar actualizaciones de transition_progress_ en los métodos de transición y reset
+        // transition_progress_.total_steps = startup_transition_step_count_;
         startup_transition_initialized_ = true;
         startup_step_ = 0;
     }
@@ -1070,20 +1047,23 @@ int StateController::executeStartupSequence() {
     case 0:
         // Step 1: Initialize ready stance
         startup_step_ = 1;
-        transition_progress_.current_step = 1;
+        // Eliminar actualizaciones de transition_progress_ en los métodos de transición y reset
+        // transition_progress_.current_step = 1;
         return 25;
 
     case 1:
         // Step 2: Move to intermediate position (safer transition)
         // Use locomotion system to transition to higher stance
         startup_step_ = 2;
-        transition_progress_.current_step = 2;
+        // Eliminar actualizaciones de transition_progress_ en los métodos de transición y reset
+        // transition_progress_.current_step = 2;
         return 50;
 
     case 2:
         // Step 3: Move to walking height
         startup_step_ = 3;
-        transition_progress_.current_step = 3;
+        // Eliminar actualizaciones de transition_progress_ en los métodos de transición y reset
+        // transition_progress_.current_step = 3;
         return 75;
 
     case 3:
@@ -1092,8 +1072,9 @@ int StateController::executeStartupSequence() {
             // Update default configuration for walking
             startup_step_ = 0; // Reset for next time
             startup_transition_initialized_ = false;
-            transition_progress_.current_step = startup_transition_step_count_;
-            transition_progress_.is_complete = true;
+            // Eliminar actualizaciones de transition_progress_ en los métodos de transición y reset
+            // transition_progress_.current_step = startup_transition_step_count_;
+            // transition_progress_.is_complete = true;
             return 100;
         }
         return 75;
@@ -1121,7 +1102,8 @@ int StateController::executeShutdownSequence() {
             desired_angular_velocity_ = 0.0f;
             return 10; // Stay in shutdown but indicate progress
         }
-        transition_progress_.total_steps = shutdown_transition_step_count_;
+        // Eliminar actualizaciones de transition_progress_ en los métodos de transición y reset
+        // transition_progress_.total_steps = shutdown_transition_step_count_;
         shutdown_transition_initialized_ = true;
         shutdown_step_ = 0;
     }
@@ -1133,13 +1115,15 @@ int StateController::executeShutdownSequence() {
             manual_leg_count_ = 0;
         }
         shutdown_step_ = 1;
-        transition_progress_.current_step = 1;
+        // Eliminar actualizaciones de transition_progress_ en los métodos de transición y reset
+        // transition_progress_.current_step = 1;
         return 33;
 
     case 1:
         // Step 2: Transition to ready height (higher than walking height)
         shutdown_step_ = 2;
-        transition_progress_.current_step = 2;
+        // Eliminar actualizaciones de transition_progress_ en los métodos de transición y reset
+        // transition_progress_.current_step = 2;
         return 66;
 
     case 2:
@@ -1147,8 +1131,9 @@ int StateController::executeShutdownSequence() {
         if (locomotion_system_.setStandingPose()) {
             shutdown_step_ = 0; // Reset for next time
             shutdown_transition_initialized_ = false;
-            transition_progress_.current_step = shutdown_transition_step_count_;
-            transition_progress_.is_complete = true;
+            // Eliminar actualizaciones de transition_progress_ en los métodos de transición y reset
+            // transition_progress_.current_step = shutdown_transition_step_count_;
+            // transition_progress_.is_complete = true;
             return 100;
         }
         return 66;
@@ -1161,19 +1146,22 @@ int StateController::executeShutdownSequence() {
 int StateController::executePackSequence() {
     // Simplified pack sequence using instance member
     if (pack_step_ == 0) {
-        transition_progress_.total_steps = 2;
+        // Eliminar actualizaciones de transition_progress_ en los métodos de transición y reset
+        // transition_progress_.total_steps = 2;
         pack_step_ = 1;
-        transition_progress_.current_step = 1;
+        // Eliminar actualizaciones de transition_progress_ en los métodos de transición y reset
+        // transition_progress_.current_step = 1;
         return 50;
     } else if (pack_step_ == 1) {
         // Move to packed position (standing pose as approximation)
         if (locomotion_system_.setStandingPose()) {
             pack_step_ = 0; // Reset for next time
-            transition_progress_.current_step = 2;
-            transition_progress_.is_complete = true;
+            // Eliminar actualizaciones de transition_progress_ en los métodos de transición y reset
+            // transition_progress_.current_step = 2;
+            // transition_progress_.is_complete = true;
             // Capture packed target joint angles
             for (int i = 0; i < NUM_LEGS; ++i) {
-                packed_target_angles_[i] = locomotion_system_.getCurrentAngles(i);
+                packed_target_angles_[i] = locomotion_system_.getJointAngles(i);
             }
             return 100;
         }
@@ -1184,29 +1172,28 @@ int StateController::executePackSequence() {
 int StateController::executeUnpackSequence() {
     // Simplified unpack sequence using instance member
     if (unpack_step_ == 0) {
-        transition_progress_.total_steps = 2;
+        // Eliminar actualizaciones de transition_progress_ en los métodos de transición y reset
+        // transition_progress_.total_steps = 2;
         unpack_step_ = 1;
-        transition_progress_.current_step = 1;
+        // Eliminar actualizaciones de transition_progress_ en los métodos de transición y reset
+        // transition_progress_.current_step = 1;
         return 50;
     } else if (unpack_step_ == 1) {
         // Move to ready position
         if (locomotion_system_.setStandingPose()) {
             unpack_step_ = 0; // Reset for next time
-            transition_progress_.current_step = 2;
-            transition_progress_.is_complete = true;
+            // Eliminar actualizaciones de transition_progress_ en los métodos de transición y reset
+            // transition_progress_.current_step = 2;
+            // transition_progress_.is_complete = true;
             // Capture ready target joint angles
             for (int i = 0; i < NUM_LEGS; ++i) {
-                ready_target_angles_[i] = locomotion_system_.getCurrentAngles(i);
+                ready_target_angles_[i] = locomotion_system_.getJointAngles(i);
             }
             return 100;
         }
     }
     return 50;
 }
-
-// ==============================
-// STATE DETECTION METHODS
-// ==============================
 
 bool StateController::isRobotPacked() const {
     // Check if robot is in packed state based on body position and orientation
@@ -1234,7 +1221,7 @@ bool StateController::isRobotPacked() const {
     // Joint-based packed check
     bool joints_ok = true;
     for (int i = 0; i < NUM_LEGS; ++i) {
-        JointAngles cur = locomotion_system_.getCurrentAngles(i);
+        JointAngles cur = locomotion_system_.getJointAngles(i);
         JointAngles tgt = packed_target_angles_[i];
         if (abs(cur.coxa - tgt.coxa) > JOINT_TOLERANCE ||
             abs(cur.femur - tgt.femur) > JOINT_TOLERANCE ||
@@ -1263,7 +1250,7 @@ bool StateController::isRobotReady() const {
     // Joint-based ready check
     bool joints_ok = true;
     for (int i = 0; i < NUM_LEGS; ++i) {
-        JointAngles cur = locomotion_system_.getCurrentAngles(i);
+        JointAngles cur = locomotion_system_.getJointAngles(i);
         JointAngles tgt = ready_target_angles_[i];
         if (abs(cur.coxa - tgt.coxa) > JOINT_TOLERANCE ||
             abs(cur.femur - tgt.femur) > JOINT_TOLERANCE ||
@@ -1297,10 +1284,6 @@ bool StateController::isValidStateTransition(RobotState current_state, RobotStat
         return false;
     }
 }
-
-// ==============================
-// UTILITY METHODS
-// ==============================
 
 void StateController::setError(const String &message) {
     has_error_ = true;

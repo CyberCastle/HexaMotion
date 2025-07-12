@@ -1,4 +1,4 @@
-#include "HexaModel.h"
+#include "robot_model.h"
 #include <iomanip>
 #include <iostream>
 #include <vector>
@@ -9,7 +9,7 @@ int main() {
     p.coxa_length = 50;
     p.femur_length = 101;
     p.tibia_length = 208;
-    p.robot_height = 120;
+    p.robot_height = 208;
     p.coxa_angle_limits[0] = -90;
     p.coxa_angle_limits[1] = 90;
     p.femur_angle_limits[0] = -90;
@@ -40,17 +40,17 @@ int main() {
     std::cout << "Min reach: " << min_reach << "mm" << std::endl;
     std::cout << "Target reachable: " << (reachable ? "YES" : "NO") << std::endl;
 
-    JointAngles ik_result = model.inverseKinematics(0, problem_target);
+    JointAngles ik_result = model.inverseKinematicsGlobalCoordinates(0, problem_target);
     std::cout << "IK result: (" << ik_result.coxa << "°, "
               << ik_result.femur << "°, " << ik_result.tibia << "°)" << std::endl;
 
-    Point3D fk_verify = model.forwardKinematics(0, ik_result);
+    Point3D fk_verify = model.forwardKinematicsGlobalCoordinates(0, ik_result);
     std::cout << "FK verify: (" << fk_verify.x << ", "
               << fk_verify.y << ", " << fk_verify.z << ")" << std::endl;
 
     double error = sqrt(pow(problem_target.x - fk_verify.x, 2) +
-                       pow(problem_target.y - fk_verify.y, 2) +
-                       pow(problem_target.z - fk_verify.z, 2));
+                        pow(problem_target.y - fk_verify.y, 2) +
+                        pow(problem_target.z - fk_verify.z, 2));
     std::cout << "Error: " << error << "mm" << std::endl;
 
     // Test what the original FK should have been
@@ -80,14 +80,14 @@ int main() {
         std::cout << "\nTarget " << (i + 1) << ": (" << target.x << ", "
                   << target.y << ", " << target.z << ")" << std::endl;
 
-        JointAngles angles = model.inverseKinematics(0, target);
+        JointAngles angles = model.inverseKinematicsGlobalCoordinates(0, target);
         std::cout << "Result: (" << angles.coxa << "°, "
                   << angles.femur << "°, " << angles.tibia << "°)" << std::endl;
 
-        Point3D fk_check = model.forwardKinematics(0, angles);
+        Point3D fk_check = model.forwardKinematicsGlobalCoordinates(0, angles);
         double err = sqrt(pow(target.x - fk_check.x, 2) +
-                         pow(target.y - fk_check.y, 2) +
-                         pow(target.z - fk_check.z, 2));
+                          pow(target.y - fk_check.y, 2) +
+                          pow(target.z - fk_check.z, 2));
         std::cout << "Error: " << err << "mm" << std::endl;
     }
 

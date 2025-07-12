@@ -25,7 +25,8 @@ int main() {
     DummyFSR fsr;
     DummyServo servos;
 
-    sys.initialize(&imu, &fsr, &servos);
+    // PoseConfiguration pose_config; // Elimina o reemplaza por una construcción válida con parámetros
+    sys.initialize(&imu, &fsr, &servos, pose_config);
 
     std::cout << "=== IK Test Debug ===" << std::endl;
 

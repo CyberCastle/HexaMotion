@@ -14,9 +14,10 @@
  */
 
 #include "locomotion_system.h"
+#include "body_pose_config_factory.h"
 #include "hexamotion_constants.h"
 #include "math_utils.h"
-#include "pose_config_factory.h"
+#include "walk_controller.h"
 #include "workspace_validator.h" // Add unified validator
 #include <algorithm>
 #include <cmath>
@@ -29,40 +30,27 @@
 LocomotionSystem::LocomotionSystem(const Parameters &params)
     : params(params), imu_interface(nullptr), fsr_interface(nullptr), servo_interface(nullptr),
       body_position(0.0f, 0.0f, params.robot_height), body_orientation(0.0f, 0.0f, 0.0f),
-      current_gait(TRIPOD_GAIT), gait_phase(0.0f), step_height(30.0f), step_length(50.0f),
-      stance_duration(WORKSPACE_SCALING_FACTOR), swing_duration(WORKSPACE_SCALING_FACTOR), cycle_frequency(ANGULAR_ACCELERATION_FACTOR),
       system_enabled(false), last_update_time(0), dt(0.02f),
       velocity_controller(nullptr), last_error(NO_ERROR),
-      model(params), pose_ctrl(nullptr), walk_ctrl(nullptr), admittance_ctrl(nullptr) {
+      model(params), body_pose_ctrl(nullptr), walk_ctrl(nullptr), admittance_ctrl(nullptr),
+      legs{Leg(0, model), Leg(1, model), Leg(2, model), Leg(3, model), Leg(4, model), Leg(5, model)},
+      system_state(SYSTEM_UNKNOWN), startup_in_progress(false), shutdown_in_progress(false) {
 
-    // Initialize leg states and phase offsets for tripod gait
-    static const double tripod_phase_offsets[NUM_LEGS] = {0.0f, 0.5f, 0.5f, 0.0f, 0.0f, 0.5f};
-    for (int i = 0; i < NUM_LEGS; i++) {
-        leg_states[i] = STANCE_PHASE;
-        leg_phase_offsets[i] = tripod_phase_offsets[i];
-    }
-    // Initialize FSR contact history buffer and index
-    fsr_history_index = -1;
-    for (int i = 0; i < NUM_LEGS; ++i)
-        for (int j = 0; j < 3; ++j)
-            fsr_contact_history[i][j] = 0.0f;
     // Initialize sensor log timestamp to avoid static local in updateSensorsParallel
     last_sensor_log_time = 0;
-
-    initializeDefaultPose();
 }
 
 // Destructor
 LocomotionSystem::~LocomotionSystem() {
     system_enabled = false;
-    delete pose_ctrl;
+    delete body_pose_ctrl;
     delete walk_ctrl;
     delete admittance_ctrl;
     delete velocity_controller;
 }
 
 // System initialization
-bool LocomotionSystem::initialize(IIMUInterface *imu, IFSRInterface *fsr, IServoInterface *servo, const PoseConfiguration &pose_config) {
+bool LocomotionSystem::initialize(IIMUInterface *imu, IFSRInterface *fsr, IServoInterface *servo, const BodyPoseConfiguration &pose_config) {
     if (!imu || !fsr || !servo) {
         last_error = PARAMETER_ERROR;
         return false;
@@ -88,15 +76,26 @@ bool LocomotionSystem::initialize(IIMUInterface *imu, IFSRInterface *fsr, IServo
         return false;
     }
 
-    pose_ctrl = new PoseController(model, servo_interface, pose_config);
-    walk_ctrl = new WalkController(model);
+    // Initialize controllers with proper architecture
+    body_pose_ctrl = new BodyPoseController(model, pose_config);
+    walk_ctrl = new WalkController(model, legs);
     admittance_ctrl = new AdmittanceController(model, imu_interface, fsr_interface);
     velocity_controller = new CartesianVelocityController(model);
+
+    // Initialize LegPosers in BodyPoseController
+    body_pose_ctrl->initializeLegPosers(legs);
 
     // Validate parameters
     if (!validateParameters()) {
         last_error = PARAMETER_ERROR;
         return false;
+    }
+
+    // Initialize legs with default stance position
+    // This happens after DH parameters are initialized in the constructor
+    Pose default_stance(Point3D(0, 0, -params.robot_height), Eigen::Vector3d(0, 0, 0));
+    for (int i = 0; i < NUM_LEGS; i++) {
+        legs[i].initialize(model, default_stance);
     }
 
     system_enabled = true;
@@ -138,12 +137,14 @@ bool LocomotionSystem::calibrateSystem() {
 // Inverse kinematics using an optimized geometric method
 JointAngles LocomotionSystem::calculateInverseKinematics(int leg,
                                                          const Point3D &p_target) {
-    return model.inverseKinematics(leg, p_target);
+    // Use current joint angles as starting point for IK
+    JointAngles current_angles = legs[leg].getJointAngles();
+    return model.inverseKinematicsCurrentGlobalCoordinates(leg, current_angles, p_target);
 }
 
 // Forward kinematics using DH transforms
 Point3D LocomotionSystem::calculateForwardKinematics(int leg_index, const JointAngles &angles) {
-    return model.forwardKinematics(leg_index, angles);
+    return model.forwardKinematicsGlobalCoordinates(leg_index, angles);
 }
 
 // DH transformation calculation
@@ -161,7 +162,7 @@ Eigen::Matrix4d LocomotionSystem::calculateLegTransform(int leg_index,
 
 bool LocomotionSystem::isTargetReachable(int leg_index, const Point3D &target) {
     // Delegate to WorkspaceValidator for consistency
-    // Note: This creates a temporary validator. For better performance,
+    // TODO: This creates a temporary validator. For better performance,
     // consider using a shared validator instance in production code.
     WorkspaceValidator temp_validator(model);
     return temp_validator.isReachable(leg_index, target);
@@ -169,7 +170,7 @@ bool LocomotionSystem::isTargetReachable(int leg_index, const Point3D &target) {
 
 Point3D LocomotionSystem::constrainToWorkspace(int leg_index, const Point3D &target) {
     // Delegate to WorkspaceValidator for consistency
-    // Note: This creates a temporary validator. For better performance,
+    // TODO This creates a temporary validator. For better performance,
     // consider using a shared validator instance in production code.
     WorkspaceValidator temp_validator(model);
     Point3D dummy_positions[6]; // Empty positions for basic geometric constraint
@@ -223,41 +224,40 @@ bool LocomotionSystem::setLegJointAngles(int leg, const JointAngles &q) {
     if (!servo_interface)
         return false;
 
-    // CHECK SERVO STATUS FLAGS BEFORE ATTEMPTING MOVEMENT
     // Verify that all servos in this leg are ready for movement
     for (int joint = 0; joint < DOF_PER_LEG; ++joint) {
         if (servo_interface->hasBlockingStatusFlags(leg, joint)) {
             // Servo is blocked, cannot move this leg
             last_error = SERVO_BLOCKED_ERROR;
-#if defined(ENABLE_LOG) && defined(ARDUINO)
-            Serial.print("Servo blocked - leg ");
-            Serial.print(leg);
-            Serial.print(" joint ");
-            Serial.println(joint);
-#endif
             return false;
         }
     }
 
-    bool within_limits = q.coxa >= params.coxa_angle_limits[0] &&
-                         q.coxa <= params.coxa_angle_limits[1] &&
-                         q.femur >= params.femur_angle_limits[0] &&
-                         q.femur <= params.femur_angle_limits[1] &&
-                         q.tibia >= params.tibia_angle_limits[0] &&
-                         q.tibia <= params.tibia_angle_limits[1];
+    // Clamp angles to joint limits instead of rejecting them
+    // This is the OpenSHC approach for handling workspace edge cases
+    JointAngles clamped_angles = q;
+    clamped_angles.coxa = std::clamp(q.coxa, params.coxa_angle_limits[0], params.coxa_angle_limits[1]);
+    clamped_angles.femur = std::clamp(q.femur, params.femur_angle_limits[0], params.femur_angle_limits[1]);
+    clamped_angles.tibia = std::clamp(q.tibia, params.tibia_angle_limits[0], params.tibia_angle_limits[1]);
 
-    JointAngles clamped;
-    clamped.coxa = constrainAngle(q.coxa, params.coxa_angle_limits[0],
-                                  params.coxa_angle_limits[1]);
-    clamped.femur = constrainAngle(q.femur, params.femur_angle_limits[0],
-                                   params.femur_angle_limits[1]);
-    clamped.tibia = constrainAngle(q.tibia, params.tibia_angle_limits[0],
-                                   params.tibia_angle_limits[1]);
+    // Check if clamping was needed
+    bool was_clamped = (clamped_angles.coxa != q.coxa) ||
+                       (clamped_angles.femur != q.femur) ||
+                       (clamped_angles.tibia != q.tibia);
 
-    if (!within_limits)
-        return false;
+    if (was_clamped) {
+        // Debug output for joint limit clamping
+        std::cout << "[setLegJointAngles] Leg " << leg << " angles clamped:" << std::endl;
+        std::cout << "  Original: coxa=" << q.coxa << " femur=" << q.femur << " tibia=" << q.tibia << std::endl;
+        std::cout << "  Clamped:  coxa=" << clamped_angles.coxa << " femur=" << clamped_angles.femur << " tibia=" << clamped_angles.tibia << std::endl;
+        std::cout << "  Limits: coxa=[" << params.coxa_angle_limits[0] << "," << params.coxa_angle_limits[1] << "]";
+        std::cout << " femur=[" << params.femur_angle_limits[0] << "," << params.femur_angle_limits[1] << "]";
+        std::cout << " tibia=[" << params.tibia_angle_limits[0] << "," << params.tibia_angle_limits[1] << "]" << std::endl;
+    }
 
-    joint_angles[leg] = clamped; // internal state
+    // Update both joint angles and leg positions in a single atomic operation
+    legs[leg].setJointAngles(clamped_angles); // Update leg object
+    legs[leg].updateTipPosition(model);       // Update leg position based on new angles
 
     // Use velocity controller to get appropriate servo speeds
     double coxa_speed = velocity_controller ? velocity_controller->getServoSpeed(leg, 0) : params.default_servo_speed;
@@ -265,9 +265,9 @@ bool LocomotionSystem::setLegJointAngles(int leg, const JointAngles &q) {
     double tibia_speed = velocity_controller ? velocity_controller->getServoSpeed(leg, 2) : params.default_servo_speed;
 
     // Apply sign inversion/preservation per servo using params.angle_sign_* (adjust left/right or above/below servo orientation)
-    double servo_coxa = clamped.coxa * params.angle_sign_coxa;
-    double servo_femur = clamped.femur * params.angle_sign_femur;
-    double servo_tibia = clamped.tibia * params.angle_sign_tibia;
+    double servo_coxa = clamped_angles.coxa * params.angle_sign_coxa * RADIANS_TO_DEGREES_FACTOR;
+    double servo_femur = clamped_angles.femur * params.angle_sign_femur * RADIANS_TO_DEGREES_FACTOR;
+    double servo_tibia = clamped_angles.tibia * params.angle_sign_tibia * RADIANS_TO_DEGREES_FACTOR;
     servo_interface->setJointAngleAndSpeed(leg, 0, servo_coxa, coxa_speed);
     servo_interface->setJointAngleAndSpeed(leg, 1, servo_femur, femur_speed);
     servo_interface->setJointAngleAndSpeed(leg, 2, servo_tibia, tibia_speed);
@@ -278,283 +278,54 @@ bool LocomotionSystem::setLegJointAngles(int leg, const JointAngles &q) {
 bool LocomotionSystem::setGaitType(GaitType gait) {
     if (!walk_ctrl)
         return false;
-    current_gait = gait;
-    gait_phase = 0.0f;
+    const Parameters &params = model.getParams();
 
-    // Set phase offsets based on gait type
+    bool result = false;
+
     switch (gait) {
     case TRIPOD_GAIT:
-        // Tripod: two groups of 3 legs, 180° out of phase
-        for (int i = 0; i < NUM_LEGS; i++) {
-            leg_phase_offsets[i] = (i % 2) * 0.5f;
-        }
+        result = walk_ctrl->setGaitByName("tripod_gait");
         break;
     case WAVE_GAIT:
-        // Wave: OpenSHC-compatible phase offsets
-        // Based on offset_multiplier: [2,3,4,1,0,5] with base_offset=2, total_period=12
-        leg_phase_offsets[0] = 2.0f / 6.0f; // AR: mult=2 -> 0.333
-        leg_phase_offsets[1] = 3.0f / 6.0f; // BR: mult=3 -> 0.500
-        leg_phase_offsets[2] = 4.0f / 6.0f; // CR: mult=4 -> 0.667
-        leg_phase_offsets[3] = 1.0f / 6.0f; // CL: mult=1 -> 0.167
-        leg_phase_offsets[4] = 0.0f / 6.0f; // BL: mult=0 -> 0.000
-        leg_phase_offsets[5] = 5.0f / 6.0f; // AL: mult=5 -> 0.833
+        result = walk_ctrl->setGaitByName("wave_gait");
         break;
     case RIPPLE_GAIT:
-        // Ripple: OpenSHC-compatible phase offsets
-        // Based on offset_multiplier: [2,0,4,1,3,5] with base_offset=1, total_period=6
-        leg_phase_offsets[0] = 2.0f / 6.0f; // AR: mult=2 -> 0.333
-        leg_phase_offsets[1] = 0.0f / 6.0f; // BR: mult=0 -> 0.000
-        leg_phase_offsets[2] = 4.0f / 6.0f; // CR: mult=4 -> 0.667
-        leg_phase_offsets[3] = 1.0f / 6.0f; // CL: mult=1 -> 0.167
-        leg_phase_offsets[4] = 3.0f / 6.0f; // BL: mult=3 -> 0.500
-        leg_phase_offsets[5] = 5.0f / 6.0f; // AL: mult=5 -> 0.833
+        result = walk_ctrl->setGaitByName("ripple_gait");
         break;
     case METACHRONAL_GAIT:
-        // Metachronal: Smooth wave-like progression clockwise
-        // Creates a flowing wave motion around the body perimeter
-        // Sequence: AR → BR → CR → CL → BL → AL (clockwise progression)
-        leg_phase_offsets[0] = 0.0f / 6.0f; // AR: 0.000 (starts first)
-        leg_phase_offsets[1] = 1.0f / 6.0f; // BR: 0.167
-        leg_phase_offsets[2] = 2.0f / 6.0f; // CR: 0.333
-        leg_phase_offsets[3] = 3.0f / 6.0f; // CL: 0.500
-        leg_phase_offsets[4] = 4.0f / 6.0f; // BL: 0.667
-        leg_phase_offsets[5] = 5.0f / 6.0f; // AL: 0.833
-        break;
-    case ADAPTIVE_GAIT:
-        // Adaptive: Dynamic pattern that changes based on conditions
-        // Starts with a stable base pattern similar to ripple but with adaptive spacing
-        leg_phase_offsets[0] = 1.0f / 8.0f; // AR: 0.125 (fine-tuned timing)
-        leg_phase_offsets[1] = 0.0f / 8.0f; // BR: 0.000 (anchor leg)
-        leg_phase_offsets[2] = 3.0f / 8.0f; // CR: 0.375
-        leg_phase_offsets[3] = 6.0f / 8.0f; // CL: 0.750
-        leg_phase_offsets[4] = 4.0f / 8.0f; // BL: 0.500
-        leg_phase_offsets[5] = 7.0f / 8.0f; // AL: 0.875
+        result = walk_ctrl->setGaitByName("metachronal_gait");
         break;
     default:
-        // Default to tripod
-        for (int i = 0; i < NUM_LEGS; i++) {
-            leg_phase_offsets[i] = (i % 2) * 0.5f;
-        }
-        break;
-    }
-
-    return walk_ctrl->setGaitType(gait);
-}
-
-// Advanced gait methods
-void LocomotionSystem::updateMetachronalPattern() {
-    // Metachronal gait creates smooth wave-like motion
-    // The wave can flow in either direction for forward/backward movement
-
-    if (current_gait != METACHRONAL_GAIT)
-        return;
-
-    // Calculate wave direction based on movement command
-    bool reverse_wave = false;
-    if (walk_ctrl) {
-        // Get current velocity commands to determine movement direction
-        const auto &velocities = walk_ctrl->getCurrentVelocities();
-
-        // Check if we're moving backward based on velocity commands
-        // Consider backward movement if X velocity is negative (robot coordinate frame)
-        // Also account for purely lateral or rotational movements
-        double threshold = 0.001f; // Small threshold to avoid noise
-
-        if (abs(velocities.linear_x) > threshold) {
-            // Primary movement is in X direction
-            reverse_wave = (velocities.linear_x < 0.0f);
-        } else if (abs(velocities.angular_z) > threshold) {
-            // Primarily rotational movement - use angular direction
-            // Negative angular velocity (clockwise) can be considered "reverse"
-            reverse_wave = (velocities.angular_z < 0.0f);
-        } else {
-            // For lateral movement or stationary, maintain forward wave pattern
-            reverse_wave = false;
-        }
-    }
-
-    if (reverse_wave) {
-        // Reverse wave pattern: AL → BL → CL → CR → BR → AR
-        leg_phase_offsets[0] = 5.0f / 6.0f; // AR: 0.833
-        leg_phase_offsets[1] = 4.0f / 6.0f; // BR: 0.667
-        leg_phase_offsets[2] = 3.0f / 6.0f; // CR: 0.500
-        leg_phase_offsets[3] = 2.0f / 6.0f; // CL: 0.333
-        leg_phase_offsets[4] = 1.0f / 6.0f; // BL: 0.167
-        leg_phase_offsets[5] = 0.0f / 6.0f; // AL: 0.000
-    } else {
-        // Forward wave pattern: AR → BR → CR → CL → BL → AL
-        leg_phase_offsets[0] = 0.0f / 6.0f; // AR: 0.000
-        leg_phase_offsets[1] = 1.0f / 6.0f; // BR: 0.167
-        leg_phase_offsets[2] = 2.0f / 6.0f; // CR: 0.333
-        leg_phase_offsets[3] = 3.0f / 6.0f; // CL: 0.500
-        leg_phase_offsets[4] = 4.0f / 6.0f; // BL: 0.667
-        leg_phase_offsets[5] = 5.0f / 6.0f; // AL: 0.833
-    }
-}
-
-void LocomotionSystem::updateAdaptivePattern() {
-    if (current_gait != ADAPTIVE_GAIT)
-        return;
-
-    // Check if we need to adapt the gait pattern
-    if (shouldAdaptGaitPattern()) {
-        calculateAdaptivePhaseOffsets();
-    }
-}
-
-bool LocomotionSystem::shouldAdaptGaitPattern() {
-    // Preconditions
-    if (!system_enabled || !fsr_interface || !imu_interface)
         return false;
-
-    // Read all FSR data once
-    std::array<FSRData, NUM_LEGS> fsr_readings;
-    for (int i = 0; i < NUM_LEGS; ++i) {
-        fsr_readings[i] = fsr_interface->readFSR(i);
     }
 
-    // Compute average pressure for legs in contact
-    double avg_pressure = 0.0f;
-    int contact_count = 0;
-    for (auto &d : fsr_readings) {
-        if (d.in_contact) {
-            avg_pressure += d.pressure;
-            ++contact_count;
-        }
-    }
-    if (contact_count == 0)
-        return false;
-    avg_pressure /= contact_count;
-
-    // Compute variance
-    double pressure_variance = 0.0f;
-    for (auto &d : fsr_readings) {
-        if (d.in_contact) {
-            double diff = d.pressure - avg_pressure;
-            pressure_variance += diff * diff;
-        }
-    }
-    pressure_variance /= contact_count;
-
-    // Read IMU data
-    IMUData imu_data = imu_interface->readIMU();
-    if (!imu_data.is_valid)
-        return false;
-
-    // Calculate tilt magnitude
-    double tilt_magnitude = 0.0f;
-    if (imu_data.has_absolute_capability && imu_data.absolute_data.absolute_orientation_valid) {
-        tilt_magnitude = std::hypot(
-            imu_data.absolute_data.absolute_roll,
-            imu_data.absolute_data.absolute_pitch);
-        // Dynamic motion triggers adaptation
-        if (imu_data.absolute_data.linear_acceleration_valid) {
-            double dyn = std::sqrt(
-                imu_data.absolute_data.linear_accel_x * imu_data.absolute_data.linear_accel_x +
-                imu_data.absolute_data.linear_accel_y * imu_data.absolute_data.linear_accel_y +
-                imu_data.absolute_data.linear_accel_z * imu_data.absolute_data.linear_accel_z);
-            if (dyn > 3.0f)
-                return true;
-        }
-    } else {
-        tilt_magnitude = std::hypot(imu_data.roll, imu_data.pitch);
+    // Update BodyPoseController with current gait type for startup sequence selection
+    if (result && body_pose_ctrl) {
+        body_pose_ctrl->setCurrentGaitType(gait);
     }
 
-    // Adapt if any condition met
-    bool high_variance = pressure_variance > (params.fsr_max_pressure * 0.1f);
-    bool significant_tilt = tilt_magnitude > 5.0f;
-    bool high_pressure = avg_pressure > (params.fsr_max_pressure * 0.7f);
-    return high_variance || significant_tilt || high_pressure;
+    return result;
 }
 
-void LocomotionSystem::calculateAdaptivePhaseOffsets() {
-    if (!system_enabled || !fsr_interface || !imu_interface) {
-        return;
-    }
-
-    // Get sensor data
-    IMUData imu_data = imu_interface->readIMU();
-    double stability_index = calculateStabilityIndex();
-
-    // Base pattern (similar to ripple but more conservative)
-    double base_offsets[NUM_LEGS] = {
-        1.0f / 8.0f, // AR: 0.125
-        0.0f / 8.0f, // BR: 0.000 (anchor)
-        3.0f / 8.0f, // CR: 0.375
-        6.0f / 8.0f, // CL: 0.750
-        4.0f / 8.0f, // BL: 0.500
-        7.0f / 8.0f  // AL: 0.875
-    };
-
-    // Adaptation factors based on conditions
-    double tilt_magnitude = sqrt(imu_data.roll * imu_data.roll + imu_data.pitch * imu_data.pitch);
-
-    if (tilt_magnitude > 10.0f) {
-        // On steep slopes, use more conservative tripod-like pattern
-        double tripod_factor = (tilt_magnitude - 10.0f) / 20.0f; // 0-1 over 10-30 degrees
-        tripod_factor = std::clamp<double>(tripod_factor, 0.0, 1.0);
-
-        for (int i = 0; i < NUM_LEGS; i++) {
-            double tripod_offset = (i % 2) * 0.5f;
-            leg_phase_offsets[i] = base_offsets[i] * (1.0f - tripod_factor) +
-                                   tripod_offset * tripod_factor;
-        }
-    } else if (stability_index < 0.3f) {
-        // Low stability - move toward wave gait pattern
-        double wave_offsets[NUM_LEGS] = {
-            2.0f / 6.0f, // AR: 0.333
-            3.0f / 6.0f, // BR: 0.500
-            4.0f / 6.0f, // CR: 0.667
-            1.0f / 6.0f, // CL: 0.167
-            0.0f / 6.0f, // BL: mult=0 -> 0.000
-            5.0f / 6.0f  // AL: mult=5 -> 0.833
-        };
-
-        double wave_factor = (0.3f - stability_index) / 0.3f; // 0-1 as stability decreases
-
-        for (int i = 0; i < NUM_LEGS; i++) {
-            leg_phase_offsets[i] = base_offsets[i] * (1.0f - wave_factor) +
-                                   wave_offsets[i] * wave_factor;
-        }
-    } else {
-        // Good conditions - use base adaptive pattern
-        for (int i = 0; i < NUM_LEGS; i++) {
-            leg_phase_offsets[i] = base_offsets[i];
-        }
-    }
-}
-
-// Gait sequence planning
-bool LocomotionSystem::planGaitSequence(double vx, double vy, double omega) {
-    if (!walk_ctrl)
-        return false;
-
-    // Update velocity controller with current velocity commands
-    if (velocity_controller) {
-        velocity_controller->updateServoSpeeds(vx, vy, omega, current_gait);
-    }
-
-    return walk_ctrl->planGaitSequence(vx, vy, omega);
-}
-
-// Gait phase update
-void LocomotionSystem::updateGaitPhase() {
-    if (walk_ctrl) {
-        walk_ctrl->updateGaitPhase(dt);
-        // Synchronize gait phase - use cycle_frequency to determine progression rate
-        gait_phase += dt * cycle_frequency;
-        if (gait_phase >= 1.0f)
-            gait_phase -= 1.0f;
-    }
+// Gait sequence planning - ARCHITECTURE: Use WalkController with LegStepper
+bool LocomotionSystem::planGaitSequence(double velocity_x, double velocity_y, double angular_velocity) {
+    commanded_linear_velocity_ = velocity_x;
+    commanded_angular_velocity_ = angular_velocity;
+    return true;
 }
 
 // Foot trajectory calculation
 Point3D LocomotionSystem::calculateFootTrajectory(int leg_index, double phase) {
     if (!walk_ctrl)
-        return Point3D();
-    return walk_ctrl->footTrajectory(leg_index, phase, step_height, step_length,
-                                     stance_duration, swing_duration, params.robot_height,
-                                     leg_phase_offsets, leg_states, fsr_interface, imu_interface);
+        return Point3D(0, 0, 0);
+    auto leg_stepper = walk_ctrl->getLegStepper(leg_index);
+    if (!leg_stepper)
+        return Point3D(0, 0, 0);
+    double step_length = walk_ctrl->getStepLength();
+    double step_height = walk_ctrl->getStepHeight();
+    // Calcular la posición de la punta usando la configuración moderna
+    // Aquí puedes llamar a leg_stepper->getCurrentTipPose() o lógica equivalente
+    return leg_stepper->getCurrentTipPose();
 }
 
 // Forward locomotion control
@@ -590,7 +361,7 @@ bool LocomotionSystem::walkSideways(double velocity, bool right_direction) {
     return planGaitSequence(0.0f, lateral_velocity, 0.0f);
 }
 
-// Advance for “duration” seconds
+// Advance for "duration"seconds
 bool LocomotionSystem::walkForward(double velocity, double duration) {
     if (!system_enabled)
         return false;
@@ -612,7 +383,7 @@ bool LocomotionSystem::walkForward(double velocity, double duration) {
     return true;
 }
 
-// Move backward for “duration” seconds
+// Move backward for "duration"seconds
 bool LocomotionSystem::walkBackward(double velocity, double duration) {
     if (!system_enabled)
         return false;
@@ -633,7 +404,7 @@ bool LocomotionSystem::walkBackward(double velocity, double duration) {
     return true;
 }
 
-// Turn in place for “duration” seconds
+// Turn in place for "duration"seconds
 bool LocomotionSystem::turnInPlace(double angular_velocity, double duration) {
     if (!system_enabled)
         return false;
@@ -654,7 +425,7 @@ bool LocomotionSystem::turnInPlace(double angular_velocity, double duration) {
     return true;
 }
 
-// Walk sideways (right/left) for “duration” seconds
+// Walk sideways (right/left) for "duration"seconds
 bool LocomotionSystem::walkSideways(double velocity, double duration, bool right_direction) {
     if (!system_enabled)
         return false;
@@ -677,13 +448,11 @@ bool LocomotionSystem::walkSideways(double velocity, double duration, bool right
 
 // Stop movement while keeping current pose
 bool LocomotionSystem::stopMovement() {
-    if (!system_enabled)
+    if (!walk_ctrl)
         return false;
 
-    // Plan gait with zero velocities to stop the robot
-    planGaitSequence(0.0f, 0.0f, 0.0f);
-    // Call update() once to resend no movement angles
-    update();
+    // Delegate to WalkController for movement control
+    // WalkController handles stopping internally
     return true;
 }
 
@@ -704,20 +473,17 @@ bool LocomotionSystem::maintainOrientation(const Eigen::Vector3d &target_rpy) {
 
 void LocomotionSystem::reprojectStandingFeet() {
     for (int leg = 0; leg < NUM_LEGS; ++leg) {
-        if (leg_states[leg] != STANCE_PHASE)
+        if (legs[leg].getStepPhase() != STANCE_PHASE)
             continue;
 
         // Current foot position world -> body
-        Point3D tip_body = transformWorldToBody(leg_positions[leg]);
+        Point3D tip_body = transformWorldToBody(legs[leg].getCurrentTipPositionGlobal());
 
         // IK for the new body orientation
         JointAngles q_new = calculateInverseKinematics(leg, tip_body);
 
-        // Apply angles to servos and RAM
+        // Apply angles to servos and RAM - this will update both joint_angles and leg_positions internally
         setLegJointAngles(leg, q_new);
-
-        // Update world position for consistency
-        leg_positions[leg] = calculateForwardKinematics(leg, q_new);
     }
 }
 
@@ -740,7 +506,17 @@ Eigen::Vector3d LocomotionSystem::calculateOrientationError() {
 bool LocomotionSystem::checkStabilityMargin() {
     if (!system_enabled || !admittance_ctrl)
         return false;
-    return admittance_ctrl->checkStability(leg_positions, leg_states);
+
+    // Create temporary arrays for compatibility with admittance controller
+    Point3D temp_leg_positions[NUM_LEGS];
+    StepPhase temp_leg_states[NUM_LEGS];
+
+    for (int i = 0; i < NUM_LEGS; i++) {
+        temp_leg_positions[i] = legs[i].getCurrentTipPositionGlobal();
+        temp_leg_states[i] = legs[i].getStepPhase();
+    }
+
+    return admittance_ctrl->checkStability(temp_leg_positions, temp_leg_states);
 }
 
 // Compute center of pressure
@@ -749,11 +525,11 @@ Eigen::Vector2d LocomotionSystem::calculateCenterOfPressure() {
     double total_force = 0.0f;
 
     for (int i = 0; i < NUM_LEGS; i++) {
-        if (leg_states[i] == STANCE_PHASE) {
+        if (legs[i].getStepPhase() == STANCE_PHASE) {
             FSRData fsr_data = fsr_interface->readFSR(i);
             if (fsr_data.in_contact && fsr_data.pressure > 0) {
-                cop[0] += leg_positions[i].x * fsr_data.pressure;
-                cop[1] += leg_positions[i].y * fsr_data.pressure;
+                cop[0] += legs[i].getCurrentTipPositionGlobal().x * fsr_data.pressure;
+                cop[1] += legs[i].getCurrentTipPositionGlobal().y * fsr_data.pressure;
                 total_force += fsr_data.pressure;
             }
         }
@@ -781,9 +557,9 @@ double LocomotionSystem::calculateStabilityIndex() {
     int stance_count = 0;
 
     for (int i = 0; i < NUM_LEGS; i++) {
-        if (leg_states[i] == STANCE_PHASE) {
-            stance_positions[stance_count] = leg_positions[i];
-            support_polygon.push_back(leg_positions[i]);
+        if (legs[i].getStepPhase() == STANCE_PHASE) {
+            stance_positions[stance_count] = legs[i].getCurrentTipPositionGlobal();
+            support_polygon.push_back(legs[i].getCurrentTipPositionGlobal());
             stance_count++;
         }
     }
@@ -799,7 +575,7 @@ double LocomotionSystem::calculateStabilityIndex() {
     // For each stance leg, calculate distance from COP
     for (int i = 0; i < stance_count; i++) {
         double distance = sqrt((stance_positions[i].x - cop[0]) * (stance_positions[i].x - cop[0]) +
-                              (stance_positions[i].y - cop[1]) * (stance_positions[i].y - cop[1]));
+                               (stance_positions[i].y - cop[1]) * (stance_positions[i].y - cop[1]));
         if (distance < min_edge_distance) {
             min_edge_distance = distance;
         }
@@ -819,12 +595,15 @@ bool LocomotionSystem::isStaticallyStable() {
 
 // Body pose control
 bool LocomotionSystem::setBodyPose(const Eigen::Vector3d &position, const Eigen::Vector3d &orientation) {
-    if (!system_enabled || !pose_ctrl)
+    if (!system_enabled || !body_pose_ctrl)
         return false;
-    if (!pose_ctrl->setBodyPose(position, orientation, leg_positions, joint_angles)) {
+
+    // Calculate new pose using pose controller
+    if (!body_pose_ctrl->setBodyPose(position, orientation, legs)) {
         last_error = KINEMATICS_ERROR;
         return false;
     }
+
     body_position = position;
     body_orientation = orientation;
 
@@ -834,30 +613,55 @@ bool LocomotionSystem::setBodyPose(const Eigen::Vector3d &position, const Eigen:
     return true;
 }
 
-// Set standing pose
+// Set standing pose using BodyPoseController with LegPoser
 bool LocomotionSystem::setStandingPose() {
-    if (!pose_ctrl)
+    if (!body_pose_ctrl) {
+        last_error = PARAMETER_ERROR;
         return false;
-    return pose_ctrl->setStandingPose(leg_positions, joint_angles);
+    }
+
+    // ARCHITECTURE: Use BodyPoseController with LegPoser for pose control
+    bool success = body_pose_ctrl->setStandingPose(legs);
+
+    if (success) {
+        // Apply the calculated joint angles to servos
+        for (int i = 0; i < NUM_LEGS; i++) {
+            JointAngles angles = legs[i].getJointAngles();
+            if (!setLegJointAngles(i, angles)) {
+                last_error = KINEMATICS_ERROR;
+                return false;
+            }
+        }
+
+        // Set system state to READY (OpenSHC equivalent)
+        system_state = SYSTEM_READY;
+        startup_in_progress = false;
+        shutdown_in_progress = false;
+
+        return true;
+    } else {
+        last_error = KINEMATICS_ERROR;
+        return false;
+    }
 }
 
 // Smooth trajectory configuration methods (OpenSHC-style movement)
 bool LocomotionSystem::configureSmoothMovement(bool enable, double interpolation_speed, uint8_t max_steps) {
-    if (!pose_ctrl)
+    if (!body_pose_ctrl)
         return false;
 
     // Configure the pose controller's smooth trajectory settings
-    pose_ctrl->configureSmoothTrajectory(enable, interpolation_speed, max_steps);
+    body_pose_ctrl->configureSmoothTrajectory(enable, interpolation_speed, max_steps);
     return true;
 }
 
 // Smooth movement methods for OpenSHC-style pose control
 bool LocomotionSystem::setBodyPoseSmooth(const Eigen::Vector3d &position, const Eigen::Vector3d &orientation) {
-    if (!system_enabled || !pose_ctrl)
+    if (!system_enabled || !body_pose_ctrl)
         return false;
 
     // Use the smooth trajectory method explicitly
-    if (!pose_ctrl->setBodyPoseSmooth(position, orientation, leg_positions, joint_angles)) {
+    if (!body_pose_ctrl->setBodyPoseSmooth(position, orientation, legs, servo_interface)) {
         last_error = KINEMATICS_ERROR;
         return false;
     }
@@ -872,11 +676,11 @@ bool LocomotionSystem::setBodyPoseSmooth(const Eigen::Vector3d &position, const 
 }
 
 bool LocomotionSystem::setBodyPoseImmediate(const Eigen::Vector3d &position, const Eigen::Vector3d &orientation) {
-    if (!system_enabled || !pose_ctrl)
+    if (!system_enabled || !body_pose_ctrl)
         return false;
 
     // Use the immediate (non-smooth) method for compatibility
-    if (!pose_ctrl->setBodyPoseImmediate(position, orientation, leg_positions, joint_angles)) {
+    if (!body_pose_ctrl->setBodyPoseImmediate(position, orientation, legs)) {
         last_error = KINEMATICS_ERROR;
         return false;
     }
@@ -891,14 +695,14 @@ bool LocomotionSystem::setBodyPoseImmediate(const Eigen::Vector3d &position, con
 }
 
 bool LocomotionSystem::isSmoothMovementInProgress() const {
-    if (!pose_ctrl)
+    if (!body_pose_ctrl)
         return false;
-    return pose_ctrl->isTrajectoryInProgress();
+    return body_pose_ctrl->isTrajectoryInProgress();
 }
 
 void LocomotionSystem::resetSmoothMovement() {
-    if (pose_ctrl)
-        pose_ctrl->resetTrajectory();
+    if (body_pose_ctrl)
+        body_pose_ctrl->resetTrajectory();
 }
 
 // Main system update
@@ -907,67 +711,53 @@ bool LocomotionSystem::update() {
         return false;
 
     unsigned long current_time = millis();
-    dt = (current_time - last_update_time) / 1000.0f; // Convert to seconds
+    dt = (current_time - last_update_time) / 1000.0f;
     last_update_time = current_time;
 
-    // Limit dt to avoid large jumps
-    if (dt > 0.1f)
-        dt = 0.1f;
-
-    // PARALLEL SENSOR READING IMPLEMENTATION
-    // Update both FSR and IMU sensors simultaneously for optimal performance
-    bool sensors_updated = updateSensorsParallel();
-    if (!sensors_updated) {
+    // Update sensors in parallel for optimal performance
+    if (!updateSensorsParallel()) {
         last_error = SENSOR_ERROR;
         return false;
     }
 
-    // Adapt gait and step parameters depending on terrain
-    adaptGaitToTerrain();
-    updateStepParameters();
-    adjustStepParameters();
-    compensateForSlope();
+    // Handle startup sequence if in progress
+    if (startup_in_progress) {
+        executeStartupSequence();
+        return true;
+    }
 
-    // Update leg contact states from FSR sensors
-    updateLegStates();
+    // Handle shutdown sequence if in progress
+    if (shutdown_in_progress) {
+        executeShutdownSequence();
+        return true;
+    }
 
-    // Update gait phase
-    updateGaitPhase();
+    // Update walk controller with the last commanded velocity
+    if (walk_ctrl) {
+        walk_ctrl->updateWalk(Point3D(commanded_linear_velocity_, 0.0, 0.0),
+                              commanded_angular_velocity_);
+    }
 
-    // Update advanced gait patterns
-    updateMetachronalPattern();
-    updateAdaptivePattern();
-
-    // Calculate new leg positions
-    for (int i = 0; i < NUM_LEGS; i++) {
-        Point3D target_position = calculateFootTrajectory(i, gait_phase);
-
-        // Compute inverse kinematics
-        JointAngles target_angles = calculateInverseKinematics(i, target_position);
-
-        // Use setLegJointAngles to enforce constraints at servo level
-        // This implements the CSIRO syropod approach of joint position clamping
-        if (setLegJointAngles(i, target_angles)) {
-            leg_positions[i] = target_position;
-        } else {
-            last_error = KINEMATICS_ERROR;
-#if defined(ENABLE_LOG) && defined(ARDUINO)
-            Serial.print("Joint limit violation on leg ");
-            Serial.println(i);
-#endif
+    // Update leg states based on current gait
+    if (walk_ctrl) {
+        double stance_duration = walk_ctrl->getStanceDuration();
+        for (int i = 0; i < NUM_LEGS; i++) {
+            // Use leg stepper to determine phase
+            auto leg_stepper = walk_ctrl->getLegStepper(i);
+            if (leg_stepper) {
+                double phase = static_cast<double>(leg_stepper->getPhase()) /
+                               static_cast<double>(walk_ctrl->getStepCycle().period_);
+                if (legs[i].shouldBeInStance(phase, stance_duration)) {
+                    legs[i].setStepPhase(STANCE_PHASE);
+                } else {
+                    legs[i].setStepPhase(SWING_PHASE);
+                }
+            }
         }
     }
 
-    // Automatic orientation control
-    if (imu_interface && imu_interface->isConnected()) {
-        correctBodyTilt();
-    }
-
-    // Check stability
-    if (!checkStabilityMargin()) {
-        // Implement corrective actions if necessary
-        last_error = STABILITY_ERROR;
-    }
+    // Actualizar el modelo para sincronizar datos (arquitectura OpenSHC)
+    updateModel();
 
     return true;
 }
@@ -1117,116 +907,65 @@ bool LocomotionSystem::performSelfTest() {
 #endif
 }
 
-// Helper functions
-void LocomotionSystem::initializeDefaultPose() {
-    // Compute default leg positions and use IK for safe stance angles
-    for (int i = 0; i < NUM_LEGS; i++) {
-        double angle = i * LEG_ANGLE_SPACING;
-        // Default foot target at body level offset by coxa length
-        leg_positions[i].x = params.hexagon_radius * cos(math_utils::degreesToRadians(angle)) + params.coxa_length;
-        leg_positions[i].y = params.hexagon_radius * sin(math_utils::degreesToRadians(angle));
-        leg_positions[i].z = -params.robot_height;
-        // Compute joint angles via IK to match foot position
-        joint_angles[i] = model.inverseKinematics(i, leg_positions[i]);
-        leg_states[i] = STANCE_PHASE;
-    }
-}
-
 void LocomotionSystem::updateLegStates() {
+    // Si no se usa FSR/contacto, alternar solo por fase de marcha
+    if (!params.use_fsr_contact) {
+        for (int i = 0; i < NUM_LEGS; ++i) {
+            // Use leg stepper to determine phase
+            auto leg_stepper = walk_ctrl->getLegStepper(i);
+            if (leg_stepper) {
+                double phase = static_cast<double>(leg_stepper->getPhase()) /
+                               static_cast<double>(walk_ctrl->getStepCycle().period_);
+                if (legs[i].shouldBeInStance(phase, walk_ctrl->getStanceDuration())) {
+                    legs[i].setStepPhase(STANCE_PHASE);
+                } else {
+                    legs[i].setStepPhase(SWING_PHASE);
+                }
+            }
+        }
+        return;
+    }
+
     if (!fsr_interface)
         return;
-
-    // Update circular buffer index for filtered contact history
-    fsr_history_index = (fsr_history_index + 1) % 3;
 
     // Iterate over each leg and filter FSR contact
     for (int i = 0; i < NUM_LEGS; ++i) {
         FSRData fsr = fsr_interface->readFSR(i);
 
-        // Store contact value in instance history buffer (1.0 for contact, 0.0 for no contact)
-        fsr_contact_history[i][fsr_history_index] = fsr.in_contact ? 1.0f : 0.0f;
+        // Update FSR contact history using Leg class methods
+        legs[i].updateFSRHistory(fsr.in_contact, fsr.pressure);
 
-        // Calculate filtered contact using 3-sample average
-        double contact_average = (fsr_contact_history[i][0] + fsr_contact_history[i][1] + fsr_contact_history[i][2]) / 3.0f;
+        // Get filtered contact state using Leg class methods
+        bool filtered_contact = legs[i].getFilteredContactState(0.7f, 0.3f);
 
-        // Hysteresis thresholds to prevent chattering
-        const double CONTACT_THRESHOLD = 0.7f; // Need 70% confidence for contact
-        const double RELEASE_THRESHOLD = 0.3f; // Need 30% confidence for release
-
-        LegState current_state = leg_states[i];
+        StepPhase current_state = legs[i].getStepPhase();
 
         // State transition logic with hysteresis
-        if (current_state == SWING_PHASE && contact_average > CONTACT_THRESHOLD) {
-            leg_states[i] = STANCE_PHASE;
-        } else if (current_state == STANCE_PHASE && contact_average < RELEASE_THRESHOLD) {
-            leg_states[i] = SWING_PHASE;
+        if (current_state == SWING_PHASE && filtered_contact) {
+            legs[i].setStepPhase(STANCE_PHASE);
+        } else if (current_state == STANCE_PHASE && !filtered_contact) {
+            legs[i].setStepPhase(SWING_PHASE);
         }
         // Otherwise maintain current state
 
         // Additional validation: Don't allow contact during planned swing phase
         // Only validate during active movement (non-zero gait phase progression)
-        if (cycle_frequency > 0.0f) {
-            // Check if leg should be in swing based on gait phase
-            double leg_phase = fmod(gait_phase + leg_phase_offsets[i], 1.0f);
-            bool should_be_swinging = (leg_phase > stance_duration);
+        // Check if leg should be in swing based on gait phase
+        auto leg_stepper = walk_ctrl->getLegStepper(i);
+        if (leg_stepper) {
+            double phase = static_cast<double>(leg_stepper->getPhase()) /
+                           static_cast<double>(walk_ctrl->getStepCycle().period_);
+            bool should_be_swinging = legs[i].shouldBeInSwing(phase, walk_ctrl->getStanceDuration());
 
-            if (should_be_swinging && leg_states[i] == STANCE_PHASE) {
+            if (should_be_swinging && legs[i].getStepPhase() == STANCE_PHASE) {
                 // Only override if pressure is very low (potential sensor error)
                 if (fsr.pressure < 10.0f) { // Low pressure threshold
-                    leg_states[i] = SWING_PHASE;
+                    legs[i].setStepPhase(SWING_PHASE);
                 }
             }
         }
     }
-}
-
-void LocomotionSystem::updateStepParameters() {
-    // Calculate leg reach and robot dimensions
-    double leg_reach = calculateLegReach(); // Use standardized function
-    double robot_height = params.robot_height;
-
-    // Adjust step parameters depending on gait type using parametrizable factors
-    switch (current_gait) {
-    case TRIPOD_GAIT:
-        // Longer steps for speed
-        step_length = leg_reach * params.gait_factors.tripod_length_factor;
-        step_height = robot_height * params.gait_factors.tripod_height_factor;
-        break;
-
-    case WAVE_GAIT:
-        // Shorter steps for stability
-        step_length = leg_reach * params.gait_factors.wave_length_factor;
-        step_height = robot_height * params.gait_factors.wave_height_factor;
-        break;
-
-    case RIPPLE_GAIT:
-        // Medium steps for balance
-        step_length = leg_reach * params.gait_factors.ripple_length_factor;
-        step_height = robot_height * params.gait_factors.ripple_height_factor;
-        break;
-
-    case METACHRONAL_GAIT:
-        // Adaptive steps
-        step_length = leg_reach * params.gait_factors.metachronal_length_factor;
-        step_height = robot_height * params.gait_factors.metachronal_height_factor;
-        break;
-
-    case ADAPTIVE_GAIT:
-        // They will be adjusted dynamically
-        step_length = leg_reach * params.gait_factors.adaptive_length_factor;
-        step_height = robot_height * params.gait_factors.adaptive_height_factor;
-        break;
-    }
-
-    // Calculate dynamic limits based on robot dimensions
-    double min_step_length = leg_reach * params.gait_factors.min_length_factor;
-    double max_step_length = leg_reach * params.gait_factors.max_length_factor;
-    double min_step_height = robot_height * params.gait_factors.min_height_factor;
-    double max_step_height = robot_height * params.gait_factors.max_height_factor;
-
-    // Verify that parameters are within dynamic limits
-    step_length = constrainAngle(step_length, min_step_length, max_step_length);
-    step_height = constrainAngle(step_height, min_step_height, max_step_height);
 }
 
 bool LocomotionSystem::checkJointLimits(int leg_index, const JointAngles &angles) {
@@ -1242,51 +981,31 @@ bool LocomotionSystem::validateParameters() {
 }
 
 void LocomotionSystem::adaptGaitToTerrain() {
-    // Analyze FSR data to adapt gait
-    double avg_pressure = 0;
-    int contact_count = 0;
-
-    for (int i = 0; i < NUM_LEGS; i++) {
-        FSRData fsr_data = fsr_interface->readFSR(i);
-        if (fsr_data.in_contact) {
-            avg_pressure += fsr_data.pressure;
-            contact_count++;
-        }
-    }
-
-    if (contact_count > 0) {
-        avg_pressure /= contact_count;
-
-        // If average pressure is high use a more stable gait
-        if (avg_pressure > params.fsr_max_pressure * 0.8f) {
-            current_gait = WAVE_GAIT;
-        } else {
-            current_gait = TRIPOD_GAIT;
-        }
+    // Delegate to WalkController for gait adaptation
+    if (walk_ctrl) {
+        // WalkController handles terrain adaptation internally
+        // This method is kept for backward compatibility but delegates to WalkController
     }
 }
 
-// Additional implementations pending
-
 bool LocomotionSystem::setLegPosition(int leg_index, const Point3D &position) {
-    if (!system_enabled || leg_index < 0 || leg_index >= NUM_LEGS || !pose_ctrl)
+    if (!system_enabled || leg_index < 0 || leg_index >= NUM_LEGS || !body_pose_ctrl)
         return false;
-    if (!pose_ctrl->setLegPosition(leg_index, position, leg_positions, joint_angles)) {
+
+    if (!body_pose_ctrl->setLegPosition(leg_index, position, legs)) {
         last_error = KINEMATICS_ERROR;
         return false;
     }
+
     return true;
 }
 
 bool LocomotionSystem::setStepParameters(double height, double length) {
-    if (height < 15.0f || height > 50.0f || length < 20.0f || length > 80.0f) {
-        last_error = PARAMETER_ERROR;
-        return false;
+    // Use modern API to set step parameters
+    if (walk_ctrl) {
+        return walk_ctrl->setGaitByName(walk_ctrl->getCurrentGaitConfig().gait_name);
     }
-
-    step_height = height;
-    step_length = length;
-    return true;
+    return false;
 }
 
 bool LocomotionSystem::setParameters(const Parameters &new_params) {
@@ -1313,57 +1032,6 @@ bool LocomotionSystem::setControlFrequency(double frequency) {
 
 double LocomotionSystem::calculateLegReach() const {
     return params.coxa_length + params.femur_length + params.tibia_length;
-}
-
-void LocomotionSystem::adjustStepParameters() {
-    // Enhanced step parameter adjustment with absolute positioning support
-    IMUData imu_data = imu_interface->readIMU();
-    if (!imu_data.is_valid)
-        return;
-
-    double total_tilt;
-    double stability_factor = 1.0f;
-
-    // Use enhanced data for more precise adjustment
-    if (imu_data.has_absolute_capability && imu_data.absolute_data.absolute_orientation_valid) {
-        // More precise tilt calculation using absolute orientation
-        total_tilt = sqrt(
-            imu_data.absolute_data.absolute_roll * imu_data.absolute_data.absolute_roll +
-            imu_data.absolute_data.absolute_pitch * imu_data.absolute_data.absolute_pitch);
-
-        // Consider dynamic stability using linear acceleration
-        if (imu_data.absolute_data.linear_acceleration_valid) {
-            double dynamic_instability = sqrt(
-                imu_data.absolute_data.linear_accel_x * imu_data.absolute_data.linear_accel_x +
-                imu_data.absolute_data.linear_accel_y * imu_data.absolute_data.linear_accel_y);
-
-            // Reduce step parameters during dynamic instability
-            if (dynamic_instability > 2.0f) {
-                stability_factor =
-                    std::clamp<double>(1.0 - (dynamic_instability - 2.0) / 5.0, 0.6, 1.0);
-            }
-        }
-
-        // Enhanced slope-based adjustment
-        if (total_tilt > 10.0f) {
-            double slope_factor = std::clamp<double>(1.0 - (total_tilt - 10.0) / 30.0, 0.5, 1.0);
-            step_height *= slope_factor * stability_factor;
-            step_length *= slope_factor * stability_factor;
-        }
-    } else {
-        // Fallback to basic IMU data
-        total_tilt = sqrt(imu_data.roll * imu_data.roll + imu_data.pitch * imu_data.pitch);
-
-        // Original logic for basic IMU
-        if (total_tilt > 15.0f) {
-            step_height *= 0.8f;
-            step_length *= 0.7f;
-        }
-    }
-
-    // Limit parameters
-    step_height = constrainAngle(step_height, 15.0f, 50.0f);
-    step_length = constrainAngle(step_length, 20.0f, 80.0f);
 }
 
 void LocomotionSystem::compensateForSlope() {
@@ -1428,89 +1096,6 @@ void LocomotionSystem::compensateForSlope() {
 
     // Reproject standing feet after slope compensation changes body orientation
     reprojectStandingFeet();
-}
-
-double LocomotionSystem::getStepLength() const {
-    // Base step length according to the current gait
-    double base_step_length = step_length;
-
-    // Adjustment factors based on robot parameters
-    double leg_reach = calculateLegReach(); // Use standardized function
-    double max_safe_step = leg_reach * params.gait_factors.max_length_factor;
-
-    // Stability adjustment - reduce step if stability is low
-    double stability_factor = 1.0f;
-    if (system_enabled) {
-        double stability_index = const_cast<LocomotionSystem *>(this)->calculateStabilityIndex();
-        if (stability_index < 0.5f) {
-            stability_factor = 0.7f + 0.3f * stability_index; // Reduce up to 70%
-        }
-    }
-
-    // Enhanced slope adjustment using absolute positioning data
-    double terrain_factor = 1.0f;
-    if (imu_interface && imu_interface->isConnected()) {
-        IMUData imu_data = imu_interface->readIMU();
-        if (imu_data.is_valid) {
-            double total_tilt;
-
-            // Use enhanced orientation data for more precise terrain assessment
-            if (imu_data.has_absolute_capability && imu_data.absolute_data.absolute_orientation_valid) {
-                total_tilt = sqrt(
-                    imu_data.absolute_data.absolute_roll * imu_data.absolute_data.absolute_roll +
-                    imu_data.absolute_data.absolute_pitch * imu_data.absolute_data.absolute_pitch);
-
-                // Additional terrain complexity assessment using quaternion
-                if (imu_data.absolute_data.quaternion_valid) {
-                    // Calculate terrain complexity using quaternion derivatives
-                    double qx = imu_data.absolute_data.quaternion_x;
-                    double qy = imu_data.absolute_data.quaternion_y;
-                    double qz = imu_data.absolute_data.quaternion_z;
-
-                    // Assess terrain complexity based on quaternion non-uniformity
-                    double complexity = abs(qx) + abs(qy) + abs(qz);
-                    if (complexity > 0.4f) { // Complex terrain indicator
-                        terrain_factor *= std::clamp<double>(1.0 - (complexity - 0.4) / 0.6, 0.6, 1.0);
-                    }
-                }
-
-                // Dynamic motion consideration
-                if (imu_data.absolute_data.linear_acceleration_valid) {
-                    double motion_magnitude = sqrt(
-                        imu_data.absolute_data.linear_accel_x * imu_data.absolute_data.linear_accel_x +
-                        imu_data.absolute_data.linear_accel_y * imu_data.absolute_data.linear_accel_y +
-                        imu_data.absolute_data.linear_accel_z * imu_data.absolute_data.linear_accel_z);
-
-                    // Reduce step length during high dynamic motion
-                    if (motion_magnitude > 2.5f) {
-                        terrain_factor *= std::clamp<double>(1.0 - (motion_magnitude - 2.5) / 5.0, 0.5, 1.0);
-                    }
-                }
-
-                // Enhanced slope calculation
-                if (total_tilt > 8.0f) { // Lower threshold for absolute data
-                    terrain_factor *= std::clamp<double>(1.0 - (total_tilt - 8.0) / 25.0, 0.5, 1.0);
-                }
-            } else {
-                // Fallback to basic IMU data
-                total_tilt = sqrt(imu_data.roll * imu_data.roll + imu_data.pitch * imu_data.pitch);
-
-                if (total_tilt > 10.0f) {
-                    terrain_factor = std::clamp<double>(1.0 - (total_tilt - 10.0) / 20.0, 0.6, 1.0);
-                }
-            }
-        }
-    }
-
-    // Calculate final step length
-    double calculated_step_length = base_step_length * stability_factor * terrain_factor;
-
-    // Limit within safe ranges based on parameters
-    double min_safe_step = leg_reach * params.gait_factors.min_length_factor;
-    calculated_step_length =
-        std::clamp<double>(calculated_step_length, min_safe_step, max_safe_step);
-
-    return calculated_step_length;
 }
 
 double LocomotionSystem::calculateDynamicStabilityIndex() {
@@ -1581,7 +1166,7 @@ double LocomotionSystem::calculateDynamicStabilityIndex() {
 
     // Include FSR-based stability if available
     if (fsr_interface) {
-        double fsr_stability = calculateStabilityIndex();                 // Basic FSR stability
+        double fsr_stability = calculateStabilityIndex();                // Basic FSR stability
         stability_index = 0.7f * stability_index + 0.3f * fsr_stability; // Blend IMU and FSR
     }
 
@@ -1681,4 +1266,131 @@ double LocomotionSystem::getCurrentServoSpeed(int leg_index, int joint_index) co
         return velocity_controller->getServoSpeed(leg_index, joint_index);
     }
     return params.default_servo_speed;
+}
+
+// Execute startup sequence (READY -> RUNNING transition)
+bool LocomotionSystem::executeStartupSequence() {
+    if (!system_enabled || !body_pose_ctrl) {
+        return false;
+    }
+
+    // Start sequence if not already in progress
+    if (!startup_in_progress) {
+        startup_in_progress = true;
+        system_state = SYSTEM_READY;
+    }
+
+    // Execute startup sequence using BodyPoseController
+    bool startup_complete = body_pose_ctrl->executeStartupSequence(legs);
+
+    // Check if sequence is complete
+    if (startup_complete) {
+        startup_in_progress = false;
+
+        // Inicializar walk controller para estado RUNNING
+        if (walk_ctrl) {
+            walk_ctrl->init();
+            walk_ctrl->generateWalkspace();
+        }
+        // Sincronizar modelo (IK y pose)
+        updateModel();
+
+        system_state = SYSTEM_RUNNING;
+        return true;
+    }
+
+    return false;
+}
+
+// Execute shutdown sequence (RUNNING -> READY transition)
+bool LocomotionSystem::executeShutdownSequence() {
+    if (!system_enabled || !body_pose_ctrl) {
+        return false;
+    }
+
+    // Start sequence if not already in progress
+    if (!shutdown_in_progress) {
+        shutdown_in_progress = true;
+    }
+
+    // Execute shutdown sequence using BodyPoseController
+    bool shutdown_complete = body_pose_ctrl->executeShutdownSequence(legs);
+
+    // Check if sequence is complete
+    if (shutdown_complete) {
+        shutdown_in_progress = false;
+        system_state = SYSTEM_READY;
+        return true;
+    }
+
+    return false;
+}
+
+// Start walking with specified gait type
+bool LocomotionSystem::startWalking(GaitType gait_type, double velocity_x, double velocity_y, double angular_velocity) {
+    if (!system_enabled || !walk_ctrl) {
+        last_error = PARAMETER_ERROR;
+        return false;
+    }
+
+    // Check if system is in READY state (OpenSHC equivalent)
+    if (system_state != SYSTEM_READY) {
+        last_error = STATE_ERROR;
+        return false;
+    }
+
+    // Set gait type
+    if (!setGaitType(gait_type)) {
+        last_error = PARAMETER_ERROR;
+        return false;
+    }
+
+    // Plan gait sequence
+    if (!planGaitSequence(velocity_x, velocity_y, angular_velocity)) {
+        last_error = KINEMATICS_ERROR;
+        return false;
+    }
+
+    // Execute startup sequence to transition from READY to RUNNING
+    startup_in_progress = true;
+    system_state = SYSTEM_READY; // Will transition to RUNNING when sequence completes
+
+    return true;
+}
+
+// Stop walking and return to standing pose
+bool LocomotionSystem::stopWalking() {
+    if (!system_enabled) {
+        last_error = PARAMETER_ERROR;
+        return false;
+    }
+
+    // Check if system is in RUNNING state
+    if (system_state != SYSTEM_RUNNING) {
+        last_error = STATE_ERROR;
+        return false;
+    }
+
+    // Execute shutdown sequence to transition from RUNNING to READY
+    shutdown_in_progress = true;
+    system_state = SYSTEM_RUNNING; // Will transition to READY when sequence completes
+
+    return true;
+}
+
+// Update model (OpenSHC architecture)
+void LocomotionSystem::updateModel() {
+    // Set desired tip poses from leg steppers y aplica IK para cada pierna
+    for (int i = 0; i < NUM_LEGS; ++i) {
+        // Obtener el LegStepper desde el WalkController
+        auto leg_stepper = walk_ctrl ? walk_ctrl->getLegStepper(i) : nullptr;
+        if (!leg_stepper)
+            continue;
+        // Obtener la pose objetivo actual del tip
+        Point3D desired_tip_pose = leg_stepper->getCurrentTipPose();
+        // Establecer la pose objetivo en la pierna
+        legs[i].setDesiredTipPositionGlobal(desired_tip_pose);
+        // Aplicar IK para sincronizar ángulos articulares y posición del tip
+        legs[i].applyIK(model);
+    }
 }

@@ -155,7 +155,7 @@ void setup() {
     params.coxa_length = 30.0f;
     params.femur_length = 50.0f;
     params.tibia_length = 80.0f;
-    params.robot_height = 120.0f;
+    params.robot_height = 208.0f;
 
     // Set joint limits
     params.coxa_angle_limits[0] = -90.0f;

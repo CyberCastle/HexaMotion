@@ -1,8 +1,8 @@
 #ifndef IMU_AUTO_POSE_H
 #define IMU_AUTO_POSE_H
 
-#include "HexaModel.h"
-#include "manual_pose_controller.h"
+#include "robot_model.h"
+#include "manual_body_pose_controller.h"
 #include "precision_config.h"
 
 /**
@@ -20,26 +20,26 @@ class IMUAutoPose {
      * @brief Auto-pose control modes
      */
     enum AutoPoseMode {
-        AUTO_POSE_OFF,         ///< No automatic posing
-        AUTO_POSE_LEVEL,       ///< Keep body level (gravity aligned)
-        AUTO_POSE_INCLINATION, ///< Compensate for surface inclination
-        AUTO_POSE_ADAPTIVE,    ///< Adaptive response based on conditions
-        AUTO_POSE_CUSTOM       ///< Custom auto-pose behavior
+        AUTO_POSE_OFF,         //< No automatic posing
+        AUTO_POSE_LEVEL,       //< Keep body level (gravity aligned)
+        AUTO_POSE_INCLINATION, //< Compensate for surface inclination
+        AUTO_POSE_ADAPTIVE,    //< Adaptive response based on conditions
+        AUTO_POSE_CUSTOM       //< Custom auto-pose behavior
     };
 
     /**
      * @brief IMU pose control parameters
      */
     struct IMUPoseParams {
-        double orientation_gain;    ///< Orientation correction gain
-        double inclination_gain;    ///< Inclination compensation gain
-        double response_speed;      ///< Response speed (0-1)
-        double deadzone_degrees;    ///< Deadzone for small tilts
-        double stabilization_gain;  ///< Stabilization gain for rough terrain
-        bool gravity_compensation; ///< Enable gravity compensation
-        bool adaptive_gains;       ///< Use adaptive gain adjustment
-        bool use_absolute_data;    ///< Use IMU's absolute positioning if available
-        bool prefer_sensor_fusion; ///< Prefer sensor's built-in fusion over library algorithms
+        double orientation_gain;    //< Orientation correction gain
+        double inclination_gain;    //< Inclination compensation gain
+        double response_speed;      //< Response speed (0-1)
+        double deadzone_degrees;    //< Deadzone for small tilts
+        double stabilization_gain;  //< Stabilization gain for rough terrain
+        bool gravity_compensation; //< Enable gravity compensation
+        bool adaptive_gains;       //< Use adaptive gain adjustment
+        bool use_absolute_data;    //< Use IMU's absolute positioning if available
+        bool prefer_sensor_fusion; //< Prefer sensor's built-in fusion over library algorithms
 
         IMUPoseParams() : orientation_gain(0.5f), inclination_gain(0.3f),
                           response_speed(0.1f), deadzone_degrees(2.0f),
@@ -52,15 +52,15 @@ class IMUAutoPose {
      * @brief Auto-pose state information
      */
     struct AutoPoseState {
-        Point3D gravity_vector;     ///< Estimated gravity direction
-        Point3D inclination_angle;  ///< Surface inclination (roll, pitch, yaw)
-        Point3D orientation_error;  ///< Current orientation error
-        Point3D correction_pose;    ///< Calculated correction pose
-        bool pose_active;           ///< Whether auto-pose is active
-        double confidence;           ///< Pose correction confidence (0-1)
-        bool using_absolute_data;   ///< Whether using IMU's absolute positioning
-        uint8_t calibration_status; ///< IMU calibration status (0-3)
-        IMUMode active_mode;        ///< Current IMU operation mode
+        Point3D gravity_vector;     //< Estimated gravity direction
+        Point3D inclination_angle;  //< Surface inclination (roll, pitch, yaw)
+        Point3D orientation_error;  //< Current orientation error
+        Point3D correction_pose;    //< Calculated correction pose
+        bool pose_active;           //< Whether auto-pose is active
+        double confidence;           //< Pose correction confidence (0-1)
+        bool using_absolute_data;   //< Whether using IMU's absolute positioning
+        uint8_t calibration_status; //< IMU calibration status (0-3)
+        IMUMode active_mode;        //< Current IMU operation mode
 
         AutoPoseState() : gravity_vector(0, 0, -9.81f), inclination_angle(0, 0, 0),
                           orientation_error(0, 0, 0), correction_pose(0, 0, 0),
@@ -71,7 +71,7 @@ class IMUAutoPose {
   private:
     RobotModel &model_;
     IIMUInterface *imu_;
-    ManualPoseController &pose_controller_;
+    ManualBodyPoseController &body_pose_controller_;
     ComputeConfig config_;
 
     AutoPoseMode current_mode_;
@@ -90,17 +90,17 @@ class IMUAutoPose {
     // Adaptive control
     double terrain_roughness_estimate_;
     bool walking_detected_;
-    Point3D previous_acceleration_; ///< Previous acceleration for variance calculation
+    Point3D previous_acceleration_; //< Previous acceleration for variance calculation
 
   public:
     /**
      * @brief Construct IMU auto-pose controller
      * @param model Reference to robot model
      * @param imu IMU interface
-     * @param pose_controller Reference to manual pose controller
+     * @param body_pose_controller Reference to manual body pose controller
      * @param config Computational configuration
      */
-    IMUAutoPose(RobotModel &model, IIMUInterface *imu, ManualPoseController &pose_controller,
+    IMUAutoPose(RobotModel &model, IIMUInterface *imu, ManualBodyPoseController &body_pose_controller,
                 ComputeConfig config = ComputeConfig::medium());
 
     /**

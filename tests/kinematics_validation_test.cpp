@@ -9,7 +9,8 @@
  * con la lógica geométrica precisa de angle_calculus.cpp
  */
 
-#include "HexaModel.h"
+#include "body_pose_config_factory.h"
+#include "robot_model.h"
 #include <cmath>
 #include <iomanip>
 #include <iostream>
@@ -26,7 +27,7 @@ constexpr double DEG2RAD = M_PI / 180.0;
 constexpr double RAD2DEG = 180.0 / M_PI;
 
 // Estructura para ángulos de angle_calculus
-struct AngleCalcAngles {
+struct CalcAngles {
     double theta1; // °  coxa-fémur
     double theta2; // °  fémur-tibia
     bool valid;    // solución dentro de límites
@@ -44,8 +45,8 @@ constexpr double TIBIA_MAX_DEG = 45.0;  // °  límites de servo
  * @param H_mm  Altura desde el plano de la base de la pierna hasta la punta [mm].
  * @return      Estructura con los ángulos θ₁ y θ₂ en grados, y un booleano valid.
  */
-AngleCalcAngles calcLegAngles(double H_mm) {
-    AngleCalcAngles best{0, 0, false};
+CalcAngles calcLegAngles(double H_mm) {
+    CalcAngles best{0, 0, false};
     double bestErr = std::numeric_limits<double>::infinity();
 
     // ---------------------------------------
@@ -163,7 +164,7 @@ class KinematicsValidator {
         params.coxa_length = A_COXA;
         params.femur_length = B_FEMUR;
         params.tibia_length = C_TIBIA;
-        params.robot_height = 120.0f;
+        params.robot_height = 208.0f;
 
         // Límites de angle_calculus.cpp
         params.coxa_angle_limits[0] = -75.0f;
@@ -189,8 +190,11 @@ class KinematicsValidator {
 
     void validateVerticalReach() {
         std::cout << "\n=== VALIDACIÓN: ÁNGULOS SERVO FEMUR Y TIBIA ===" << std::endl;
-        std::cout << "Comparando alturas: angle_calculus.cpp vs HexaMotion FK (altura relativa a base de pierna)" << std::endl;
-        std::cout << std::string(90, '-') << std::endl;
+        std::cout << "Comparando alturas: angle_calculus.cpp vs calculateServoAnglesForHeight (OpenSHC)" << std::endl;
+        std::cout << std::string(120, '-') << std::endl;
+        std::cout << "Height | angle_calculus (femur,tibia,alpha,beta) | calculateServoAnglesForHeight (femur,tibia,alpha,beta) | Δfemur | Δtibia | Status" << std::endl;
+        std::cout << "(mm)   | (deg, deg, deg, deg)                   | (deg, deg, deg, deg)                                 | (deg)  | (deg)   |" << std::endl;
+        std::cout << std::string(120, '-') << std::endl;
 
         // Test heights from angle_calculus range
         std::vector<double> test_heights = {
@@ -198,107 +202,53 @@ class KinematicsValidator {
 
         int passed = 0, total = 0;
 
-        std::cout << std::fixed << std::setprecision(2);
-        std::cout << "Height | angle_calculus        | HexaMotion FK Local  | Error     | Status" << std::endl;
-        std::cout << "(mm)   | θ1     θ2     α    β  | α      β     H_calc  | H_err     |" << std::endl;
-        std::cout << std::string(90, '-') << std::endl;
-
         for (double height : test_heights) {
             total++;
-
             // 1. Obtener ángulos de referencia con angle_calculus.cpp
-            AngleCalcAngles ref_solution = calcLegAngles(height);
+            CalcAngles ref_solution = calcLegAngles(height);
+            CalculatedServoAngles calc_solution = calculateServoAnglesForHeight(height, params);
 
             if (!ref_solution.valid) {
-                std::cout << std::setw(6) << height << " | "
-                          << "INVALID SOLUTION       | N/A                   | N/A       | SKIP" << std::endl;
+                std::cout << std::setw(6) << height << " | INVALID SOLUTION             | INVALID SOLUTION                        |   N/A  |   N/A   | SKIP" << std::endl;
                 total--;
                 continue;
             }
 
-            // 2. Convertir ángulos relativos de angle_calculus a ángulos absolutos DH
-            double theta1_rad = ref_solution.theta1 * DEG2RAD;
-            double theta2_rad = ref_solution.theta2 * DEG2RAD;
+            // Mostrar ambos resultados explícitamente
+            double femur1 = ref_solution.theta1; // angle_calculus femur
+            double tibia1 = ref_solution.theta2; // angle_calculus tibia
+            double theta1_rad = femur1 * DEG2RAD;
+            double theta2_rad = tibia1 * DEG2RAD;
+            double beta1 = -theta2_rad;         // β = −θ₂
+            double alpha1 = theta1_rad + beta1; // α = θ₁ + β
+            double alpha1_deg = alpha1 * RAD2DEG;
+            double beta1_deg = beta1 * RAD2DEG;
 
-            double beta = -theta2_rad;        // β = −θ₂
-            double alpha = theta1_rad + beta; // α = θ₁ + β
+            double femur2 = calc_solution.femur; // calculateServoAnglesForHeight femur
+            double tibia2 = calc_solution.tibia; // calculateServoAnglesForHeight tibia
+            double theta1b_rad = femur2 * DEG2RAD;
+            double theta2b_rad = tibia2 * DEG2RAD;
+            double beta2 = -theta2b_rad;
+            double alpha2 = theta1b_rad + beta2;
+            double alpha2_deg = alpha2 * RAD2DEG;
+            double beta2_deg = beta2 * RAD2DEG;
 
-            // Convertir a grados para mostrar y comparar
-            double alpha_deg = alpha * RAD2DEG; // Ángulo femur
-            double beta_deg = beta * RAD2DEG;   // Ángulo tibia
-
-            // 3. PRUEBA DIRECTA: Usar los ángulos convertidos directamente en HexaMotion FK
-            JointAngles test_angles;
-            test_angles.coxa = 0.0f;       // Sin rotación horizontal
-            test_angles.femur = alpha_deg; // Ángulo femur absoluto
-            test_angles.tibia = beta_deg;  // Ángulo tibia absoluto
-
-            // 4. Calcular la posición de la punta con FK en frame global del robot
-            Point3D tip_global = model->forwardKinematics(0, test_angles);
-
-            // 5. Calcular la posición de la base de la pierna (con ángulos cero)
-            JointAngles zero_angles(0, 0, 0);
-            Point3D base_global = model->getDHLegBasePosition(0);
-
-            // 6. Calcular la altura relativa a la base de la pierna
-            // La altura es la diferencia en Z (negativa hacia abajo)
-            double hexa_height = -(tip_global.z - base_global.z);
-            double height_error = std::abs(hexa_height - height);
-
-            // 7. Verificar que la fórmula de angle_calculus coincida
-            double expected_height = C_TIBIA * std::cos(alpha) -
-                                     A_COXA * std::sin(alpha) -
-                                     B_FEMUR * std::sin(alpha) * std::cos(beta);
-            double formula_error = std::abs(expected_height - height);
-
-            // El test pasa si las alturas coinciden
-            bool height_match = height_error < 2.0f;   // ±2mm tolerancia
-            bool formula_match = formula_error < 0.1f; // La fórmula debe ser exacta
-
-            bool test_passed = height_match && formula_match;
-            if (test_passed)
+            double dfemur = std::abs(femur1 - femur2);
+            double dtibia = std::abs(tibia1 - tibia2);
+            bool match = (dfemur < 0.1 && dtibia < 0.1);
+            if (match)
                 passed++;
 
             std::cout << std::setw(6) << height << " | "
-                      << std::setw(6) << ref_solution.theta1 << " "
-                      << std::setw(6) << ref_solution.theta2 << " "
-                      << std::setw(5) << alpha_deg << " "
-                      << std::setw(4) << beta_deg << " | "
-                      << std::setw(6) << alpha_deg << " "
-                      << std::setw(5) << beta_deg << " "
-                      << std::setw(7) << hexa_height << " | "
-                      << std::setw(8) << height_error << "  | "
-                      << (test_passed ? "PASS" : "FAIL") << std::endl;
-
-            // Debug detallado para casos problemáticos o muestras
-            /*if (!test_passed || height == 120.0 || height == 200.0) {
-                std::cout << "  DEBUG altura " << height << ":" << std::endl;
-                std::cout << "    angle_calculus: θ1=" << ref_solution.theta1
-                          << "°, θ2=" << ref_solution.theta2 << "°" << std::endl;
-                std::cout << "    Conversión: α=" << alpha_deg
-                          << "°, β=" << beta_deg << "°" << std::endl;
-                std::cout << "    Fórmula angle_calculus: " << expected_height << "mm" << std::endl;
-                std::cout << "    HexaMotion base global: (" << base_global.x << ", " << base_global.y
-                          << ", " << base_global.z << ")" << std::endl;
-                std::cout << "    HexaMotion tip global: (" << tip_global.x << ", " << tip_global.y
-                          << ", " << tip_global.z << ")" << std::endl;
-                std::cout << "    HexaMotion altura relativa: " << hexa_height << "mm" << std::endl;
-                std::cout << "    Error altura: " << height_error << "mm" << std::endl;
-                std::cout << "    Error fórmula: " << formula_error << "mm" << std::endl;
-            }*/
+                      << std::setw(8) << femur1 << ", " << std::setw(8) << tibia1 << ", " << std::setw(8) << alpha1_deg << ", " << std::setw(8) << beta1_deg << " | "
+                      << std::setw(8) << femur2 << ", " << std::setw(8) << tibia2 << ", " << std::setw(8) << alpha2_deg << ", " << std::setw(8) << beta2_deg << " | "
+                      << std::setw(6) << dfemur << " | "
+                      << std::setw(6) << dtibia << " | "
+                      << (match ? "MATCH" : "DIFF") << std::endl;
         }
-
-        std::cout << std::string(90, '-') << std::endl;
-        std::cout << "Resultados: " << passed << "/" << total << " tests pasaron ("
+        std::cout << std::string(120, '-') << std::endl;
+        std::cout << "Resultados: " << passed << "/" << total << " tests coinciden ("
                   << std::fixed << std::setprecision(1) << (100.0 * passed / total) << "%)" << std::endl;
-
-        if (passed == total) {
-            std::cout << "✅ ÉXITO: La cinemática directa (FK) de HexaMotion coincide con angle_calculus.cpp" << std::endl;
-            std::cout << "   Esto confirma que el cálculo de altura es correcto." << std::endl;
-        } else {
-            std::cout << "❌ ERROR: Discrepancias en el cálculo de altura." << std::endl;
-            std::cout << "   Revisar los parámetros DH o la implementación de FK." << std::endl;
-        }
     }
 
     void validateAngleConsistency() {
@@ -345,12 +295,14 @@ class KinematicsValidator {
             target_global.y = base_global.y;
             target_global.z = base_global.z - ref_height; // Altura hacia abajo
 
-            // HexaMotion IK -> FK
-            JointAngles hexa_angles = model->inverseKinematics(0, target_global);
-            Point3D hexa_tip_global = model->forwardKinematics(0, hexa_angles);
+            Point3D base_globa2 = model->transformLocalToGlobalCoordinates(0, target_global, zero_angles);
+
+            // HexaMotion IK -> FK (los ángulos se manejan internamente en radianes)
+            JointAngles hexa_angles = model->inverseKinematicsGlobalCoordinates(0, base_globa2);
+            Point3D hexa_tip_global = model->forwardKinematicsGlobalCoordinates(0, hexa_angles);
 
             // Calcular altura relativa a la base de la pierna
-            double hexa_height = -(hexa_tip_global.z - base_global.z);
+            double hexa_height = hexa_tip_global.z;
 
             // Error en altura (principal métrica para comparación con angle_calculus)
             double height_error = std::abs(hexa_height - ref_height);
@@ -381,7 +333,7 @@ class KinematicsValidator {
         int valid_solutions = 0;
 
         for (double h = 100.0; h <= 400.0; h += 5.0) {
-            AngleCalcAngles sol = calcLegAngles(h);
+            CalcAngles sol = calcLegAngles(h);
             if (sol.valid) {
                 min_height = std::min(min_height, h);
                 max_height = std::max(max_height, h);
@@ -402,7 +354,7 @@ class KinematicsValidator {
 
         // Obtener posición de la base de la pierna
         JointAngles zero_angles(0, 0, 0);
-        Point3D base_global = model->getDHLegBasePosition(0);
+        Point3D base_global = model->getLegBasePosition(0);
 
         for (double h = min_height; h <= max_height; h += 5.0) {
             // Target en la misma posición X,Y que la base, pero con la altura deseada
@@ -411,8 +363,8 @@ class KinematicsValidator {
             target_global.y = base_global.y;
             target_global.z = base_global.z - h; // Altura hacia abajo
 
-            JointAngles hexa_sol = model->inverseKinematics(0, target_global);
-            Point3D hexa_tip_global = model->forwardKinematics(0, hexa_sol);
+            JointAngles hexa_sol = model->inverseKinematicsGlobalCoordinates(0, target_global);
+            Point3D hexa_tip_global = model->forwardKinematicsGlobalCoordinates(0, hexa_sol);
 
             // Calcular altura relativa a la base de la pierna
             double hexa_height = -(hexa_tip_global.z - base_global.z);

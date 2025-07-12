@@ -1,7 +1,7 @@
 #ifndef WORKSPACE_VALIDATOR_H
 #define WORKSPACE_VALIDATOR_H
 
-#include "HexaModel.h"
+#include "robot_model.h"
 #include "hexamotion_constants.h"
 #include <cmath>
 
@@ -211,7 +211,33 @@ class WorkspaceValidator {
      */
     const ValidationConfig &getConfig() const { return config_; }
 
-    // ===== MIGRATED FROM LegCollisionAvoidance =====
+    /**
+     * @brief Calculate limit proximity for joint angles (OpenSHC-style)
+     * @param leg_index Index of the leg
+     * @param joint_angles Current joint angles
+     * @return Limit proximity (1.0 = furthest from limit, 0.0 = at limit)
+     */
+    double calculateLimitProximity(int leg_index, const JointAngles &joint_angles) const;
+
+    /**
+     * @brief Get base position for a specific leg (for testing)
+     */
+    Point3D getLegBase(int leg_index) const;
+
+    /**
+     * @brief Calculate distance from leg base to target (for testing)
+     */
+    double getDistanceFromBase(int leg_index, const Point3D &target) const;
+
+    /**
+     * @brief Check if position respects joint limits (requires IK) (for testing)
+     */
+    bool checkJointLimits(int leg_index, const Point3D &target) const;
+
+    /**
+     * @brief Constrain position to geometric workspace bounds only (for testing)
+     */
+    Point3D constrainToGeometricWorkspace(int leg_index, const Point3D &target) const;
 
     /**
      * @brief Calculate minimum safe hexagon radius to prevent leg collisions
@@ -290,25 +316,7 @@ class WorkspaceValidator {
      */
     Point3D legLocalToGlobal(int leg_index, const Point3D &local_pos) const;
 
-    /**
-     * @brief Get base position for a specific leg
-     */
-    Point3D getLegBase(int leg_index) const;
 
-    /**
-     * @brief Calculate distance from leg base to target
-     */
-    double getDistanceFromBase(int leg_index, const Point3D &target) const;
-
-    /**
-     * @brief Check if position respects joint limits (requires IK)
-     */
-    bool checkJointLimits(int leg_index, const Point3D &target) const;
-
-    /**
-     * @brief Constrain position to geometric workspace bounds only
-     */
-    Point3D constrainToGeometricWorkspace(int leg_index, const Point3D &target) const;
 
     /**
      * @brief Apply collision avoidance adjustment (internal implementation)
@@ -317,7 +325,6 @@ class WorkspaceValidator {
                                                 const Point3D current_leg_positions[NUM_LEGS]) const;
 
     // Constants
-    static constexpr double LEG_ANGLE_SPACING_DEGREES = 60.0f;
     static constexpr double MIN_LEG_SEPARATION = 50.0f; // Minimum distance between leg tips (mm)
 };
 

@@ -170,7 +170,7 @@ void setup() {
     params.hexagon_radius = 150;
     params.coxa_length = 50;
     params.femur_length = 100;
-    params.tibia_length = 120;
+    params.tibia_length = 208;
     params.robot_height = 80;
     params.robot_weight = 2.5f;
     params.control_frequency = 50;

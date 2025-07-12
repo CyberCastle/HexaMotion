@@ -128,7 +128,7 @@ bool testSwingTrajectoryEquivalence() {
     double robot_height = 80.0f;
 
     double leg_phase_offsets[NUM_LEGS] = {0.0f, 0.33f, 0.67f, 0.0f, 0.33f, 0.67f};
-    LegState leg_states[NUM_LEGS];
+    StepPhase leg_states[NUM_LEGS];
 
     cout << "Test Parameters:" << endl;
     cout << "  Step Height: " << step_height << " mm" << endl;
@@ -291,7 +291,7 @@ bool testOpenSHCCompatibility() {
         double swing_progress = i / 100.0f;
         double total_phase = 0.6f + 0.4f * swing_progress; // Swing phase
 
-        LegState leg_states[NUM_LEGS];
+        StepPhase leg_states[NUM_LEGS];
         double leg_phase_offsets[NUM_LEGS] = {0};
 
         Point3D pos = walker.footTrajectory(0, total_phase, 20.0f, 40.0f, 0.6f, 0.4f, 80.0f,

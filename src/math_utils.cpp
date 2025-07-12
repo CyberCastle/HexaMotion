@@ -1,5 +1,5 @@
 #include "math_utils.h"
-#include "HexaModel.h"
+#include "robot_model.h"
 #include "hexamotion_constants.h"
 #include <cmath>
 
@@ -94,11 +94,38 @@ Eigen::Matrix<T, 4, 4> dhTransform(T a, T alpha, T d, T theta) {
     return transform;
 }
 
+template <typename T>
+Eigen::Matrix<T, 4, 4> dhTransformY(T a, T alpha, T d, T theta) {
+
+    // Similar to dhTransform but rotates around the Y axis. This matches
+    // the analytic model where femur and tibia joints pitch about Y.
+    Eigen::Matrix<T, 4, 4> R_y = Eigen::Matrix<T, 4, 4>::Identity();
+    R_y.block(0, 0, 3, 3) =
+        Eigen::AngleAxis<T>(theta, Eigen::Matrix<T, 3, 1>::UnitY()).toRotationMatrix();
+
+    Eigen::Matrix<T, 4, 4> T_z = Eigen::Matrix<T, 4, 4>::Identity();
+    T_z(2, 3) = d;
+
+    Eigen::Matrix<T, 4, 4> T_x = Eigen::Matrix<T, 4, 4>::Identity();
+    T_x(0, 3) = a;
+
+    Eigen::Matrix<T, 4, 4> R_x = Eigen::Matrix<T, 4, 4>::Identity();
+    R_x.block(0, 0, 3, 3) =
+        Eigen::AngleAxis<T>(alpha, Eigen::Matrix<T, 3, 1>::UnitX()).toRotationMatrix();
+
+    return R_y * T_z * T_x * R_x;
+}
+
 // Explicit instantiations for common precisions
 template Eigen::Matrix4d dhTransform<double>(double, double, double, double);
+template Eigen::Matrix4d dhTransformY<double>(double, double, double, double);
 
 Eigen::Matrix4d dhTransform(double a, double alpha, double d, double theta) {
     return dhTransform<double>(a, alpha, d, theta);
+}
+
+Eigen::Matrix4d dhTransformY(double a, double alpha, double d, double theta) {
+    return dhTransformY<double>(a, alpha, d, theta);
 }
 
 Eigen::Vector3d quaternionToEuler(const Eigen::Vector4d &quaternion) {
@@ -186,6 +213,41 @@ Point3D quaternionToEulerPoint3D(const Eigen::Vector4d &quaternion) {
     return vector3fToPoint3D(euler_vec);
 }
 
+Eigen::Vector4d quaternionSlerp(const Eigen::Vector4d &q1, const Eigen::Vector4d &q2, double t) {
+    // Compute dot product
+    double dot = q1[0] * q2[0] + q1[1] * q2[1] + q1[2] * q2[2] + q1[3] * q2[3];
+
+    // If dot product is negative, take the shorter path by negating one quaternion
+    Eigen::Vector4d q2_adj = q2;
+    if (dot < 0.0) {
+        q2_adj = -q2;
+        dot = -dot;
+    }
+
+    // If quaternions are very close, use linear interpolation to avoid numerical issues
+    if (dot > 0.9995) {
+        Eigen::Vector4d result = q1 + t * (q2_adj - q1);
+        double norm = sqrt(result[0] * result[0] + result[1] * result[1] +
+                           result[2] * result[2] + result[3] * result[3]);
+        if (norm > 0.0) {
+            result = result / norm;
+        }
+        return result;
+    }
+
+    // Calculate angle and perform SLERP
+    double theta_0 = acos(std::abs(dot));
+    double sin_theta_0 = sin(theta_0);
+
+    double theta = theta_0 * t;
+    double sin_theta = sin(theta);
+
+    double s0 = cos(theta) - dot * sin_theta / sin_theta_0;
+    double s1 = sin_theta / sin_theta_0;
+
+    return s0 * q1 + s1 * q2_adj;
+}
+
 double pointToLineDistance(const Point3D &point, const Point3D &line_start, const Point3D &line_end) {
     // Calculate the vector from line_start to line_end
     Point3D line_vec = Point3D(line_end.x - line_start.x, line_end.y - line_start.y, line_end.z - line_start.z);
@@ -201,21 +263,93 @@ double pointToLineDistance(const Point3D &point, const Point3D &line_start, cons
         return distance(point, line_start);
     }
 
-    // Calculate the projection of point_vec onto line_vec
-    double dot_product = point_vec.x * line_vec.x + point_vec.y * line_vec.y + point_vec.z * line_vec.z;
-    double t = dot_product / line_length_sq;
+    // Calculate the projection parameter t
+    double t = (point_vec.x * line_vec.x + point_vec.y * line_vec.y + point_vec.z * line_vec.z) / line_length_sq;
 
-    // Clamp t to [0, 1] to ensure we're on the line segment
-    t = std::max(0.0, std::min(DEFAULT_ANGULAR_SCALING, t));
+    // Clamp t to [0, 1] to get the closest point on the line segment
+    t = std::max(0.0, std::min(1.0, t));
 
     // Calculate the closest point on the line segment
-    Point3D closest_point = Point3D(
-        line_start.x + t * line_vec.x,
-        line_start.y + t * line_vec.y,
-        line_start.z + t * line_vec.z);
+    Point3D closest_point = Point3D(line_start.x + t * line_vec.x,
+                                   line_start.y + t * line_vec.y,
+                                   line_start.z + t * line_vec.z);
 
-    // Return the distance from the point to the closest point on the line
+    // Return the distance from the point to the closest point on the line segment
     return distance(point, closest_point);
+}
+
+Point3D crossProduct(const Point3D &a, const Point3D &b) {
+    return Point3D(a.y * b.z - a.z * b.y,
+                   a.z * b.x - a.x * b.z,
+                   a.x * b.y - a.y * b.x);
+}
+
+Point3D projectVector(const Point3D &vector, const Point3D &onto) {
+    double onto_magnitude_sq = onto.x * onto.x + onto.y * onto.y + onto.z * onto.z;
+
+    // Handle degenerate case where onto vector is zero
+    if (onto_magnitude_sq < 1e-6) {
+        return Point3D(0, 0, 0);
+    }
+
+    double dot_product = vector.x * onto.x + vector.y * onto.y + vector.z * onto.z;
+    double scale = dot_product / onto_magnitude_sq;
+
+    return Point3D(onto.x * scale, onto.y * scale, onto.z * scale);
+}
+
+bool solveLeastSquaresPlane(const double* raw_A, const double* raw_B, int num_points, double& a, double& b, double& c) {
+
+    // Build normal equations: A^T * A * x = A^T * b
+    double ATA[3][3] = {{0}};
+    double ATb[3] = {0};
+
+    for (int i = 0; i < num_points; i++) {
+        double x = raw_A[i * 3];
+        double y = raw_A[i * 3 + 1];
+        double z = raw_B[i];
+
+        // A^T * A
+        ATA[0][0] += x * x;
+        ATA[0][1] += x * y;
+        ATA[0][2] += x;
+        ATA[1][1] += y * y;
+        ATA[1][2] += y;
+        ATA[2][2] += 1;
+
+        // A^T * b
+        ATb[0] += x * z;
+        ATb[1] += y * z;
+        ATb[2] += z;
+    }
+
+    // Symmetric matrix
+    ATA[1][0] = ATA[0][1];
+    ATA[2][0] = ATA[0][2];
+    ATA[2][1] = ATA[1][2];
+
+    // Solve using Cramer's rule for 3x3 system
+    double det = ATA[0][0] * (ATA[1][1] * ATA[2][2] - ATA[1][2] * ATA[2][1]) -
+                 ATA[0][1] * (ATA[1][0] * ATA[2][2] - ATA[1][2] * ATA[2][0]) +
+                 ATA[0][2] * (ATA[1][0] * ATA[2][1] - ATA[1][1] * ATA[2][0]);
+
+    if (abs(det) > 1e-6) { // Check for singular matrix
+        a = (ATb[0] * (ATA[1][1] * ATA[2][2] - ATA[1][2] * ATA[2][1]) -
+                ATA[0][1] * (ATb[1] * ATA[2][2] - ATA[1][2] * ATb[2]) +
+                ATA[0][2] * (ATb[1] * ATA[2][1] - ATA[1][1] * ATb[2])) /
+               det;
+        b = (ATA[0][0] * (ATb[1] * ATA[2][2] - ATA[1][2] * ATb[2]) -
+                ATb[0] * (ATA[1][0] * ATA[2][2] - ATA[1][2] * ATA[2][0]) +
+                ATA[0][2] * (ATA[1][0] * ATb[2] - ATb[1] * ATA[2][0])) /
+               det;
+        c = (ATA[0][0] * (ATA[1][1] * ATb[2] - ATA[1][2] * ATb[1]) -
+                ATA[0][1] * (ATA[1][0] * ATb[2] - ATA[1][2] * ATb[0]) +
+                ATb[0] * (ATA[1][0] * ATA[2][1] - ATA[1][1] * ATA[2][0])) /
+               det;
+        return true;
+    }
+
+    return false; // Matrix is singular
 }
 
 } // namespace math_utils

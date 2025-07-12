@@ -8,9 +8,9 @@
 #include <algorithm>
 #include <cmath>
 
-IMUAutoPose::IMUAutoPose(RobotModel &model, IIMUInterface *imu, ManualPoseController &pose_controller,
+IMUAutoPose::IMUAutoPose(RobotModel &model, IIMUInterface *imu, ManualBodyPoseController &body_pose_controller,
                          ComputeConfig config)
-    : model_(model), imu_(imu), pose_controller_(pose_controller), config_(config),
+    : model_(model), imu_(imu), body_pose_controller_(body_pose_controller), config_(config),
       current_mode_(AUTO_POSE_OFF), filter_alpha_(0.1f), last_update_time_(0),
       terrain_roughness_estimate_(0.0f), walking_detected_(false) {
 
@@ -247,7 +247,7 @@ void IMUAutoPose::applyAutoPose() {
     auto_pose_state.pose_blend_factor = current_state_.confidence;
 
     // Apply pose through manual pose controller
-    pose_controller_.setTargetPose(auto_pose_state);
+            body_pose_controller_.setTargetBodyPose(auto_pose_state);
 }
 
 void IMUAutoPose::updateLevelMode() {
@@ -267,7 +267,7 @@ void IMUAutoPose::updateAdaptiveMode() {
         params_.orientation_gain *= 0.7f;
     } else {
         // While stationary, can be more responsive
-        params_.orientation_gain = std::min(1.0f, params_.orientation_gain * 1.1f);
+        params_.orientation_gain = std::min(1.0f, static_cast<float>(params_.orientation_gain * 1.1f));
     }
 
     current_state_.pose_active = true;
@@ -383,7 +383,7 @@ double IMUAutoPose::calculateConfidence(const Point3D &orientation_error) const 
     double error_magnitude = math_utils::magnitude(orientation_error);
     double max_error = math_utils::degreesToRadians(45.0f); // Maximum reasonable error
 
-    double confidence = 1.0f - std::min(1.0f, error_magnitude / max_error);
+    double confidence = 1.0f - std::min(1.0f, static_cast<float>(error_magnitude / max_error));
 
     // Reduce confidence during walking
     if (walking_detected_) {
@@ -431,15 +431,15 @@ void IMUAutoPose::updateAdaptiveGains() {
         params_.response_speed *= 0.95f;
     } else {
         // Smooth terrain - can increase responsiveness
-        params_.orientation_gain = std::min(1.0f, params_.orientation_gain * 1.01f);
-        params_.response_speed = std::min(1.0f, params_.response_speed * 1.02f);
-        params_.stabilization_gain = std::max(0.5f, params_.stabilization_gain * 0.98f);
+        params_.orientation_gain = std::min(1.0f, static_cast<float>(params_.orientation_gain * 1.01f));
+        params_.response_speed = std::min(1.0f, static_cast<float>(params_.response_speed * 1.02f));
+        params_.stabilization_gain = std::max(0.5f, static_cast<float>(params_.stabilization_gain * 0.98f));
     }
 
     // Apply bounds to prevent instability
-    params_.orientation_gain = std::max(0.1f, std::min(1.0f, params_.orientation_gain));
-    params_.response_speed = std::max(0.1f, std::min(1.0f, params_.response_speed));
-    params_.stabilization_gain = std::max(0.5f, std::min(2.0f, params_.stabilization_gain));
+    params_.orientation_gain = std::max(0.1f, std::min(1.0f, static_cast<float>(params_.orientation_gain)));
+    params_.response_speed = std::max(0.1f, std::min(1.0f, static_cast<float>(params_.response_speed)));
+    params_.stabilization_gain = std::max(0.5f, std::min(2.0f, static_cast<float>(params_.stabilization_gain)));
 }
 
 Point3D IMUAutoPose::normalizeAngles(const Point3D &angles) {
