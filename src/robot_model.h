@@ -513,8 +513,6 @@ class RobotModel {
     /** Compute forward kinematics for a leg (Global coordinates). */
     Point3D forwardKinematicsGlobalCoordinates(int leg, const JointAngles &q) const;
 
-    /** Analytic Jacobian for a leg. */
-    Eigen::Matrix3d analyticJacobian(int leg, const JointAngles &q) const;
     /** Numerical Jacobian calculation. */
     Eigen::Matrix3d calculateJacobian(int leg, const JointAngles &q, const Point3D &target) const;
     /** Homogeneous transform for a full leg chain. */
@@ -551,9 +549,6 @@ class RobotModel {
      * @return Pose transformed to leg frame
      */
     Pose getPoseLegFrame(int leg_index, const JointAngles &joint_angles, const Pose &robot_frame_pose = Pose::Identity()) const;
-
-    /** Get the Analytic position of the leg base (without joint transformations) */
-    Point3D getAnalyticLegBasePosition(int leg_index) const;
 
     /** Get the DH position of the leg base (without joint transformations) */
     Point3D getDHLegBasePosition(int leg_index) const;
@@ -668,11 +663,6 @@ class RobotModel {
                                                    const JointAngles &current_angles) const;
 
     std::vector<Eigen::Matrix4d> buildDHTransforms(int leg, const JointAngles &q) const;
-
-    Point3D forwardKinematicsGlobalCoordinatesAnalytic(int leg_index, const JointAngles &angles) const;
-    Eigen::Matrix4d legTransformAnalytic(int leg_index, const JointAngles &q) const;
-    Eigen::Matrix3d calculateJacobianAnalytic(int leg, const JointAngles &q, const Point3D &) const;
-    std::vector<Eigen::Matrix4d> buildDHTransformsAnalytic(int leg, const JointAngles &q) const;
 
   private:
     Parameters params;

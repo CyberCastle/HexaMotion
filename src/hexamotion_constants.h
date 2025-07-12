@@ -10,6 +10,14 @@
  * Centralizing these constants improves maintainability and consistency.
  */
 
+#include <cmath>
+#ifndef M_PI
+#define M_PI 3.14159265358979323846
+#endif
+
+#define NUM_LEGS 6
+#define DEGREES_TO_RADIANS_FACTOR (M_PI / 180.0f)
+
 // ========================================================================
 // VELOCITY CONTROL CONSTANTS
 // ========================================================================
@@ -194,5 +202,16 @@ enum SystemState {
 #define LEG_STEPPER_SWING_NODE_SCALER 0.25
 #define LEG_STEPPER_TOUCHDOWN_NODE_MULTIPLIER 4.0
 #define LEG_STEPPER_TOUCHDOWN_INTERPOLATION 0.5
+
+// Per-leg base orientation offsets in radians - symmetric for opposite leg pairs
+// Pairs: (0,3)=(-30°,30°), (1,4)=(-90°,90°), (2,5)=(-150°,150°)
+// This matches the DH parameter orientation
+const double BASE_THETA_OFFSETS[NUM_LEGS] = {
+    -30.0 * DEGREES_TO_RADIANS_FACTOR,
+    -90.0 * DEGREES_TO_RADIANS_FACTOR,
+    -150.0 * DEGREES_TO_RADIANS_FACTOR,
+    150.0 * DEGREES_TO_RADIANS_FACTOR,
+    90.0 * DEGREES_TO_RADIANS_FACTOR,
+    30.0 * DEGREES_TO_RADIANS_FACTOR};
 
 #endif // HEXAMOTION_CONSTANTS_H

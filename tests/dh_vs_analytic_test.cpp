@@ -3,6 +3,7 @@
 #include <cmath>
 #include <iomanip>
 #include <iostream>
+#include "analytic_robot_model.h"
 
 int main() {
     Parameters p{};
@@ -20,6 +21,7 @@ int main() {
     p.tibia_angle_limits[1] = 45;
 
     RobotModel model(p);
+    AnalyticRobotModel analytic_model(p);
 
     std::cout << std::fixed << std::setprecision(6);
     std::cout << "=== DH vs Analytic Methods Comparison Test ===" << std::endl;
@@ -38,7 +40,7 @@ int main() {
     // Test with zero angles
     JointAngles zero_angles(0, 0, 0);
     for (int leg = 0; leg < NUM_LEGS; ++leg) {
-        Point3D analytic_pos = model.forwardKinematicsGlobalCoordinatesAnalytic(leg, zero_angles);
+        Point3D analytic_pos = analytic_model.forwardKinematicsGlobalCoordinatesAnalytic(leg, zero_angles);
         Point3D dh_pos = model.forwardKinematicsGlobalCoordinates(leg, zero_angles);
 
         double error = std::sqrt(std::pow(analytic_pos.x - dh_pos.x, 2) +
@@ -56,7 +58,7 @@ int main() {
     // Test with non-zero angles
     JointAngles test_angles(15.0 * M_PI / 180.0, -30.0 * M_PI / 180.0, 20.0 * M_PI / 180.0);
     for (int leg = 0; leg < NUM_LEGS; ++leg) {
-        Point3D analytic_pos = model.forwardKinematicsGlobalCoordinatesAnalytic(leg, test_angles);
+        Point3D analytic_pos = analytic_model.forwardKinematicsGlobalCoordinatesAnalytic(leg, test_angles);
         Point3D dh_pos = model.forwardKinematicsGlobalCoordinates(leg, test_angles);
 
         double error = std::sqrt(std::pow(analytic_pos.x - dh_pos.x, 2) +
@@ -75,7 +77,7 @@ int main() {
     std::cout << "\n--- Test 2: Jacobian Comparison ---" << std::endl;
 
     for (int leg = 0; leg < NUM_LEGS; ++leg) {
-        Eigen::Matrix3d analytic_jacobian = model.calculateJacobianAnalytic(leg, test_angles, Point3D());
+        Eigen::Matrix3d analytic_jacobian = analytic_model.calculateJacobianAnalytic(leg, test_angles, Point3D());
         Eigen::Matrix3d dh_jacobian = model.calculateJacobian(leg, test_angles, Point3D());
 
         double max_error = 0.0;
@@ -97,7 +99,7 @@ int main() {
     std::cout << "\n--- Test 3: Transform Matrix Comparison ---" << std::endl;
 
     for (int leg = 0; leg < NUM_LEGS; ++leg) {
-        Eigen::Matrix4d analytic_transform = model.legTransformAnalytic(leg, test_angles);
+        Eigen::Matrix4d analytic_transform = analytic_model.legTransformAnalytic(leg, test_angles);
         Eigen::Matrix4d dh_transform = model.legTransform(leg, test_angles);
 
         double max_error = 0.0;
@@ -119,7 +121,7 @@ int main() {
     std::cout << "\n--- Test 4: DH Transform Building Comparison ---" << std::endl;
 
     for (int leg = 0; leg < NUM_LEGS; ++leg) {
-        std::vector<Eigen::Matrix4d> analytic_transforms = model.buildDHTransformsAnalytic(leg, test_angles);
+        std::vector<Eigen::Matrix4d> analytic_transforms = analytic_model.buildDHTransformsAnalytic(leg, test_angles);
         std::vector<Eigen::Matrix4d> dh_transforms = model.buildDHTransforms(leg, test_angles);
 
         double max_error = 0.0;
