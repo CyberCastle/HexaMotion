@@ -283,7 +283,7 @@ static bool validateJointAngleCoherence(const LocomotionSystem &sys, const Param
 
     int coherence_violations = 0;
     int total_checks = 0;
-    double expected_z = -p.robot_height;
+    double expected_z = -p.standing_height;
     double tol = 2.0;
 
     std::cout << "Current leg positions and angles:" << std::endl;
@@ -377,7 +377,7 @@ static void printDetailedLegSymmetry(const LocomotionSystem &sys, const Paramete
     const char *pair_names[3] = {"Front Right <-> Back Left", "Middle Right <-> Middle Left", "Back Right <-> Front Left"};
     const double tolerance = 5.0; // 5 degrees tolerance
 
-    double expected_z = -p.robot_height;
+    double expected_z = -p.standing_height;
     double tol = 2.0;
 
     std::cout << "Opposite leg pair analysis:" << std::endl;
