@@ -114,6 +114,13 @@ class BodyPoseController {
                          double t, Leg legs[NUM_LEGS]);
 
     /**
+     * @brief Calculate body position based on current leg positions
+     * @param legs Array of Leg objects
+     * @return Current body position as Vector3d
+     */
+    Eigen::Vector3d calculateBodyPosition(Leg legs[NUM_LEGS]) const;
+
+    /**
      * @brief Check if body pose is within configured limits
      * @param position Body position to check
      * @param orientation Body orientation to check

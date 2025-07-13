@@ -304,6 +304,20 @@ bool BodyPoseController::checkBodyPoseLimits(const Eigen::Vector3d &position, co
     return true;
 }
 
+Eigen::Vector3d BodyPoseController::calculateBodyPosition(Leg legs[NUM_LEGS]) const {
+    // Calculate body position based on average leg positions
+    double total_z = 0.0;
+    for (int i = 0; i < NUM_LEGS; i++) {
+        Point3D leg_pos = legs[i].getCurrentTipPositionGlobal();
+        total_z += leg_pos.z;
+    }
+    double average_leg_z = total_z / NUM_LEGS;
+
+    // Return body position with calculated Z height
+    // X and Y remain at origin for standing pose
+    return Eigen::Vector3d(0.0, 0.0, average_leg_z);
+}
+
 bool BodyPoseController::initializeTrajectoryFromCurrent(const Eigen::Vector3d &target_position,
                                                          const Eigen::Vector3d &target_orientation,
                                                          Leg legs[NUM_LEGS], IServoInterface *servos) {

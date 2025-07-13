@@ -307,7 +307,7 @@ bool LocomotionSystem::setGaitType(GaitType gait) {
     return result;
 }
 
-// Gait sequence planning - ARCHITECTURE: Use WalkController with LegStepper
+// Gait sequence planning - Use WalkController with LegStepper
 bool LocomotionSystem::planGaitSequence(double velocity_x, double velocity_y, double angular_velocity) {
     commanded_linear_velocity_ = velocity_x;
     commanded_angular_velocity_ = angular_velocity;
@@ -620,7 +620,7 @@ bool LocomotionSystem::setStandingPose() {
         return false;
     }
 
-    // ARCHITECTURE: Use BodyPoseController with LegPoser for pose control
+    // Use BodyPoseController with LegPoser for pose control
     bool success = body_pose_ctrl->setStandingPose(legs);
 
     if (success) {
@@ -632,6 +632,10 @@ bool LocomotionSystem::setStandingPose() {
                 return false;
             }
         }
+
+        // Update body position based on actual leg positions through BodyPoseController
+        // The BodyPoseController handles the calculation of body position
+        body_position = body_pose_ctrl->calculateBodyPosition(legs);
 
         // Set system state to READY (OpenSHC equivalent)
         system_state = SYSTEM_READY;
