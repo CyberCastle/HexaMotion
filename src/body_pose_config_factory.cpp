@@ -251,7 +251,7 @@ AutoPoseConfiguration createAutoPoseConfiguration(const Parameters &params) {
     AutoPoseConfiguration config;
 
     // OpenSHC auto_pose.yaml equivalent settings
-    config.enabled = true;
+    config.enabled = false;       // Disable auto-pose for consistent testing
     config.pose_frequency = -1.0; // Synchronize with gait cycle
 
     // Tripod gait phase configuration (OpenSHC equivalent)
