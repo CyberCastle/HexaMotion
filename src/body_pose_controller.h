@@ -179,6 +179,16 @@ class BodyPoseController {
      */
     GaitType getCurrentGaitType() const { return current_gait_type_; }
 
+    /**
+     * @brief Reset all startup/shutdown sequence states
+     */
+    void resetSequenceStates() {
+        step_to_new_stance_current_group = 0;
+        step_to_new_stance_sequence_generated = false;
+        direct_startup_sequence_initialized = false;
+        shutdown_sequence_initialized = false;
+    }
+
     // Compatibility methods for existing tests
     const BodyPoseConfiguration &getBodyPoseConfig() const { return body_pose_config; }
     void setBodyPoseConfig(const BodyPoseConfiguration &config) { body_pose_config = config; }
@@ -230,6 +240,21 @@ class BodyPoseController {
     JointAngles trajectory_start_angles[NUM_LEGS];
     Point3D trajectory_target_positions[NUM_LEGS];
     JointAngles trajectory_target_angles[NUM_LEGS];
+
+    // stepToNewStance state variables (moved from static to class level)
+    int step_to_new_stance_current_group;
+    bool step_to_new_stance_sequence_generated;
+
+    // executeDirectStartup state variables (moved from static to class level)
+    bool direct_startup_sequence_initialized;
+
+    // executeShutdownSequence state variables (moved from static to class level)
+    bool shutdown_sequence_initialized;
+
+    // Tripod gait leg groupings (OpenSHC compatible)
+    // Group A: AR (0), CR (2), BL (4) - Anterior Right, Center Right, Back Left
+    // Group B: BR (1), CL (3), AL (5) - Back Right, Center Left, Anterior Left
+    static constexpr int tripod_leg_groups[2][3] = {{0, 2, 4}, {1, 3, 5}};
 
     // Constants
     static constexpr double ANGULAR_SCALING = 1.0;

@@ -28,7 +28,9 @@ class BodyPoseController::LegPoserImpl {
 
 BodyPoseController::BodyPoseController(RobotModel &m, const BodyPoseConfiguration &config)
     : model(m), body_pose_config(config), auto_pose_enabled(true), trajectory_in_progress(false),
-      trajectory_progress(0.0), trajectory_step_count(0), current_gait_type_(TRIPOD_GAIT) {
+      trajectory_progress(0.0), trajectory_step_count(0), current_gait_type_(TRIPOD_GAIT),
+      step_to_new_stance_current_group(0), step_to_new_stance_sequence_generated(false),
+      direct_startup_sequence_initialized(false), shutdown_sequence_initialized(false) {
 
     // Initialize leg posers
     for (int i = 0; i < NUM_LEGS; i++) {
@@ -398,51 +400,68 @@ void BodyPoseController::resetTrajectory() {
 // Tripod leg coordination for stance transition (OpenSHC equivalent)
 bool BodyPoseController::stepToNewStance(Leg legs[NUM_LEGS], double step_height, double step_time) {
 
-    // Tripod leg groups (AR/CR/BL and BR/CL/AL)
-    static const int groups[2][3] = {{0, 2, 4}, {1, 3, 5}};
+    // Use class-level tripod leg groups configuration
     const int legs_in_group = 3;
-    static int current_group = 0; // 0: group_a, 1: group_b
-    static bool sequence_generated = false;
 
     // Initialize sequence if not already done
-    if (!sequence_generated) {
+    if (!step_to_new_stance_sequence_generated) {
         double robot_z = -model.getParams().robot_height;
+        int initialized_posers = 0;
         for (int i = 0; i < NUM_LEGS; ++i) {
             auto *poser = leg_posers_[i] ? leg_posers_[i]->get() : nullptr;
-            if (!poser)
+            if (!poser) {
                 continue;
+            }
             const auto &cfg = body_pose_config.leg_stance_positions[i];
             poser->setTargetPosition(Point3D{cfg.x, cfg.y, robot_z});
             poser->resetStepToPosition();
+            initialized_posers++;
         }
-        current_group = 0;
-        sequence_generated = true;
+        step_to_new_stance_current_group = 0;
+        step_to_new_stance_sequence_generated = true;
+
+        // If no posers are initialized, return false immediately
+        if (initialized_posers == 0) {
+            return false;
+        }
     }
 
     // Move legs in current group and track completion
     int completed_legs = 0;
+    int valid_legs = 0;
     for (int idx = 0; idx < legs_in_group; ++idx) {
-        int i = groups[current_group][idx];
+        int i = tripod_leg_groups[step_to_new_stance_current_group][idx];
         auto *poser = leg_posers_[i] ? leg_posers_[i]->get() : nullptr;
-        if (!poser)
+        if (!poser) {
             continue;
+        }
+        valid_legs++;
         bool leg_complete = poser->stepToPosition(poser->getTargetPosition(), step_height, step_time);
         Point3D new_pos = poser->getCurrentPosition();
         JointAngles curr_angles = legs[i].getJointAngles();
         JointAngles new_angles = model.inverseKinematicsCurrentGlobalCoordinates(i, curr_angles, new_pos);
         legs[i].setCurrentTipPositionGlobal(model, new_pos);
         legs[i].setJointAngles(new_angles);
-        if (leg_complete)
-            ++completed_legs;
+        if (leg_complete) {
+            completed_legs++;
+        }
     }
 
-    // Advance group or finish when all legs complete
-    if (completed_legs == legs_in_group) {
-        if (current_group == 0) {
-            current_group = 1;
+    // Advance group or finish when all valid legs complete
+    if (completed_legs == valid_legs && valid_legs > 0) {
+        if (step_to_new_stance_current_group == 0) {
+            step_to_new_stance_current_group = 1;
+            // Reset leg posers for Group B
+            for (int idx = 0; idx < legs_in_group; ++idx) {
+                int i = tripod_leg_groups[step_to_new_stance_current_group][idx];
+                auto *poser = leg_posers_[i] ? leg_posers_[i]->get() : nullptr;
+                if (poser) {
+                    poser->resetStepToPosition();
+                }
+            }
         } else {
-            sequence_generated = false;
-            current_group = 0;
+            step_to_new_stance_sequence_generated = false;
+            step_to_new_stance_current_group = 0;
             return true;
         }
     }
@@ -451,12 +470,6 @@ bool BodyPoseController::stepToNewStance(Leg legs[NUM_LEGS], double step_height,
 
 // Execute startup sequence (READY -> RUNNING transition)
 bool BodyPoseController::executeStartupSequence(Leg legs[NUM_LEGS]) {
-    static bool sequence_initialized = false;
-
-    // Initialize sequence if not done
-    if (!sequence_initialized) {
-        sequence_initialized = true;
-    }
 
     // OpenSHC Architecture Compliance:
     // According to OpenSHC documentation and implementation:
@@ -474,7 +487,7 @@ bool BodyPoseController::executeStartupSequence(Leg legs[NUM_LEGS]) {
     // Check if we're using tripod gait - stepToNewStance is only for tripod gait
     bool use_tripod_coordination = (current_gait_type_ == TRIPOD_GAIT);
 
-    bool complete;
+    bool complete = false;
     if (use_tripod_coordination) {
         // Use stepToNewStance for tripod gait coordination (OpenSHC style)
         // This coordinates legs in two groups of 3, moving one group at a time
@@ -485,21 +498,14 @@ bool BodyPoseController::executeStartupSequence(Leg legs[NUM_LEGS]) {
         complete = executeDirectStartup(legs);
     }
 
-    if (complete) {
-        sequence_initialized = false;
-        return true;
-    }
-
-    return false;
+    return complete;
 }
 
 // Execute direct startup sequence (simultaneous leg coordination)
 bool BodyPoseController::executeDirectStartup(Leg legs[NUM_LEGS]) {
-    static bool sequence_initialized = false;
-
     // Initialize sequence if not done
-    if (!sequence_initialized) {
-        sequence_initialized = true;
+    if (!direct_startup_sequence_initialized) {
+        direct_startup_sequence_initialized = true;
     }
 
     // Use time_to_start directly as total sequence time (OpenSHC style)
@@ -534,7 +540,7 @@ bool BodyPoseController::executeDirectStartup(Leg legs[NUM_LEGS]) {
     }
 
     if (completed_legs >= NUM_LEGS) {
-        sequence_initialized = false;
+        direct_startup_sequence_initialized = false;
         return true;
     }
 
@@ -543,11 +549,9 @@ bool BodyPoseController::executeDirectStartup(Leg legs[NUM_LEGS]) {
 
 // Execute shutdown sequence (RUNNING -> READY transition)
 bool BodyPoseController::executeShutdownSequence(Leg legs[NUM_LEGS]) {
-    static bool sequence_initialized = false;
-
     // Initialize sequence if not done
-    if (!sequence_initialized) {
-        sequence_initialized = true;
+    if (!shutdown_sequence_initialized) {
+        shutdown_sequence_initialized = true;
     }
 
     // Move legs back to standing pose positions using configured values
@@ -581,7 +585,7 @@ bool BodyPoseController::executeShutdownSequence(Leg legs[NUM_LEGS]) {
     }
 
     if (completed_legs >= NUM_LEGS) {
-        sequence_initialized = false;
+        shutdown_sequence_initialized = false;
         return true;
     }
 
