@@ -46,9 +46,11 @@ class WalkController {
     ~WalkController() = default;
 
     /**
-     * @brief Initialize the walk controller with default parameters
+     * @brief Initialize the walk controller with default parameters and current robot pose
+     * @param current_body_position Current position of the robot body
+     * @param current_body_orientation Current orientation of the robot body
      */
-    void init();
+    void init(const Eigen::Vector3d &current_body_position, const Eigen::Vector3d &current_body_orientation);
 
     /**
      * @brief Generate walkspace for the robot
@@ -61,9 +63,10 @@ class WalkController {
     void generateLimits(StepCycle step);
 
     /**
-     * @brief Update walking with velocity commands (OpenSHC equivalent)
+     * @brief Update walking with velocity commands and current robot pose (OpenSHC equivalent)
      */
-    void updateWalk(const Point3D &linear_velocity_input, double angular_velocity_input);
+    void updateWalk(const Point3D &linear_velocity_input, double angular_velocity_input,
+                    const Eigen::Vector3d &current_body_position, const Eigen::Vector3d &current_body_orientation);
 
     /**
      * @brief Update walk plane estimation
@@ -232,6 +235,10 @@ class WalkController {
     Point3D walk_plane_normal_;
     Point3D odometry_ideal_;
     int pose_state_;
+
+    // Current robot pose (provided by BodyPoseController)
+    Eigen::Vector3d current_body_position_;
+    Eigen::Vector3d current_body_orientation_;
 
     // Velocity limits
     std::map<int, double> max_linear_speed_;

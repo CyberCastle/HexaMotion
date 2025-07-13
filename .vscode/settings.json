@@ -72,6 +72,8 @@
         "iomanip": "cpp",
         "span": "cpp",
         "chrono": "cpp",
-        "thread": "cpp"
+        "thread": "cpp",
+        "queue": "cpp",
+        "stack": "cpp"
     }
 }

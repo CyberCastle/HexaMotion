@@ -736,10 +736,11 @@ bool LocomotionSystem::update() {
         return true;
     }
 
-    // Update walk controller with the last commanded velocity
+    // Update walk controller with the last commanded velocity, body position, and orientation
     if (walk_ctrl) {
         walk_ctrl->updateWalk(Point3D(commanded_linear_velocity_, 0.0, 0.0),
-                              commanded_angular_velocity_);
+                              commanded_angular_velocity_,
+                              body_position, body_orientation);
     }
 
     // Update leg states based on current gait
@@ -1293,7 +1294,7 @@ bool LocomotionSystem::executeStartupSequence() {
 
         // Inicializar walk controller para estado RUNNING
         if (walk_ctrl) {
-            walk_ctrl->init();
+            walk_ctrl->init(body_position, body_orientation);
             walk_ctrl->generateWalkspace();
         }
         // Sincronizar modelo (IK y pose)

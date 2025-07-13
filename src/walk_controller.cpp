@@ -233,12 +233,16 @@ VelocityLimits::WorkspaceConfig WalkController::getWorkspaceConfig() const {
 
 // TODO: Use defines
 // --- WalkController Methods Implementation ---
-void WalkController::init() {
+void WalkController::init(const Eigen::Vector3d &current_body_position, const Eigen::Vector3d &current_body_orientation) {
     time_delta_ = 0.01; // 10ms default
     walk_state_ = WALK_STOPPED;
     walk_plane_ = Point3D(0, 0, 0);
     walk_plane_normal_ = Point3D(0, 0, 1);
     odometry_ideal_ = Point3D(0, 0, 0);
+
+    // Store current robot pose
+    current_body_position_ = current_body_position;
+    current_body_orientation_ = current_body_orientation;
 
     // Set default stance tip positions from parameters
     for (auto &leg_stepper : leg_steppers_) {
@@ -256,10 +260,13 @@ void WalkController::init() {
         double leg_reach = params.coxa_length + params.femur_length + params.tibia_length;
         double safe_reach = leg_reach * 0.65f;
 
+        // Use current robot body height
+        double current_body_height = current_body_position.z();
+
         Point3D stance_tip_pose(
             base_x + safe_reach * cos(base_angle),
             base_y + safe_reach * sin(base_angle),
-            -params.robot_height);
+            current_body_height);
 
         leg_stepper->setDefaultTipPose(stance_tip_pose);
     }
@@ -269,9 +276,14 @@ void WalkController::init() {
     desired_angular_velocity_ = 0;
 }
 
-void WalkController::updateWalk(const Point3D &linear_velocity_input, double angular_velocity_input) {
+void WalkController::updateWalk(const Point3D &linear_velocity_input, double angular_velocity_input,
+                                const Eigen::Vector3d &current_body_position, const Eigen::Vector3d &current_body_orientation) {
     // Update global gait phase based on control frequency interval
     time_delta_ = 1.0 / model.getParams().control_frequency;
+
+    // Store current robot pose
+    current_body_position_ = current_body_position;
+    current_body_orientation_ = current_body_orientation;
 
     Point3D new_linear_velocity;
     double new_angular_velocity;
@@ -519,8 +531,9 @@ void WalkController::generateWalkspace() {
             double target_x = base_x + safe_reach * cos(bearing_rad);
             double target_y = base_y + safe_reach * sin(bearing_rad);
 
-            // Check if target is reachable by this leg
-            Point3D target(target_x, target_y, -params.robot_height);
+            // Check if target is reachable by this leg, using current body position
+            // Use inverse kinematics to find angles for this target position
+            Point3D target(target_x, target_y, current_body_position_.z());
             // For workspace generation, use zero angles as starting point
             JointAngles zero_angles(0, 0, 0);
             JointAngles angles = model.inverseKinematicsCurrentGlobalCoordinates(leg, zero_angles, target);
