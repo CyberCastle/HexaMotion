@@ -107,7 +107,7 @@ static void validateTrajectorySimilarity(const LocomotionSystem &sys,
     }
 }
 
-static void validateSwingPeakSync(const LocomotionSystem &sys, TestReport &rep) {
+static void validateSwingPeakSync(LocomotionSystem &sys, TestReport &rep) {
     WalkController *wc = sys.getWalkController();
     if (!wc)
         return;
