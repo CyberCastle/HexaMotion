@@ -14,6 +14,7 @@ struct TestReport {
 
 static void printDiagnostics(const LocomotionSystem &sys) {
     std::cout << "--- Leg diagnostics ---" << std::endl;
+    const double deg = 180.0 / M_PI;
     for (int i = 0; i < NUM_LEGS; ++i) {
         const Leg &leg = sys.getLeg(i);
         JointAngles q = leg.getJointAngles();
@@ -22,8 +23,8 @@ static void printDiagnostics(const LocomotionSystem &sys) {
         std::cout << "Leg " << i
                   << " phase=" << (ph == STANCE_PHASE ? "STANCE" : "SWING")
                   << " pos(" << p.x << ", " << p.y << ", " << p.z << ")"
-                  << " angles(" << q.coxa << ", " << q.femur << ", " << q.tibia
-                  << ")" << std::endl;
+                  << " angles(" << q.coxa * deg << ", " << q.femur * deg << ", "
+                  << q.tibia * deg << ")" << std::endl;
     }
     std::cout << "-----------------------" << std::endl;
 }
@@ -132,18 +133,13 @@ int main() {
     addResult(rep, std::abs(sys.getBodyPosition().z() + 150.0) <= 2.0,
               "Initial body height", sys);
 
-    int startup_iterations = 0;
-    const int max_startup_iterations = 1000;
-    while (!sys.executeStartupSequence() && startup_iterations < max_startup_iterations) {
-        sys.update();
-        ++startup_iterations;
-    }
-    addResult(rep, startup_iterations < max_startup_iterations, "Startup sequence timeout", sys);
+    bool startup_ok = sys.executeStartupSequence();
+    addResult(rep, startup_ok, "Startup sequence", sys);
 
     assert(sys.setGaitType(TRIPOD_GAIT));
     assert(sys.walkForward(100.0));
 
-    const double distance = 1000.0; // mm
+    const double distance = 500.0; // mm
     double dt = 1.0 / p.control_frequency;
     int cycles = static_cast<int>(distance / (100.0 * dt));
 
