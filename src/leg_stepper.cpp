@@ -36,6 +36,10 @@ LegStepper::LegStepper(int leg_index, const Point3D &identity_tip_pose, Leg &leg
     body_clearance_ = 0.0;
     swing_clearance_ = Point3D(0.0, 0.0, 0.0);
 
+    // Initialize origin positions with identity pose instead of (0,0,0)
+    swing_origin_tip_position_ = identity_tip_pose_;
+    stance_origin_tip_position_ = identity_tip_pose_;
+
     for (int i = 0; i < 5; ++i) {
         swing_1_nodes_[i] = identity_tip_pose_;
         swing_2_nodes_[i] = identity_tip_pose_;
@@ -155,7 +159,6 @@ void LegStepper::updateDefaultTipPosition() {
 void LegStepper::updateTipPosition(double step_length, double time_delta, bool rough_terrain_mode, bool force_normal_touchdown) {
     // Usar el step_length configurado si no se pasa uno explícito
     double used_step_length = (step_length_ > 0.0) ? step_length_ : step_length;
-    target_tip_pose_ = default_tip_pose_ + stride_vector_ * 0.5;
 
     // Update dynamic timing parameters (OpenSHC equivalent)
     updateDynamicTiming(used_step_length, time_delta);
@@ -165,41 +168,58 @@ void LegStepper::updateTipPosition(double step_length, double time_delta, bool r
     double stance_ratio = config.duty_factor;
 
     // Usar la frecuencia de control del sistema en lugar de la frecuencia de la marcha
-    // La frecuencia de control determina qué tan rápido se ejecutan los pasos
     double control_frequency = robot_model_.getParams().control_frequency;
 
     // Calcular velocidad lineal basada en step_length y frecuencia de control
-    // Para una marcha efectiva, la velocidad debe ser step_length * control_frequency / 2
-    // (dividido por 2 porque cada paso completo incluye stance y swing)
     double linear_velocity_x = used_step_length * control_frequency / 2.0;
     double linear_velocity_y = 0.0;
     double angular_velocity = 0.0;
 
+    // Actualizar stride vector
+    updateStride(linear_velocity_x, linear_velocity_y, angular_velocity, stance_ratio, control_frequency);
+
+    // Calcular target tip pose basado en el stride vector
+    target_tip_pose_ = default_tip_pose_ + stride_vector_ * 0.5;
+
     // Período de Swing
     if (step_state_ == STEP_SWING) {
-        updateStride(linear_velocity_x, linear_velocity_y, angular_velocity, stance_ratio, control_frequency);
-        double time_input = step_progress_;
+        // Generar nodos de control para swing
         generatePrimarySwingControlNodes();
         generateSecondarySwingControlNodes(false);
-        Point3D delta_pos = math_utils::quarticBezierDot(swing_1_nodes_, time_input);
-        Point3D new_tip_position = swing_origin_tip_position_ + delta_pos;
-        current_tip_pose_ = new_tip_position;
-        current_tip_velocity_ = delta_pos / time_delta;
-        leg_.setDesiredTipPositionGlobal(new_tip_position);
-        leg_.applyIK(robot_model_);
+
+        // Usar step_progress_ para interpolación Bézier
+        double time_input = step_progress_;
+
+        // Determinar qué curva usar basado en el progreso
+        Point3D delta_pos;
+        if (time_input < 0.5) {
+            // Primera mitad del swing - usar swing_1_nodes_
+            double t = time_input * 2.0; // Mapear [0,0.5] a [0,1]
+            delta_pos = math_utils::quarticBezier(swing_1_nodes_, t);
+        } else {
+            // Segunda mitad del swing - usar swing_2_nodes_
+            double t = (time_input - 0.5) * 2.0; // Mapear [0.5,1] a [0,1]
+            delta_pos = math_utils::quarticBezier(swing_2_nodes_, t);
+        }
+
+        current_tip_pose_ = delta_pos;
+        current_tip_velocity_ = (delta_pos - swing_origin_tip_position_) / time_delta;
     }
     // Período de Stance
     else if (step_state_ == STEP_STANCE || step_state_ == STEP_FORCE_STANCE) {
-        updateStride(linear_velocity_x, linear_velocity_y, angular_velocity, stance_ratio, control_frequency);
-        double time_input = step_progress_;
+        // Generar nodos de control para stance
         generateStanceControlNodes(1.0);
-        Point3D delta_pos = math_utils::quarticBezierDot(stance_nodes_, time_input);
-        Point3D new_tip_position = stance_origin_tip_position_ + delta_pos;
-        current_tip_pose_ = new_tip_position;
-        current_tip_velocity_ = delta_pos / time_delta;
-        leg_.setDesiredTipPositionGlobal(new_tip_position);
-        leg_.applyIK(robot_model_);
+
+        // Usar step_progress_ para interpolación Bézier
+        double time_input = step_progress_;
+        Point3D delta_pos = math_utils::quarticBezier(stance_nodes_, time_input);
+
+        current_tip_pose_ = delta_pos;
+        current_tip_velocity_ = (delta_pos - stance_origin_tip_position_) / time_delta;
     }
+
+    leg_.setDesiredTipPositionGlobal(current_tip_pose_);
+    leg_.applyIK(robot_model_);
 }
 
 void LegStepper::generatePrimarySwingControlNodes() {
@@ -324,26 +344,35 @@ void LegStepper::updateWithPhase(double local_phase, double step_length, double 
     // Use dynamic duty factor from configuration
     double duty_factor = config.duty_factor;
 
-    // Actualizar posiciones de origen si es necesario
-    if (step_state_ == STEP_STANCE && local_phase < duty_factor) {
-        // Estamos en stance, actualizar posición de origen de stance
-        stance_origin_tip_position_ = leg_.getCurrentTipPositionGlobal();
-    } else if (step_state_ == STEP_SWING && local_phase >= duty_factor) {
-        // Estamos en swing, actualizar posición de origen de swing
-        swing_origin_tip_position_ = leg_.getCurrentTipPositionGlobal();
+    // Determinar el nuevo estado basado en la fase
+    StepState new_state;
+    if (local_phase < duty_factor) {
+        new_state = STEP_STANCE;
+    } else {
+        new_state = STEP_SWING;
     }
 
-    // Determinar estado y progreso usando configuración dinámica
-    if (local_phase < duty_factor) {
-        // STANCE
-        step_state_ = STEP_STANCE;
+    // Actualizar posiciones de origen SOLO cuando hay transición de estado
+    if (new_state != step_state_) {
+        if (new_state == STEP_STANCE) {
+            // Transición a STANCE: actualizar posición de origen de stance
+            stance_origin_tip_position_ = leg_.getCurrentTipPositionGlobal();
+        } else if (new_state == STEP_SWING) {
+            // Transición a SWING: actualizar posición de origen de swing
+            swing_origin_tip_position_ = leg_.getCurrentTipPositionGlobal();
+        }
+    }
+
+    // Actualizar estado y progreso
+    step_state_ = new_state;
+
+    if (step_state_ == STEP_STANCE) {
         double stance_progress = local_phase / duty_factor;
         step_progress_ = stance_progress;
         stance_progress_ = stance_progress;
         swing_progress_ = -1.0;
     } else {
         // SWING
-        step_state_ = STEP_SWING;
         double swing_progress = (local_phase - duty_factor) / (1.0 - duty_factor);
         step_progress_ = swing_progress;
         swing_progress_ = swing_progress;
