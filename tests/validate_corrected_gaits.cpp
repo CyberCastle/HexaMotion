@@ -1,4 +1,5 @@
-#include "locomotion_system.h"
+#include "../src/body_pose_config_factory.h"
+#include "../src/locomotion_system.h"
 #include "test_stubs.h"
 #include <cassert>
 #include <cmath>
@@ -60,7 +61,7 @@ bool validateGaitImplementation(GaitType gait, const std::string &name,
     DummyFSR fsr;
     DummyServo servos;
 
-    BodyPoseConfiguration pose_config;
+    BodyPoseConfiguration pose_config = getDefaultBodyPoseConfig(p);
     assert(sys.initialize(&imu, &fsr, &servos, pose_config));
     assert(sys.calibrateSystem());
     assert(sys.setGaitType(gait));
@@ -94,7 +95,7 @@ int main() {
     DummyFSR fsr;
     DummyServo servos;
 
-    BodyPoseConfiguration pose_config;
+    BodyPoseConfiguration pose_config = getDefaultBodyPoseConfig(p);
     assert(sys.initialize(&imu, &fsr, &servos, pose_config));
     assert(sys.calibrateSystem());
 
