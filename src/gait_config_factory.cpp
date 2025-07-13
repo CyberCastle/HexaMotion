@@ -35,8 +35,8 @@ GaitConfiguration createWaveGaitConfig(const Parameters &params) {
         {"AR", 2}, {"BR", 3}, {"CR", 4}, {"CL", 1}, {"BL", 0}, {"AL", 5}};
     double leg_reach = params.coxa_length + params.femur_length + params.tibia_length;
     config.step_length = leg_reach * params.gait_factors.wave_length_factor;
-    config.swing_height = params.robot_height * params.gait_factors.wave_height_factor;
-    config.body_clearance = params.robot_height;
+    config.swing_height = params.standing_height * params.gait_factors.wave_height_factor;
+    config.body_clearance = params.standing_height;
     int total_phase = config.phase_config.stance_phase + config.phase_config.swing_phase;
     config.step_frequency = 1.0 / (total_phase * 0.01);
     config.max_velocity = 50.0;
@@ -77,8 +77,8 @@ GaitConfiguration createTripodGaitConfig(const Parameters &params) {
         {"AR", 0}, {"BR", 1}, {"CR", 0}, {"CL", 1}, {"BL", 0}, {"AL", 1}};
     double leg_reach = params.coxa_length + params.femur_length + params.tibia_length;
     config.step_length = leg_reach * params.gait_factors.tripod_length_factor;
-    config.swing_height = params.robot_height * params.gait_factors.tripod_height_factor;
-    config.body_clearance = params.robot_height;
+    config.swing_height = params.standing_height * params.gait_factors.tripod_height_factor;
+    config.body_clearance = params.standing_height;
     int total_phase = config.phase_config.stance_phase + config.phase_config.swing_phase;
     config.step_frequency = 1.0 / (total_phase * 0.01);
     config.max_velocity = 100.0;
@@ -126,8 +126,8 @@ GaitConfiguration createRippleGaitConfig(const Parameters &params) {
     // Calculated parameters
     double leg_reach = params.coxa_length + params.femur_length + params.tibia_length;
     config.step_length = leg_reach * params.gait_factors.ripple_length_factor;
-    config.swing_height = params.robot_height * params.gait_factors.ripple_height_factor;
-    config.body_clearance = params.robot_height;
+    config.swing_height = params.standing_height * params.gait_factors.ripple_height_factor;
+    config.body_clearance = params.standing_height;
     int total_phase = config.phase_config.stance_phase + config.phase_config.swing_phase;
     config.step_frequency = 1.0 / (total_phase * 0.01); // Assuming 10ms iterations
     config.max_velocity = 150.0;                        // Faster movement
@@ -168,8 +168,8 @@ GaitConfiguration createMetachronalGaitConfig(const Parameters &params) {
     // Calculated parameters
     double leg_reach = params.coxa_length + params.femur_length + params.tibia_length;
     config.step_length = leg_reach * params.gait_factors.metachronal_length_factor;
-    config.swing_height = params.robot_height * params.gait_factors.metachronal_height_factor;
-    config.body_clearance = params.robot_height;
+    config.swing_height = params.standing_height * params.gait_factors.metachronal_height_factor;
+    config.body_clearance = params.standing_height;
     int total_phase = config.phase_config.stance_phase + config.phase_config.swing_phase;
     config.step_frequency = 1.0 / (total_phase * 0.01);
     config.max_velocity = 80.0;     // Adaptive speed
