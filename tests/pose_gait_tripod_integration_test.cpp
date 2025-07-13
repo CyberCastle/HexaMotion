@@ -107,6 +107,39 @@ static void validateTrajectorySimilarity(const LocomotionSystem &sys,
     }
 }
 
+static void validateSwingPeakSync(const LocomotionSystem &sys, TestReport &rep) {
+    WalkController *wc = sys.getWalkController();
+    if (!wc)
+        return;
+
+    std::vector<int> swing;
+    for (int i = 0; i < NUM_LEGS; ++i) {
+        if (sys.getLegState(i) == SWING_PHASE)
+            swing.push_back(i);
+    }
+
+    if (swing.size() == 3) {
+        bool near_mid = true;
+        for (int idx = 0; idx < 3; ++idx) {
+            auto stepper = wc->getLegStepper(swing[idx]);
+            double prog = stepper ? stepper->getSwingProgress() : -1.0;
+            if (prog < 0.45 || prog > 0.55)
+                near_mid = false;
+        }
+
+        if (near_mid) {
+            double z0 = sys.getLeg(swing[0]).getCurrentTipPositionGlobal().z;
+            bool equal = true;
+            for (int idx = 1; idx < 3; ++idx) {
+                double zi = sys.getLeg(swing[idx]).getCurrentTipPositionGlobal().z;
+                if (std::abs(zi - z0) > 1.0)
+                    equal = false;
+            }
+            addResult(rep, equal, "Swing legs peak height sync", sys);
+        }
+    }
+}
+
 int main() {
     Parameters p{};
     p.hexagon_radius = 200;
@@ -193,6 +226,7 @@ int main() {
             validateCoxaSymmetry(sys, rep);
             validateTrajectorySimilarity(sys, rep);
         }
+        validateSwingPeakSync(sys, rep);
     }
     addResult(rep, step >= cycles, "Gait execution timeout", sys);
 
