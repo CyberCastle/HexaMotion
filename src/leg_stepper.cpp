@@ -1,14 +1,14 @@
 #include "leg_stepper.h"
+#include "hexamotion_constants.h"
 #include "math_utils.h"
 #include <algorithm>
 #include <cmath>
-#include "hexamotion_constants.h"
 
 #include "velocity_limits.h"
 
-//Constructor without WalkController dependency
-LegStepper::LegStepper(int leg_index, const Point3D& identity_tip_pose, Leg& leg, RobotModel& robot_model,
-                       WalkspaceAnalyzer* walkspace_analyzer, WorkspaceValidator* workspace_validator)
+// Constructor without WalkController dependency
+LegStepper::LegStepper(int leg_index, const Point3D &identity_tip_pose, Leg &leg, RobotModel &robot_model,
+                       WalkspaceAnalyzer *walkspace_analyzer, WorkspaceValidator *workspace_validator)
     : leg_index_(leg_index),
       leg_(leg),
       robot_model_(robot_model),
@@ -44,12 +44,12 @@ LegStepper::LegStepper(int leg_index, const Point3D& identity_tip_pose, Leg& leg
 }
 
 // Core functionality implementations
-void LegStepper::updatePhase(const StepCycle& step) {
+void LegStepper::updatePhase(const StepCycle &step) {
     phase_ = static_cast<int>(step_progress_ * step.period_);
     updateStepState(step);
 }
 
-void LegStepper::iteratePhase(const StepCycle& step) {
+void LegStepper::iteratePhase(const StepCycle &step) {
     phase_ = (phase_ + 1) % step.period_;
     updateStepState(step);
 
@@ -61,7 +61,7 @@ void LegStepper::iteratePhase(const StepCycle& step) {
         stance_progress_ = -1.0;
     } else if (step_state_ == STEP_STANCE) {
         stance_progress_ = double((phase_ + (step.period_ - step.stance_start_)) % step.period_ + 1) /
-                          double((step.stance_end_ - step.stance_start_ + step.period_) % step.period_);
+                           double((step.stance_end_ - step.stance_start_ + step.period_) % step.period_);
         stance_progress_ = std::max(0.0, std::min(1.0, stance_progress_));
         swing_progress_ = -1.0;
     } else if (step_state_ == STEP_FORCE_STOP) {
@@ -70,7 +70,7 @@ void LegStepper::iteratePhase(const StepCycle& step) {
     }
 }
 
-void LegStepper::updateStepState(const StepCycle& step) {
+void LegStepper::updateStepState(const StepCycle &step) {
     // Actualizar estado de paso desde la fase a menos que esté forzado a parar
     if (step_state_ == STEP_FORCE_STOP) {
         return;
@@ -87,8 +87,7 @@ void LegStepper::updateStride(double linear_velocity_x, double linear_velocity_y
     // Usar el método OpenSHC-equivalente
     stride_vector_ = VelocityLimits::calculateStrideVector(
         linear_velocity_x, linear_velocity_y, angular_velocity,
-        getCurrentTipPose(), stance_ratio, step_frequency
-    );
+        getCurrentTipPose(), stance_ratio, step_frequency);
 }
 
 Point3D LegStepper::calculateStanceSpanChange() {
@@ -117,6 +116,15 @@ Point3D LegStepper::calculateStanceSpanChange() {
     if (radius == 0.0 && workspace_validator_) {
         WorkspaceBounds bounds = workspace_validator_->getWorkspaceBounds(leg_index_);
         radius = bounds.max_radius;
+    }
+
+    // TODO: Validate if workspace validator is available
+    // Fallback final: usar estimación basada en geometría del robot si no hay workspace data
+    if (radius == 0.0) {
+        // Estimar un radio base basado en la posición de identidad
+        double identity_radius = sqrt(identity_tip_pose_.x * identity_tip_pose_.x +
+                                      identity_tip_pose_.y * identity_tip_pose_.y);
+        radius = identity_radius * 0.8; // Use 80% of identity radius as safe estimate
     }
 
     // Aplicar el modificador de span
@@ -153,7 +161,7 @@ void LegStepper::updateTipPosition(double step_length, double time_delta, bool r
     updateDynamicTiming(used_step_length, time_delta);
 
     // Obtener parámetros de la configuración de marcha actual
-    const auto& config = robot_model_.getParams().dynamic_gait;
+    const auto &config = robot_model_.getParams().dynamic_gait;
     double stance_ratio = config.duty_factor;
 
     // Usar la frecuencia de control del sistema en lugar de la frecuencia de la marcha
@@ -213,7 +221,7 @@ void LegStepper::generatePrimarySwingControlNodes() {
     bool positive_y_axis = (identity_tip_pose_.y > 0.0);
     mid_tip_position.y += positive_y_axis ? mid_lateral_shift : -mid_lateral_shift;
 
-    //Avoid division by zero and use reasonable defaults
+    // Avoid division by zero and use reasonable defaults
     Point3D stance_node_separation;
     if (swing_delta_t_ > LEG_STEPPER_FLOAT_TOLERANCE && swing_origin_tip_velocity_.norm() < LEG_STEPPER_MAX_SWING_VELOCITY) {
         stance_node_separation = swing_origin_tip_velocity_ * (1.0 / swing_delta_t_) * LEG_STEPPER_SWING_NODE_SCALER;
@@ -235,7 +243,7 @@ void LegStepper::generateSecondarySwingControlNodes(bool ground_contact) {
     if (swing_origin_tip_position_.norm() < 1e-6) {
         swing_origin_tip_position_ = leg_.getCurrentTipPositionGlobal();
     }
-    //Avoid division by zero and use reasonable defaults
+    // Avoid division by zero and use reasonable defaults
     Point3D final_tip_velocity;
     Point3D stance_node_separation;
 
@@ -282,7 +290,7 @@ void LegStepper::generateStanceControlNodes(double stride_scaler) {
 }
 
 void LegStepper::forceNormalTouchdown() {
-    //Avoid division by zero and use reasonable defaults
+    // Avoid division by zero and use reasonable defaults
     Point3D final_tip_velocity;
     Point3D stance_node_separation;
 
@@ -311,7 +319,7 @@ void LegStepper::forceNormalTouchdown() {
 
 // Nueva API OpenSHC-like
 void LegStepper::updateWithPhase(double local_phase, double step_length, double time_delta) {
-    const auto& config = robot_model_.getParams().dynamic_gait;
+    const auto &config = robot_model_.getParams().dynamic_gait;
 
     // Use dynamic duty factor from configuration
     double duty_factor = config.duty_factor;
@@ -343,13 +351,13 @@ void LegStepper::updateWithPhase(double local_phase, double step_length, double 
     }
 
     // Actualizar la trayectoria y ángulos usando el progreso
-    updateTipPosition(step_length, time_delta, false, false);  // Default terrain adaptation values
+    updateTipPosition(step_length, time_delta, false, false); // Default terrain adaptation values
 }
 
 // Dynamic iteration calculation implementations (OpenSHC equivalent)
 
 int LegStepper::calculateSwingIterations(double step_length, double time_delta) const {
-    const auto& config = robot_model_.getParams().dynamic_gait;
+    const auto &config = robot_model_.getParams().dynamic_gait;
 
     if (!config.enable_dynamic_iterations) {
         // Fallback to static calculation
@@ -365,13 +373,13 @@ int LegStepper::calculateSwingIterations(double step_length, double time_delta) 
 
     // Apply safety limits
     iterations = std::max(static_cast<int>(config.min_swing_iterations),
-                         std::min(static_cast<int>(config.max_swing_iterations), iterations));
+                          std::min(static_cast<int>(config.max_swing_iterations), iterations));
 
     return iterations;
 }
 
 int LegStepper::calculateStanceIterations(double step_length, double time_delta) const {
-    const auto& config = robot_model_.getParams().dynamic_gait;
+    const auto &config = robot_model_.getParams().dynamic_gait;
 
     if (!config.enable_dynamic_iterations) {
         // Fallback to static calculation
@@ -387,13 +395,13 @@ int LegStepper::calculateStanceIterations(double step_length, double time_delta)
 
     // Apply safety limits
     iterations = std::max(static_cast<int>(config.min_stance_iterations),
-                         std::min(static_cast<int>(config.max_stance_iterations), iterations));
+                          std::min(static_cast<int>(config.max_stance_iterations), iterations));
 
     return iterations;
 }
 
 double LegStepper::calculateSwingPeriod(double step_length) const {
-    const auto& config = robot_model_.getParams().dynamic_gait;
+    const auto &config = robot_model_.getParams().dynamic_gait;
 
     // Base swing period from configuration
     double base_period = config.swing_phase;
@@ -408,7 +416,7 @@ double LegStepper::calculateSwingPeriod(double step_length) const {
 }
 
 double LegStepper::calculateStancePeriod(double step_length) const {
-    const auto& config = robot_model_.getParams().dynamic_gait;
+    const auto &config = robot_model_.getParams().dynamic_gait;
 
     // Base stance period from configuration
     double base_period = config.stance_phase;
@@ -423,7 +431,7 @@ double LegStepper::calculateStancePeriod(double step_length) const {
 }
 
 void LegStepper::updateDynamicTiming(double step_length, double time_delta) {
-    const auto& config = robot_model_.getParams().dynamic_gait;
+    const auto &config = robot_model_.getParams().dynamic_gait;
 
     if (config.enable_dynamic_iterations) {
         // Calculate dynamic timing parameters
@@ -441,7 +449,7 @@ void LegStepper::updateDynamicTiming(double step_length, double time_delta) {
 }
 
 StepCycle LegStepper::calculateStepCycle(double step_length, double time_delta) const {
-    const auto& config = robot_model_.getParams().dynamic_gait;
+    const auto &config = robot_model_.getParams().dynamic_gait;
 
     StepCycle cycle;
 
