@@ -405,7 +405,7 @@ bool BodyPoseController::stepToNewStance(Leg legs[NUM_LEGS], double step_height,
 
     // Initialize sequence if not already done
     if (!step_to_new_stance_sequence_generated) {
-        double robot_z = -model.getParams().robot_height;
+        double robot_z = -model.getParams().standing_height;
         int initialized_posers = 0;
         for (int i = 0; i < NUM_LEGS; ++i) {
             auto *poser = leg_posers_[i] ? leg_posers_[i]->get() : nullptr;

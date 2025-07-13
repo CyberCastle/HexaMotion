@@ -138,7 +138,7 @@ void LegPoser::updateAutoPose(int phase) {
 
     // Get robot parameters for compensation calculations
     const auto &params = robot_model_.getParams();
-    double body_clearance = params.robot_height;
+    double body_clearance = params.standing_height;
     double hexagon_radius = params.hexagon_radius;
 
     // Calculate auto pose compensation based on phase

@@ -164,8 +164,8 @@ BodyPoseConfiguration createPoseConfiguration(const Parameters &params, const st
     config.time_to_start = 6.0f;      // Match OpenSHC default.yaml
 
     // OpenSHC equivalent body clearance and swing parameters
-    config.body_clearance = params.robot_height; // Body clearance in millimeters
-    config.swing_height = 20.0f;                 // Default 20mm swing height (OpenSHC typical)
+    config.body_clearance = params.standing_height; // Body clearance in millimeters - use standing_height for consistency
+    config.swing_height = 20.0f;                    // Default 20mm swing height (OpenSHC typical)
 
     // OpenSHC equivalent pose limits (from default.yaml)
     config.max_translation = {25.0f, 25.0f, 25.0f}; // 25mm translation limits
