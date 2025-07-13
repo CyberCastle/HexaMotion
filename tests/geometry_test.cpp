@@ -30,7 +30,7 @@ int main() {
     DummyIMU imu;
     DummyFSR fsr;
     DummyServo servos;
-    // PoseConfiguration pose_config; // Elimina o reemplaza por una construcción válida con parámetros
+    // BodyPoseConfiguration pose_config; // Elimina o reemplaza por una construcción válida con parámetros
     sys.initialize(&imu, &fsr, &servos, pose_config);
 
     // Test basic leg 0 geometry
@@ -62,8 +62,8 @@ int main() {
     std::cout << "FK verify: " << verify_bent.x << ", " << verify_bent.y << ", " << verify_bent.z << std::endl;
 
     double error = sqrt(pow(pos_bent.x - verify_bent.x, 2) +
-                       pow(pos_bent.y - verify_bent.y, 2) +
-                       pow(pos_bent.z - verify_bent.z, 2));
+                        pow(pos_bent.y - verify_bent.y, 2) +
+                        pow(pos_bent.z - verify_bent.z, 2));
     std::cout << "Error: " << error << "mm" << std::endl;
 
     return 0;

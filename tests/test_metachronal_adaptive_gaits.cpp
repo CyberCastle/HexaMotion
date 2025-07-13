@@ -14,7 +14,7 @@ int main() {
     DummyIMU imu;
     DummyFSR fsr;
     ProgressiveServo servos; // Use ProgressiveServo for realistic simulation
-    PoseConfiguration pose_config;
+    BodyPoseConfiguration pose_config;
 
     assert(sys.initialize(&imu, &fsr, &servos, pose_config));
     assert(sys.calibrateSystem());

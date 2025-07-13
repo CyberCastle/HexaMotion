@@ -25,7 +25,7 @@ int main() {
     DummyFSR fsr;
     DummyServo servos;
 
-    // PoseConfiguration pose_config; // Elimina o reemplaza por una construcción válida con parámetros
+    // BodyPoseConfiguration pose_config; // Elimina o reemplaza por una construcción válida con parámetros
     sys.initialize(&imu, &fsr, &servos, pose_config);
 
     std::cout << "=== IK Test Debug ===" << std::endl;
@@ -50,8 +50,8 @@ int main() {
     std::cout << "FK verify: x=" << verify_pos.x << ", y=" << verify_pos.y << ", z=" << verify_pos.z << std::endl;
 
     double error = sqrt(pow(fk_pos.x - verify_pos.x, 2) +
-                       pow(fk_pos.y - verify_pos.y, 2) +
-                       pow(fk_pos.z - verify_pos.z, 2));
+                        pow(fk_pos.y - verify_pos.y, 2) +
+                        pow(fk_pos.z - verify_pos.z, 2));
     std::cout << "Total error: " << error << "mm" << std::endl;
 
     // Test simple position
@@ -68,8 +68,8 @@ int main() {
     std::cout << "FK verify: x=" << simple_verify.x << ", y=" << simple_verify.y << ", z=" << simple_verify.z << std::endl;
 
     double simple_error = sqrt(pow(simple_pos.x - simple_verify.x, 2) +
-                              pow(simple_pos.y - simple_verify.y, 2) +
-                              pow(simple_pos.z - simple_verify.z, 2));
+                               pow(simple_pos.y - simple_verify.y, 2) +
+                               pow(simple_pos.z - simple_verify.z, 2));
     std::cout << "Error: " << simple_error << "mm" << std::endl;
 
     return 0;

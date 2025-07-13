@@ -1,7 +1,7 @@
+#include "../src/body_pose_config_factory.h"
+#include "../src/body_pose_controller.h"
 #include "manual_pose_controller.h"
 #include "math_utils.h"
-#include "../src/body_pose_controller.h"
-#include "../src/body_pose_config_factory.h"
 #include "test_stubs.h"
 #include <cmath>
 #include <iostream>
@@ -16,7 +16,7 @@ int main() {
     DummyServo servos;
 
     // Create default pose configuration
-    PoseConfiguration default_config = getDefaultPoseConfig(params);
+    BodyPoseConfiguration default_config = getDefaultPoseConfig(params);
     PoseController pose_controller(model, default_config);
     ManualPoseController manual_controller(model);
 
@@ -47,8 +47,8 @@ int main() {
     std::cout << "Converted back: (" << euler_back.x << ", " << euler_back.y << ", " << euler_back.z << ")" << std::endl;
 
     double conversion_error = std::abs(euler_test_deg.x - euler_back.x) +
-                             std::abs(euler_test_deg.y - euler_back.y) +
-                             std::abs(euler_test_deg.z - euler_back.z);
+                              std::abs(euler_test_deg.y - euler_back.y) +
+                              std::abs(euler_test_deg.z - euler_back.z);
     std::cout << "Conversion error: " << conversion_error << " degrees" << std::endl;
     std::cout << "Conversion test: " << (conversion_error < 0.1f ? "PASS" : "FAIL") << std::endl;
 
@@ -87,9 +87,9 @@ int main() {
 
     Eigen::Vector4d retrieved_quat = manual_controller.getCurrentQuaternion();
     double quat_diff = std::abs(manual_quat[0] - retrieved_quat[0]) +
-                      std::abs(manual_quat[1] - retrieved_quat[1]) +
-                      std::abs(manual_quat[2] - retrieved_quat[2]) +
-                      std::abs(manual_quat[3] - retrieved_quat[3]);
+                       std::abs(manual_quat[1] - retrieved_quat[1]) +
+                       std::abs(manual_quat[2] - retrieved_quat[2]) +
+                       std::abs(manual_quat[3] - retrieved_quat[3]);
 
     std::cout << "Manual controller quaternion consistency: " << (quat_diff < 0.01f ? "PASS" : "FAIL") << std::endl;
 
@@ -105,9 +105,9 @@ int main() {
 
     Eigen::Vector4d final_quat = manual_controller.getCurrentQuaternion();
     double final_diff = std::abs(target_quat[0] - final_quat[0]) +
-                       std::abs(target_quat[1] - final_quat[1]) +
-                       std::abs(target_quat[2] - final_quat[2]) +
-                       std::abs(target_quat[3] - final_quat[3]);
+                        std::abs(target_quat[1] - final_quat[1]) +
+                        std::abs(target_quat[2] - final_quat[2]) +
+                        std::abs(target_quat[3] - final_quat[3]);
 
     std::cout << "Quaternion interpolation convergence: " << (final_diff < 0.5f ? "PASS" : "FAIL") << std::endl;
 

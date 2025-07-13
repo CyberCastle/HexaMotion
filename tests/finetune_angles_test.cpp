@@ -1,3 +1,5 @@
+#include "body_pose_config.h"
+#include "body_pose_config_factory.h"
 #include "robot_model.h"
 #include <algorithm>
 #include <cmath>

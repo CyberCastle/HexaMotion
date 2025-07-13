@@ -61,7 +61,7 @@ bool validateGaitEquivalence(GaitType gait_type, const OpenSHCGaitConfig &config
     DummyIMU imu;
     DummyFSR fsr;
     DummyServo servos;
-    PoseConfiguration pose_config;
+    BodyPoseConfiguration pose_config;
 
     assert(sys.initialize(&imu, &fsr, &servos, pose_config));
     assert(sys.calibrateSystem());

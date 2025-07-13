@@ -438,8 +438,8 @@ static void printMovementStatus(LocomotionSystem &sys, const JointAngles prev[NU
     for (int leg = 0; leg < NUM_LEGS; ++leg) {
         JointAngles q = sys.getJointAngles(leg);
         double total_change = std::abs(q.coxa - prev[leg].coxa) +
-                             std::abs(q.femur - prev[leg].femur) +
-                             std::abs(q.tibia - prev[leg].tibia);
+                              std::abs(q.femur - prev[leg].femur) +
+                              std::abs(q.tibia - prev[leg].tibia);
 
         if (total_change > 0.1f) {
             moving_legs++;
@@ -493,7 +493,7 @@ int main() {
 
     // Locomotion system
     LocomotionSystem sys(p);
-    PoseConfiguration pose_config(p);
+    BodyPoseConfiguration pose_config(p);
     assert(sys.initialize(&imu, &fsr, &servos, pose_config));
     assert(sys.calibrateSystem());
     assert(sys.setGaitType(TRIPOD_GAIT));
