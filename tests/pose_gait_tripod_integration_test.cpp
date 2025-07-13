@@ -132,9 +132,13 @@ int main() {
     addResult(rep, std::abs(sys.getBodyPosition().z() + 150.0) <= 2.0,
               "Initial body height", sys);
 
-    while (!sys.executeStartupSequence()) {
+    int startup_iterations = 0;
+    const int max_startup_iterations = 1000;
+    while (!sys.executeStartupSequence() && startup_iterations < max_startup_iterations) {
         sys.update();
+        ++startup_iterations;
     }
+    addResult(rep, startup_iterations < max_startup_iterations, "Startup sequence timeout", sys);
 
     assert(sys.setGaitType(TRIPOD_GAIT));
     assert(sys.walkForward(100.0));
@@ -146,7 +150,9 @@ int main() {
     std::vector<StepPhase> prev_phase(NUM_LEGS);
     for (int i = 0; i < NUM_LEGS; ++i) prev_phase[i] = sys.getLegState(i);
 
-    for (int step = 0; step < cycles; ++step) {
+    int max_cycles = cycles * 10;
+    int step = 0;
+    for (; step < cycles && step < max_cycles; ++step) {
         assert(sys.update());
         bool phase_change = false;
         for (int i = 0; i < NUM_LEGS; ++i) {
@@ -161,6 +167,7 @@ int main() {
             validateTrajectorySimilarity(sys, rep);
         }
     }
+    addResult(rep, step >= cycles, "Gait execution timeout", sys);
 
     sys.planGaitSequence(0.0, 0.0, 0.0);
     for (int i = 0; i < p.control_frequency; ++i) sys.update();
