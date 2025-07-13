@@ -125,7 +125,7 @@ std::array<StandingPoseJoints, NUM_LEGS> getDefaultStandingPoseJoints(const Para
 
     // Calculate servo angles analytically to guarantee the desired height
     CalculatedServoAngles calc =
-        calculateServoAnglesForHeight(params.robot_height, params);
+        calculateServoAnglesForHeight(params.standing_height, params);
 
     for (int i = 0; i < NUM_LEGS; i++) {
         if (calc.valid) {

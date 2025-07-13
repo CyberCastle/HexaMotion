@@ -291,6 +291,13 @@ int main() {
         std::cout << "ALTURA OBJETIVO: " << target_height << "mm" << std::endl;
         std::cout << std::string(80, '=') << std::endl;
 
+        CalculatedServoAngles calc_angles = calculateServoAnglesForHeight(target_height, p);
+        std::cout << "Ángulos calculados para altura objetivo:" << std::endl;
+        std::cout << "  - Coxa: " << calc_angles.coxa << "°" << std::endl;
+        std::cout << "  - Fémur: " << calc_angles.femur << "°" << std::endl;
+        std::cout << "  - Tibia: " << calc_angles.tibia << "°" << std::endl;
+        std::cout << "  - Solución válida: " << (calc_angles.valid ? "SÍ" : "NO") << std::endl;
+
         // Buscar soluciones para esta altura con tolerancia aumentada
         std::vector<AngleSolution> solutions = findOptimalAnglesForHeight(model, target_height, 0.1); // Tolerancia aumentada
 

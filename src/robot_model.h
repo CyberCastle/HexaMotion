@@ -25,7 +25,8 @@ struct Parameters {
     double tibia_length;
 
     double robot_height;
-    double height_offset = 0.0f; //< structural body height offset
+    double standing_height = 150; //< Default standing height in mm
+    double height_offset = 0.0f;  //< structural body height offset
     double robot_weight;
     Eigen::Vector3d center_of_mass;
 
