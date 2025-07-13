@@ -42,8 +42,9 @@ Each test executable can be run individually.
 These are the characteristics of a real robot, used to test this library.
 
 -   robot height: 208 mm (with all angles in local position equals to 0º)
+-   default standing height 150 mm
 -   robot weight: 6.5 Kg
--   body hexagon radius: 200 mm.
+-   body hexagon radius: 200 mm
 -   coxa length: 50 mm
 -   coxa weight: 54 g
 -   femur length: 101 mm
@@ -64,6 +65,7 @@ p.coxa_length = 50;
 p.femur_length = 101;
 p.tibia_length = 208;
 p.robot_height = 208;
+p.standing_height = 150;
 p.control_frequency = 50;
 p.coxa_angle_limits[0] = -65;
 p.coxa_angle_limits[1] = 65;
