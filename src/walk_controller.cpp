@@ -699,6 +699,9 @@ Point3D WalkController::calculateDefaultStancePosition(int leg_index) {
     double default_foot_x = base_x + safe_reach * cos(base_angle);
     double default_foot_y = base_y + safe_reach * sin(base_angle);
 
+    // Z coordinate is set to 0 for default stance
+    // This is an identity position, or neutral, which is not adjusted to the terrain.
+    // This position must be dynamically adjusted to the robot's pose.
     return Point3D(default_foot_x, default_foot_y, 0);
 }
 
