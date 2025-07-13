@@ -18,23 +18,23 @@
  * @date 2024
  */
 
-#include "robot_model.h"
-#include "../src/locomotion_system.h"
 #include "../src/body_pose_config_factory.h"
+#include "../src/locomotion_system.h"
+#include "robot_model.h"
 #include "test_stubs.h"
+#include <Eigen/Dense>
 #include <cassert>
 #include <chrono>
 #include <iomanip>
 #include <iostream>
 #include <vector>
-#include <Eigen/Dense>
 
 // Test configuration for 100 meters displacement
-constexpr double TARGET_DISTANCE = 5000.0; // 5 meters in mm
-constexpr double TEST_VELOCITY = 400.0;      // mm/s
-constexpr double TEST_DURATION = TARGET_DISTANCE / TEST_VELOCITY; // seconds
-constexpr int TEST_CYCLES_PER_VALIDATION = 100; // Validate every 100 cycles
-constexpr double FINAL_POSE_POSITION_TOLERANCE = 5.0;   // 5mm tolerance for pose comparison
+constexpr double TARGET_DISTANCE = 5000.0;                            // 5 meters in mm
+constexpr double TEST_VELOCITY = 400.0;                               // mm/s
+constexpr double TEST_DURATION = TARGET_DISTANCE / TEST_VELOCITY;     // seconds
+constexpr int TEST_CYCLES_PER_VALIDATION = 100;                       // Validate every 100 cycles
+constexpr double FINAL_POSE_POSITION_TOLERANCE = 5.0;                 // 5mm tolerance for pose comparison
 constexpr double FINAL_POSE_ORIENTATION_TOLERANCE = 2 * M_PI / 180.0; // 2 degrees tolerance for orientation
 
 // Tripod gait validation structure
@@ -75,7 +75,7 @@ struct TestResults {
         failed_messages.clear();
     }
 
-    void addResult(bool passed, bool warning, const std::string& message) {
+    void addResult(bool passed, bool warning, const std::string &message) {
         total_tests++;
         if (passed && !warning) {
             passed_tests++;
@@ -99,22 +99,24 @@ static void printWelcome() {
     std::cout << "HEXAPOD TRIPOD GAIT COMPREHENSIVE TEST" << std::endl;
     std::cout << "=========================================" << std::endl;
     std::cout << "Enhanced simulation with full validation suite" << std::endl;
-    std::cout << "Distance: " << (TARGET_DISTANCE/1000.0) << "m | Velocity: " << TEST_VELOCITY << "mm/s" << std::endl;
+    std::cout << "Distance: " << (TARGET_DISTANCE / 1000.0) << "m | Velocity: " << TEST_VELOCITY << "mm/s" << std::endl;
     std::cout << "Duration: " << TEST_DURATION << "s | Validation every " << TEST_CYCLES_PER_VALIDATION << " cycles" << std::endl;
     std::cout << "Architecture: LocomotionSystem orchestrator" << std::endl;
-    std::cout << "=========================================" << std::endl << std::endl;
+    std::cout << "=========================================" << std::endl
+              << std::endl;
 }
 
 static void printRobotDimensions(const Parameters &p) {
     std::cout << "=========================================" << std::endl;
     std::cout << "           ROBOT DIMENSIONS" << std::endl;
     std::cout << "=========================================" << std::endl;
-    std::cout << "Hexagon Radius:    " << std::setw(6) << p.hexagon_radius << " mm" << std::endl;
-    std::cout << "Coxa Length:       " << std::setw(6) << p.coxa_length << " mm" << std::endl;
-    std::cout << "Femur Length:      " << std::setw(6) << p.femur_length << " mm" << std::endl;
-    std::cout << "Tibia Length:      " << std::setw(6) << p.tibia_length << " mm" << std::endl;
-    std::cout << "Robot Height:      " << std::setw(6) << p.robot_height << " mm" << std::endl;
-    std::cout << "Control Frequency: " << std::setw(6) << p.control_frequency << " Hz" << std::endl;
+    std::cout << "Hexagon Radius:       " << std::setw(6) << p.hexagon_radius << " mm" << std::endl;
+    std::cout << "Coxa Length:          " << std::setw(6) << p.coxa_length << " mm" << std::endl;
+    std::cout << "Femur Length:         " << std::setw(6) << p.femur_length << " mm" << std::endl;
+    std::cout << "Tibia Length:         " << std::setw(6) << p.tibia_length << " mm" << std::endl;
+    std::cout << "Robot Height:         " << std::setw(6) << p.robot_height << " mm" << std::endl;
+    std::cout << "Standing Height:      " << std::setw(6) << p.standing_height << " mm" << std::endl;
+    std::cout << "Control Frequency:    " << std::setw(6) << p.control_frequency << " Hz" << std::endl;
     std::cout << std::endl;
 
     double max_reach = p.coxa_length + p.femur_length + p.tibia_length;
@@ -130,7 +132,8 @@ static void printRobotDimensions(const Parameters &p) {
     std::cout << "Coxa:  " << std::setw(4) << p.coxa_angle_limits[0] << "° to " << std::setw(4) << p.coxa_angle_limits[1] << "°" << std::endl;
     std::cout << "Femur: " << std::setw(4) << p.femur_angle_limits[0] << "° to " << std::setw(4) << p.femur_angle_limits[1] << "°" << std::endl;
     std::cout << "Tibia: " << std::setw(4) << p.tibia_angle_limits[0] << "° to " << std::setw(4) << p.tibia_angle_limits[1] << "°" << std::endl;
-    std::cout << "=========================================" << std::endl << std::endl;
+    std::cout << "=========================================" << std::endl
+              << std::endl;
 }
 
 static void printGaitPattern(const LocomotionSystem &sys, int step, double phase) {
@@ -253,10 +256,10 @@ static bool validateSynchronization(const TripodValidation &validation, TestResu
 }
 
 // Añadir función para validar altura de las patas
-template<typename GetLegFunc>
-bool validateLegsHeight(const Parameters& p, GetLegFunc getLeg, int n_legs, const char* context) {
-    const double expected_z = -p.robot_height;
-    const double tol = 2.0; // mm
+template <typename GetLegFunc>
+bool validateLegsHeight(const Parameters &p, GetLegFunc getLeg, int n_legs, const char *context) {
+    const double expected_z = -p.standing_height; // Altura esperada de las patas en mm
+    const double tol = 2.0;                       // mm
     bool all_ok = true;
     std::cout << "\n=== HEIGHT VALIDATION: " << context << " ===" << std::endl;
     std::cout << "Leg | z (mm) | Status" << std::endl;
@@ -265,7 +268,7 @@ bool validateLegsHeight(const Parameters& p, GetLegFunc getLeg, int n_legs, cons
         double z = getLeg(i).getCurrentTipPositionGlobal().z;
         bool ok = std::abs(z - expected_z) <= tol;
         all_ok = all_ok && ok;
-        std::cout << " L" << (i+1) << " | " << std::fixed << std::setprecision(1) << z << " | " << (ok ? "✓ OK" : "✗ ERROR") << std::endl;
+        std::cout << " L" << (i + 1) << " | " << std::fixed << std::setprecision(1) << z << " | " << (ok ? "✓ OK" : "✗ ERROR") << std::endl;
     }
     if (all_ok) {
         std::cout << "✓ All legs at correct height (" << expected_z << ") mm" << std::endl;
@@ -275,7 +278,7 @@ bool validateLegsHeight(const Parameters& p, GetLegFunc getLeg, int n_legs, cons
     return all_ok;
 }
 
-static bool validateJointAngleCoherence(const LocomotionSystem &sys, const Parameters& p, TestResults &results) {
+static bool validateJointAngleCoherence(const LocomotionSystem &sys, const Parameters &p, TestResults &results) {
     std::cout << "\n=== JOINT ANGLE COHERENCE VALIDATION ===" << std::endl;
 
     int coherence_violations = 0;
@@ -361,7 +364,7 @@ static bool validateSymmetry(const TripodValidation &validation, TestResults &re
     return passed;
 }
 
-static void printDetailedLegSymmetry(const LocomotionSystem &sys, const Parameters& p) {
+static void printDetailedLegSymmetry(const LocomotionSystem &sys, const Parameters &p) {
     std::cout << "\n=== DETAILED LEG SYMMETRY ANALYSIS ===" << std::endl;
 
     // Define opposite leg pairs for symmetry validation (180° apart)
@@ -480,8 +483,7 @@ static bool validateTrajectorySymmetry(const TripodValidation &validation, TestR
         }
     }
 
-    double symmetry_percentage = total_comparable_steps > 0 ?
-        (double)symmetry_steps / total_comparable_steps * 100.0 : 0.0;
+    double symmetry_percentage = total_comparable_steps > 0 ? (double)symmetry_steps / total_comparable_steps * 100.0 : 0.0;
     double group_a_consistency = (double)group_a_consistent_steps / validation.group_a_phases.size() * 100.0;
     double group_b_consistency = (double)group_b_consistent_steps / validation.group_a_phases.size() * 100.0;
 
@@ -540,11 +542,13 @@ static bool validateCoxaAngleSignOpposition(const TripodValidation &validation, 
 
         // Calculate and display averages
         double group_a_avg_coxa = (validation.leg_angles[0][last_step].coxa +
-                                  validation.leg_angles[2][last_step].coxa +
-                                  validation.leg_angles[4][last_step].coxa) / 3.0;
+                                   validation.leg_angles[2][last_step].coxa +
+                                   validation.leg_angles[4][last_step].coxa) /
+                                  3.0;
         double group_b_avg_coxa = (validation.leg_angles[1][last_step].coxa +
-                                  validation.leg_angles[3][last_step].coxa +
-                                  validation.leg_angles[5][last_step].coxa) / 3.0;
+                                   validation.leg_angles[3][last_step].coxa +
+                                   validation.leg_angles[5][last_step].coxa) /
+                                  3.0;
 
         std::cout << std::endl;
         std::cout << "Group A average coxa angle: " << std::fixed << std::setprecision(1) << (group_a_avg_coxa * 180.0 / M_PI) << "° "
@@ -575,11 +579,13 @@ static bool validateCoxaAngleSignOpposition(const TripodValidation &validation, 
 
         if (groups_opposite_phases) {
             double group_a_avg_coxa = (validation.leg_angles[0][step].coxa +
-                                      validation.leg_angles[2][step].coxa +
-                                      validation.leg_angles[4][step].coxa) / 3.0;
+                                       validation.leg_angles[2][step].coxa +
+                                       validation.leg_angles[4][step].coxa) /
+                                      3.0;
             double group_b_avg_coxa = (validation.leg_angles[1][step].coxa +
-                                      validation.leg_angles[3][step].coxa +
-                                      validation.leg_angles[5][step].coxa) / 3.0;
+                                       validation.leg_angles[3][step].coxa +
+                                       validation.leg_angles[5][step].coxa) /
+                                      3.0;
 
             bool appropriate_pattern = false;
             if (std::abs(group_a_avg_coxa) > 0.1 && std::abs(group_b_avg_coxa) > 0.1) {
@@ -596,8 +602,7 @@ static bool validateCoxaAngleSignOpposition(const TripodValidation &validation, 
         }
     }
 
-    double opposition_percentage = total_comparable_steps > 0 ?
-        (double)opposition_steps / total_comparable_steps * 100.0 : 0.0;
+    double opposition_percentage = total_comparable_steps > 0 ? (double)opposition_steps / total_comparable_steps * 100.0 : 0.0;
 
     bool coxa_opposition_ok = opposition_percentage >= 70.0;
 
@@ -612,9 +617,9 @@ static bool validateCoxaAngleSignOpposition(const TripodValidation &validation, 
     return coxa_opposition_ok;
 }
 
-static bool validateBodyPoseStability(const std::vector<Eigen::Vector3d>& body_positions,
-                                    const std::vector<Eigen::Vector3d>& body_orientations,
-                                    TestResults &results) {
+static bool validateBodyPoseStability(const std::vector<Eigen::Vector3d> &body_positions,
+                                      const std::vector<Eigen::Vector3d> &body_orientations,
+                                      TestResults &results) {
     std::cout << "\n=== BODY POSE STABILITY VALIDATION ===" << std::endl;
 
     if (body_positions.empty() || body_orientations.empty()) {
@@ -630,8 +635,8 @@ static bool validateBodyPoseStability(const std::vector<Eigen::Vector3d>& body_p
     int total_steps = body_positions.size();
 
     for (size_t i = 1; i < body_positions.size(); ++i) {
-        double position_diff = (body_positions[i] - body_positions[i-1]).norm();
-        double orientation_diff = (body_orientations[i] - body_orientations[i-1]).norm();
+        double position_diff = (body_positions[i] - body_positions[i - 1]).norm();
+        double orientation_diff = (body_orientations[i] - body_orientations[i - 1]).norm();
 
         if (position_diff <= position_tolerance && orientation_diff <= orientation_tolerance) {
             stable_steps++;
@@ -653,9 +658,9 @@ static bool validateBodyPoseStability(const std::vector<Eigen::Vector3d>& body_p
 }
 
 static bool validateFinalPoseConsistency(const LocomotionSystem &sys,
-                                       const Eigen::Vector3d& initial_position,
-                                       const Eigen::Vector3d& initial_orientation,
-                                       TestResults &results) {
+                                         const Eigen::Vector3d &initial_position,
+                                         const Eigen::Vector3d &initial_orientation,
+                                         TestResults &results) {
     std::cout << "\n=== FINAL POSE CONSISTENCY VALIDATION ===" << std::endl;
 
     // Get final body pose
@@ -700,21 +705,21 @@ static void printTestSummary(const TestResults &results) {
 
     if (!results.passed_messages.empty()) {
         std::cout << "\nPASSED TESTS:" << std::endl;
-        for (const auto& msg : results.passed_messages) {
+        for (const auto &msg : results.passed_messages) {
             std::cout << "✓ " << msg << std::endl;
         }
     }
 
     if (!results.warning_messages.empty()) {
         std::cout << "\nWARNING TESTS:" << std::endl;
-        for (const auto& msg : results.warning_messages) {
+        for (const auto &msg : results.warning_messages) {
             std::cout << "⚠ " << msg << std::endl;
         }
     }
 
     if (!results.failed_messages.empty()) {
         std::cout << "\nFAILED TESTS:" << std::endl;
-        for (const auto& msg : results.failed_messages) {
+        for (const auto &msg : results.failed_messages) {
             std::cout << "✗ " << msg << std::endl;
         }
     }
@@ -751,7 +756,7 @@ int main() {
     unsigned validation_steps = total_steps / TEST_CYCLES_PER_VALIDATION;
 
     std::cout << "Simulation Configuration:" << std::endl;
-    std::cout << "  Total distance: " << (TARGET_DISTANCE/1000.0) << " meters" << std::endl;
+    std::cout << "  Total distance: " << (TARGET_DISTANCE / 1000.0) << " meters" << std::endl;
     std::cout << "  Velocity: " << TEST_VELOCITY << " mm/s" << std::endl;
     std::cout << "  Duration: " << TEST_DURATION << " seconds" << std::endl;
     std::cout << "  Total steps: " << total_steps << std::endl;
@@ -783,7 +788,7 @@ int main() {
         return 1;
     }
     // Validar altura de patas en standing pose
-    validateLegsHeight(p, [&](int i){return sys.getLeg(i);}, NUM_LEGS, "STANDING POSE");
+    validateLegsHeight(p, [&](int i) { return sys.getLeg(i); }, NUM_LEGS, "STANDING POSE");
 
     // Execute startup sequence
     while (!sys.executeStartupSequence()) {
@@ -825,7 +830,7 @@ int main() {
         if (step % TEST_CYCLES_PER_VALIDATION == 0) {
             std::cout << "\n--- VALIDATION CYCLE " << (step / TEST_CYCLES_PER_VALIDATION) << " ---" << std::endl;
             std::cout << "Step: " << step << " | Phase: " << std::fixed << std::setprecision(2) << phase << std::endl;
-            std::cout << "Distance covered: " << std::fixed << std::setprecision(1) << (distance_covered/1000.0) << " meters" << std::endl;
+            std::cout << "Distance covered: " << std::fixed << std::setprecision(1) << (distance_covered / 1000.0) << " meters" << std::endl;
 
             // Collect validation data
             TripodValidation validation = {};
@@ -840,7 +845,7 @@ int main() {
                 validation.leg_angles[leg].reserve(TEST_CYCLES_PER_VALIDATION);
             }
 
-                        // Collect data for this validation cycle
+            // Collect data for this validation cycle
             std::vector<Eigen::Vector3d> body_positions;
             std::vector<Eigen::Vector3d> body_orientations;
 
@@ -859,8 +864,6 @@ int main() {
                     validation.group_a_phases.push_back(group_a_phase);
                     validation.group_b_phases.push_back(group_b_phase);
                     validation.gait_phases.push_back(static_cast<double>(cycle_step) / TEST_CYCLES_PER_VALIDATION);
-
-
 
                     // Collect trajectory data
                     for (int leg = 0; leg < NUM_LEGS; ++leg) {
