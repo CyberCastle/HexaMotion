@@ -120,6 +120,9 @@ class LegStepper {
     void generateStanceControlNodes(double stride_scaler);
     void forceNormalTouchdown();
 
+    // OpenSHC-style position delta calculation
+    Point3D calculatePositionDelta(const Point3D &desired_position, const Point3D &current_position) const;
+
     // Dynamic iteration calculation (OpenSHC equivalent)
     int calculateSwingIterations(double step_length, double time_delta) const;
     int calculateStanceIterations(double step_length, double time_delta) const;

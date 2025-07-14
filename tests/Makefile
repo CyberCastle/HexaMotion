@@ -23,9 +23,6 @@ pose_controller_test: pose_controller_test.cpp ../src/body_pose_controller.cpp .
 body_pose_controller_gait_test: body_pose_controller_gait_test.cpp ../src/body_pose_controller.cpp ../src/robot_model.cpp ../src/math_utils.cpp ../src/body_pose_config_factory.cpp ../src/leg.cpp ../src/leg_poser.cpp
 	$(CXX) $(CXXFLAGS) $^ -o $@
 
-leg_poser_bezier_test: leg_poser_bezier_test.cpp ../src/leg_poser.cpp ../src/robot_model.cpp ../src/math_utils.cpp ../src/leg.cpp
-	$(CXX) $(CXXFLAGS) $^ -o $@
-
 walk_controller_test: walk_controller_test.cpp ../src/walk_controller.cpp ../src/leg_stepper.cpp ../src/terrain_adaptation.cpp ../src/robot_model.cpp ../src/velocity_limits.cpp ../src/math_utils.cpp ../src/workspace_validator.cpp ../src/leg.cpp ../src/walkspace_analyzer.cpp ../src/gait_config_factory.cpp ../src/body_pose_config_factory.cpp ../src/body_pose_controller.cpp ../src/leg_poser.cpp
 	$(CXX) $(CXXFLAGS) $^ -o $@
 
@@ -183,6 +180,9 @@ servo_angle_limits_test: servo_angle_limits_test.cpp ../src/body_pose_config_fac
 	$(CXX) $(CXXFLAGS) $^ -o $@
 
 pose_gait_tripod_integration_test: pose_gait_tripod_integration_test.cpp ../src/locomotion_system.cpp ../src/robot_model.cpp ../src/body_pose_controller.cpp ../src/walk_controller.cpp ../src/leg_stepper.cpp ../src/terrain_adaptation.cpp ../src/admittance_controller.cpp ../src/velocity_limits.cpp ../src/cartesian_velocity_controller.cpp ../src/math_utils.cpp ../src/workspace_validator.cpp ../src/body_pose_config_factory.cpp ../src/body_pose.cpp ../src/leg.cpp ../src/walkspace_analyzer.cpp ../src/leg_poser.cpp ../src/gait_config_factory.cpp
+	$(CXX) $(CXXFLAGS) $^ -o $@
+
+leg_poser_bezier_test: leg_poser_bezier_test.cpp ../src/locomotion_system.cpp ../src/robot_model.cpp ../src/analytic_robot_model.cpp ../src/body_pose_controller.cpp ../src/walk_controller.cpp ../src/leg_stepper.cpp ../src/terrain_adaptation.cpp ../src/admittance_controller.cpp ../src/velocity_limits.cpp ../src/cartesian_velocity_controller.cpp ../src/math_utils.cpp ../src/workspace_validator.cpp ../src/body_pose_config_factory.cpp ../src/body_pose.cpp ../src/leg.cpp ../src/walkspace_analyzer.cpp ../src/leg_poser.cpp ../src/gait_config_factory.cpp
 	$(CXX) $(CXXFLAGS) $^ -o $@
 
 brute_force_workspace_test: brute_force_workspace_test.cpp ../src/robot_model.cpp ../src/math_utils.cpp

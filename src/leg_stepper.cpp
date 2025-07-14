@@ -249,6 +249,28 @@ void LegStepper::updateTipPosition(double step_length, double time_delta, bool r
     leg_.applyIK(robot_model_);
 }
 
+// OpenSHC-style position delta calculation
+Point3D LegStepper::calculatePositionDelta(const Point3D &desired_position, const Point3D &current_position) const {
+    // Transform both positions to leg frame coordinates (OpenSHC approach)
+    // This follows OpenSHC's getPoseJointFrame transformation approach
+
+    // Get current joint angles to establish the leg frame reference
+    JointAngles current_angles = leg_.getJointAngles();
+
+    // Transform desired position to leg local coordinates
+    Point3D leg_frame_desired = robot_model_.transformGlobalToLocalCoordinates(
+        leg_index_, desired_position, current_angles);
+
+    // Transform current position to leg local coordinates
+    Point3D leg_frame_current = robot_model_.transformGlobalToLocalCoordinates(
+        leg_index_, current_position, current_angles);
+
+    // Calculate position delta in leg frame (OpenSHC equivalent)
+    Point3D position_delta = leg_frame_desired - leg_frame_current;
+
+    return position_delta;
+}
+
 void LegStepper::generatePrimarySwingControlNodes() {
     // If swing_origin_tip_position_ is at (0,0,0), initialize it with the current tip position
     if (swing_origin_tip_position_.norm() < 1e-6) {
@@ -393,7 +415,7 @@ void LegStepper::updateWithPhase(double local_phase, double step_length, double 
             // Transición a STANCE: actualizar posición de origen de stance
             stance_origin_tip_position_ = leg_.getCurrentTipPositionGlobal();
         } else if (new_state == STEP_SWING) {
-            // Transición a SWING: actualizar posición de origen de swing (OpenSHC equivalent)
+            // Transición a SWING: actualizar posición de origen de swing (OpenSHC equivalente)
             swing_origin_tip_position_ = leg_.getCurrentTipPositionGlobal();
             swing_origin_tip_velocity_ = current_tip_velocity_;
         }
