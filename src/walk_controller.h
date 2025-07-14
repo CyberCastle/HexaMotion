@@ -1,6 +1,7 @@
 #ifndef WALK_CONTROLLER_H
 #define WALK_CONTROLLER_H
 
+#include "body_pose_controller.h"
 #include "gait_config.h"
 #include "gait_config_factory.h"
 #include "leg_stepper.h" // Include for StepCycle definition
@@ -69,14 +70,15 @@ class WalkController {
                     const Eigen::Vector3d &current_body_position, const Eigen::Vector3d &current_body_orientation);
 
     /**
-     * @brief Update walk plane estimation
-     */
-    void updateWalkPlane();
-
-    /**
      * @brief Calculate odometry for the given time period
      */
     Point3D calculateOdometry(double time_period);
+
+    /**
+     * @brief Set body pose controller reference for walk plane functionality
+     * @param controller Pointer to BodyPoseController instance
+     */
+    void setBodyPoseController(BodyPoseController *controller) { body_pose_controller_ = controller; }
 
     /**
      * @brief Estimate gravity vector
@@ -93,8 +95,20 @@ class WalkController {
     double getDesiredAngularVelocity() const { return desired_angular_velocity_; }
     WalkState getWalkState() const { return walk_state_; }
     std::map<int, double> getWalkspace() const { return walkspace_; }
-    Point3D getWalkPlane() const { return walk_plane_; }
-    Point3D getWalkPlaneNormal() const { return walk_plane_normal_; }
+    // Walk plane functionality moved to BodyPoseController
+    Point3D getWalkPlane() const {
+        return body_pose_controller_ ? body_pose_controller_->getWalkPlanePose().position : Point3D(0, 0, 0);
+    }
+    Point3D getWalkPlaneNormal() const {
+        if (body_pose_controller_) {
+            // Extract normal from walk plane pose quaternion
+            Pose pose = body_pose_controller_->getWalkPlanePose();
+            Eigen::Vector3d z_axis(0, 0, 1);
+            Eigen::Vector3d normal = pose.rotation * z_axis;
+            return Point3D(normal.x(), normal.y(), normal.z());
+        }
+        return Point3D(0, 0, 1);
+    }
     Point3D getOdometryIdeal() const { return odometry_ideal_; }
     std::shared_ptr<LegStepper> getLegStepper(int leg_index) const;
 
@@ -231,8 +245,9 @@ class WalkController {
     double desired_angular_velocity_;
     WalkState walk_state_;
     std::map<int, double> walkspace_;
-    Point3D walk_plane_;
-    Point3D walk_plane_normal_;
+    // Walk plane functionality moved to BodyPoseController
+    // Point3D walk_plane_;
+    // Point3D walk_plane_normal_;
     Point3D odometry_ideal_;
     int pose_state_;
 
@@ -262,6 +277,9 @@ class WalkController {
     // Terrain adaptation system
     TerrainAdaptation terrain_adaptation_;
 
+    // Body pose controller reference for walk plane functionality
+    BodyPoseController *body_pose_controller_;
+
     // Velocity limits system
     VelocityLimits velocity_limits_;
     VelocityLimits::LimitValues current_velocity_limits_;
@@ -275,6 +293,9 @@ class WalkController {
 
     // Collision avoidance: track current leg positions
     Point3D current_leg_positions_[NUM_LEGS];
+
+    // Reference to legs array for body pose controller updates
+    Leg *legs_array_;
 
     // Helper methods
     // Helper methods

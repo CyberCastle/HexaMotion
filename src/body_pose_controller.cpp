@@ -45,6 +45,22 @@ BodyPoseController::BodyPoseController(RobotModel &m, const BodyPoseConfiguratio
         trajectory_target_angles[i] = JointAngles(0, 0, 0);
     }
 
+    // Initialize walk plane pose system (OpenSHC equivalent with Bézier curves)
+    walk_plane_pose_ = Pose(Point3D(0.0, 0.0, body_pose_config.body_clearance), Eigen::Quaterniond::Identity());
+    walk_plane_pose_enabled = true;
+    walk_plane_update_threshold = 1.0; // 1mm threshold
+
+    // Initialize Bézier curve control system
+    walk_plane_bezier_in_progress = false;
+    walk_plane_bezier_time = 0.0;
+    walk_plane_bezier_duration = 1.0; // 1 second transition time
+
+    // Initialize control nodes arrays
+    for (int i = 0; i < 5; i++) {
+        walk_plane_position_nodes[i] = Point3D(0.0, 0.0, body_pose_config.body_clearance);
+        walk_plane_rotation_nodes[i] = Eigen::Quaterniond::Identity();
+    }
+
     // Initialize auto-pose configuration from factory
     auto_pose_config = createAutoPoseConfiguration(model.getParams());
 }
@@ -112,8 +128,18 @@ bool BodyPoseController::setLegPosition(int leg_index, const Point3D &position, 
 }
 
 bool BodyPoseController::calculateBodyPoseFromConfig(double height_offset, Leg legs[NUM_LEGS]) {
-    // Calculate Z position based on body clearance and height offset
-    double target_z = -(body_pose_config.body_clearance + height_offset);
+    // Update walk plane pose with current leg positions
+    updateWalkPlanePose(legs);
+
+    // Calculate target Z position using walk plane pose
+    double target_z;
+    if (walk_plane_pose_enabled) {
+        // Use walk plane pose height (already includes body clearance)
+        target_z = walk_plane_pose_.position.z + height_offset;
+    } else {
+        // Fallback to traditional body clearance calculation
+        target_z = -(body_pose_config.body_clearance + height_offset);
+    }
 
     // Use configured stance positions for each leg
     for (int i = 0; i < NUM_LEGS; i++) {
@@ -125,6 +151,16 @@ bool BodyPoseController::calculateBodyPoseFromConfig(double height_offset, Leg l
         target_pos.x = stance_x_mm;
         target_pos.y = stance_y_mm;
         target_pos.z = target_z;
+
+        // Apply walk plane pose rotation if enabled
+        if (walk_plane_pose_enabled) {
+            // Transform leg position by walk plane pose rotation
+            Eigen::Vector3d leg_vector(target_pos.x, target_pos.y, target_pos.z);
+            Eigen::Vector3d rotated_vector = walk_plane_pose_.rotation * leg_vector;
+            target_pos.x = rotated_vector.x();
+            target_pos.y = rotated_vector.y();
+            target_pos.z = rotated_vector.z();
+        }
 
         // Use LegPoser if available for smooth movement
         if (getLegPoser(i)) {
@@ -307,7 +343,18 @@ bool BodyPoseController::checkBodyPoseLimits(const Eigen::Vector3d &position, co
 }
 
 Eigen::Vector3d BodyPoseController::calculateBodyPosition(Leg legs[NUM_LEGS]) const {
-    // Calculate body position based on average leg positions
+    // Update walk plane pose for current leg positions
+    const_cast<BodyPoseController *>(this)->updateWalkPlanePose(legs);
+
+    // Use walk plane pose for body position calculation (OpenSHC equivalent)
+    if (walk_plane_pose_enabled) {
+        return Eigen::Vector3d(
+            walk_plane_pose_.position.x,
+            walk_plane_pose_.position.y,
+            walk_plane_pose_.position.z);
+    }
+
+    // Fallback to legacy calculation if walk plane pose disabled
     double total_z = 0.0;
     for (int i = 0; i < NUM_LEGS; i++) {
         Point3D leg_pos = legs[i].getCurrentTipPositionGlobal();
@@ -315,8 +362,6 @@ Eigen::Vector3d BodyPoseController::calculateBodyPosition(Leg legs[NUM_LEGS]) co
     }
     double average_leg_z = total_z / NUM_LEGS;
 
-    // Return body position with calculated Z height
-    // X and Y remain at origin for standing pose
     return Eigen::Vector3d(0.0, 0.0, average_leg_z);
 }
 
@@ -594,6 +639,9 @@ bool BodyPoseController::executeShutdownSequence(Leg legs[NUM_LEGS]) {
 
 // Update auto-pose during gait execution (OpenSHC equivalent)
 bool BodyPoseController::updateAutoPose(double gait_phase, Leg legs[NUM_LEGS]) {
+    // Update walk plane pose first (OpenSHC integration)
+    updateWalkPlanePose(legs);
+
     if (!auto_pose_enabled || !auto_pose_config.enabled) {
         return true; // Auto-pose disabled, but not an error
     }
@@ -679,4 +727,210 @@ bool BodyPoseController::updateAutoPose(double gait_phase, Leg legs[NUM_LEGS]) {
     }
 
     return true;
+}
+
+// Walk plane pose system implementation (OpenSHC equivalent)
+
+void BodyPoseController::updateWalkPlanePose(Leg legs[NUM_LEGS]) {
+    if (!walk_plane_pose_enabled) {
+        return;
+    }
+
+    // Calculate walk plane normal and height from stance leg positions
+    Point3D walk_plane_normal = calculateWalkPlaneNormal(legs);
+    double walk_plane_height = calculateWalkPlaneHeight(legs);
+
+    // Create target walk plane pose
+    Pose target_walk_plane_pose;
+    target_walk_plane_pose.position = Point3D(0.0, 0.0, walk_plane_height + body_pose_config.body_clearance);
+
+    // Set orientation: align body with walk plane normal
+    Eigen::Vector3d unit_z(0.0, 0.0, 1.0);
+    Eigen::Vector3d walk_normal(walk_plane_normal.x, walk_plane_normal.y, walk_plane_normal.z);
+    walk_normal.normalize();
+    target_walk_plane_pose.rotation = Eigen::Quaterniond::FromTwoVectors(unit_z, walk_normal);
+
+    // Check if change is significant enough to update
+    double position_change = (target_walk_plane_pose.position - walk_plane_pose_.position).norm();
+    double rotation_change = target_walk_plane_pose.rotation.angularDistance(walk_plane_pose_.rotation);
+
+    if (position_change > walk_plane_update_threshold || rotation_change > 0.01) {
+        // For moderate changes, use direct assignment to avoid unnecessary Bézier transitions
+        if (position_change < 200.0 && rotation_change < 0.1) {
+            walk_plane_pose_ = target_walk_plane_pose;
+            walk_plane_bezier_in_progress = false;
+            return;
+        }
+
+        // Start new Bézier transition for larger changes
+        Point3D start_position = walk_plane_pose_.position;
+        Point3D end_position = target_walk_plane_pose.position;
+        Eigen::Quaterniond start_rotation = walk_plane_pose_.rotation;
+        Eigen::Quaterniond end_rotation = target_walk_plane_pose.rotation;
+
+        // Generate quartic Bézier control nodes for position (OpenSHC method)
+        walk_plane_position_nodes[0] = start_position;
+        walk_plane_position_nodes[1] = start_position + (end_position - start_position) * 0.2;
+        walk_plane_position_nodes[2] = start_position + (end_position - start_position) * 0.5;
+        walk_plane_position_nodes[3] = start_position + (end_position - start_position) * 0.8;
+        walk_plane_position_nodes[4] = end_position;
+
+        // Generate quartic Bézier control nodes for rotation using SLERP intermediate points
+        walk_plane_rotation_nodes[0] = start_rotation;
+        walk_plane_rotation_nodes[1] = start_rotation.slerp(0.2, end_rotation);
+        walk_plane_rotation_nodes[2] = start_rotation.slerp(0.5, end_rotation);
+        walk_plane_rotation_nodes[3] = start_rotation.slerp(0.8, end_rotation);
+        walk_plane_rotation_nodes[4] = end_rotation;
+
+        // Reset Bézier transition state
+        walk_plane_bezier_in_progress = true;
+        walk_plane_bezier_time = 0.0;
+    }
+
+    // Update current pose using Bézier curve if transition is in progress
+    if (walk_plane_bezier_in_progress) {
+        // Calculate normalized time parameter with smooth step function
+        double t = walk_plane_bezier_time / walk_plane_bezier_duration;
+        if (t >= 1.0) {
+            t = 1.0;
+            walk_plane_bezier_in_progress = false;
+        }
+
+        // Apply smooth step function for natural acceleration/deceleration
+        double smooth_t = math_utils::smoothStep(t);
+
+        // Evaluate Bézier curves
+        Point3D bezier_position = math_utils::quarticBezier(walk_plane_position_nodes, smooth_t);
+
+        // For quaternion interpolation, use weighted average of SLERP points
+        Eigen::Quaterniond bezier_rotation = walk_plane_rotation_nodes[0].slerp(smooth_t, walk_plane_rotation_nodes[4]);
+
+        // Update walk plane pose
+        walk_plane_pose_.position = bezier_position;
+        walk_plane_pose_.rotation = bezier_rotation;
+
+        // Advance time for next iteration
+        walk_plane_bezier_time += 1.0 / model.getParams().control_frequency;
+    }
+}
+
+Point3D BodyPoseController::calculateWalkPlaneNormal(Leg legs[NUM_LEGS]) const {
+    // Collect stance leg positions for plane fitting
+    std::vector<Point3D> stance_points;
+
+    for (int i = 0; i < NUM_LEGS; i++) {
+        if (legs[i].getStepPhase() == STANCE_PHASE) {
+            stance_points.push_back(legs[i].getCurrentTipPositionGlobal());
+        }
+    }
+
+    // Need at least 3 points to define a plane
+    if (stance_points.size() < 3) {
+        return Point3D(0.0, 0.0, 1.0); // Default to horizontal plane
+    }
+
+    // Prepare data for least squares plane fitting
+    std::vector<double> raw_A;
+    std::vector<double> raw_B;
+
+    for (const auto &point : stance_points) {
+        raw_A.push_back(point.x);
+        raw_A.push_back(point.y);
+        raw_A.push_back(1.0);
+        raw_B.push_back(point.z);
+    }
+
+    // Solve for plane equation: ax + by + c = z
+    double a, b, c;
+    if (math_utils::solveLeastSquaresPlane(raw_A.data(), raw_B.data(), stance_points.size(), a, b, c)) {
+        // Convert plane coefficients to normal vector
+        // Plane equation: ax + by - z + c = 0
+        // Normal vector: (a, b, -1)
+        double normal_magnitude = std::sqrt(a * a + b * b + 1.0);
+        Point3D normal(-a / normal_magnitude, -b / normal_magnitude, 1.0 / normal_magnitude);
+
+        // Ensure normal points upward (positive Z component)
+        if (normal.z < 0) {
+            normal.x = -normal.x;
+            normal.y = -normal.y;
+            normal.z = -normal.z;
+        }
+
+        return normal;
+    }
+
+    // Fallback to horizontal plane if calculation fails
+    return Point3D(0.0, 0.0, 1.0);
+}
+
+double BodyPoseController::calculateWalkPlaneHeight(Leg legs[NUM_LEGS]) const {
+    // Calculate average Z position of stance legs
+    double total_z = 0.0;
+    int stance_count = 0;
+
+    for (int i = 0; i < NUM_LEGS; i++) {
+        if (legs[i].getStepPhase() == STANCE_PHASE) {
+            total_z += legs[i].getCurrentTipPositionGlobal().z;
+            stance_count++;
+        }
+    }
+
+    if (stance_count > 0) {
+        return total_z / stance_count;
+    }
+
+    // Fallback: use current walk plane height minus body clearance
+    return walk_plane_pose_.position.z - body_pose_config.body_clearance;
+}
+
+void BodyPoseController::applyWalkPlanePoseToBodyPosition(Eigen::Vector3d &position) const {
+    if (!walk_plane_pose_enabled) {
+        return;
+    }
+
+    // Apply walk plane pose to maintain body clearance
+    position.x() = walk_plane_pose_.position.x;
+    position.y() = walk_plane_pose_.position.y;
+    position.z() = walk_plane_pose_.position.z;
+}
+
+Pose BodyPoseController::getWalkPlanePose() const {
+    return walk_plane_pose_;
+}
+
+void BodyPoseController::setWalkPlanePose(const Pose &pose) {
+    walk_plane_pose_ = pose;
+
+    // Reset Bézier transition state
+    walk_plane_bezier_in_progress = false;
+    walk_plane_bezier_time = 0.0;
+
+    // Initialize all control nodes to current pose
+    for (int i = 0; i < 5; i++) {
+        walk_plane_position_nodes[i] = pose.position;
+        walk_plane_rotation_nodes[i] = pose.rotation;
+    }
+}
+
+void BodyPoseController::setWalkPlanePoseEnabled(bool enabled) {
+    walk_plane_pose_enabled = enabled;
+    if (enabled) {
+        // Reset to neutral position
+        Pose neutral_pose(Point3D(0.0, 0.0, body_pose_config.body_clearance), Eigen::Quaterniond::Identity());
+        walk_plane_pose_ = neutral_pose;
+
+        // Reset Bézier transition state
+        walk_plane_bezier_in_progress = false;
+        walk_plane_bezier_time = 0.0;
+
+        // Initialize all control nodes to neutral pose
+        for (int i = 0; i < 5; i++) {
+            walk_plane_position_nodes[i] = neutral_pose.position;
+            walk_plane_rotation_nodes[i] = neutral_pose.rotation;
+        }
+    }
+}
+
+bool BodyPoseController::isWalkPlanePoseEnabled() const {
+    return walk_plane_pose_enabled;
 }

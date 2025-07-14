@@ -14,12 +14,12 @@
 #include <vector>
 
 WalkController::WalkController(RobotModel &m, Leg legs[NUM_LEGS])
-    : model(m), terrain_adaptation_(m), velocity_limits_(m),
+    : model(m), terrain_adaptation_(m), body_pose_controller_(nullptr), velocity_limits_(m),
       step_clearance_(30.0), step_depth_(10.0),
       desired_linear_velocity_(0, 0, 0), desired_angular_velocity_(0.0),
       walk_state_(WALK_STOPPED), pose_state_(0),
       regenerate_walkspace_(false), legs_at_correct_phase_(0), legs_completed_first_step_(0),
-      return_to_default_attempted_(false) {
+      return_to_default_attempted_(false), legs_array_(legs) {
 
     // Initialize leg_steppers_ with references to actual legs from LocomotionSystem
     leg_steppers_.clear();
@@ -236,8 +236,6 @@ VelocityLimits::WorkspaceConfig WalkController::getWorkspaceConfig() const {
 void WalkController::init(const Eigen::Vector3d &current_body_position, const Eigen::Vector3d &current_body_orientation) {
     time_delta_ = 0.01; // 10ms default
     walk_state_ = WALK_STOPPED;
-    walk_plane_ = Point3D(0, 0, 0);
-    walk_plane_normal_ = Point3D(0, 0, 1);
     odometry_ideal_ = Point3D(0, 0, 0);
 
     // Store current robot pose
@@ -402,7 +400,10 @@ void WalkController::updateWalk(const Point3D &linear_velocity_input, double ang
         leg_stepper->updateWithPhase(local_phase, current_gait_config_.step_length, time_delta_);
     }
 
-    updateWalkPlane();
+    // Update walk plane pose through BodyPoseController
+    if (body_pose_controller_) {
+        body_pose_controller_->updateWalkPlanePose(legs_array_);
+    }
     odometry_ideal_ = odometry_ideal_ + calculateOdometry(time_delta_);
 
     // Integrate WalkspaceAnalyzer for real-time analysis (OpenSHC equivalent)
@@ -443,45 +444,7 @@ void WalkController::updateWalk(const Point3D &linear_velocity_input, double ang
     }
 }
 
-// TODO: Use defines
-void WalkController::updateWalkPlane() {
-    std::vector<double> raw_A;
-    std::vector<double> raw_B;
-
-    if (NUM_LEGS >= 3) { // Minimum for plane estimation
-        for (auto &leg_stepper : leg_steppers_) {
-            Point3D default_tip_pose = leg_stepper->getDefaultTipPose();
-            raw_A.push_back(default_tip_pose.x);
-            raw_A.push_back(default_tip_pose.y);
-            raw_A.push_back(1.0);
-            raw_B.push_back(default_tip_pose.z);
-        }
-
-        // Implement proper least squares plane fitting
-        if (raw_A.size() >= 9) { // At least 3 legs * 3 coordinates
-            // Use least squares to fit plane: ax + by + c = z
-            int num_points = raw_A.size() / 3;
-
-            double a, b, c;
-            if (math_utils::solveLeastSquaresPlane(raw_A.data(), raw_B.data(), num_points, a, b, c)) {
-
-                // Normalize plane normal vector
-                double normal_magnitude = sqrt(a * a + b * b + 1.0);
-                walk_plane_normal_ = Point3D(-a / normal_magnitude, -b / normal_magnitude, 1.0 / normal_magnitude);
-
-                // Calculate walk plane center point
-                walk_plane_ = Point3D(0, 0, c);
-            } else {
-                // Fallback to horizontal plane
-                walk_plane_ = Point3D(0, 0, 0);
-                walk_plane_normal_ = Point3D(0, 0, 1);
-            }
-        }
-    } else {
-        walk_plane_ = Point3D(0, 0, 0);
-        walk_plane_normal_ = Point3D(0, 0, 1);
-    }
-}
+// Walk plane functionality moved to BodyPoseController::updateWalkPlanePose()
 
 Point3D WalkController::calculateOdometry(double time_period) {
     Point3D desired_linear_velocity(desired_linear_velocity_.x, desired_linear_velocity_.y, 0);
