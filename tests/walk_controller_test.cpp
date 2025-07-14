@@ -575,7 +575,9 @@ int main() {
 
     // Simular un paso de marcha con velocidad hacia adelante
     Point3D forward_velocity(10.0, 0.0, 0.0); // 10 mm/s en X
-    wc.updateWalk(forward_velocity, 0.0);
+    Eigen::Vector3d current_body_position(0.0, 0.0, 0.0);
+    Eigen::Vector3d current_body_orientation(0.0, 0.0, 0.0);
+    wc.updateWalk(forward_velocity, 0.0, current_body_position, current_body_orientation);
 
     // Obtener el LegStepper y la posición del pie para la pierna 0
     auto leg_stepper = wc.getLegStepper(0);
