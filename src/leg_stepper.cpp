@@ -99,9 +99,9 @@ void LegStepper::updateStride(double linear_velocity_x, double linear_velocity_y
 }
 
 Point3D LegStepper::calculateStanceSpanChange() {
-    // Obtener altura objetivo del plano de trabajo
-    Point3D default_shift = default_tip_pose_ - identity_tip_pose_;
-    double target_workplane_height = default_shift.z;
+    // Use body_clearance_ directly as the target workplane height
+    // This avoids circular dependency on default_tip_pose_
+    double target_workplane_height = -body_clearance_;
 
     // stance_span_modifier configurable por marcha
     double stance_span_modifier = stance_span_modifier_;
@@ -146,15 +146,20 @@ void LegStepper::updateDefaultTipPosition() {
     if (external_default_.defined) {
         new_default_tip_pose = external_default_.position;
     } else {
+        // Start with identity position
         Point3D identity_tip_position = identity_tip_pose_;
+
+        // Apply lateral stance span adjustment
         identity_tip_position = identity_tip_position + calculateStanceSpanChange();
-        // Usar body_clearance_ si está configurado
+
+        // Apply body clearance (maintain z = -body_clearance_)
         if (body_clearance_ > 0.0) {
             identity_tip_position.z = -body_clearance_;
         }
-        Point3D identity_to_stance_origin = stance_origin_tip_position_ - identity_tip_position;
-        Point3D projection_to_walk_plane = math_utils::projectVector(identity_to_stance_origin, walk_plane_normal_);
-        new_default_tip_pose = identity_tip_position + projection_to_walk_plane;
+
+        // Use the adjusted position directly as the default tip pose
+        // Remove erroneous projection logic that was canceling body_clearance_
+        new_default_tip_pose = identity_tip_position;
     }
     double default_tip_position_delta = math_utils::distance(default_tip_pose_, new_default_tip_pose);
     default_tip_pose_ = new_default_tip_pose;
