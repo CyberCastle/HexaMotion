@@ -245,19 +245,9 @@ void LegStepper::updateTipPosition(double step_length, double time_delta, bool r
         current_tip_velocity_ = bezier_velocity / time_delta;
     }
 
-    leg_.setDesiredTipPositionGlobal(current_tip_pose_);
-
-    // Calculate position delta for OpenSHC-style IK application
-    Point3D current_leg_position = leg_.getCurrentTipPositionGlobal();
-    Point3D position_delta = calculatePositionDelta(current_tip_pose_, current_leg_position);
-
-    // Apply IK with delta (OpenSHC approach) while maintaining original functionality
-    bool delta_ik_success = leg_.applyIKWithDelta(robot_model_, position_delta);
-
-    // Fallback to standard IK if delta approach fails
-    if (!delta_ik_success) {
-        leg_.applyIK(robot_model_);
-    }
+    // Call automatic synchronization to ensure all data is consistent
+    // This handles tip position setting, IK calculation, and position updates
+    autoSyncWithLeg();
 }
 
 // OpenSHC-style position delta calculation
@@ -403,8 +393,6 @@ void LegStepper::forceNormalTouchdown() {
     swing_2_nodes_[1] = swing_2_nodes_[0] + (swing_2_nodes_[2] - bezier_origin) * LEG_STEPPER_TOUCHDOWN_INTERPOLATION;
 }
 
-// These methods are now inline in the header file
-
 // Nueva API OpenSHC-like
 void LegStepper::updateWithPhase(double local_phase, double step_length, double time_delta) {
     const auto &config = robot_model_.getParams().dynamic_gait;
@@ -452,8 +440,7 @@ void LegStepper::updateWithPhase(double local_phase, double step_length, double 
     updateTipPosition(step_length, time_delta, false, false); // Default terrain adaptation values
 }
 
-// Dynamic iteration calculation implementations (OpenSHC equivalent)
-
+// Implementaciones de cálculo de iteración dinámica (equivalente a OpenSHC)
 int LegStepper::calculateSwingIterations(double step_length, double time_delta) const {
     const auto &config = robot_model_.getParams().dynamic_gait;
 
@@ -568,4 +555,23 @@ StepCycle LegStepper::calculateStepCycle(double step_length, double time_delta) 
     cycle.frequency_ = config.frequency;
 
     return cycle;
+}
+
+void LegStepper::autoSyncWithLeg() {
+
+    // 1. Synchronize desired tip position
+    leg_.setDesiredTipPositionGlobal(current_tip_pose_);
+
+    // 2. Apply OpenSHC-style IK with delta calculation
+    Point3D current_leg_position = leg_.getCurrentTipPositionGlobal();
+    Point3D position_delta = calculatePositionDelta(current_tip_pose_, current_leg_position);
+
+    // Apply delta IK (OpenSHC approach)
+    leg_.applyIKWithDelta(robot_model_, position_delta);
+
+    // 3. Update tip position to ensure consistency
+    leg_.updateTipPosition(robot_model_);
+
+    // 4. Synchronize phase information
+    leg_.setPhaseOffset(phase_ / 100.0); // Convert to 0-1 range
 }

@@ -44,12 +44,12 @@
 #ifndef LOCOMOTION_SYSTEM_H
 #define LOCOMOTION_SYSTEM_H
 
-#include "robot_model.h"
 #include "admittance_controller.h"
-#include "cartesian_velocity_controller.h"
 #include "body_pose_controller.h"
-#include "walk_controller.h"
+#include "cartesian_velocity_controller.h"
 #include "leg.h"
+#include "robot_model.h"
+#include "walk_controller.h"
 #include <Arduino.h>
 #include <ArduinoEigen.h>
 #include <math.h>
@@ -69,9 +69,9 @@ class LocomotionSystem {
         KINEMATICS_ERROR = 4,
         STABILITY_ERROR = 5,
         PARAMETER_ERROR = 6,
-        SENSOR_ERROR = 7,       // General sensor communication error
+        SENSOR_ERROR = 7,        // General sensor communication error
         SERVO_BLOCKED_ERROR = 8, // Servo blocked by status flags
-        STATE_ERROR = 9         // System state error
+        STATE_ERROR = 9          // System state error
     };
 
   private:
@@ -84,9 +84,9 @@ class LocomotionSystem {
     IServoInterface *servo_interface;
 
     // System states
-    Eigen::Vector3d body_position;      // Body position [x,y,z]
-    Eigen::Vector3d body_orientation;   // Body orientation [roll,pitch,yaw]
-    Leg legs[NUM_LEGS];                 // Leg objects containing all leg data
+    Eigen::Vector3d body_position;    // Body position [x,y,z]
+    Eigen::Vector3d body_orientation; // Body orientation [roll,pitch,yaw]
+    Leg legs[NUM_LEGS];               // Leg objects containing all leg data
 
     // Control variables
     bool system_enabled;
@@ -271,9 +271,9 @@ class LocomotionSystem {
 
     // Leg access methods
     /** Get leg object by index. */
-    const Leg& getLeg(int leg_index) const { return legs[leg_index]; }
+    const Leg &getLeg(int leg_index) const { return legs[leg_index]; }
     /** Get leg object by index (mutable). */
-    Leg& getLeg(int leg_index) { return legs[leg_index]; }
+    Leg &getLeg(int leg_index) { return legs[leg_index]; }
 
     // Setters
     /** Replace the current parameter set. */
@@ -320,16 +320,13 @@ class LocomotionSystem {
     bool performSelfTest();
 
     // Getter for WalkController
-    WalkController* getWalkController() { return walk_ctrl; }
+    WalkController *getWalkController() { return walk_ctrl; }
 
     // Gait control
     /** Start walking with specified gait type and velocities. */
     bool startWalking(GaitType gait_type, double velocity_x, double velocity_y, double angular_velocity);
     /** Stop walking and return to standing pose. */
     bool stopWalking();
-
-    // Update model (OpenSHC architecture)
-    void updateModel();
 
   private:
     // Helper methods

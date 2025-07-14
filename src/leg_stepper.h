@@ -134,6 +134,14 @@ class LegStepper {
     // OpenSHC-like API without WalkController dependency
     void updateWithPhase(double local_phase, double step_length, double time_delta);
 
+    /**
+     * @brief Automatically synchronize internal state with Leg object
+     * This method ensures that all calculated trajectory data is properly
+     * synchronized with the Leg object, eliminating the need for external
+     * synchronization calls like LocomotionSystem::updateModel()
+     */
+    void autoSyncWithLeg();
+
   private:
     int leg_index_;
     Leg &leg_;

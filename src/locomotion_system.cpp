@@ -741,10 +741,8 @@ bool LocomotionSystem::update() {
         walk_ctrl->updateWalk(Point3D(commanded_linear_velocity_, 0.0, 0.0),
                               commanded_angular_velocity_,
                               body_position, body_orientation);
-    }
 
-    // Update leg states based on current gait
-    if (walk_ctrl) {
+        // Update leg states based on current gait
         double stance_duration = walk_ctrl->getStanceDuration();
         for (int i = 0; i < NUM_LEGS; i++) {
             // Use leg stepper to determine phase
@@ -760,9 +758,6 @@ bool LocomotionSystem::update() {
             }
         }
     }
-
-    // Actualizar el modelo para sincronizar datos (arquitectura OpenSHC)
-    updateModel();
 
     return true;
 }
@@ -1297,8 +1292,6 @@ bool LocomotionSystem::executeStartupSequence() {
             walk_ctrl->init(body_position, body_orientation);
             walk_ctrl->generateWalkspace();
         }
-        // Sincronizar modelo (IK y pose)
-        updateModel();
 
         system_state = SYSTEM_RUNNING;
         return true;
@@ -1381,21 +1374,4 @@ bool LocomotionSystem::stopWalking() {
     system_state = SYSTEM_RUNNING; // Will transition to READY when sequence completes
 
     return true;
-}
-
-// Update model (OpenSHC architecture)
-void LocomotionSystem::updateModel() {
-    // Set desired tip poses from leg steppers y aplica IK para cada pierna
-    for (int i = 0; i < NUM_LEGS; ++i) {
-        // Obtener el LegStepper desde el WalkController
-        auto leg_stepper = walk_ctrl ? walk_ctrl->getLegStepper(i) : nullptr;
-        if (!leg_stepper)
-            continue;
-        // Obtener la pose objetivo actual del tip
-        Point3D desired_tip_pose = leg_stepper->getCurrentTipPose();
-        // Establecer la pose objetivo en la pierna
-        legs[i].setDesiredTipPositionGlobal(desired_tip_pose);
-        // Aplicar IK para sincronizar ángulos articulares y posición del tip
-        legs[i].applyIK(model);
-    }
 }

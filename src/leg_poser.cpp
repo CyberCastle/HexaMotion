@@ -112,7 +112,8 @@ bool LegPoser::stepToPosition(const Pose &target_tip_pose, const Pose &target_po
 
     // Update current tip pose
     current_tip_pose_ = Pose(new_tip_position, Eigen::Vector3d(0, 0, 0));
-    leg_.setCurrentTipPositionGlobal(robot_model_, current_tip_pose_.position);
+
+    autoSyncWithLeg();
 
     // Check if step is complete
     if (master_iteration_count_ >= num_iterations) {
@@ -250,4 +251,19 @@ void LegPoser::generateSecondarySwingControlNodes(const Point3D &origin_pos, con
     control_nodes_secondary_[2] = target_pos - node_separation * 2.0;
     control_nodes_secondary_[3] = target_pos - node_separation;
     control_nodes_secondary_[4] = target_pos;
+}
+
+void LegPoser::autoSyncWithLeg() {
+
+    // 1. Synchronize current tip position
+    leg_.setCurrentTipPositionGlobal(robot_model_, current_tip_pose_.position);
+
+    // 2. Synchronize desired tip position
+    leg_.setDesiredTipPositionGlobal(target_tip_pose_.position);
+
+    // 3. Apply IK to calculate joint angles
+    leg_.applyIK(robot_model_);
+
+    // 4. Update tip position to ensure consistency
+    leg_.updateTipPosition(robot_model_);
 }

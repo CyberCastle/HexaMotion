@@ -127,6 +127,14 @@ class LegPoser {
         return stepToPosition(target_pose, Pose::Identity(), step_height, step_time, false);
     }
 
+    /**
+     * @brief Automatically synchronize internal state with Leg object
+     * This method ensures that all calculated pose data is properly
+     * synchronized with the Leg object, eliminating the need for external
+     * synchronization calls like LocomotionSystem::updateModel()
+     */
+    void autoSyncWithLeg();
+
   private:
     /**
      * @brief Generate control nodes for primary swing bezier curve
