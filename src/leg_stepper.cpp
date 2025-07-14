@@ -246,7 +246,18 @@ void LegStepper::updateTipPosition(double step_length, double time_delta, bool r
     }
 
     leg_.setDesiredTipPositionGlobal(current_tip_pose_);
-    leg_.applyIK(robot_model_);
+
+    // Calculate position delta for OpenSHC-style IK application
+    Point3D current_leg_position = leg_.getCurrentTipPositionGlobal();
+    Point3D position_delta = calculatePositionDelta(current_tip_pose_, current_leg_position);
+
+    // Apply IK with delta (OpenSHC approach) while maintaining original functionality
+    bool delta_ik_success = leg_.applyIKWithDelta(robot_model_, position_delta);
+
+    // Fallback to standard IK if delta approach fails
+    if (!delta_ik_success) {
+        leg_.applyIK(robot_model_);
+    }
 }
 
 // OpenSHC-style position delta calculation

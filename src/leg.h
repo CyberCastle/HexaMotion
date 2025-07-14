@@ -362,6 +362,9 @@ class Leg {
     // Apply inverse kinematics (OpenSHC architecture)
     bool applyIK(const RobotModel &model);
 
+    // Apply inverse kinematics with position delta (OpenSHC architecture)
+    bool applyIKWithDelta(const RobotModel &model, const Point3D &position_delta);
+
   private:
     // ===== IDENTIFICATION =====
     int leg_id_;      //< Leg identification number (0-5)

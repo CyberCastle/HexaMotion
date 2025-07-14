@@ -221,6 +221,29 @@ bool Leg::applyIK(const RobotModel &model) {
     return ik_error < IK_TOLERANCE; // 1mm tolerance
 }
 
+// Apply inverse kinematics with position delta (OpenSHC architecture)
+bool Leg::applyIKWithDelta(const RobotModel &model, const Point3D &position_delta) {
+    // Get current tip position in leg frame coordinates
+    Point3D current_tip_leg_frame = model.transformGlobalToLocalCoordinates(
+        leg_id_, tip_position_, joint_angles_);
+
+    // Apply delta in leg frame coordinates (OpenSHC approach)
+    Point3D target_tip_leg_frame = current_tip_leg_frame + position_delta;
+
+    // Transform back to global coordinates
+    Point3D target_tip_global = model.transformLocalToGlobalCoordinates(
+        leg_id_, target_tip_leg_frame, joint_angles_);
+
+    // Set the desired position and apply standard IK
+    setDesiredTipPositionGlobal(target_tip_global);
+    bool ik_success = applyIK(model);
+
+    // Note: applyIK already calls updateTipPosition(model) internally
+    // which updates tip_position_ based on the new joint angles
+
+    return ik_success;
+}
+
 void Leg::calculateBasePosition(const RobotModel &model) {
     // Calculate leg base position in world coordinates using RobotModel
     double angle_rad = model.getLegBaseAngleOffset(leg_id_);
