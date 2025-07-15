@@ -165,13 +165,14 @@ BodyPoseConfiguration createPoseConfiguration(const Parameters &params, const st
 
     // OpenSHC equivalent body clearance and swing parameters
     config.body_clearance = params.standing_height; // Body clearance in millimeters - use standing_height for consistency
-    config.swing_height = 20.0f;                    // Default 20mm swing height (OpenSHC typical)
+    // Use swing height factor from gait factors for consistent swing amplitude
+    config.swing_height = static_cast<float>(params.standing_height * params.gait_factors.tripod_height_factor);
 
     // OpenSHC equivalent pose limits (from default.yaml)
-    config.max_translation = {25.0f, 25.0f, 25.0f}; // 25mm translation limits
-    config.max_rotation = {0.250f, 0.250f, 0.250f}; // 0.25 radian rotation limits
-    config.max_translation_velocity = 50.0f;        // 50mm/s velocity limit
-    config.max_rotation_velocity = 0.200f;          // 0.2 rad/s rotation limit
+    config.max_translation = {150.0f, 150.0f, 150.0f}; // 25mm translation limits
+    config.max_rotation = {0.5f, 0.5f, 0.5f};          // 0.25 radian rotation limits
+    config.max_translation_velocity = 50.0f;           // 50mm/s velocity limit
+    config.max_rotation_velocity = 0.200f;             // 0.2 rad/s rotation limit
 
     // OpenSHC equivalent pose control flags
     config.gravity_aligned_tips = false;          // Match OpenSHC default.yaml

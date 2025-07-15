@@ -46,7 +46,7 @@ BodyPoseController::BodyPoseController(RobotModel &m, const BodyPoseConfiguratio
     }
 
     // Initialize walk plane pose system (OpenSHC equivalent with Bézier curves)
-    walk_plane_pose_ = Pose(Point3D(0.0, 0.0, body_pose_config.body_clearance), Eigen::Quaterniond::Identity());
+    walk_plane_pose_ = Pose(Point3D(0.0, 0.0, -body_pose_config.body_clearance), Eigen::Quaterniond::Identity());
     walk_plane_pose_enabled = true;
     walk_plane_update_threshold = 1.0; // 1mm threshold
 
@@ -57,7 +57,7 @@ BodyPoseController::BodyPoseController(RobotModel &m, const BodyPoseConfiguratio
 
     // Initialize control nodes arrays
     for (int i = 0; i < 5; i++) {
-        walk_plane_position_nodes[i] = Point3D(0.0, 0.0, body_pose_config.body_clearance);
+        walk_plane_position_nodes[i] = Point3D(0.0, 0.0, -body_pose_config.body_clearance);
         walk_plane_rotation_nodes[i] = Eigen::Quaterniond::Identity();
     }
 
@@ -198,28 +198,15 @@ bool BodyPoseController::setStandingPose(Leg legs[NUM_LEGS]) {
         initializeLegPosers(legs);
     }
 
-    // Standing pose uses pre-configured joint angles, not calculated positions
-    for (int i = 0; i < NUM_LEGS; i++) {
-        // Use configured standing pose joint angles
-        JointAngles angles;
-        angles.coxa = body_pose_config.standing_pose_joints[i].coxa;
-        angles.femur = body_pose_config.standing_pose_joints[i].femur;
-        angles.tibia = body_pose_config.standing_pose_joints[i].tibia;
+    // Get the desired standing height from the configuration
+    double target_height = body_pose_config.body_clearance;
 
-        // Check joint limits
-        angles.coxa = model.constrainAngle(angles.coxa, model.getParams().coxa_angle_limits[0],
-                                           model.getParams().coxa_angle_limits[1]);
-        angles.femur = model.constrainAngle(angles.femur, model.getParams().femur_angle_limits[0],
-                                            model.getParams().femur_angle_limits[1]);
-        angles.tibia = model.constrainAngle(angles.tibia, model.getParams().tibia_angle_limits[0],
-                                            model.getParams().tibia_angle_limits[1]);
+    // Calculate the body pose to achieve the target height
+    Eigen::Vector3d position(0, 0, -target_height); // Assuming Z is up
+    Eigen::Vector3d orientation(0, 0, 0);
 
-        // Calculate resulting position using forward kinematics
-        legs[i].setJointAngles(angles);
-        legs[i].updateTipPosition(model);
-    }
-
-    return true;
+    // Use setBodyPose to move all legs to the correct standing position
+    return setBodyPose(position, orientation, legs);
 }
 
 bool BodyPoseController::setBodyPoseQuaternion(const Eigen::Vector3d &position, const Eigen::Vector4d &quaternion,

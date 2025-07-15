@@ -52,6 +52,7 @@ struct BodyPoseConfiguration {
     std::string auto_pose_type; //< String denoting the default auto posing cycle type
     bool start_up_sequence;     //< Flag allowing execution of start up and shutdown sequences
     double time_to_start;       //< The time to complete a direct start up
+    double standing_height;     //< The desired height of the robot body when standing (mm)
 
     // OpenSHC equivalent body clearance and swing parameters
     double body_clearance; //< The requested height of the robot body above ground (mm)
@@ -59,15 +60,15 @@ struct BodyPoseConfiguration {
 
     // OpenSHC equivalent pose limits
     struct {
-        double x; //< Maximum X translation (millimeters)
-        double y; //< Maximum Y translation (millimeters)
-        double z; //< Maximum Z translation (millimeters)
+        double x = 50.0; //< Maximum X translation (millimeters)
+        double y = 50.0; //< Maximum Y translation (millimeters)
+        double z = 50.0; //< Maximum Z translation (millimeters)
     } max_translation;
 
     struct {
-        double roll;  //< Maximum roll rotation (radians)
-        double pitch; //< Maximum pitch rotation (radians)
-        double yaw;   //< Maximum yaw rotation (radians)
+        double roll = 0.5;  //< Maximum roll rotation (radians)
+        double pitch = 0.5; //< Maximum pitch rotation (radians)
+        double yaw = 0.5;   //< Maximum yaw rotation (radians)
     } max_rotation;
 
     // OpenSHC equivalent velocity limits

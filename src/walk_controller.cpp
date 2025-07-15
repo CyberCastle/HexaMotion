@@ -369,6 +369,20 @@ void WalkController::updateWalk(const Point3D &linear_velocity_input, double ang
     // State transitions for Walk State Machine
     int leg_count = NUM_LEGS;
 
+    // Reset counters before checking leg states
+    legs_at_correct_phase_ = 0;
+    legs_completed_first_step_ = 0;
+
+    // Update state counters by querying each leg stepper
+    for (const auto &leg_stepper : leg_steppers_) {
+        if (leg_stepper->isAtCorrectPhase()) {
+            legs_at_correct_phase_++;
+        }
+        if (leg_stepper->hasCompletedFirstStep()) {
+            legs_completed_first_step_++;
+        }
+    }
+
     // State transition: STOPPED->STARTING
     if (walk_state_ == WALK_STOPPED && has_velocity_command) {
         walk_state_ = WALK_STARTING;
@@ -385,8 +399,6 @@ void WalkController::updateWalk(const Point3D &linear_velocity_input, double ang
     }
     // State transition: STARTING->MOVING
     else if (walk_state_ == WALK_STARTING && legs_at_correct_phase_ == leg_count && legs_completed_first_step_ == leg_count) {
-        legs_at_correct_phase_ = 0;
-        legs_completed_first_step_ = 0;
         walk_state_ = WALK_MOVING;
     }
     // State transition: MOVING->STOPPING
@@ -395,7 +407,6 @@ void WalkController::updateWalk(const Point3D &linear_velocity_input, double ang
     }
     // State transition: STOPPING->STOPPED
     else if (walk_state_ == WALK_STOPPING && legs_at_correct_phase_ == leg_count && pose_state_ == 0) {
-        legs_at_correct_phase_ = 0;
         walk_state_ = WALK_STOPPED;
     }
 
@@ -404,15 +415,28 @@ void WalkController::updateWalk(const Point3D &linear_velocity_input, double ang
         // Set walk state in LegStepper
         leg_stepper->setWalkState(walk_state_);
 
+        // Set desired velocity for the leg stepper
+        leg_stepper->setDesiredVelocity(desired_linear_velocity_, desired_angular_velocity_);
+
         // Advance phase for this leg
-        leg_stepper->iteratePhase(current_gait_config_.step_cycle);
+        // leg_stepper->iteratePhase(current_gait_config_.step_cycle);
 
         // Calculate local phase using step cycle and leg offset
         int current_phase = leg_stepper->getPhase();
-        double local_phase = static_cast<double>(current_phase) /
-                             static_cast<double>(current_gait_config_.step_cycle.period_);
+        // Apply gait phase offset for tripod synchronization
+        double base_phase_frac = static_cast<double>(current_phase) /
+                                 static_cast<double>(current_gait_config_.step_cycle.period_);
+        double offset = leg_stepper->getPhaseOffset();
+        double local_phase = std::fmod(base_phase_frac + offset, 1.0);
+
         // Usar los parámetros de marcha de GaitConfiguration
         leg_stepper->updateWithPhase(local_phase, current_gait_config_.step_length, time_delta_);
+
+        // After updating, check the leg's state for the next cycle's state machine logic
+        if (leg_stepper->isAtCorrectPhase()) {
+            // This check is now implicitly handled at the top of the function
+        }
+        leg_stepper->iteratePhase(current_gait_config_.step_cycle);
     }
 
     // Update walk plane pose through BodyPoseController

@@ -51,6 +51,12 @@ LegStepper::LegStepper(int leg_index, const Point3D &identity_tip_pose, Leg &leg
     }
 }
 
+// Add setter implementation for desired velocity to ensure velocities are synced
+void LegStepper::setDesiredVelocity(const Point3D &linear_velocity, double angular_velocity) {
+    desired_linear_velocity_ = linear_velocity;
+    desired_angular_velocity_ = angular_velocity;
+}
+
 // Core functionality implementations
 void LegStepper::updatePhase(const StepCycle &step) {
     phase_ = static_cast<int>(step_progress_ * step.period_);
@@ -91,11 +97,11 @@ void LegStepper::updateStepState(const StepCycle &step) {
     }
 }
 
-void LegStepper::updateStride(double linear_velocity_x, double linear_velocity_y, double angular_velocity, double stance_ratio, double step_frequency) {
+void LegStepper::updateStride() {
     // Usar el método OpenSHC-equivalente
     stride_vector_ = VelocityLimits::calculateStrideVector(
-        linear_velocity_x, linear_velocity_y, angular_velocity,
-        getCurrentTipPose(), stance_ratio, step_frequency);
+        desired_linear_velocity_.x, desired_linear_velocity_.y, desired_angular_velocity_,
+        getCurrentTipPose(), robot_model_.getParams().dynamic_gait.duty_factor, robot_model_.getParams().control_frequency);
 }
 
 Point3D LegStepper::calculateStanceSpanChange() {
@@ -180,12 +186,12 @@ void LegStepper::updateTipPosition(double step_length, double time_delta, bool r
     double control_frequency = robot_model_.getParams().control_frequency;
 
     // Calcular velocidad lineal basada en step_length y frecuencia de control
-    double linear_velocity_x = used_step_length * control_frequency / 2.0;
-    double linear_velocity_y = 0.0;
-    double angular_velocity = 0.0;
+    // double linear_velocity_x = used_step_length * control_frequency / 2.0;
+    // double linear_velocity_y = 0.0;
+    // double angular_velocity = 0.0;
 
     // Actualizar stride vector
-    updateStride(linear_velocity_x, linear_velocity_y, angular_velocity, stance_ratio, control_frequency);
+    updateStride();
 
     // En OpenSHC, el target se calcula desde la posición actual, no desde default_tip_pose_
     Point3D origin_position;
@@ -219,8 +225,9 @@ void LegStepper::updateTipPosition(double step_length, double time_delta, bool r
             bezier_position = math_utils::quarticBezier(swing_2_nodes_, t);
         }
 
-        // La posición actual es la posición del Bézier
+        // Set position from Bézier and override z to default stance + swing_height
         current_tip_pose_ = bezier_position;
+        current_tip_pose_.z = default_tip_pose_.z + swing_height_;
 
         // Calcular velocidad usando la derivada de la curva Bézier
         Point3D bezier_velocity;
@@ -250,9 +257,17 @@ void LegStepper::updateTipPosition(double step_length, double time_delta, bool r
         current_tip_velocity_ = bezier_velocity / time_delta;
     }
 
-    // Call automatic synchronization to ensure all data is consistent
-    // This handles tip position setting, IK calculation, and position updates
-    autoSyncWithLeg();
+    // Synchronize with leg: use autoSync for stance, manual set for swing to preserve bezier trajectory
+    if (step_state_ == STEP_STANCE || step_state_ == STEP_FORCE_STANCE) {
+        autoSyncWithLeg();
+    } else {
+        // SWING: directly set tip position and joint angles based on IK
+        leg_.setCurrentTipPositionGlobal(robot_model_, current_tip_pose_);
+        // Compute joint angles for swing pose
+        JointAngles angles = robot_model_.inverseKinematicsCurrentGlobalCoordinates(
+            leg_index_, leg_.getJointAngles(), current_tip_pose_);
+        leg_.setJointAngles(angles);
+    }
 }
 
 // OpenSHC-style position delta calculation
@@ -282,14 +297,16 @@ void LegStepper::generatePrimarySwingControlNodes() {
     if (swing_origin_tip_position_.norm() < 1e-6) {
         swing_origin_tip_position_ = leg_.getCurrentTipPositionGlobal();
     }
-    Point3D mid_tip_position = (swing_origin_tip_position_ + target_tip_pose_) * 0.5;
-    // Usar swing_height_ si está configurado
-    if (swing_height_ > 0.0) {
-        mid_tip_position.z = swing_origin_tip_position_.z + swing_height_;
-    } else {
-        mid_tip_position.z = std::max(swing_origin_tip_position_.z, target_tip_pose_.z);
-        mid_tip_position = mid_tip_position + swing_clearance_;
+    // Ensure swing origin at default tip z
+    {
+        Point3D origin = swing_origin_tip_position_;
+        origin.z = default_tip_pose_.z;
+        swing_origin_tip_position_ = origin;
     }
+
+    // Calculate midpoint for swing using default tip z and configured swing height
+    Point3D mid_tip_position = (swing_origin_tip_position_ + target_tip_pose_) * 0.5;
+    mid_tip_position.z = default_tip_pose_.z + swing_height_;
 
     // Get swing width parameter from robot model or use default
     double mid_lateral_shift = LEG_STEPPER_SWING_LATERAL_SHIFT; // Default swing width, configurable

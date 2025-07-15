@@ -86,6 +86,7 @@ class LegStepper {
     LegStepperExternalTarget getExternalDefault() const { return external_default_; }
 
     // Modifiers
+    void setDesiredVelocity(const Point3D &linear_velocity, double angular_velocity);
     void setCurrentTipPose(const RobotModel &model, const Point3D &pose) { leg_.setCurrentTipPositionGlobal(model, pose); }
     void setDefaultTipPose(const Point3D &pose) { default_tip_pose_ = pose; }
     void setStepState(StepState state) { step_state_ = state; }
@@ -111,7 +112,7 @@ class LegStepper {
     void updatePhase(const StepCycle &step);     // StepCycle passed as parameter
     void iteratePhase(const StepCycle &step);    // StepCycle passed as parameter
     void updateStepState(const StepCycle &step); // StepCycle passed as parameter
-    void updateStride(double linear_velocity_x, double linear_velocity_y, double angular_velocity, double stance_ratio, double step_frequency);
+    void updateStride();
     Point3D calculateStanceSpanChange();
     void updateDefaultTipPosition();
     void updateTipPosition(double step_length, double time_delta, bool rough_terrain_mode, bool force_normal_touchdown); // Parameters passed
@@ -153,6 +154,8 @@ class LegStepper {
     Point3D current_tip_pose_; //< Current tip pose calculated by stepper
 
     // Walking state
+    Point3D desired_linear_velocity_;
+    double desired_angular_velocity_;
     Point3D walk_plane_;
     Point3D walk_plane_normal_;
     Point3D stride_vector_;
