@@ -156,6 +156,9 @@ struct Parameters {
 
     // Tipo de gait seleccionado (OpenSHC compatible)
     std::string gait_type;
+
+    // Gait phase offset multiplier for tripod gait synchronization
+    double offset_multiplier = 0.5; // Default offset multiplier for tripod gait phase synchronization
 };
 
 enum GaitType {

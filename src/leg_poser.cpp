@@ -56,10 +56,9 @@ bool LegPoser::stepToPosition(const Pose &target_tip_pose, const Pose &target_po
     // Get time_delta from robot model parameters (OpenSHC style)
     double time_delta = 1.0 / robot_model_.getParams().control_frequency;
     int num_iterations = std::max(1, static_cast<int>(std::round(time_to_step / time_delta)));
-    double delta_t = 1.0 / num_iterations;
 
     master_iteration_count_++;
-    double completion_ratio = static_cast<double>(master_iteration_count_ - 1) / static_cast<double>(num_iterations);
+    double completion_ratio = static_cast<double>(master_iteration_count_) / static_cast<double>(num_iterations);
 
     // Check if transition is needed
     Point3D origin_pos = origin_tip_pose_.position;
@@ -79,7 +78,7 @@ bool LegPoser::stepToPosition(const Pose &target_tip_pose, const Pose &target_po
     // If no significant movement needed and no lift height, complete immediately
     if (distance < TIP_TOLERANCE && lift_height == 0.0) {
         first_iteration_ = true;
-        current_tip_pose_ = origin_tip_pose_;
+        current_tip_pose_ = target_tip_pose;
         leg_completed_step_ = true;
         return true;
     }
@@ -90,28 +89,26 @@ bool LegPoser::stepToPosition(const Pose &target_tip_pose, const Pose &target_po
         generateSecondarySwingControlNodes(origin_pos, target_pos, lift_height);
     }
 
-    // Calculate time input using delta_t (OpenSHC style)
-    double time_input = master_iteration_count_ * delta_t;
+    // Calculate time input for bezier curve progression
+    double time_input = completion_ratio;
 
     // Calculate swing iteration count and determine which bezier curve to use
     int half_swing_iteration = num_iterations / 2;
-    int swing_iteration_count = (master_iteration_count_ + (num_iterations - 1)) % num_iterations + 1;
-
     Point3D new_tip_position;
 
     // Use dual quartic bezier curves for swing trajectory (OpenSHC style)
-    if (swing_iteration_count <= half_swing_iteration) {
+    if (master_iteration_count_ <= half_swing_iteration) {
         // First half of swing - use primary bezier curve
-        time_input = swing_iteration_count * delta_t * 2.0;
+        time_input = (2.0 * static_cast<double>(master_iteration_count_)) / static_cast<double>(num_iterations);
         new_tip_position = math_utils::quarticBezier(control_nodes_primary_, time_input);
     } else {
         // Second half of swing - use secondary bezier curve
-        time_input = (swing_iteration_count - half_swing_iteration) * delta_t * 2.0;
+        time_input = (2.0 * static_cast<double>(master_iteration_count_ - half_swing_iteration)) / static_cast<double>(num_iterations);
         new_tip_position = math_utils::quarticBezier(control_nodes_secondary_, time_input);
     }
 
     // Update current tip pose
-    current_tip_pose_ = Pose(new_tip_position, Eigen::Vector3d(0, 0, 0));
+    current_tip_pose_ = Pose(new_tip_position, target_tip_pose.rotation);
 
     autoSyncWithLeg();
 
@@ -119,6 +116,7 @@ bool LegPoser::stepToPosition(const Pose &target_tip_pose, const Pose &target_po
     if (master_iteration_count_ >= num_iterations) {
         first_iteration_ = true;
         leg_completed_step_ = true;
+        current_tip_pose_ = target_tip_pose; // Ensure exact final position
         return true;
     } else {
         return false;

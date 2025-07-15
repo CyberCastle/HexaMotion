@@ -86,8 +86,23 @@ bool WalkController::setGaitByName(const std::string &gait_name) {
         // Gait not found, return false
         return false;
     }
+
     // Apply the gait configuration
-    return setGaitConfiguration(gait_config);
+    bool success = setGaitConfiguration(gait_config);
+
+    // Apply phase offset to each leg (corrección del problema 2)
+    if (success && gait_name == "tripod_gait") {
+        // Use offset_multiplier parameter from robot configuration
+        double offset_multiplier = params.offset_multiplier;
+
+        // Apply offset to each leg
+        for (int i = 0; i < NUM_LEGS; i++) {
+            double offset_normalized = static_cast<double>(gait_config.offsets.getForLegIndex(i)) * offset_multiplier;
+            legs_array_[i].setPhaseOffset(offset_normalized);
+        }
+    }
+
+    return success;
 }
 
 void WalkController::applyGaitConfigToLegSteppers(const GaitConfiguration &gait_config) {

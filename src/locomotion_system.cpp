@@ -742,15 +742,16 @@ bool LocomotionSystem::update() {
                               commanded_angular_velocity_,
                               body_position, body_orientation);
 
-        // Update leg states based on current gait
-        double stance_duration = walk_ctrl->getStanceDuration();
+        // Update leg states based on current gait with proper normalization
+        double stance_norm = walk_ctrl->getStanceDuration(); // Already normalized [0.0-1.0]
+
         for (int i = 0; i < NUM_LEGS; i++) {
             // Use leg stepper to determine phase
             auto leg_stepper = walk_ctrl->getLegStepper(i);
             if (leg_stepper) {
                 double phase = static_cast<double>(leg_stepper->getPhase()) /
                                static_cast<double>(walk_ctrl->getStepCycle().period_);
-                if (legs[i].shouldBeInStance(phase, stance_duration)) {
+                if (legs[i].shouldBeInStance(phase, stance_norm)) {
                     legs[i].setStepPhase(STANCE_PHASE);
                 } else {
                     legs[i].setStepPhase(SWING_PHASE);

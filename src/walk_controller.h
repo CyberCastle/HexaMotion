@@ -214,8 +214,10 @@ class WalkController {
      * @return Stance duration (0-1)
      */
     double getStanceDuration() const {
-        return (double)current_gait_config_.phase_config.stance_phase /
-               (current_gait_config_.phase_config.stance_phase + current_gait_config_.phase_config.swing_phase);
+        // Return normalized value [0.0-1.0] for stance duration
+        double total_period = current_gait_config_.phase_config.stance_phase +
+                              current_gait_config_.phase_config.swing_phase;
+        return total_period > 0 ? static_cast<double>(current_gait_config_.phase_config.stance_phase) / total_period : 0.0;
     }
 
     /**
