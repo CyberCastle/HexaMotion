@@ -47,7 +47,7 @@ BodyPoseController::BodyPoseController(RobotModel &m, const BodyPoseConfiguratio
 
     // Initialize walk plane pose system (OpenSHC equivalent with Bézier curves)
     walk_plane_pose_ = Pose(Point3D(0.0, 0.0, body_pose_config.body_clearance), Eigen::Quaterniond::Identity());
-    walk_plane_pose_enabled = true;
+    walk_plane_pose_enabled = false;
     walk_plane_update_threshold = 1.0; // 1mm threshold
 
     // Initialize Bézier curve control system
@@ -198,15 +198,20 @@ bool BodyPoseController::setStandingPose(Leg legs[NUM_LEGS]) {
         initializeLegPosers(legs);
     }
 
-    // Get the desired standing height from the configuration
-    double target_height = body_pose_config.body_clearance;
+    // Apply configured standing pose joint angles for each leg
+    for (int i = 0; i < NUM_LEGS; ++i) {
+        const auto &standing_joints = body_pose_config.standing_pose_joints[i];
+        JointAngles angles;
+        angles.coxa = standing_joints.coxa;
+        angles.femur = standing_joints.femur;
+        angles.tibia = standing_joints.tibia;
+        // Update leg with standing joint angles and corresponding tip position
+        legs[i].setJointAngles(angles);
+        Point3D pos = model.forwardKinematicsGlobalCoordinates(i, angles);
+        legs[i].setCurrentTipPositionGlobal(model, pos);
+    }
 
-    // Calculate the body pose to achieve the target height
-    Eigen::Vector3d position(0, 0, -target_height); // Assuming Z is up
-    Eigen::Vector3d orientation(0, 0, 0);
-
-    // Use setBodyPose to move all legs to the correct standing position
-    return setBodyPose(position, orientation, legs);
+    return true;
 }
 
 bool BodyPoseController::setBodyPoseQuaternion(const Eigen::Vector3d &position, const Eigen::Vector4d &quaternion,
