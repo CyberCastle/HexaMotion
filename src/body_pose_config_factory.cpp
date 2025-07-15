@@ -22,46 +22,6 @@
  */
 
 /**
- * @brief Calculate hexagonal leg stance positions based on robot parameters
- * Following OpenSHC's stance positioning approach from default.yaml
- * Uses DH parameter-based forward kinematics for accurate stance positioning
- *
- * Based on AGENTS.md physical characteristics:
- * - Robot height: 208 mm (with all angles at 0°)
- * - Body hexagon radius: 200 mm
- * - Coxa length: 50 mm
- * - Femur length: 101 mm
- * - Tibia length: 208 mm
- *
- * @param params Robot parameters containing dimensions and joint limits.
- * @return Array of calculated stance positions in millimeters
- */
-std::array<LegStancePosition, NUM_LEGS> calculateHexagonalStancePositions(const Parameters &params) {
-    std::array<LegStancePosition, NUM_LEGS> positions;
-
-    // Create a temporary RobotModel to use DH-based calculations
-    RobotModel temp_model(params);
-
-    // Calculate stance positions using DH-based forward kinematics
-    // For stance positions, we use 0° angles (neutral position) as per AGENTS.md
-    // "Physically, if the robot has all servo angles at 0°, the femur remains horizontal,
-    // in line with the coxa. The tibia, on the other hand, remains vertical, perpendicular to the ground."
-    JointAngles neutral_angles(0.0, 0.0, 0.0); // All angles at 0° for neutral stance
-
-    for (int i = 0; i < NUM_LEGS; i++) {
-        // Use DH-based forward kinematics to calculate the foot position
-        // This gives us the exact position where the foot would be with 0° angles
-        Point3D foot_position = temp_model.forwardKinematicsGlobalCoordinates(i, neutral_angles);
-
-        // Store the stance position (x, y coordinates only, z is the height)
-        positions[i].x = foot_position.x;
-        positions[i].y = foot_position.y;
-    }
-
-    return positions;
-}
-
-/**
  * @brief Calculate joint angles for a given height using analytic IK
  *
  * This helper mimics the logic from angle_calculus.cpp. It sweeps the
@@ -105,6 +65,58 @@ CalculatedServoAngles calculateServoAnglesForHeight(double target_height_mm, con
 }
 
 /**
+ * @brief Calculate hexagonal leg stance positions based on robot parameters
+ * Following OpenSHC's stance positioning approach from default.yaml
+ * Uses DH parameter-based forward kinematics for accurate stance positioning
+ *
+ * Based on AGENTS.md physical characteristics:
+ * - Robot height: 208 mm (with all angles at 0°)
+ * - Body hexagon radius: 200 mm
+ * - Coxa length: 50 mm
+ * - Femur length: 101 mm
+ * - Tibia length: 208 mm
+ *
+ * @param params Robot parameters containing dimensions and joint limits.
+ * @return Array of calculated stance positions in millimeters
+ */
+std::array<LegStancePosition, NUM_LEGS> getDefaultStandPositions(const Parameters &params) {
+    std::array<LegStancePosition, NUM_LEGS> positions;
+
+    // Create a temporary RobotModel to use DH-based calculations
+    RobotModel temp_model(params);
+
+    // Calculate servo angles analytically to guarantee the desired height
+    CalculatedServoAngles calc =
+        calculateServoAnglesForHeight(params.standing_height, params);
+
+    JointAngles neutral_angles;
+    if (calc.valid) {
+        neutral_angles = JointAngles{
+            0.0, // Coxa angle is 0° for radial alignment
+            math_utils::degreesToRadians(calc.femur),
+            math_utils::degreesToRadians(calc.tibia)};
+    } else {
+        neutral_angles = JointAngles{
+            0.0, // Coxa angle is 0° for radial alignment
+            0.0, // Femur angle is 0° for horizontal alignment
+            0.0  // Tibia angle is 0° for vertical alignment
+        };
+    }
+
+    for (int i = 0; i < NUM_LEGS; i++) {
+        // Use DH-based forward kinematics to calculate the foot position
+        // This gives us the exact position where the foot would be with 0° angles
+        Point3D foot_position = temp_model.forwardKinematicsGlobalCoordinates(i, neutral_angles);
+
+        // Store the stance position (x, y coordinates only, z is the height)
+        positions[i].x = foot_position.x;
+        positions[i].y = foot_position.y;
+    }
+
+    return positions;
+}
+
+/**
  * @brief Get default standing pose joint angles (OpenSHC equivalent)
  * For a hexagonal robot in static equilibrium:
  * - Coxa ≈ 0° (each leg aligned radially with mounting at 60°)
@@ -139,8 +151,8 @@ std::array<StandingPoseJoints, NUM_LEGS> getDefaultStandingPoseJoints(const Para
             // This is the precise configuration for the target robot height
             // calculated with finetune_angles_test.cpp
             joints[i].coxa = 0.0; // Coxa angle is 0° for radial alignment
-            joints[i].femur = math_utils::degreesToRadians(0.0);
-            joints[i].tibia = math_utils::degreesToRadians(0.0);
+            joints[i].femur = 0.0;
+            joints[i].tibia = 0.0;
         }
     }
 
@@ -155,7 +167,7 @@ std::array<StandingPoseJoints, NUM_LEGS> getDefaultStandingPoseJoints(const Para
  */
 BodyPoseConfiguration createPoseConfiguration(const Parameters &params, const std::string &config_type) {
     BodyPoseConfiguration config(params);
-    config.leg_stance_positions = calculateHexagonalStancePositions(params);
+    config.leg_stance_positions = getDefaultStandPositions(params);
     config.standing_pose_joints = getDefaultStandingPoseJoints(params);
 
     // OpenSHC equivalent pose controller parameters
@@ -207,6 +219,26 @@ BodyPoseConfiguration createPoseConfiguration(const Parameters &params, const st
         config.gravity_aligned_tips = false; // Disable for speed
     }
 
+    std::cout << "[DEBUG] Created pose configuration: "
+              << "Type: " << config_type
+              << ", Body Clearance: " << config.body_clearance
+              << ", Swing Height: " << config.swing_height
+              << ", Max Translation: (" << config.max_translation.x << ", "
+              << config.max_translation.y << ", " << config.max_translation.z << ")"
+              << ", Max Rotation: (" << config.max_rotation.roll << ", "
+              << config.max_rotation.pitch << ", " << config.max_rotation.yaw << ")"
+              << std::endl;
+    std::cout << "[DEBUG] standing_pose_joints: ";
+    for (const auto &joint : config.standing_pose_joints) {
+        std::cout << "Coxa: " << joint.coxa
+                  << ", Femur: " << joint.femur
+                  << ", Tibia: " << joint.tibia << " | ";
+    }
+    std::cout << std::endl;
+    std::cout << "[DEBUG] leg_stance_positions: ";
+    for (const auto &pos : config.leg_stance_positions) {
+        std::cout << "X: " << pos.x << ", Y: " << pos.y << " | ";
+    }
     return config;
 }
 

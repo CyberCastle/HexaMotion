@@ -27,7 +27,7 @@ struct CalculatedServoAngles {
  * @param params Robot parameters containing dimensions and joint limits
  * @return Array of calculated stance positions in millimeters
  */
-std::array<LegStancePosition, NUM_LEGS> calculateHexagonalStancePositions(const Parameters &params);
+std::array<LegStancePosition, NUM_LEGS> getDefaultStandPositions(const Parameters &params);
 
 /**
  * @brief Get default standing pose joint angles (OpenSHC equivalent)
