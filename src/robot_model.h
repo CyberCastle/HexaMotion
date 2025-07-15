@@ -65,8 +65,8 @@ struct Parameters {
      * Equivalent to OpenSHC's trajectory interpolation system.
      */
     struct SmoothTrajectoryConfig {
-        bool use_current_servo_positions = true;           //< Use current servo positions as starting point for trajectories (OpenSHC-style)
-        bool enable_pose_interpolation = true;             //< Enable smooth pose interpolation between positions
+        bool use_current_servo_positions = false;          //< Use current servo positions as starting point for trajectories (OpenSHC-style)
+        bool enable_pose_interpolation = false;            //< Enable smooth pose interpolation between positions
         double interpolation_speed = MIN_SERVO_VELOCITY;   //< Interpolation speed factor (0.01-1.0, where 0.1 is smooth)
         double position_tolerance_mm = POSITION_TOLERANCE; //< Position tolerance for determining if servo has reached target
         uint8_t max_interpolation_steps = 20;              //< Maximum steps for pose interpolation

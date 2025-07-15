@@ -46,7 +46,7 @@ BodyPoseController::BodyPoseController(RobotModel &m, const BodyPoseConfiguratio
     }
 
     // Initialize walk plane pose system (OpenSHC equivalent with Bézier curves)
-    walk_plane_pose_ = Pose(Point3D(0.0, 0.0, -body_pose_config.body_clearance), Eigen::Quaterniond::Identity());
+    walk_plane_pose_ = Pose(Point3D(0.0, 0.0, body_pose_config.body_clearance), Eigen::Quaterniond::Identity());
     walk_plane_pose_enabled = true;
     walk_plane_update_threshold = 1.0; // 1mm threshold
 
@@ -57,7 +57,7 @@ BodyPoseController::BodyPoseController(RobotModel &m, const BodyPoseConfiguratio
 
     // Initialize control nodes arrays
     for (int i = 0; i < 5; i++) {
-        walk_plane_position_nodes[i] = Point3D(0.0, 0.0, -body_pose_config.body_clearance);
+        walk_plane_position_nodes[i] = Point3D(0.0, 0.0, body_pose_config.body_clearance);
         walk_plane_rotation_nodes[i] = Eigen::Quaterniond::Identity();
     }
 
