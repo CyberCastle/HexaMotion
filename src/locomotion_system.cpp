@@ -240,21 +240,6 @@ bool LocomotionSystem::setLegJointAngles(int leg, const JointAngles &q) {
     clamped_angles.femur = std::clamp(q.femur, params.femur_angle_limits[0], params.femur_angle_limits[1]);
     clamped_angles.tibia = std::clamp(q.tibia, params.tibia_angle_limits[0], params.tibia_angle_limits[1]);
 
-    // Check if clamping was needed
-    bool was_clamped = (clamped_angles.coxa != q.coxa) ||
-                       (clamped_angles.femur != q.femur) ||
-                       (clamped_angles.tibia != q.tibia);
-
-    if (was_clamped) {
-        // Debug output for joint limit clamping
-        std::cout << "[setLegJointAngles] Leg " << leg << " angles clamped:" << std::endl;
-        std::cout << "  Original: coxa=" << q.coxa << " femur=" << q.femur << " tibia=" << q.tibia << std::endl;
-        std::cout << "  Clamped:  coxa=" << clamped_angles.coxa << " femur=" << clamped_angles.femur << " tibia=" << clamped_angles.tibia << std::endl;
-        std::cout << "  Limits: coxa=[" << params.coxa_angle_limits[0] << "," << params.coxa_angle_limits[1] << "]";
-        std::cout << " femur=[" << params.femur_angle_limits[0] << "," << params.femur_angle_limits[1] << "]";
-        std::cout << " tibia=[" << params.tibia_angle_limits[0] << "," << params.tibia_angle_limits[1] << "]" << std::endl;
-    }
-
     // Update both joint angles and leg positions in a single atomic operation
     legs[leg].setJointAngles(clamped_angles); // Update leg object
     legs[leg].updateTipPosition(model);       // Update leg position based on new angles
