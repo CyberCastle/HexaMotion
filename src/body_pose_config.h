@@ -23,6 +23,7 @@
 struct LegStancePosition {
     double x; //< X position relative to body center (millimeters)
     double y; //< Y position relative to body center (millimeters)
+    double z; //< Z position relative to body center (millimeters)
 };
 
 /**

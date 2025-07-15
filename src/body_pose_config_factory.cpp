@@ -47,7 +47,7 @@ CalculatedServoAngles calculateServoAnglesForHeight(double target_height_mm, con
         return result;
 
     double femur_rad = std::asin(ratio);
-    double femur_deg = math_utils::radiansToDegrees(femur_rad);
+    double femur_deg = femur_rad;
     double tibia_deg = -femur_deg; // Keep tibia vertical
 
     // Check servo limits
@@ -93,8 +93,8 @@ std::array<LegStancePosition, NUM_LEGS> getDefaultStandPositions(const Parameter
     if (calc.valid) {
         neutral_angles = JointAngles{
             0.0, // Coxa angle is 0° for radial alignment
-            math_utils::degreesToRadians(calc.femur),
-            math_utils::degreesToRadians(calc.tibia)};
+            calc.femur,
+            calc.tibia};
     } else {
         neutral_angles = JointAngles{
             0.0, // Coxa angle is 0° for radial alignment
@@ -111,6 +111,7 @@ std::array<LegStancePosition, NUM_LEGS> getDefaultStandPositions(const Parameter
         // Store the stance position (x, y coordinates only, z is the height)
         positions[i].x = foot_position.x;
         positions[i].y = foot_position.y;
+        positions[i].z = foot_position.z; // Use Z from FK for accurate stance height
     }
 
     return positions;
@@ -142,8 +143,8 @@ std::array<StandingPoseJoints, NUM_LEGS> getDefaultStandingPoseJoints(const Para
     for (int i = 0; i < NUM_LEGS; i++) {
         if (calc.valid) {
             joints[i].coxa = 0.0; // Coxa angle is 0° for radial alignment
-            joints[i].femur = math_utils::degreesToRadians(calc.femur);
-            joints[i].tibia = math_utils::degreesToRadians(calc.tibia);
+            joints[i].femur = calc.femur;
+            joints[i].tibia = calc.tibia;
         } else {
             // Fallback to a neutral configuration
             // Fine-tuned angles that achieve exactly -208mm height:
@@ -181,10 +182,10 @@ BodyPoseConfiguration createPoseConfiguration(const Parameters &params, const st
     config.swing_height = static_cast<float>(params.standing_height * params.gait_factors.tripod_height_factor);
 
     // OpenSHC equivalent pose limits (from default.yaml)
-    config.max_translation = {150.0f, 150.0f, 150.0f}; // 25mm translation limits
-    config.max_rotation = {0.5f, 0.5f, 0.5f};          // 0.25 radian rotation limits
-    config.max_translation_velocity = 50.0f;           // 50mm/s velocity limit
-    config.max_rotation_velocity = 0.200f;             // 0.2 rad/s rotation limit
+    config.max_translation = {25.0f, 25.0f, 25.0f}; // 25mm translation limits
+    config.max_rotation = {0.25f, 0.25f, 0.25f};    // 0.25 radian rotation limits
+    config.max_translation_velocity = 50.0f;        // 50mm/s velocity limit
+    config.max_rotation_velocity = 0.200f;          // 0.2 rad/s rotation limit
 
     // OpenSHC equivalent pose control flags
     config.gravity_aligned_tips = false;          // Match OpenSHC default.yaml
@@ -219,26 +220,6 @@ BodyPoseConfiguration createPoseConfiguration(const Parameters &params, const st
         config.gravity_aligned_tips = false; // Disable for speed
     }
 
-    std::cout << "[DEBUG] Created pose configuration: "
-              << "Type: " << config_type
-              << ", Body Clearance: " << config.body_clearance
-              << ", Swing Height: " << config.swing_height
-              << ", Max Translation: (" << config.max_translation.x << ", "
-              << config.max_translation.y << ", " << config.max_translation.z << ")"
-              << ", Max Rotation: (" << config.max_rotation.roll << ", "
-              << config.max_rotation.pitch << ", " << config.max_rotation.yaw << ")"
-              << std::endl;
-    std::cout << "[DEBUG] standing_pose_joints: ";
-    for (const auto &joint : config.standing_pose_joints) {
-        std::cout << "Coxa: " << joint.coxa
-                  << ", Femur: " << joint.femur
-                  << ", Tibia: " << joint.tibia << " | ";
-    }
-    std::cout << std::endl;
-    std::cout << "[DEBUG] leg_stance_positions: ";
-    for (const auto &pos : config.leg_stance_positions) {
-        std::cout << "X: " << pos.x << ", Y: " << pos.y << " | ";
-    }
     return config;
 }
 
