@@ -52,7 +52,6 @@ struct BodyPoseConfiguration {
     std::string auto_pose_type; //< String denoting the default auto posing cycle type
     bool start_up_sequence;     //< Flag allowing execution of start up and shutdown sequences
     double time_to_start;       //< The time to complete a direct start up
-    double standing_height;     //< The desired height of the robot body when standing (mm)
 
     // OpenSHC equivalent body clearance and swing parameters
     double body_clearance; //< The requested height of the robot body above ground (mm)
