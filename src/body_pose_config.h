@@ -60,15 +60,15 @@ struct BodyPoseConfiguration {
 
     // OpenSHC equivalent pose limits
     struct {
-        double x = 50.0; //< Maximum X translation (millimeters)
-        double y = 50.0; //< Maximum Y translation (millimeters)
-        double z = 50.0; //< Maximum Z translation (millimeters)
+        double x; //< Maximum X translation (millimeters)
+        double y; //< Maximum Y translation (millimeters)
+        double z; //< Maximum Z translation (millimeters)
     } max_translation;
 
     struct {
-        double roll = 0.5;  //< Maximum roll rotation (radians)
-        double pitch = 0.5; //< Maximum pitch rotation (radians)
-        double yaw = 0.5;   //< Maximum yaw rotation (radians)
+        double roll;  //< Maximum roll rotation (radians)
+        double pitch; //< Maximum pitch rotation (radians)
+        double yaw;   //< Maximum yaw rotation (radians)
     } max_rotation;
 
     // OpenSHC equivalent velocity limits

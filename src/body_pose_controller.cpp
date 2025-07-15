@@ -335,11 +335,12 @@ bool BodyPoseController::checkBodyPoseLimits(const Eigen::Vector3d &position, co
 }
 
 Eigen::Vector3d BodyPoseController::calculateBodyPosition(Leg legs[NUM_LEGS]) const {
-    // Update walk plane pose for current leg positions
-    const_cast<BodyPoseController *>(this)->updateWalkPlanePose(legs);
 
     // Use walk plane pose for body position calculation (OpenSHC equivalent)
     if (walk_plane_pose_enabled) {
+        // Update walk plane pose for current leg positions
+        const_cast<BodyPoseController *>(this)->updateWalkPlanePose(legs);
+
         return Eigen::Vector3d(
             walk_plane_pose_.position.x,
             walk_plane_pose_.position.y,
