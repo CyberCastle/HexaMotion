@@ -225,20 +225,8 @@ void LegStepper::updateTipPosition(double step_length, double time_delta, bool r
             bezier_position = math_utils::quarticBezier(swing_2_nodes_, t);
         }
 
-        // Set position from Bézier and override z to default stance + swing_height
+        // Set position from Bézier (z already encoded by control nodes)
         current_tip_pose_ = bezier_position;
-        current_tip_pose_.z = default_tip_pose_.z + swing_height_;
-
-        // Calcular velocidad usando la derivada de la curva Bézier
-        Point3D bezier_velocity;
-        if (time_input < 0.5) {
-            double t = time_input * 2.0;
-            bezier_velocity = math_utils::quarticBezierDot(swing_1_nodes_, t) * 2.0;
-        } else {
-            double t = (time_input - 0.5) * 2.0;
-            bezier_velocity = math_utils::quarticBezierDot(swing_2_nodes_, t) * 2.0;
-        }
-        current_tip_velocity_ = bezier_velocity / time_delta;
     }
     // Período de Stance
     else if (step_state_ == STEP_STANCE || step_state_ == STEP_FORCE_STANCE) {
@@ -306,7 +294,8 @@ void LegStepper::generatePrimarySwingControlNodes() {
 
     // Calculate midpoint for swing using default tip z and configured swing height
     Point3D mid_tip_position = (swing_origin_tip_position_ + target_tip_pose_) * 0.5;
-    mid_tip_position.z = default_tip_pose_.z + swing_height_;
+    // Use configured swing clearance for midpoint height
+    mid_tip_position.z = default_tip_pose_.z + swing_clearance_.z;
 
     // Get swing width parameter from robot model or use default
     double mid_lateral_shift = LEG_STEPPER_SWING_LATERAL_SHIFT; // Default swing width, configurable
