@@ -524,19 +524,14 @@ bool BodyPoseController::executeStartupSequence(Leg legs[NUM_LEGS]) {
 
     // Check if we're using tripod gait - stepToNewStance is only for tripod gait
     bool use_tripod_coordination = (current_gait_type_ == TRIPOD_GAIT);
-
-    bool complete = false;
+    // Execute startup sequence based on gait type
     if (use_tripod_coordination) {
-        // Use stepToNewStance for tripod gait coordination (OpenSHC style)
-        // This coordinates legs in two groups of 3, moving one group at a time
-        complete = stepToNewStance(legs, step_height, step_time);
+        // Tripod gait startup: two-phase sequence
+        return stepToNewStance(legs, step_height, step_time);
     } else {
-        // Use executeDirectStartup for wave, ripple, metachronal, and other gaits (OpenSHC style)
-        // This provides simultaneous leg coordination (all legs move together)
-        complete = executeDirectStartup(legs);
+        // Other gaits: direct simultaneous startup
+        return executeDirectStartup(legs);
     }
-
-    return complete;
 }
 
 // Execute direct startup sequence (simultaneous leg coordination)

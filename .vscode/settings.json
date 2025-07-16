@@ -75,6 +75,7 @@
         "thread": "cpp",
         "queue": "cpp",
         "stack": "cpp",
-        "core": "cpp"
+        "core": "cpp",
+        "map": "cpp"
     }
 }

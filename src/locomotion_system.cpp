@@ -731,15 +731,20 @@ bool LocomotionSystem::update() {
         double stance_norm = walk_ctrl->getStanceDuration(); // Already normalized [0.0-1.0]
 
         for (int i = 0; i < NUM_LEGS; i++) {
-            // Get calculated trajectory information from walk controller
-            WalkController::LegTrajectoryInfo trajectory_info = walk_ctrl->getLegTrajectoryInfo(i);
 
-            // Update leg step phase based on walk controller calculation
-            legs[i].setStepPhase(trajectory_info.step_phase);
-
-            // Get precalculated joint angles from leg stepper (IK already done)
+            // Get precalculated joint angles from leg stepper (IK already done in LegStepper)
             auto leg_stepper = walk_ctrl->getLegStepper(i);
             if (leg_stepper) {
+
+                double phase = static_cast<double>(leg_stepper->getPhase()) /
+                               static_cast<double>(walk_ctrl->getStepCycle().period_);
+
+                if (legs[i].shouldBeInStance(phase, stance_norm)) {
+                    legs[i].setStepPhase(STANCE_PHASE);
+                } else {
+                    legs[i].setStepPhase(SWING_PHASE);
+                }
+
                 JointAngles target_angles = leg_stepper->getJointAngles();
 
                 // Apply joint angles to both leg object and servos

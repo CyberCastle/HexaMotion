@@ -108,7 +108,6 @@ class LegStepper {
     void setStanceSpanModifier(double modifier) { stance_span_modifier_ = modifier; }
     void setSwingClearance(const Point3D &clearance) { swing_clearance_ = clearance; }
 
-    // Core functionality without WalkController dependency
     void updatePhase(const StepCycle &step);     // StepCycle passed as parameter
     void iteratePhase(const StepCycle &step);    // StepCycle passed as parameter
     void updateStepState(const StepCycle &step); // StepCycle passed as parameter
@@ -131,8 +130,6 @@ class LegStepper {
     double calculateStancePeriod(double step_length) const;
     void updateDynamicTiming(double step_length, double time_delta);
     StepCycle calculateStepCycle(double step_length, double time_delta) const;
-
-    // OpenSHC-like API without WalkController dependency
     void updateWithPhase(double local_phase, double step_length, double time_delta);
 
     /**
@@ -142,13 +139,6 @@ class LegStepper {
      * synchronization calls like LocomotionSystem::updateModel()
      */
     void autoSyncWithLeg();
-
-    /**
-     * @brief Update only phase information without position changes
-     * @param local_phase Current phase in the step cycle [0.0, 1.0]
-     * @param time_delta Time since last update in seconds
-     */
-    void updatePhaseOnly(double local_phase, double time_delta);
 
   private:
     int leg_index_;

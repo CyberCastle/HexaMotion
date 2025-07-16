@@ -87,22 +87,7 @@ bool WalkController::setGaitByName(const std::string &gait_name) {
         return false;
     }
 
-    // Apply the gait configuration
-    bool success = setGaitConfiguration(gait_config);
-
-    // Apply phase offset to each leg (corrección del problema 2)
-    if (success && gait_name == "tripod_gait") {
-        // Use offset_multiplier parameter from robot configuration
-        double offset_multiplier = params.offset_multiplier;
-
-        // Apply offset to each leg
-        for (int i = 0; i < NUM_LEGS; i++) {
-            double offset_normalized = static_cast<double>(gait_config.offsets.getForLegIndex(i)) * offset_multiplier;
-            legs_array_[i].setPhaseOffset(offset_normalized);
-        }
-    }
-
-    return success;
+    return setGaitConfiguration(gait_config);
 }
 
 void WalkController::applyGaitConfigToLegSteppers(const GaitConfiguration &gait_config) {
@@ -127,8 +112,6 @@ void WalkController::applyGaitConfigToLegSteppers(const GaitConfiguration &gait_
         // En OpenSHC, swing_clearance_ se inicializa con swing_height en dirección normal al plano de marcha
         Point3D swing_clearance(0.0, 0.0, gait_config.swing_height);
         leg_stepper->setSwingClearance(swing_clearance);
-
-        // Si hay otros parámetros relevantes, configurarlos aquí
     }
 
     // Actualizar parámetros de adaptación al terreno
@@ -426,8 +409,9 @@ void WalkController::updateWalk(const Point3D &linear_velocity_input, double ang
         double offset = leg_stepper->getPhaseOffset();
         double local_phase = std::fmod(base_phase_frac + offset, 1.0);
 
-        // ONLY UPDATE PHASE DATA - NO POSITION CHANGES
-        leg_stepper->updatePhaseOnly(local_phase, time_delta_);
+        // Update phase and positions - this is where LegStepper calculates IK
+        leg_stepper->updateWithPhase(local_phase, getStepLength(), time_delta_);
+        leg_stepper->updatePhase(current_gait_config_.step_cycle);
 
         // Advance to next phase
         leg_stepper->iteratePhase(current_gait_config_.step_cycle);
