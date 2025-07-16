@@ -74,8 +74,6 @@ class LegStepper {
     double getPhaseOffset() const { return leg_.getPhaseOffset(); }
     Point3D getStrideVector() const { return stride_vector_; }
     Point3D getSwingClearance() const { return swing_clearance_; }
-    double getSwingProgress() const { return swing_progress_; }
-    double getStanceProgress() const { return stance_progress_; }
     double getStepProgress() const { return step_progress_; }
     bool hasCompletedFirstStep() const { return completed_first_step_; }
     bool isAtCorrectPhase() const { return at_correct_phase_; }
@@ -91,8 +89,6 @@ class LegStepper {
     void setDefaultTipPose(const Point3D &pose) { default_tip_pose_ = pose; }
     void setStepState(StepState state) { step_state_ = state; }
     void setPhase(int phase) { phase_ = phase; }
-    void setSwingProgress(double progress) { swing_progress_ = progress; }
-    void setStanceProgress(double progress) { stance_progress_ = progress; }
     void setStepProgress(double progress) { step_progress_ = progress; }
     void setPhaseOffset(double offset) { leg_.setPhaseOffset(offset); }
     void setSwingOriginTipVelocity(const Point3D &velocity) { swing_origin_tip_velocity_ = velocity; }
@@ -108,13 +104,14 @@ class LegStepper {
     void setStanceSpanModifier(double modifier) { stance_span_modifier_ = modifier; }
     void setSwingClearance(const Point3D &clearance) { swing_clearance_ = clearance; }
 
-    void updatePhase(const StepCycle &step);     // StepCycle passed as parameter
-    void iteratePhase(const StepCycle &step);    // StepCycle passed as parameter
-    void updateStepState(const StepCycle &step); // StepCycle passed as parameter
+    // Main unified update method (OpenSHC equivalent)
+    void updateStepCycle(double normalized_phase, double step_length, double time_delta);
+
+    // Internal helper methods
     void updateStride();
     Point3D calculateStanceSpanChange();
     void updateDefaultTipPosition();
-    void updateTipPosition(double step_length, double time_delta, bool rough_terrain_mode, bool force_normal_touchdown); // Parameters passed
+    void updateTipPosition(double step_length, double time_delta, bool rough_terrain_mode, bool force_normal_touchdown);
     void generatePrimarySwingControlNodes();
     void generateSecondarySwingControlNodes(bool ground_contact);
     void generateStanceControlNodes(double stride_scaler);
@@ -122,15 +119,6 @@ class LegStepper {
 
     // OpenSHC-style position delta calculation
     Point3D calculatePositionDelta(const Point3D &desired_position, const Point3D &current_position) const;
-
-    // Dynamic iteration calculation (OpenSHC equivalent)
-    int calculateSwingIterations(double step_length, double time_delta) const;
-    int calculateStanceIterations(double step_length, double time_delta) const;
-    double calculateSwingPeriod(double step_length) const;
-    double calculateStancePeriod(double step_length) const;
-    void updateDynamicTiming(double step_length, double time_delta);
-    StepCycle calculateStepCycle(double step_length, double time_delta) const;
-    void updateWithPhase(double local_phase, double step_length, double time_delta);
 
     /**
      * @brief Automatically synchronize internal state with Leg object
@@ -141,6 +129,12 @@ class LegStepper {
     void autoSyncWithLeg();
 
   private:
+    // Internal helper methods
+    void updateStepState(const StepCycle &step);
+    void updateInternalPhase(double normalized_phase, const StepCycle &step);
+    void calculateStepProgress(double normalized_phase, const StepCycle &step);
+    void updateDynamicTiming(double step_length, double time_delta);
+
     int leg_index_;
     Leg &leg_;
     RobotModel &robot_model_; // Store robot model for kinematics
@@ -166,8 +160,6 @@ class LegStepper {
     bool at_correct_phase_;
     bool completed_first_step_;
     int phase_;
-    double stance_progress_;
-    double swing_progress_;
     double step_progress_;
     StepState step_state_;
     WalkState current_walk_state_; // Internal walk state

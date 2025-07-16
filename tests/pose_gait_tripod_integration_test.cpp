@@ -38,7 +38,7 @@ static void addResult(TestReport &rep, bool ok, const std::string &msg,
     } else {
         rep.failed++;
         std::cout << "Test failed: " << msg << std::endl;
-        printDiagnostics(sys);
+        // printDiagnostics(sys);
     }
 }
 
@@ -70,7 +70,7 @@ static void validateSwingHeights(LocomotionSystem &sys, TestReport &rep) {
             std::cout << "Swing progress: ";
             for (int i = 0; i < swing.size(); ++i) {
                 auto stepper = wc->getLegStepper(swing[i]);
-                double prog = stepper ? stepper->getSwingProgress() : -1.0;
+                double prog = stepper ? stepper->getStepProgress() : -1.0;
                 std::cout << "Leg" << swing[i] << "=" << prog << " ";
             }
             std::cout << std::endl;
@@ -135,7 +135,7 @@ static void validateSwingPeakSync(LocomotionSystem &sys, TestReport &rep) {
         bool near_mid = true;
         for (int idx = 0; idx < 3; ++idx) {
             auto stepper = wc->getLegStepper(swing[idx]);
-            double prog = stepper ? stepper->getSwingProgress() : -1.0;
+            double prog = stepper ? stepper->getStepProgress() : -1.0;
             if (prog < 0.45 || prog > 0.55)
                 near_mid = false;
         }
@@ -291,6 +291,7 @@ int main() {
     int max_cycles = cycles * 10;
     int step = 0;
     for (; step < cycles && step < max_cycles; ++step) {
+        printf("=============================================================================Cycle %d/%d\n", step + 1, cycles);
         assert(sys.update());
         bool phase_change = false;
         for (int i = 0; i < NUM_LEGS; ++i) {
@@ -299,6 +300,7 @@ int main() {
                 phase_change = true;
             prev_phase[i] = ph;
         }
+        printDiagnostics(sys);
         if (phase_change) {
             validateGroupSync(sys, rep);
             validateSwingHeights(sys, rep);
