@@ -451,6 +451,39 @@ void LegStepper::updateWithPhase(double local_phase, double step_length, double 
     updateTipPosition(step_length, time_delta, false, false); // Default terrain adaptation values
 }
 
+void LegStepper::updatePhaseOnly(double local_phase, double time_delta) {
+    const auto &config = robot_model_.getParams().dynamic_gait;
+
+    // Use dynamic duty factor from configuration
+    double duty_factor = config.duty_factor;
+
+    // Determinar el nuevo estado basado en la fase
+    StepState new_state;
+    if (local_phase < duty_factor) {
+        new_state = STEP_STANCE;
+    } else {
+        new_state = STEP_SWING;
+    }
+
+    // Actualizar estado y progreso SOLO (sin cambios de posición)
+    step_state_ = new_state;
+
+    if (step_state_ == STEP_STANCE) {
+        double stance_progress = local_phase / duty_factor;
+        step_progress_ = stance_progress;
+        stance_progress_ = stance_progress;
+        swing_progress_ = -1.0;
+    } else {
+        // SWING
+        double swing_progress = (local_phase - duty_factor) / (1.0 - duty_factor);
+        step_progress_ = swing_progress;
+        swing_progress_ = swing_progress;
+        stance_progress_ = -1.0;
+    }
+
+    // NO LLAMAR updateTipPosition - solo actualizar información de estado
+}
+
 // Implementaciones de cálculo de iteración dinámica (equivalente a OpenSHC)
 int LegStepper::calculateSwingIterations(double step_length, double time_delta) const {
     const auto &config = robot_model_.getParams().dynamic_gait;

@@ -143,6 +143,13 @@ class LegStepper {
      */
     void autoSyncWithLeg();
 
+    /**
+     * @brief Update only phase information without position changes
+     * @param local_phase Current phase in the step cycle [0.0, 1.0]
+     * @param time_delta Time since last update in seconds
+     */
+    void updatePhaseOnly(double local_phase, double time_delta);
+
   private:
     int leg_index_;
     Leg &leg_;
