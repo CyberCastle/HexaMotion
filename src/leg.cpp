@@ -54,11 +54,20 @@ bool Leg::setCurrentTipPositionGlobal(const RobotModel &model, const Point3D &po
     // Store the target position
     Point3D target = position;
 
-    // Check if target is reachable
-    double distance = sqrt(target.x * target.x + target.y * target.y + target.z * target.z);
+    // For global coordinates, we need to check reachability relative to the leg's base position
+    Point3D leg_base = model.getLegBasePosition(leg_id_);
+
+    // Calculate distance from leg base to target position
+    double dx = target.x - leg_base.x;
+    double dy = target.y - leg_base.y;
+    double dz = target.z - leg_base.z;
+    double distance = sqrt(dx * dx + dy * dy + dz * dz);
+
     double max_reach = getLegReach(model.getParams());
 
     if (distance > max_reach) {
+        // TODO: OpenSHC approach: could adjust position to be within reach
+        //  For now, we reject it
         return false; // Target too far
     }
 
@@ -178,8 +187,9 @@ void Leg::reset(const RobotModel &model) {
 }
 
 double Leg::getLegReach(const Parameters &params) const {
-    // Maximum reach is sum of link lengths
-    return params.coxa_length + params.femur_length + params.tibia_length;
+    // Maximum reach is femur + tibia lengths (coxa only provides lateral offset)
+    // The coxa rotates around Z-axis and doesn't extend the radial reach
+    return params.femur_length + params.tibia_length;
 }
 
 double Leg::getDistanceToTarget(const Point3D &target) const {

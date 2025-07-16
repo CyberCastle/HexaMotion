@@ -201,10 +201,12 @@ bool BodyPoseController::setStandingPose(Leg legs[NUM_LEGS]) {
     // Apply configured standing pose joint angles for each leg
     for (int i = 0; i < NUM_LEGS; ++i) {
         const auto &standing_joints = body_pose_config.standing_pose_joints[i];
+
         JointAngles angles;
         angles.coxa = standing_joints.coxa;
         angles.femur = standing_joints.femur;
         angles.tibia = standing_joints.tibia;
+
         // Update leg with standing joint angles and corresponding tip position
         legs[i].setJointAngles(angles);
         Point3D pos = model.forwardKinematicsGlobalCoordinates(i, angles);
