@@ -235,6 +235,21 @@ class WalkController {
      */
     double getCycleFrequency() const { return current_gait_config_.step_frequency; }
 
+    /**
+     * @brief Get calculated leg trajectory information for locomotion system
+     * @param leg_index Index of the leg (0-5)
+     * @return Calculated tip position and trajectory information
+     */
+    struct LegTrajectoryInfo {
+        Point3D target_position;
+        StepPhase step_phase;
+        double phase_progress;
+        bool is_stance;
+        Point3D velocity;
+    };
+
+    LegTrajectoryInfo getLegTrajectoryInfo(int leg_index) const;
+
   private:
     RobotModel &model;
 

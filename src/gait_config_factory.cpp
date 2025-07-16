@@ -83,7 +83,7 @@ GaitConfiguration createTripodGaitConfig(const Parameters &params) {
     config.step_frequency = 1.0 / (total_phase * 0.01);
     config.max_velocity = 100.0;
     config.stability_factor = 0.75;
-    config.supports_rough_terrain = true;
+    config.supports_rough_terrain = false;
 
     // Velocity limits parameters (unified configuration)
     config.stance_ratio = (double)config.phase_config.stance_phase / total_phase;

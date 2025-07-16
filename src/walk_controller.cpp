@@ -87,22 +87,7 @@ bool WalkController::setGaitByName(const std::string &gait_name) {
         return false;
     }
 
-    // Apply the gait configuration
-    bool success = setGaitConfiguration(gait_config);
-
-    // Apply phase offset to each leg (corrección del problema 2)
-    if (success && gait_name == "tripod_gait") {
-        // Use offset_multiplier parameter from robot configuration
-        double offset_multiplier = params.offset_multiplier;
-
-        // Apply offset to each leg
-        for (int i = 0; i < NUM_LEGS; i++) {
-            double offset_normalized = static_cast<double>(gait_config.offsets.getForLegIndex(i)) * offset_multiplier;
-            legs_array_[i].setPhaseOffset(offset_normalized);
-        }
-    }
-
-    return success;
+    return setGaitConfiguration(gait_config);
 }
 
 void WalkController::applyGaitConfigToLegSteppers(const GaitConfiguration &gait_config) {
@@ -127,8 +112,6 @@ void WalkController::applyGaitConfigToLegSteppers(const GaitConfiguration &gait_
         // En OpenSHC, swing_clearance_ se inicializa con swing_height en dirección normal al plano de marcha
         Point3D swing_clearance(0.0, 0.0, gait_config.swing_height);
         leg_stepper->setSwingClearance(swing_clearance);
-
-        // Si hay otros parámetros relevantes, configurarlos aquí
     }
 
     // Actualizar parámetros de adaptación al terreno
@@ -387,13 +370,10 @@ void WalkController::updateWalk(const Point3D &linear_velocity_input, double ang
     if (walk_state_ == WALK_STOPPED && has_velocity_command) {
         walk_state_ = WALK_STARTING;
         // Inicializar LegSteppers solo con el offset y parámetros de GaitConfiguration
-        StepCycle step = current_gait_config_.step_cycle;
         for (auto &leg_stepper : leg_steppers_) {
             leg_stepper->setAtCorrectPhase(false);
             leg_stepper->setCompletedFirstStep(false);
             leg_stepper->setStepState(STEP_STANCE);
-            // Offset y parámetros ya aplicados en applyGaitConfigToLegSteppers
-            leg_stepper->updateStepState(step);
         }
         return;
     }
@@ -410,16 +390,13 @@ void WalkController::updateWalk(const Point3D &linear_velocity_input, double ang
         walk_state_ = WALK_STOPPED;
     }
 
-    // Update walk/step state and tip position along trajectory for each leg
+    // Calculate gait coordination data for each leg (NO POSITION UPDATES)
     for (auto &leg_stepper : leg_steppers_) {
-        // Set walk state in LegStepper
+        // Set walk state in LegStepper for coordination only
         leg_stepper->setWalkState(walk_state_);
 
         // Set desired velocity for the leg stepper
         leg_stepper->setDesiredVelocity(desired_linear_velocity_, desired_angular_velocity_);
-
-        // Advance phase for this leg
-        // leg_stepper->iteratePhase(current_gait_config_.step_cycle);
 
         // Calculate local phase using step cycle and leg offset
         int current_phase = leg_stepper->getPhase();
@@ -429,14 +406,8 @@ void WalkController::updateWalk(const Point3D &linear_velocity_input, double ang
         double offset = leg_stepper->getPhaseOffset();
         double local_phase = std::fmod(base_phase_frac + offset, 1.0);
 
-        // Usar los parámetros de marcha de GaitConfiguration
-        leg_stepper->updateWithPhase(local_phase, current_gait_config_.step_length, time_delta_);
-
-        // After updating, check the leg's state for the next cycle's state machine logic
-        if (leg_stepper->isAtCorrectPhase()) {
-            // This check is now implicitly handled at the top of the function
-        }
-        leg_stepper->iteratePhase(current_gait_config_.step_cycle);
+        // Update step cycle with unified method (OpenSHC equivalent)
+        leg_stepper->updateStepCycle(local_phase, getStepLength(), time_delta_);
     }
 
     // Update walk plane pose through BodyPoseController
@@ -447,11 +418,9 @@ void WalkController::updateWalk(const Point3D &linear_velocity_input, double ang
 
     // Integrate WalkspaceAnalyzer for real-time analysis (OpenSHC equivalent)
     if (walkspace_analyzer_ && walkspace_analyzer_->isAnalysisEnabled()) {
-        // Update current leg positions for analysis
+        // Update current leg positions for analysis using current positions from legs_array_
         for (int i = 0; i < NUM_LEGS; i++) {
-            if (i < (int)leg_steppers_.size() && leg_steppers_[i]) {
-                current_leg_positions_[i] = leg_steppers_[i]->getCurrentTipPose();
-            }
+            current_leg_positions_[i] = legs_array_[i].getCurrentTipPositionGlobal();
         }
 
         // Perform real-time walkspace analysis
@@ -710,4 +679,46 @@ Point3D WalkController::calculateDefaultStancePosition(int leg_index) {
 double WalkController::calculateLegReach() const {
     const auto &params = model.getParams();
     return params.coxa_length + params.femur_length + params.tibia_length;
+}
+
+WalkController::LegTrajectoryInfo WalkController::getLegTrajectoryInfo(int leg_index) const {
+    LegTrajectoryInfo info;
+
+    if (leg_index < 0 || leg_index >= NUM_LEGS || leg_index >= (int)leg_steppers_.size()) {
+        // Return empty info for invalid index
+        info.target_position = Point3D(0, 0, 0);
+        info.step_phase = STANCE_PHASE;
+        info.phase_progress = 0.0;
+        info.is_stance = true;
+        info.velocity = Point3D(0, 0, 0);
+        return info;
+    }
+
+    auto leg_stepper = leg_steppers_[leg_index];
+    if (!leg_stepper) {
+        // Return empty info for null stepper
+        info.target_position = Point3D(0, 0, 0);
+        info.step_phase = STANCE_PHASE;
+        info.phase_progress = 0.0;
+        info.is_stance = true;
+        info.velocity = Point3D(0, 0, 0);
+        return info;
+    }
+
+    // Calculate target position based on current phase and gait parameters
+    double local_phase = leg_stepper->getStepProgress();
+    StepState step_state = leg_stepper->getStepState();
+
+    // Get current tip position from leg stepper (this is the calculated position)
+    info.target_position = leg_stepper->getCurrentTipPose();
+
+    // Convert StepState to StepPhase for compatibility
+    info.step_phase = (step_state == STEP_STANCE) ? STANCE_PHASE : SWING_PHASE;
+    info.phase_progress = local_phase;
+    info.is_stance = (step_state == STEP_STANCE);
+
+    // Calculate velocity based on desired velocity and leg stepper state
+    info.velocity = leg_stepper->getCurrentTipVelocity();
+
+    return info;
 }

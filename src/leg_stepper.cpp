@@ -6,7 +6,6 @@
 
 #include "velocity_limits.h"
 
-// Constructor without WalkController dependency
 LegStepper::LegStepper(int leg_index, const Point3D &identity_tip_pose, Leg &leg, RobotModel &robot_model,
                        WalkspaceAnalyzer *walkspace_analyzer, WorkspaceValidator *workspace_validator)
     : leg_index_(leg_index),
@@ -23,8 +22,6 @@ LegStepper::LegStepper(int leg_index, const Point3D &identity_tip_pose, Leg &leg
     at_correct_phase_ = false;
     completed_first_step_ = false;
     phase_ = 0;
-    stance_progress_ = 0.0;
-    swing_progress_ = 0.0;
     step_progress_ = 0.0;
     step_state_ = STEP_STANCE;
     current_walk_state_ = WALK_STOPPED;
@@ -57,42 +54,86 @@ void LegStepper::setDesiredVelocity(const Point3D &linear_velocity, double angul
     desired_angular_velocity_ = angular_velocity;
 }
 
-// Core functionality implementations
-void LegStepper::updatePhase(const StepCycle &step) {
-    phase_ = static_cast<int>(step_progress_ * step.period_);
-    updateStepState(step);
+// Main unified step cycle update method (OpenSHC equivalent)
+void LegStepper::updateStepCycle(double normalized_phase, double step_length, double time_delta) {
+    // Get current step cycle configuration
+    const auto &config = robot_model_.getParams().dynamic_gait;
+
+    // Create step cycle from configuration
+    StepCycle step_cycle;
+    step_cycle.period_ = config.stance_phase + config.swing_phase;
+    step_cycle.stance_start_ = 0;
+    step_cycle.stance_end_ = config.stance_phase;
+    step_cycle.swing_start_ = config.stance_phase;
+    step_cycle.swing_end_ = step_cycle.period_;
+    step_cycle.frequency_ = config.frequency;
+
+    // 1. Update internal phase based on normalized input
+    updateInternalPhase(normalized_phase, step_cycle);
+
+    // 2. Update step state (STANCE/SWING)
+    updateStepState(step_cycle);
+
+    // 3. Calculate step progress
+    calculateStepProgress(normalized_phase, step_cycle);
+
+    // 4. Update dynamic timing parameters
+    updateDynamicTiming(step_length, time_delta);
+
+    // 5. Update tip position and trajectories
+    updateTipPosition(step_length, time_delta, false, false);
+
+    // 6. Synchronize with hardware leg
+    autoSyncWithLeg();
 }
 
-void LegStepper::iteratePhase(const StepCycle &step) {
-    phase_ = (phase_ + 1) % step.period_;
-    updateStepState(step);
+// Internal helper methods
+void LegStepper::updateInternalPhase(double normalized_phase, const StepCycle &step) {
+    phase_ = static_cast<int>(normalized_phase * step.period_);
+}
 
-    // Calcular progreso de stance/swing periods (0.0->1.0 o -1.0 si no está en estado específico)
-    step_progress_ = double(phase_) / step.period_;
-    if (step_state_ == STEP_SWING) {
-        swing_progress_ = double(phase_ - step.swing_start_ + 1) / double(step.swing_end_ - step.swing_start_);
-        swing_progress_ = std::max(0.0, std::min(1.0, swing_progress_));
-        stance_progress_ = -1.0;
-    } else if (step_state_ == STEP_STANCE) {
-        stance_progress_ = double((phase_ + (step.period_ - step.stance_start_)) % step.period_ + 1) /
-                           double((step.stance_end_ - step.stance_start_ + step.period_) % step.period_);
-        stance_progress_ = std::max(0.0, std::min(1.0, stance_progress_));
-        swing_progress_ = -1.0;
-    } else if (step_state_ == STEP_FORCE_STOP) {
-        stance_progress_ = 0.0;
-        swing_progress_ = -1.0;
+void LegStepper::calculateStepProgress(double normalized_phase, const StepCycle &step) {
+    step_progress_ = normalized_phase;
+
+    // Update at_correct_phase_ and completed_first_step_ based on walk state
+    if (current_walk_state_ == WALK_STARTING) {
+        // During starting, check if we're at the correct phase for this leg
+        if (step_state_ == STEP_STANCE && step_progress_ < 0.1) {
+            at_correct_phase_ = true;
+            completed_first_step_ = true;
+        }
+    } else if (current_walk_state_ == WALK_STOPPING) {
+        // During stopping, check if we're back to default position
+        Point3D error = current_tip_pose_ - default_tip_pose_;
+        if (error.norm() < 5.0) { // 5mm tolerance
+            at_correct_phase_ = true;
+        }
+    } else if (current_walk_state_ == WALK_MOVING) {
+        at_correct_phase_ = true;
+        completed_first_step_ = true;
     }
 }
 
 void LegStepper::updateStepState(const StepCycle &step) {
-    // Actualizar estado de paso desde la fase a menos que esté forzado a parar
+    // Update step state from phase unless force stopped
     if (step_state_ == STEP_FORCE_STOP) {
         return;
     }
-    if (phase_ >= step.swing_start_ && phase_ < step.swing_end_ &&
-        step_state_ != STEP_FORCE_STANCE) {
+
+    if (phase_ >= step.swing_start_ && phase_ < step.swing_end_ && step_state_ != STEP_FORCE_STANCE) {
+        // Transition to swing state
+        if (step_state_ != STEP_SWING) {
+            // Just transitioned to swing - update swing origin
+            swing_origin_tip_position_ = leg_.getCurrentTipPositionGlobal();
+            swing_origin_tip_velocity_ = current_tip_velocity_;
+        }
         step_state_ = STEP_SWING;
     } else {
+        // Transition to stance state
+        if (step_state_ != STEP_STANCE) {
+            // Just transitioned to stance - update stance origin
+            stance_origin_tip_position_ = leg_.getCurrentTipPositionGlobal();
+        }
         step_state_ = STEP_STANCE;
     }
 }
@@ -227,6 +268,17 @@ void LegStepper::updateTipPosition(double step_length, double time_delta, bool r
 
         // Set position from Bézier (z already encoded by control nodes)
         current_tip_pose_ = bezier_position;
+
+        // Calculate velocity using bezier derivative
+        Point3D bezier_velocity;
+        if (time_input < 0.5) {
+            double t = time_input * 2.0;
+            bezier_velocity = math_utils::quarticBezierDot(swing_1_nodes_, t) * 2.0; // Chain rule
+        } else {
+            double t = (time_input - 0.5) * 2.0;
+            bezier_velocity = math_utils::quarticBezierDot(swing_2_nodes_, t) * 2.0; // Chain rule
+        }
+        current_tip_velocity_ = bezier_velocity / time_delta;
     }
     // Período de Stance
     else if (step_state_ == STEP_STANCE || step_state_ == STEP_FORCE_STANCE) {
@@ -404,168 +456,19 @@ void LegStepper::forceNormalTouchdown() {
     swing_2_nodes_[1] = swing_2_nodes_[0] + (swing_2_nodes_[2] - bezier_origin) * LEG_STEPPER_TOUCHDOWN_INTERPOLATION;
 }
 
-// Nueva API OpenSHC-like
-void LegStepper::updateWithPhase(double local_phase, double step_length, double time_delta) {
-    const auto &config = robot_model_.getParams().dynamic_gait;
-
-    // Use dynamic duty factor from configuration
-    double duty_factor = config.duty_factor;
-
-    // Determinar el nuevo estado basado en la fase
-    StepState new_state;
-    if (local_phase < duty_factor) {
-        new_state = STEP_STANCE;
-    } else {
-        new_state = STEP_SWING;
-    }
-
-    // Actualizar posiciones de origen SOLO cuando hay transición de estado
-    if (new_state != step_state_) {
-        if (new_state == STEP_STANCE) {
-            // Transición a STANCE: actualizar posición de origen de stance
-            stance_origin_tip_position_ = leg_.getCurrentTipPositionGlobal();
-        } else if (new_state == STEP_SWING) {
-            // Transición a SWING: actualizar posición de origen de swing (OpenSHC equivalente)
-            swing_origin_tip_position_ = leg_.getCurrentTipPositionGlobal();
-            swing_origin_tip_velocity_ = current_tip_velocity_;
-        }
-    }
-
-    // Actualizar estado y progreso
-    step_state_ = new_state;
-
-    if (step_state_ == STEP_STANCE) {
-        double stance_progress = local_phase / duty_factor;
-        step_progress_ = stance_progress;
-        stance_progress_ = stance_progress;
-        swing_progress_ = -1.0;
-    } else {
-        // SWING
-        double swing_progress = (local_phase - duty_factor) / (1.0 - duty_factor);
-        step_progress_ = swing_progress;
-        swing_progress_ = swing_progress;
-        stance_progress_ = -1.0;
-    }
-
-    // Actualizar la trayectoria y ángulos usando el progreso
-    updateTipPosition(step_length, time_delta, false, false); // Default terrain adaptation values
-}
-
-// Implementaciones de cálculo de iteración dinámica (equivalente a OpenSHC)
-int LegStepper::calculateSwingIterations(double step_length, double time_delta) const {
-    const auto &config = robot_model_.getParams().dynamic_gait;
-
-    if (!config.enable_dynamic_iterations) {
-        // Fallback to static calculation
-        return static_cast<int>(config.swing_phase / config.time_delta);
-    }
-
-    // OpenSHC-style dynamic calculation
-    double swing_period = calculateSwingPeriod(step_length);
-    double period = config.step_period;
-
-    // Calculate iterations using OpenSHC formula
-    int iterations = static_cast<int>((swing_period / period) / (config.frequency * time_delta));
-
-    // Apply safety limits
-    iterations = std::max(static_cast<int>(config.min_swing_iterations),
-                          std::min(static_cast<int>(config.max_swing_iterations), iterations));
-
-    return iterations;
-}
-
-int LegStepper::calculateStanceIterations(double step_length, double time_delta) const {
-    const auto &config = robot_model_.getParams().dynamic_gait;
-
-    if (!config.enable_dynamic_iterations) {
-        // Fallback to static calculation
-        return static_cast<int>(config.stance_phase / config.time_delta);
-    }
-
-    // OpenSHC-style dynamic calculation
-    double stance_period = calculateStancePeriod(step_length);
-    double period = config.step_period;
-
-    // Calculate iterations using OpenSHC formula
-    int iterations = static_cast<int>((stance_period / period) / (config.frequency * time_delta));
-
-    // Apply safety limits
-    iterations = std::max(static_cast<int>(config.min_stance_iterations),
-                          std::min(static_cast<int>(config.max_stance_iterations), iterations));
-
-    return iterations;
-}
-
-double LegStepper::calculateSwingPeriod(double step_length) const {
-    const auto &config = robot_model_.getParams().dynamic_gait;
-
-    // Base swing period from configuration
-    double base_period = config.swing_phase;
-
-    // Apply step length scaling (longer steps = longer swing period)
-    double length_factor = std::max(0.5, std::min(2.0, step_length / 50.0)); // Normalize around 50mm
-
-    // Apply swing period factor from configuration
-    double scaled_period = base_period * config.swing_period_factor * length_factor;
-
-    return scaled_period;
-}
-
-double LegStepper::calculateStancePeriod(double step_length) const {
-    const auto &config = robot_model_.getParams().dynamic_gait;
-
-    // Base stance period from configuration
-    double base_period = config.stance_phase;
-
-    // Apply step length scaling (longer steps = longer stance period)
-    double length_factor = std::max(0.5, std::min(2.0, step_length / 50.0)); // Normalize around 50mm
-
-    // Apply stance period factor from configuration
-    double scaled_period = base_period * config.stance_period_factor * length_factor;
-
-    return scaled_period;
-}
-
 void LegStepper::updateDynamicTiming(double step_length, double time_delta) {
     const auto &config = robot_model_.getParams().dynamic_gait;
 
     if (config.enable_dynamic_iterations) {
-        // Calculate dynamic timing parameters
-        double swing_period = calculateSwingPeriod(step_length);
-        double stance_period = calculateStancePeriod(step_length);
-
-        // Update timing deltas based on calculated periods
-        swing_delta_t_ = swing_period * time_delta;
-        stance_delta_t_ = stance_period * time_delta;
+        // Use dynamic timing based on step length
+        double length_factor = std::max(0.5, std::min(2.0, step_length / 50.0)); // Normalize around 50mm
+        swing_delta_t_ = config.swing_phase * config.swing_period_factor * length_factor * time_delta;
+        stance_delta_t_ = config.stance_phase * config.stance_period_factor * length_factor * time_delta;
     } else {
         // Use static timing from configuration
         swing_delta_t_ = config.swing_phase * time_delta;
         stance_delta_t_ = config.stance_phase * time_delta;
     }
-}
-
-StepCycle LegStepper::calculateStepCycle(double step_length, double time_delta) const {
-    const auto &config = robot_model_.getParams().dynamic_gait;
-
-    StepCycle cycle;
-
-    // Calculate dynamic iterations
-    cycle.swing_period_ = calculateSwingIterations(step_length, time_delta);
-    cycle.stance_period_ = calculateStanceIterations(step_length, time_delta);
-
-    // Calculate total period
-    cycle.period_ = cycle.swing_period_ + cycle.stance_period_;
-
-    // Calculate phase boundaries
-    cycle.stance_start_ = 0;
-    cycle.stance_end_ = cycle.stance_period_;
-    cycle.swing_start_ = cycle.stance_end_;
-    cycle.swing_end_ = cycle.period_;
-
-    // Set frequency from configuration
-    cycle.frequency_ = config.frequency;
-
-    return cycle;
 }
 
 void LegStepper::autoSyncWithLeg() {

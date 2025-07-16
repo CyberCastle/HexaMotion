@@ -171,7 +171,11 @@ class BodyPoseController {
      * @brief Set current gait type for startup sequence selection
      * @param gait_type The GaitType enum value
      */
-    void setCurrentGaitType(GaitType gait_type) { current_gait_type_ = gait_type; }
+    void setCurrentGaitType(GaitType gait_type) {
+        current_gait_type_ = gait_type;
+        // Reset startup sequences for new gait
+        resetSequenceStates();
+    }
 
     /**
      * @brief Get current gait type

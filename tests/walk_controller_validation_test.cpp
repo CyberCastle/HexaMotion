@@ -27,7 +27,9 @@ int main() {
     }
 
     WalkController wc(model, legs);
-    wc.init();
+    Eigen::Vector3d body_pos(0, 0, 100);
+    Eigen::Vector3d body_orient(0, 0, 0);
+    wc.init(body_pos, body_orient);
     assert(wc.getWalkState() == WALK_STOPPED);
 
     // Validate gait switching using gait names
@@ -55,7 +57,7 @@ int main() {
     }
 
     // Odometry calculation
-    wc.updateWalk(Point3D(30.0, 0.0, 0.0), 0.0);
+    wc.updateWalk(Point3D(30.0, 0.0, 0.0), 0.0, body_pos, body_orient);
     Point3D odom = wc.calculateOdometry(0.1);
     std::cout << "Odometry: (" << odom.x << ", " << odom.y << ")" << std::endl;
     assert(std::abs(odom.x) > 0.0);
@@ -70,7 +72,7 @@ int main() {
     // Test metachronal gait
     assert(wc.setGaitByName("metachronal_gait"));
     for (int i = 0; i < 10; ++i) {
-        wc.updateWalk(Point3D(-20.0, 0.0, 0.0), 0.0);
+        wc.updateWalk(Point3D(-20.0, 0.0, 0.0), 0.0, body_pos, body_orient);
     }
     auto metachronal_stepper = wc.getLegStepper(0);
     assert(metachronal_stepper);
