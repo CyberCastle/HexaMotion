@@ -66,12 +66,15 @@ CalculatedServoAngles calculateServoAnglesForHeight(double target_height_mm, con
         return result; // No valid solution
     }
 
-    // Calculate femur angle
+    // Calculate femur angle in radians
     double femur_rad = std::asin(sin_femur);
-    double femur_deg = femur_rad * 180.0 / M_PI;
 
-    // Calculate tibia angle (to keep tibia vertical)
-    double tibia_deg = -femur_deg;
+    // Calculate tibia angle in radians (to keep tibia vertical)
+    double tibia_rad = -femur_rad;
+
+    // Convert to degrees for limit checking (assuming limits are in degrees)
+    double femur_deg = femur_rad * 180.0 / M_PI;
+    double tibia_deg = tibia_rad * 180.0 / M_PI;
 
     // Check servo limits
     if (femur_deg < params.femur_angle_limits[0] ||
@@ -83,8 +86,9 @@ CalculatedServoAngles calculateServoAnglesForHeight(double target_height_mm, con
         return result;
     }
 
-    result.femur = femur_deg;
-    result.tibia = tibia_deg;
+    // Return angles in radians
+    result.femur = femur_rad;
+    result.tibia = tibia_rad;
     result.coxa = 0.0; // Coxa remains at 0° for radial stance
     result.valid = true;
 
