@@ -33,8 +33,7 @@ void testLegStepperInitialization(const Leg &leg, const LegStepper &stepper, int
     assert(stepper.getStepState() == STEP_STANCE);
     assert(stepper.getWalkState() == WALK_STOPPED);
     assert(stepper.getPhase() == 0);
-    assert(stepper.getSwingProgress() == 0.0);
-    assert(stepper.getStanceProgress() == 0.0);
+    assert(stepper.getStepProgress() == 0.0);
     assert(!stepper.hasCompletedFirstStep());
     assert(!stepper.isAtCorrectPhase());
 
@@ -56,9 +55,9 @@ void testStepCyclePhaseUpdates(LegStepper &stepper, const StepCycle &step_cycle)
 
     // Test phase updates through a complete cycle
     for (int phase = 0; phase < step_cycle.period_; ++phase) {
-        // Update phase
-        stepper.setPhase(phase);
-        stepper.updateStepState(step_cycle);
+        // Update phase using unified method
+        double normalized_phase = static_cast<double>(phase) / step_cycle.period_;
+        stepper.updateStepCycle(normalized_phase, 50.0, 0.01);
 
         // Verify step state changes correctly based on phase
         StepState current_state = stepper.getStepState();
@@ -73,13 +72,14 @@ void testStepCyclePhaseUpdates(LegStepper &stepper, const StepCycle &step_cycle)
         assert(stepper.getPhase() == phase);
     }
 
-    // Test iteratePhase method
+    // Test unified updateStepCycle method
     stepper.setPhase(0);
     for (int i = 0; i < step_cycle.period_; ++i) {
+        double normalized_phase = static_cast<double>(i) / step_cycle.period_;
+        stepper.updateStepCycle(normalized_phase, 50.0, 0.01);
+
         int expected_phase = i % step_cycle.period_;
         assert(stepper.getPhase() == expected_phase);
-
-        stepper.iteratePhase(step_cycle);
     }
 
     // Test phase offset integration
@@ -94,22 +94,22 @@ void testStepCyclePhaseUpdates(LegStepper &stepper, const StepCycle &step_cycle)
 void testTrajectoryGeneration(LegStepper &stepper, const RobotModel &model) {
     std::cout << "Testing trajectory generation" << std::endl;
 
-    // Initialize timing parameters by calling updateWithPhase
+    // Initialize timing parameters by calling updateStepCycle
     // This should properly initialize swing_delta_t_ and stance_delta_t_
     double step_length = 20.0;
     double time_delta = 1.0 / 50.0; // 50Hz control frequency
 
     // Set up initial conditions
     stepper.setStepState(STEP_SWING);
-    stepper.updateStride(step_length, 0.0, 0.0, 0.8, 1.0);
+    stepper.updateStride();
 
     // Initialize tip velocity with reasonable values (much lower than before)
     // Use a more realistic velocity that won't cause numerical issues
     Point3D initial_velocity = Point3D(10.0, 0, 0); // 10 mm/s forward velocity (very conservative)
     stepper.setSwingOriginTipVelocity(initial_velocity);
 
-    // Call updateWithPhase to initialize timing parameters
-    stepper.updateWithPhase(0.5, step_length, time_delta);
+    // Call updateStepCycle to initialize timing parameters
+    stepper.updateStepCycle(0.5, step_length, time_delta);
 
     // Test swing trajectory generation step by step
     std::cout << "  Generating primary swing control nodes..." << std::endl;
@@ -226,9 +226,9 @@ void testTipPositionUpdates(LegStepper &stepper, Leg &leg, const RobotModel &mod
 
     // Set stepper to swing state and advance phase to ensure position changes
     stepper.setStepState(STEP_SWING);
-    stepper.setPhase(5);           // Advance to middle of swing phase
-    stepper.setSwingProgress(0.5); // Set swing progress to 50%
-    stepper.setStepProgress(0.5);  // Set step progress to 50% for interpolation
+    stepper.setPhase(5);          // Advance to middle of swing phase
+    stepper.setStepProgress(0.5); // Set progress to 50%
+    stepper.setStepProgress(0.5); // Set step progress to 50% for interpolation
     stepper.updateTipPosition(step_length, time_delta, false, false);
 
     Point3D new_position = leg.getCurrentTipPositionGlobal();
@@ -249,9 +249,9 @@ void testTipPositionUpdates(LegStepper &stepper, Leg &leg, const RobotModel &mod
 
     // Test stance phase position update
     stepper.setStepState(STEP_STANCE);
-    stepper.setPhase(15);           // Advance to middle of stance phase
-    stepper.setStanceProgress(0.5); // Set stance progress to 50%
-    stepper.setStepProgress(0.5);   // Set step progress to 50% for interpolation
+    stepper.setPhase(15);         // Advance to middle of stance phase
+    stepper.setStepProgress(0.5); // Set progress to 50%
+    stepper.setStepProgress(0.5); // Set step progress to 50% for interpolation
     Point3D stance_initial = leg.getCurrentTipPositionGlobal();
     stepper.updateTipPosition(step_length, time_delta, false, false);
     Point3D stance_new = leg.getCurrentTipPositionGlobal();
@@ -279,7 +279,7 @@ void testStrideVectorUpdates(LegStepper &stepper) {
 
     // Update stride
     double step_length = 25.0;
-    stepper.updateStride(step_length, 0.0, 0.0, 0.8, 1.0);
+    stepper.updateStride();
 
     Point3D new_stride = stepper.getStrideVector();
     std::cout << "  New stride vector: (" << new_stride.x << ", " << new_stride.y << ", " << new_stride.z << ")" << std::endl;
@@ -388,11 +388,11 @@ void testTrajectoryStartEnd(LegStepper &stepper, Leg &leg, const RobotModel &mod
 
     stepper.setStepState(STEP_STANCE);
     stepper.setPhase(0);
-    stepper.updateWithPhase(0.0, step_length, time_delta);
+    stepper.updateStepCycle(0.0, step_length, time_delta);
     Point3D start_pos = leg.getCurrentTipPositionGlobal();
 
     stepper.setStepState(STEP_SWING);
-    stepper.updateWithPhase(1.0, step_length, time_delta);
+    stepper.updateStepCycle(1.0, step_length, time_delta);
     Point3D end_pos = leg.getCurrentTipPositionGlobal();
 
     std::cout << "  Start: (" << start_pos.x << ", " << start_pos.y << ", " << start_pos.z << ")" << std::endl;
@@ -439,8 +439,8 @@ void testSwingHeightCompliance(LegStepper &stepper, Leg &leg, const RobotModel &
 
     // Configurar el stepper para fase de swing
     stepper.setStepState(STEP_SWING);
-    stepper.setPhase(5);           // Fase intermedia de swing
-    stepper.setSwingProgress(0.5); // 50% de progreso en swing
+    stepper.setPhase(5);          // Fase intermedia de swing
+    stepper.setStepProgress(0.5); // 50% de progreso
 
     // Configurar parámetros de marcha
     double step_length = 20.0;
@@ -456,7 +456,7 @@ void testSwingHeightCompliance(LegStepper &stepper, Leg &leg, const RobotModel &
     stepper.setCurrentTipPose(model, target_position);
 
     // Configurar stride vector para que apunte hacia adelante
-    stepper.updateStride(step_length * 2.0, 0.0, 0.0, 0.8, 50.0);
+    stepper.updateStride();
 
     // Generar nodos de control de swing
     stepper.generatePrimarySwingControlNodes();
@@ -469,7 +469,7 @@ void testSwingHeightCompliance(LegStepper &stepper, Leg &leg, const RobotModel &
 
     // Probar múltiples puntos de la trayectoria de swing
     for (double progress = 0.0; progress <= 1.0; progress += 0.1) {
-        stepper.setSwingProgress(progress);
+        stepper.setStepProgress(progress);
         stepper.setStepProgress(progress);
 
         // Actualizar posición del tip usando la trayectoria Bézier
@@ -893,6 +893,7 @@ int main() {
     // Configure standing pose using BodyPoseController
     BodyPoseConfiguration pose_config = getDefaultBodyPoseConfig(p);
     BodyPoseController pose_controller(model, pose_config);
+    pose_controller.setWalkPlanePoseEnabled(true);
     pose_controller.initializeLegPosers(test_legs);
     assert(pose_controller.setStandingPose(test_legs));
 
@@ -1027,8 +1028,8 @@ int main() {
         for (int step = 0; step < sync_cycle.period_; ++step) {
             // Update all steppers
             for (int i = 0; i < NUM_LEGS; ++i) {
-                steppers[i]->updatePhase(sync_cycle);
-                steppers[i]->updateStepState(sync_cycle);
+                double normalized_phase = static_cast<double>(step) / sync_cycle.period_;
+                steppers[i]->updateStepCycle(normalized_phase, 50.0, 0.01);
             }
 
             // Update walk plane pose based on current leg states

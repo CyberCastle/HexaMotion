@@ -370,13 +370,10 @@ void WalkController::updateWalk(const Point3D &linear_velocity_input, double ang
     if (walk_state_ == WALK_STOPPED && has_velocity_command) {
         walk_state_ = WALK_STARTING;
         // Inicializar LegSteppers solo con el offset y parámetros de GaitConfiguration
-        StepCycle step = current_gait_config_.step_cycle;
         for (auto &leg_stepper : leg_steppers_) {
             leg_stepper->setAtCorrectPhase(false);
             leg_stepper->setCompletedFirstStep(false);
             leg_stepper->setStepState(STEP_STANCE);
-            // Offset y parámetros ya aplicados en applyGaitConfigToLegSteppers
-            leg_stepper->updateStepState(step);
         }
         return;
     }
@@ -409,12 +406,8 @@ void WalkController::updateWalk(const Point3D &linear_velocity_input, double ang
         double offset = leg_stepper->getPhaseOffset();
         double local_phase = std::fmod(base_phase_frac + offset, 1.0);
 
-        // Update phase and positions - this is where LegStepper calculates IK
-        leg_stepper->updateWithPhase(local_phase, getStepLength(), time_delta_);
-        leg_stepper->updatePhase(current_gait_config_.step_cycle);
-
-        // Advance to next phase
-        leg_stepper->iteratePhase(current_gait_config_.step_cycle);
+        // Update step cycle with unified method (OpenSHC equivalent)
+        leg_stepper->updateStepCycle(local_phase, getStepLength(), time_delta_);
     }
 
     // Update walk plane pose through BodyPoseController
