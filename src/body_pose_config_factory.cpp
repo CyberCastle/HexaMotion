@@ -23,12 +23,6 @@
 
 /**
  * @brief Calculate joint angles for a given height using analytic IK
- *
- * This helper mimics the logic from angle_calculus.cpp. It sweeps the
- * tibia angle (\f$\beta\f$) across its allowed range and solves for the
- * femur angle (\f$\alpha\f$) so the tibia remains as vertical as possible
- * while respecting the servo limits.
- *
  * @param target_height_mm Target height in millimeters.
  * @param params Robot parameters containing dimensions and joint limits.
  * @return Calculated individual servo angles or default values if no solution
@@ -37,30 +31,63 @@
 CalculatedServoAngles calculateServoAnglesForHeight(double target_height_mm, const Parameters &params) {
     CalculatedServoAngles result{0.0, 0.0, 0.0, false};
 
-    const double B = params.femur_length;
-    const double C = params.tibia_length;
+    // Based on analytic_robot_model.cpp leg transform:
+    // T = T_base * R_coxa * T_coxa * R_femur * T_femur * R_tibia * T_tibia
+    //
+    // For leg height calculation with coxa = 0° (radial stance):
+    // - T_base: hexagon_radius in XY plane (Z = 0)
+    // - R_coxa: rotation around Z axis (coxa = 0°)
+    // - T_coxa: translation along X axis (coxa_length)
+    // - R_femur: rotation around Y axis (femur angle)
+    // - T_femur: translation along X axis (femur_length)
+    // - R_tibia: rotation around Y axis (tibia angle)
+    // - T_tibia: translation along Z axis (-tibia_length)
 
-    // Analytic geometry for a vertical tibia:
-    // H = C + B * sin(femur_angle)
-    double ratio = (target_height_mm - C) / B;
-    if (ratio < -1.0 || ratio > 1.0)
-        return result;
+    // With coxa = 0°, the Z component of foot position is:
+    // Z = -femur_length * sin(femur_angle) - tibia_length * cos(femur_angle + tibia_angle)
+    //
+    // For standing pose, we want tibia to be vertical (pointing down):
+    // femur_angle + tibia_angle = 0° (so tibia points straight down)
+    // Therefore: tibia_angle = -femur_angle
+    //
+    // Substituting:
+    // Z = -femur_length * sin(femur_angle) - tibia_length * cos(0°)
+    // Z = -femur_length * sin(femur_angle) - tibia_length
+    //
+    // Solving for femur_angle:
+    // target_height = -femur_length * sin(femur_angle) - tibia_length
+    // sin(femur_angle) = -(target_height + tibia_length) / femur_length
 
-    double femur_rad = std::asin(ratio);
-    double femur_deg = femur_rad;
-    double tibia_deg = -femur_deg; // Keep tibia vertical
+    double target_z = -target_height_mm; // Convert to negative Z (150 -> -150)
+    double sin_femur = -(target_z + params.tibia_length) / params.femur_length;
+
+    // Check if solution is physically possible
+    if (sin_femur < -1.0 || sin_femur > 1.0) {
+        return result; // No valid solution
+    }
+
+    // Calculate femur angle
+    double femur_rad = std::asin(sin_femur);
+    double femur_deg = femur_rad * 180.0 / M_PI;
+
+    // Calculate tibia angle (to keep tibia vertical)
+    double tibia_deg = -femur_deg;
 
     // Check servo limits
     if (femur_deg < params.femur_angle_limits[0] ||
-        femur_deg > params.femur_angle_limits[1])
+        femur_deg > params.femur_angle_limits[1]) {
         return result;
+    }
     if (tibia_deg < params.tibia_angle_limits[0] ||
-        tibia_deg > params.tibia_angle_limits[1])
+        tibia_deg > params.tibia_angle_limits[1]) {
         return result;
+    }
 
     result.femur = femur_deg;
     result.tibia = tibia_deg;
+    result.coxa = 0.0; // Coxa remains at 0° for radial stance
     result.valid = true;
+
     return result;
 }
 
