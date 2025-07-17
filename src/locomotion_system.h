@@ -164,8 +164,6 @@ class LocomotionSystem {
     // Inverse kinematics
     /** Compute joint angles for a desired leg tip position. */
     JointAngles calculateInverseKinematics(int leg_index, const Point3D &target_position);
-    /** Compute tip position from current joint angles. */
-    Point3D calculateForwardKinematics(int leg_index, const JointAngles &angles);
 
     /** Check if target is within workspace. */
     bool isTargetReachable(int leg_index, const Point3D &target);
@@ -173,12 +171,6 @@ class LocomotionSystem {
     Point3D constrainToWorkspace(int leg_index, const Point3D &target);
     /** Get joint limit proximity (1.0 = far from limits, 0.0 = at limits). */
     double getJointLimitProximity(int leg_index, const JointAngles &angles);
-
-    // Denavit-Hartenberg transforms
-    /** Compute a DH transform matrix. */
-    Eigen::Matrix4d calculateDHTransform(double a, double alpha, double d, double theta);
-    /** Compute the transform from body to leg tip. */
-    Eigen::Matrix4d calculateLegTransform(int leg_index, const JointAngles &angles);
 
     // Gait planner
     /** Select the active gait type. */
@@ -314,10 +306,6 @@ class LocomotionSystem {
 
     /** Get current servo speed for a specific joint (affected by velocity control). */
     double getCurrentServoSpeed(int leg_index, int joint_index) const;
-
-    // Diagnostics
-    /** Execute a basic hardware self-test. */
-    bool performSelfTest();
 
     // Getter for WalkController
     WalkController *getWalkController() { return walk_ctrl; }

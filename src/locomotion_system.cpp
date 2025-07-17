@@ -142,24 +142,6 @@ JointAngles LocomotionSystem::calculateInverseKinematics(int leg,
     return model.inverseKinematicsCurrentGlobalCoordinates(leg, current_angles, p_target);
 }
 
-// Forward kinematics using DH transforms
-Point3D LocomotionSystem::calculateForwardKinematics(int leg_index, const JointAngles &angles) {
-    return model.forwardKinematicsGlobalCoordinates(leg_index, angles);
-}
-
-// DH transformation calculation
-Eigen::Matrix4d LocomotionSystem::calculateDHTransform(double a, double alpha, double d, double theta) {
-    double alpha_rad = math_utils::degreesToRadians(alpha);
-    double theta_rad = math_utils::degreesToRadians(theta);
-    return math_utils::dhTransform(a, alpha_rad, d, theta_rad);
-}
-
-// Complete leg transform
-Eigen::Matrix4d LocomotionSystem::calculateLegTransform(int leg_index,
-                                                        const JointAngles &q) {
-    return model.legTransform(leg_index, q);
-}
-
 bool LocomotionSystem::isTargetReachable(int leg_index, const Point3D &target) {
     // Delegate to WorkspaceValidator for consistency
     // TODO: This creates a temporary validator. For better performance,
@@ -436,7 +418,7 @@ bool LocomotionSystem::stopMovement() {
     if (!walk_ctrl)
         return false;
 
-    // Delegate to WalkController for movement control
+    // TODO: Delegate to WalkController for movement control
     // WalkController handles stopping internally
     return true;
 }
@@ -828,77 +810,6 @@ bool LocomotionSystem::handleError(ErrorCode error) {
     }
 
     return false;
-}
-
-// System self test
-bool LocomotionSystem::performSelfTest() {
-#if defined(ENABLE_LOG) && defined(ARDUINO)
-    Serial.println("=== Starting self test ===");
-
-    // IMU test
-    if (!imu_interface || !imu_interface->isConnected()) {
-        Serial.println("X Error: IMU not connected");
-        return false;
-    }
-
-    IMUData imu_test = imu_interface->readIMU();
-    if (!imu_test.is_valid) {
-        Serial.println("X Error: invalid IMU data");
-        return false;
-    }
-    Serial.println("OK IMU working correctly");
-
-    // FSR test
-    for (int i = 0; i < NUM_LEGS; i++) {
-        FSRData fsr_test = fsr_interface->readFSR(i);
-        if (fsr_test.pressure < 0) {
-            Serial.print("X Error: FSR leg ");
-            Serial.print(i);
-            Serial.println(" malfunction");
-            return false;
-        }
-    }
-    Serial.println("OK All FSRs working");
-
-    // Servo test
-    for (int i = 0; i < NUM_LEGS; i++) {
-        for (int j = 0; j < DOF_PER_LEG; j++) {
-            double current_angle = servo_interface->getJointAngle(i, j);
-            if (current_angle < -180 || current_angle > 180) {
-                Serial.print("X Error: Servo leg ");
-                Serial.print(i);
-                Serial.print(" joint ");
-                Serial.println(j);
-                return false;
-            }
-        }
-    }
-    Serial.println("OK All servos working");
-
-    // Kinematics test
-    for (int i = 0; i < NUM_LEGS; i++) {
-        Point3D test_point(100, 0, -100);
-        JointAngles angles = calculateInverseKinematics(i, test_point);
-        Point3D calculated_point = calculateForwardKinematics(i, angles);
-
-        double error = math_utils::distance3D(test_point, calculated_point);
-        if (error > 5.0f) { // Error greater than 5mm
-            Serial.print("X Error: leg kinematics ");
-            Serial.print(i);
-            Serial.print(" error=");
-            Serial.print(error);
-            Serial.println("mm");
-            return false;
-        }
-    }
-    Serial.println("OK Kinematics working correctly");
-
-    Serial.println("=== Self test completed successfully ===");
-    return true;
-#else
-    // Self test not available without Arduino environment
-    return false;
-#endif
 }
 
 void LocomotionSystem::updateLegStates() {

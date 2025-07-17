@@ -253,8 +253,8 @@ void TerrainAdaptation::detectTouchdownEvents(int leg_index, const FSRData &fsr_
         double safe_reach = bounds.max_radius * scaling_factors.workspace_scale;
 
         Point3D foot_position;
-        foot_position.x = base_x + safe_reach * cos(math_utils::degreesToRadians(base_angle));
-        foot_position.y = base_y + safe_reach * sin(math_utils::degreesToRadians(base_angle));
+        foot_position.x = base_x + safe_reach * cos(base_angle);
+        foot_position.y = base_y + safe_reach * sin(base_angle);
         foot_position.z = -p.standing_height;
 
         // Configure step plane with detected position and current walk plane normal

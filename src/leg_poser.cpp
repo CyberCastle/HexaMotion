@@ -166,12 +166,12 @@ void LegPoser::updateAutoPose(int phase) {
 
     // Roll compensation based on leg position (Y-axis variation)
     // Legs on opposite sides of Y-axis get opposite compensation
-    double roll_factor = sin(math_utils::degreesToRadians(leg_angle));
+    double roll_factor = sin(leg_angle);
     y_compensation = body_clearance * 0.008 * roll_factor * sin(phase_ratio * 4.0 * M_PI);
 
     // Pitch compensation based on leg position (X-axis variation)
     // Legs on opposite sides of X-axis get opposite compensation
-    double pitch_factor = cos(math_utils::degreesToRadians(leg_angle));
+    double pitch_factor = cos(leg_angle);
     x_compensation = body_clearance * 0.008 * pitch_factor * cos(phase_ratio * 4.0 * M_PI);
 
     // Additional stability compensation for tripod gait
