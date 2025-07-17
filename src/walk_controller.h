@@ -314,6 +314,9 @@ class WalkController {
     // Reference to legs array for body pose controller updates
     Leg *legs_array_;
 
+    // Global phase counter for gait coordination (OpenSHC equivalent)
+    int global_phase_;
+
     // Helper methods
     // Helper methods
     double calculateStabilityIndex() const;

@@ -68,28 +68,20 @@ void LegStepper::updateStepCycle(double normalized_phase, double step_length, do
     step_cycle.swing_end_ = step_cycle.period_;
     step_cycle.frequency_ = config.frequency;
 
-    // 1. Update internal phase based on normalized input
-    updateInternalPhase(normalized_phase, step_cycle);
-
-    // 2. Update step state (STANCE/SWING)
+    // 1. Update step state (STANCE/SWING)
     updateStepState(step_cycle);
 
-    // 3. Calculate step progress
+    // 2. Calculate step progress
     calculateStepProgress(normalized_phase, step_cycle);
 
-    // 4. Update dynamic timing parameters
+    // 3. Update dynamic timing parameters
     updateDynamicTiming(step_length, time_delta);
 
-    // 5. Update tip position and trajectories
+    // 4. Update tip position and trajectories
     updateTipPosition(step_length, time_delta, false, false);
 
-    // 6. Synchronize with hardware leg
+    // 5. Synchronize with hardware leg
     autoSyncWithLeg();
-}
-
-// Internal helper methods
-void LegStepper::updateInternalPhase(double normalized_phase, const StepCycle &step) {
-    phase_ = static_cast<int>(normalized_phase * step.period_);
 }
 
 void LegStepper::calculateStepProgress(double normalized_phase, const StepCycle &step) {
@@ -485,7 +477,4 @@ void LegStepper::autoSyncWithLeg() {
 
     // 3. Update tip position to ensure consistency
     leg_.updateTipPosition(robot_model_);
-
-    // 4. Synchronize phase information
-    leg_.setPhaseOffset(phase_ / 100.0); // Convert to 0-1 range
 }

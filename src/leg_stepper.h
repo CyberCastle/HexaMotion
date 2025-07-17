@@ -131,7 +131,6 @@ class LegStepper {
   private:
     // Internal helper methods
     void updateStepState(const StepCycle &step);
-    void updateInternalPhase(double normalized_phase, const StepCycle &step);
     void calculateStepProgress(double normalized_phase, const StepCycle &step);
     void updateDynamicTiming(double step_length, double time_delta);
 

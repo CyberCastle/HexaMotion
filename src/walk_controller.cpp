@@ -270,6 +270,9 @@ void WalkController::init(const Eigen::Vector3d &current_body_position, const Ei
     // Init velocity input variables
     desired_linear_velocity_ = Point3D(0, 0, 0);
     desired_angular_velocity_ = 0;
+
+    // Initialize global phase counter
+    global_phase_ = 0;
 }
 
 void WalkController::updateWalk(const Point3D &linear_velocity_input, double angular_velocity_input,
@@ -369,6 +372,7 @@ void WalkController::updateWalk(const Point3D &linear_velocity_input, double ang
     // State transition: STOPPED->STARTING
     if (walk_state_ == WALK_STOPPED && has_velocity_command) {
         walk_state_ = WALK_STARTING;
+        global_phase_ = 0; // Reset global phase counter
         // Inicializar LegSteppers solo con el offset y parámetros de GaitConfiguration
         for (auto &leg_stepper : leg_steppers_) {
             leg_stepper->setAtCorrectPhase(false);
@@ -390,6 +394,11 @@ void WalkController::updateWalk(const Point3D &linear_velocity_input, double ang
         walk_state_ = WALK_STOPPED;
     }
 
+    // Increment global phase counter (OpenSHC equivalent)
+    if (walk_state_ == WALK_MOVING || walk_state_ == WALK_STARTING) {
+        global_phase_ = (global_phase_ + 1) % current_gait_config_.step_cycle.period_;
+    }
+
     // Calculate gait coordination data for each leg (NO POSITION UPDATES)
     for (auto &leg_stepper : leg_steppers_) {
         // Set walk state in LegStepper for coordination only
@@ -398,13 +407,17 @@ void WalkController::updateWalk(const Point3D &linear_velocity_input, double ang
         // Set desired velocity for the leg stepper
         leg_stepper->setDesiredVelocity(desired_linear_velocity_, desired_angular_velocity_);
 
-        // Calculate local phase using step cycle and leg offset
-        int current_phase = leg_stepper->getPhase();
-        // Apply gait phase offset for tripod synchronization
-        double base_phase_frac = static_cast<double>(current_phase) /
-                                 static_cast<double>(current_gait_config_.step_cycle.period_);
-        double offset = leg_stepper->getPhaseOffset();
-        double local_phase = std::fmod(base_phase_frac + offset, 1.0);
+        // Calculate local phase using global phase and leg offset (OpenSHC equivalent)
+        double offset = leg_stepper->getPhaseOffset(); // This is normalized [0,1]
+        int leg_phase = (global_phase_ + static_cast<int>(offset * current_gait_config_.step_cycle.period_)) %
+                        current_gait_config_.step_cycle.period_;
+
+        // Update leg stepper's internal phase
+        leg_stepper->setPhase(leg_phase);
+
+        // Calculate normalized local phase for trajectory calculation
+        double local_phase = static_cast<double>(leg_phase) /
+                             static_cast<double>(current_gait_config_.step_cycle.period_);
 
         // Update step cycle with unified method (OpenSHC equivalent)
         leg_stepper->updateStepCycle(local_phase, getStepLength(), time_delta_);
