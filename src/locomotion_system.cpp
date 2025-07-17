@@ -732,22 +732,19 @@ bool LocomotionSystem::update() {
 
         for (int i = 0; i < NUM_LEGS; i++) {
 
-            // Get precalculated joint angles from leg stepper (IK already done in LegStepper)
             auto leg_stepper = walk_ctrl->getLegStepper(i);
             if (leg_stepper) {
 
-                double phase = static_cast<double>(leg_stepper->getPhase()) /
-                               static_cast<double>(walk_ctrl->getStepCycle().period_);
-
-                if (legs[i].shouldBeInStance(phase, stance_norm)) {
+                // Use LegStepper's step state to determine stance or swing without reapplying offset
+                auto step_state = leg_stepper->getStepState();
+                if (step_state == STEP_STANCE || step_state == STEP_FORCE_STANCE) {
                     legs[i].setStepPhase(STANCE_PHASE);
                 } else {
                     legs[i].setStepPhase(SWING_PHASE);
                 }
 
-                JointAngles target_angles = leg_stepper->getJointAngles();
-
                 // Apply joint angles to both leg object and servos
+                JointAngles target_angles = leg_stepper->getJointAngles();
                 if (!setLegJointAngles(i, target_angles)) {
                     // Handle servo failure - maintain current position
                     continue;
