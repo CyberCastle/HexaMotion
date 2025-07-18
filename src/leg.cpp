@@ -21,6 +21,8 @@ Leg::Leg(int leg_id, const RobotModel &model)
 
 void Leg::setJointAngles(const JointAngles &angles) {
     joint_angles_ = angles;
+    // Synchronize tip position using forward kinematics
+    updateTipPosition();
 }
 
 double Leg::getJointAngle(int joint_index) const {
@@ -48,6 +50,8 @@ void Leg::setJointAngle(int joint_index, double angle) {
         joint_angles_.tibia = angle;
         break;
     }
+    // Synchronize tip position using forward kinematics
+    updateTipPosition();
 }
 
 bool Leg::setCurrentTipPositionGlobal(const Point3D &position) {
@@ -85,15 +89,19 @@ bool Leg::applyIK(const Point3D &target_position) {
     // Compute new joint angles via IK
     JointAngles new_angles = model_.inverseKinematicsCurrentGlobalCoordinates(
         leg_id_, joint_angles_, target_position);
-    // Validate limits
+
+    // Temporarily update angles to validate limits
+    JointAngles original_angles = joint_angles_;
+    joint_angles_ = new_angles;
+
+    // Validate limits with new angles
     if (!checkJointLimits()) {
+        // Restore original angles if limits are violated
+        joint_angles_ = original_angles;
         return false;
     }
-    // Update state
-    joint_angles_ = new_angles;
-    tip_position_ = target_position;
 
-    // Ensure consistency via FK
+    // Update tip position via FK to ensure consistency
     updateTipPosition();
     return true;
 }
@@ -161,6 +169,9 @@ void Leg::constrainJointLimits() {
                                    std::min(params.femur_angle_limits[1], joint_angles_.femur));
     joint_angles_.tibia = std::max(params.tibia_angle_limits[0],
                                    std::min(params.tibia_angle_limits[1], joint_angles_.tibia));
+
+    // Synchronize tip position after constraining angles
+    updateTipPosition();
 }
 
 void Leg::initialize(const Pose &default_stance) {
