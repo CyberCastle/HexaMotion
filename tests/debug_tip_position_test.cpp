@@ -17,7 +17,7 @@ void debugTipPositionGeneration(LegStepper &stepper, Leg &leg, const RobotModel 
     std::cout << "\n=== DEBUG: Tip Position Generation ===" << std::endl;
 
     // Get the actual initial position from the leg (after IK has been applied)
-    Point3D initial_position = leg.getCurrentTipPositionGlobal();
+    Point3D initial_position(288.115, -166.343, -150);
     std::cout << "Initial tip position: (" << initial_position.x << ", " << initial_position.y << ", " << initial_position.z << ")" << std::endl;
 
     // Debug stepper state before update

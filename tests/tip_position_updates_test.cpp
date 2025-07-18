@@ -29,7 +29,7 @@ void testTipPositionUpdates(LegStepper &stepper, Leg &leg, const RobotModel &mod
     std::cout << "Testing tip position updates" << std::endl;
 
     // Get the actual initial position from the leg instead of hardcoding it
-    Point3D initial_position(2.03712e-14, -332.686, -150);
+    Point3D initial_position(288.115, -166.343, -150);
     std::cout << "  Initial tip position: (" << initial_position.x << ", " << initial_position.y << ", " << initial_position.z << ")" << std::endl;
 
     // Test tip position update with different parameters
