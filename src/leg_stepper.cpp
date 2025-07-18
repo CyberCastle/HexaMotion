@@ -287,33 +287,8 @@ void LegStepper::updateTipPosition(double step_length, double time_delta, bool r
     }
 
     // Synchronize with leg after trajectory generation
-    // Update leg global position and compute IK for both stance and swing
-    leg_.setCurrentTipPositionGlobal(robot_model_, current_tip_pose_);
-    JointAngles angles = robot_model_.inverseKinematicsCurrentGlobalCoordinates(
-        leg_index_, leg_.getJointAngles(), current_tip_pose_);
-    leg_.setJointAngles(angles);
-}
-
-// OpenSHC-style position delta calculation
-Point3D LegStepper::calculatePositionDelta(const Point3D &desired_position, const Point3D &current_position) const {
-    // Transform both positions to leg frame coordinates (OpenSHC approach)
-    // This follows OpenSHC's getPoseJointFrame transformation approach
-
-    // Get current joint angles to establish the leg frame reference
-    JointAngles current_angles = leg_.getJointAngles();
-
-    // Transform desired position to leg local coordinates
-    Point3D leg_frame_desired = robot_model_.transformGlobalToLocalCoordinates(
-        leg_index_, desired_position, current_angles);
-
-    // Transform current position to leg local coordinates
-    Point3D leg_frame_current = robot_model_.transformGlobalToLocalCoordinates(
-        leg_index_, current_position, current_angles);
-
-    // Calculate position delta in leg frame (OpenSHC equivalent)
-    Point3D position_delta = leg_frame_desired - leg_frame_current;
-
-    return position_delta;
+    // Synchronize leg state: apply IK to reach current tip pose and sync FK
+    leg_.applyIK(robot_model_, current_tip_pose_);
 }
 
 void LegStepper::generatePrimarySwingControlNodes() {
@@ -456,17 +431,6 @@ void LegStepper::updateDynamicTiming(double step_length, double time_delta) {
 }
 
 void LegStepper::autoSyncWithLeg() {
-
-    // 1. Synchronize desired tip position
-    leg_.setDesiredTipPositionGlobal(current_tip_pose_);
-
-    // 2. Apply OpenSHC-style IK with delta calculation
-    Point3D current_leg_position = leg_.getCurrentTipPositionGlobal();
-    Point3D position_delta = calculatePositionDelta(current_tip_pose_, current_leg_position);
-
-    // Apply delta IK (OpenSHC approach)
-    leg_.applyIKWithDelta(robot_model_, position_delta);
-
-    // 3. Update tip position to ensure consistency
-    leg_.updateTipPosition(robot_model_);
+    // Synchronize leg state: apply IK to reach current tip pose and update FK
+    leg_.applyIK(robot_model_, current_tip_pose_);
 }

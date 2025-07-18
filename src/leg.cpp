@@ -76,18 +76,27 @@ bool Leg::setCurrentTipPositionGlobal(const RobotModel &model, const Point3D &po
     return true;
 }
 
-bool Leg::updateInverseKinematics(const RobotModel &model, const Point3D &target_position) {
-    // Use current joint angles as starting point for IK
-    JointAngles new_angles = model.inverseKinematicsCurrentGlobalCoordinates(leg_id_, joint_angles_, target_position);
-
-    // Check if IK was successful (basic validation)
-    if (checkJointLimits(model.getParams())) {
-        joint_angles_ = new_angles;
-        tip_position_ = target_position;
-        return true;
+/**
+ * @brief Apply inverse kinematics to reach a target position and update joint angles & tip position.
+ * @param model RobotModel for IK calculations
+ * @param target_position Desired global tip position
+ * @return True if IK succeeds within joint limits
+ */
+bool Leg::applyIK(const RobotModel &model, const Point3D &target_position) {
+    // Compute new joint angles via IK
+    JointAngles new_angles = model.inverseKinematicsCurrentGlobalCoordinates(
+        leg_id_, joint_angles_, target_position);
+    // Validate limits
+    if (!checkJointLimits(model.getParams())) {
+        return false;
     }
+    // Update state
+    joint_angles_ = new_angles;
+    tip_position_ = target_position;
 
-    return false;
+    // Ensure consistency via FK
+    updateTipPosition(model);
+    return true;
 }
 
 Eigen::Matrix4d Leg::getTransform(const RobotModel &model) const {
@@ -210,62 +219,19 @@ bool Leg::isInDefaultStance(double tolerance) const {
     return math_utils::distance(tip_position_, default_tip_position_) <= tolerance;
 }
 
-// Set desired tip position (OpenSHC architecture)
-void Leg::setDesiredTipPositionGlobal(const Point3D &desired_position) {
-    desired_tip_position_ = desired_position;
-}
+// Calculate position delta in leg frame for synchronization
+Point3D Leg::calculatePositionDelta(const RobotModel &model, const Point3D &desired_position, const Point3D &current_position) const {
+    // Use current joint angles to define the leg frame
+    JointAngles current_angles = joint_angles_;
 
-// Apply inverse kinematics (OpenSHC architecture)
-bool Leg::applyIK(const RobotModel &model) {
-    // Use current joint angles as starting point for IK (OpenSHC approach)
-    JointAngles new_angles = model.inverseKinematicsCurrentGlobalCoordinates(leg_id_, joint_angles_, desired_tip_position_);
+    // Transform positions to leg local coordinates
+    Point3D desired_local = model.transformGlobalToLocalCoordinates(leg_id_, desired_position, current_angles);
+    Point3D current_local = model.transformGlobalToLocalCoordinates(leg_id_, current_position, current_angles);
 
-    // Update joint angles
-    setJointAngles(new_angles);
-
-    // Update forward kinematics to synchronize current tip position
-    updateTipPosition(model);
-
-    // Check if IK was successful (tip position matches desired)
-    double ik_error = math_utils::distance(tip_position_, desired_tip_position_);
-    return ik_error < IK_TOLERANCE; // 1mm tolerance
-}
-
-// Apply inverse kinematics with position delta (OpenSHC architecture)
-bool Leg::applyIKWithDelta(const RobotModel &model, const Point3D &position_delta) {
-    // Get current tip position in leg frame coordinates
-    Point3D current_tip_leg_frame = model.transformGlobalToLocalCoordinates(
-        leg_id_, tip_position_, joint_angles_);
-
-    // Apply delta in leg frame coordinates (OpenSHC approach)
-    Point3D target_tip_leg_frame = current_tip_leg_frame + position_delta;
-
-    // Transform back to global coordinates
-    Point3D target_tip_global = model.transformLocalToGlobalCoordinates(
-        leg_id_, target_tip_leg_frame, joint_angles_);
-
-    // Set the desired position and apply standard IK
-    setDesiredTipPositionGlobal(target_tip_global);
-    bool ik_success = applyIK(model);
-
-    // Note: applyIK already calls updateTipPosition(model) internally
-    // which updates tip_position_ based on the new joint angles
-
-    return ik_success;
-}
-
-void Leg::calculateBasePosition(const RobotModel &model) {
-    // Calculate leg base position in world coordinates using RobotModel
-    double angle_rad = model.getLegBaseAngleOffset(leg_id_);
-    const Parameters &params = model.getParams();
-    base_position_.x = params.hexagon_radius * cos(angle_rad);
-    base_position_.y = params.hexagon_radius * sin(angle_rad);
-    base_position_.z = 0.0; // Base is at ground level
-}
-
-void Leg::updateTipPosition(const RobotModel &model) {
-    // Calculate tip position from current joint angles using FK
-    tip_position_ = model.forwardKinematicsGlobalCoordinates(leg_id_, joint_angles_);
+    // Compute delta in leg frame
+    return Point3D(desired_local.x - current_local.x,
+                   desired_local.y - current_local.y,
+                   desired_local.z - current_local.z);
 }
 
 // ===== FSR CONTACT HISTORY METHODS =====
@@ -350,4 +316,18 @@ bool Leg::shouldBeInStance(double global_gait_phase, double stance_duration) con
 bool Leg::shouldBeInSwing(double global_gait_phase, double stance_duration) const {
     double leg_phase = calculateLegPhase(global_gait_phase);
     return leg_phase >= stance_duration;
+}
+
+// Calculate base position from robot model
+void Leg::calculateBasePosition(const RobotModel &model) {
+    double angle_rad = model.getLegBaseAngleOffset(leg_id_);
+    const Parameters &params = model.getParams();
+    base_position_.x = params.hexagon_radius * cos(angle_rad);
+    base_position_.y = params.hexagon_radius * sin(angle_rad);
+    base_position_.z = 0.0;
+}
+
+// Update tip position via forward kinematics
+void Leg::updateTipPosition(const RobotModel &model) {
+    tip_position_ = model.forwardKinematicsGlobalCoordinates(leg_id_, joint_angles_);
 }

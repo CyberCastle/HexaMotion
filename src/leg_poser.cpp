@@ -252,16 +252,6 @@ void LegPoser::generateSecondarySwingControlNodes(const Point3D &origin_pos, con
 }
 
 void LegPoser::autoSyncWithLeg() {
-
-    // 1. Synchronize current tip position
-    leg_.setCurrentTipPositionGlobal(robot_model_, current_tip_pose_.position);
-
-    // 2. Synchronize desired tip position
-    leg_.setDesiredTipPositionGlobal(target_tip_pose_.position);
-
-    // 3. Apply IK to calculate joint angles
-    leg_.applyIK(robot_model_);
-
-    // 4. Update tip position to ensure consistency
-    leg_.updateTipPosition(robot_model_);
+    // Synchronize leg state with current target pose using IK and FK
+    leg_.applyIK(robot_model_, current_tip_pose_.position);
 }

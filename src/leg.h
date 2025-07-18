@@ -124,12 +124,12 @@ class Leg {
     // ===== KINEMATIC STATE =====
 
     /**
-     * @brief Update inverse kinematics and joint angles.
-     * @param model Robot model for IK calculations
-     * @param target_position Target tip position
-     * @return True if IK succeeds
+     * @brief Apply inverse kinematics to reach a target position and update joint angles & tip position.
+     * @param model RobotModel for IK calculations
+     * @param target_position Desired global tip position
+     * @return True if IK succeeds within joint limits
      */
-    bool updateInverseKinematics(const RobotModel &model, const Point3D &target_position);
+    bool applyIK(const RobotModel &model, const Point3D &target_position);
 
     /**
      * @brief Get current DH transform matrix.
@@ -355,15 +355,14 @@ class Leg {
      */
     bool isInDefaultStance(double tolerance = 5.0) const;
 
-    // Set desired tip position in global coordinates
-    void setDesiredTipPositionGlobal(const Point3D &desired_position);
-    Point3D getDesiredTipPositionGlobal() const { return desired_tip_position_; }
-
-    // Apply inverse kinematics (OpenSHC architecture)
-    bool applyIK(const RobotModel &model);
-
-    // Apply inverse kinematics with position delta (OpenSHC architecture)
-    bool applyIKWithDelta(const RobotModel &model, const Point3D &position_delta);
+    /**
+     * @brief Calculate position delta in leg frame for synchronization
+     * @param model Robot model for transform calculations
+     * @param desired_position Desired tip position
+     * @param current_position Current tip position
+     * @return Position delta in leg frame coordinates
+     */
+    Point3D calculatePositionDelta(const RobotModel &model, const Point3D &desired_position, const Point3D &current_position) const;
 
   private:
     // ===== IDENTIFICATION =====
@@ -391,9 +390,6 @@ class Leg {
     // ===== DEFAULT CONFIGURATION =====
     JointAngles default_angles_;   //< Default joint angles
     Point3D default_tip_position_; //< Default tip position
-
-    // Desired tip position
-    Point3D desired_tip_position_; //< Desired tip position
 
     /**
      * @brief Calculate base position from robot parameters.

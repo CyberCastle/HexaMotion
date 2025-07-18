@@ -117,9 +117,6 @@ class LegStepper {
     void generateStanceControlNodes(double stride_scaler);
     void forceNormalTouchdown();
 
-    // OpenSHC-style position delta calculation
-    Point3D calculatePositionDelta(const Point3D &desired_position, const Point3D &current_position) const;
-
     /**
      * @brief Automatically synchronize internal state with Leg object
      * This method ensures that all calculated trajectory data is properly
