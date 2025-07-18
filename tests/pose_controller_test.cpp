@@ -215,7 +215,7 @@ int main() {
     for (int i = 0; i < NUM_LEGS; i++) {
         legs[i].setStepPhase(STANCE_PHASE);
         Point3D horizontal_pos(i * 50.0, i * 30.0, -150.0); // Same Z for all legs
-        legs[i].setCurrentTipPositionGlobal(model, horizontal_pos);
+        legs[i].setCurrentTipPositionGlobal(horizontal_pos);
     }
 
     pc.updateWalkPlanePose(legs);

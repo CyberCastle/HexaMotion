@@ -2,7 +2,7 @@
 #include "hexamotion_constants.h"
 
 Leg::Leg(int leg_id, const RobotModel &model)
-    : leg_id_(leg_id), leg_name_("Leg_" + std::to_string(leg_id)), joint_angles_(0.0, 0.0, 0.0), tip_position_(0.0, 0.0, 0.0), base_position_(0.0, 0.0, 0.0), step_phase_(STANCE_PHASE), gait_phase_(0.0), in_contact_(false), contact_force_(0.0), fsr_history_index_(0), leg_phase_offset_(0.0), default_angles_(0.0, 0.0, 0.0), default_tip_position_(0.0, 0.0, 0.0) {
+    : model_(model), leg_id_(leg_id), leg_name_("Leg_" + std::to_string(leg_id)), joint_angles_(0.0, 0.0, 0.0), tip_position_(0.0, 0.0, 0.0), base_position_(0.0, 0.0, 0.0), step_phase_(STANCE_PHASE), gait_phase_(0.0), in_contact_(false), contact_force_(0.0), fsr_history_index_(0), leg_phase_offset_(0.0), default_angles_(0.0, 0.0, 0.0), default_tip_position_(0.0, 0.0, 0.0) {
 
     // Initialize FSR contact history
     for (int i = 0; i < 3; ++i) {
@@ -16,7 +16,7 @@ Leg::Leg(int leg_id, const RobotModel &model)
     }
 
     // Calculate base position
-    calculateBasePosition(model);
+    calculateBasePosition();
 }
 
 void Leg::setJointAngles(const JointAngles &angles) {
@@ -50,12 +50,12 @@ void Leg::setJointAngle(int joint_index, double angle) {
     }
 }
 
-bool Leg::setCurrentTipPositionGlobal(const RobotModel &model, const Point3D &position) {
+bool Leg::setCurrentTipPositionGlobal(const Point3D &position) {
     // Store the target position
     Point3D target = position;
 
     // For global coordinates, we need to check reachability relative to the leg's base position
-    Point3D leg_base = model.getLegBasePosition(leg_id_);
+    Point3D leg_base = model_.getLegBasePosition(leg_id_);
 
     // Calculate distance from leg base to target position
     double dx = target.x - leg_base.x;
@@ -63,11 +63,11 @@ bool Leg::setCurrentTipPositionGlobal(const RobotModel &model, const Point3D &po
     double dz = target.z - leg_base.z;
     double distance = sqrt(dx * dx + dy * dy + dz * dz);
 
-    double max_reach = getLegReach(model.getParams());
+    double max_reach = getLegReach();
 
     if (distance > max_reach) {
         // TODO: OpenSHC approach: could adjust position to be within reach
-        //  For now, we reject it
+        // For now, we reject it
         return false; // Target too far
     }
 
@@ -78,16 +78,15 @@ bool Leg::setCurrentTipPositionGlobal(const RobotModel &model, const Point3D &po
 
 /**
  * @brief Apply inverse kinematics to reach a target position and update joint angles & tip position.
- * @param model RobotModel for IK calculations
  * @param target_position Desired global tip position
  * @return True if IK succeeds within joint limits
  */
-bool Leg::applyIK(const RobotModel &model, const Point3D &target_position) {
+bool Leg::applyIK(const Point3D &target_position) {
     // Compute new joint angles via IK
-    JointAngles new_angles = model.inverseKinematicsCurrentGlobalCoordinates(
+    JointAngles new_angles = model_.inverseKinematicsCurrentGlobalCoordinates(
         leg_id_, joint_angles_, target_position);
     // Validate limits
-    if (!checkJointLimits(model.getParams())) {
+    if (!checkJointLimits()) {
         return false;
     }
     // Update state
@@ -95,31 +94,31 @@ bool Leg::applyIK(const RobotModel &model, const Point3D &target_position) {
     tip_position_ = target_position;
 
     // Ensure consistency via FK
-    updateTipPosition(model);
+    updateTipPosition();
     return true;
 }
 
-Eigen::Matrix4d Leg::getTransform(const RobotModel &model) const {
-    return model.legTransform(leg_id_, joint_angles_);
+Eigen::Matrix4d Leg::getTransform() const {
+    return model_.legTransform(leg_id_, joint_angles_);
 }
 
-Eigen::Matrix3d Leg::getJacobian(const RobotModel &model) const {
-    return model.calculateJacobian(leg_id_, joint_angles_, tip_position_);
+Eigen::Matrix3d Leg::getJacobian() const {
+    return model_.calculateJacobian(leg_id_, joint_angles_, tip_position_);
 }
 
-bool Leg::isTargetReachable(const RobotModel &model, const Point3D &target) const {
+bool Leg::isTargetReachable(const Point3D &target) const {
     // Use RobotModel's workspace validation
     // This is a simplified check - full validation should be implemented
     double distance = sqrt(target.x * target.x + target.y * target.y + target.z * target.z);
-    double max_reach = getLegReach(model.getParams());
+    double max_reach = getLegReach();
 
     return distance <= max_reach;
 }
 
-Point3D Leg::constrainToWorkspace(const RobotModel &model, const Point3D &target) const {
+Point3D Leg::constrainToWorkspace(const Point3D &target) const {
     // Simple workspace constraint - scale target to max reach if outside
     double distance = sqrt(target.x * target.x + target.y * target.y + target.z * target.z);
-    double max_reach = getLegReach(model.getParams());
+    double max_reach = getLegReach();
 
     if (distance > max_reach) {
         double scale = max_reach / distance;
@@ -129,7 +128,8 @@ Point3D Leg::constrainToWorkspace(const RobotModel &model, const Point3D &target
     return target;
 }
 
-bool Leg::checkJointLimits(const Parameters &params) const {
+bool Leg::checkJointLimits() const {
+    const Parameters &params = model_.getParams();
     return (joint_angles_.coxa >= params.coxa_angle_limits[0] &&
             joint_angles_.coxa <= params.coxa_angle_limits[1] &&
             joint_angles_.femur >= params.femur_angle_limits[0] &&
@@ -138,7 +138,8 @@ bool Leg::checkJointLimits(const Parameters &params) const {
             joint_angles_.tibia <= params.tibia_angle_limits[1]);
 }
 
-double Leg::getJointLimitProximity(const Parameters &params) const {
+double Leg::getJointLimitProximity() const {
+    const Parameters &params = model_.getParams();
     // Calculate proximity for each joint (1.0 = far from limits, 0.0 = at limits)
     double coxa_range = params.coxa_angle_limits[1] - params.coxa_angle_limits[0];
     double femur_range = params.femur_angle_limits[1] - params.femur_angle_limits[0];
@@ -152,7 +153,8 @@ double Leg::getJointLimitProximity(const Parameters &params) const {
     return std::min({coxa_proximity, femur_proximity, tibia_proximity});
 }
 
-void Leg::constrainJointLimits(const Parameters &params) {
+void Leg::constrainJointLimits() {
+    const Parameters &params = model_.getParams();
     joint_angles_.coxa = std::max(params.coxa_angle_limits[0],
                                   std::min(params.coxa_angle_limits[1], joint_angles_.coxa));
     joint_angles_.femur = std::max(params.femur_angle_limits[0],
@@ -161,13 +163,13 @@ void Leg::constrainJointLimits(const Parameters &params) {
                                    std::min(params.tibia_angle_limits[1], joint_angles_.tibia));
 }
 
-void Leg::initialize(const RobotModel &model, const Pose &default_stance) {
+void Leg::initialize(const Pose &default_stance) {
     // Calculate default tip position from stance pose
     Point3D stance_tip = default_stance.position;
 
     // Calculate IK for default stance using zero angles as starting point
     JointAngles zero_angles(0, 0, 0);
-    JointAngles stance_angles = model.inverseKinematicsCurrentGlobalCoordinates(leg_id_, zero_angles, stance_tip);
+    JointAngles stance_angles = model_.inverseKinematicsCurrentGlobalCoordinates(leg_id_, zero_angles, stance_tip);
 
     // Set default configuration
     default_angles_ = stance_angles;
@@ -178,10 +180,10 @@ void Leg::initialize(const RobotModel &model, const Pose &default_stance) {
     tip_position_ = stance_tip;
 
     // Update FK to ensure consistency
-    updateTipPosition(model);
+    updateTipPosition();
 }
 
-void Leg::reset(const RobotModel &model) {
+void Leg::reset() {
     // Reset to default configuration
     joint_angles_ = default_angles_;
     tip_position_ = default_tip_position_;
@@ -192,10 +194,11 @@ void Leg::reset(const RobotModel &model) {
     resetFSRHistory();
 
     // Update FK
-    updateTipPosition(model);
+    updateTipPosition();
 }
 
-double Leg::getLegReach(const Parameters &params) const {
+double Leg::getLegReach() const {
+    const Parameters &params = model_.getParams();
     // Maximum reach is femur + tibia lengths (coxa only provides lateral offset)
     // The coxa rotates around Z-axis and doesn't extend the radial reach
     return params.femur_length + params.tibia_length;
@@ -220,13 +223,13 @@ bool Leg::isInDefaultStance(double tolerance) const {
 }
 
 // Calculate position delta in leg frame for synchronization
-Point3D Leg::calculatePositionDelta(const RobotModel &model, const Point3D &desired_position, const Point3D &current_position) const {
+Point3D Leg::calculatePositionDelta(const Point3D &desired_position, const Point3D &current_position) const {
     // Use current joint angles to define the leg frame
     JointAngles current_angles = joint_angles_;
 
     // Transform positions to leg local coordinates
-    Point3D desired_local = model.transformGlobalToLocalCoordinates(leg_id_, desired_position, current_angles);
-    Point3D current_local = model.transformGlobalToLocalCoordinates(leg_id_, current_position, current_angles);
+    Point3D desired_local = model_.transformGlobalToLocalCoordinates(leg_id_, desired_position, current_angles);
+    Point3D current_local = model_.transformGlobalToLocalCoordinates(leg_id_, current_position, current_angles);
 
     // Compute delta in leg frame
     return Point3D(desired_local.x - current_local.x,
@@ -319,15 +322,15 @@ bool Leg::shouldBeInSwing(double global_gait_phase, double stance_duration) cons
 }
 
 // Calculate base position from robot model
-void Leg::calculateBasePosition(const RobotModel &model) {
-    double angle_rad = model.getLegBaseAngleOffset(leg_id_);
-    const Parameters &params = model.getParams();
+void Leg::calculateBasePosition() {
+    double angle_rad = model_.getLegBaseAngleOffset(leg_id_);
+    const Parameters &params = model_.getParams();
     base_position_.x = params.hexagon_radius * cos(angle_rad);
     base_position_.y = params.hexagon_radius * sin(angle_rad);
     base_position_.z = 0.0;
 }
 
 // Update tip position via forward kinematics
-void Leg::updateTipPosition(const RobotModel &model) {
-    tip_position_ = model.forwardKinematicsGlobalCoordinates(leg_id_, joint_angles_);
+void Leg::updateTipPosition() {
+    tip_position_ = model_.forwardKinematicsGlobalCoordinates(leg_id_, joint_angles_);
 }

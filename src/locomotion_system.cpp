@@ -95,7 +95,7 @@ bool LocomotionSystem::initialize(IIMUInterface *imu, IFSRInterface *fsr, IServo
     // This happens after DH parameters are initialized in the constructor
     Pose default_stance(Point3D(0, 0, -params.standing_height), Eigen::Vector3d(0, 0, 0));
     for (int i = 0; i < NUM_LEGS; i++) {
-        legs[i].initialize(model, default_stance);
+        legs[i].initialize(default_stance);
     }
 
     system_enabled = true;
@@ -224,7 +224,7 @@ bool LocomotionSystem::setLegJointAngles(int leg, const JointAngles &q) {
 
     // Update both joint angles and leg positions in a single atomic operation
     legs[leg].setJointAngles(clamped_angles); // Update leg object
-    legs[leg].updateTipPosition(model);       // Update leg position based on new angles
+    legs[leg].updateTipPosition();            // Update leg position based on new angles
 
     // Use velocity controller to get appropriate servo speeds
     double coxa_speed = velocity_controller ? velocity_controller->getServoSpeed(leg, 0) : params.default_servo_speed;

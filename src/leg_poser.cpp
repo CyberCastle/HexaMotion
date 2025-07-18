@@ -198,7 +198,7 @@ void LegPoser::updateAutoPose(int phase) {
 
     // Only apply compensation if it's above a minimum threshold to avoid jitter
     if (compensation_magnitude > 0.5) { // 0.5mm threshold
-        leg_.setCurrentTipPositionGlobal(robot_model_, auto_pose_.position);
+        leg_.setCurrentTipPositionGlobal(auto_pose_.position);
 
         // Recalculate joint angles for the new position using current angles as starting point
         JointAngles current_angles = leg_.getJointAngles();
@@ -253,5 +253,5 @@ void LegPoser::generateSecondarySwingControlNodes(const Point3D &origin_pos, con
 
 void LegPoser::autoSyncWithLeg() {
     // Synchronize leg state with current target pose using IK and FK
-    leg_.applyIK(robot_model_, current_tip_pose_.position);
+    leg_.applyIK(current_tip_pose_.position);
 }

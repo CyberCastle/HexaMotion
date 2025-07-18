@@ -85,7 +85,7 @@ class LegStepper {
 
     // Modifiers
     void setDesiredVelocity(const Point3D &linear_velocity, double angular_velocity);
-    void setCurrentTipPose(const RobotModel &model, const Point3D &pose) { leg_.setCurrentTipPositionGlobal(model, pose); }
+    void setCurrentTipPose(const Point3D &pose) { leg_.setCurrentTipPositionGlobal(pose); }
     void setDefaultTipPose(const Point3D &pose) { default_tip_pose_ = pose; }
     void setStepState(StepState state) { step_state_ = state; }
     void setPhase(int phase) { phase_ = phase; }

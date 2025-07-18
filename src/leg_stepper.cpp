@@ -288,7 +288,7 @@ void LegStepper::updateTipPosition(double step_length, double time_delta, bool r
 
     // Synchronize with leg after trajectory generation
     // Synchronize leg state: apply IK to reach current tip pose and sync FK
-    leg_.applyIK(robot_model_, current_tip_pose_);
+    leg_.applyIK(current_tip_pose_);
 }
 
 void LegStepper::generatePrimarySwingControlNodes() {
@@ -432,5 +432,5 @@ void LegStepper::updateDynamicTiming(double step_length, double time_delta) {
 
 void LegStepper::autoSyncWithLeg() {
     // Synchronize leg state: apply IK to reach current tip pose and update FK
-    leg_.applyIK(robot_model_, current_tip_pose_);
+    leg_.applyIK(current_tip_pose_);
 }

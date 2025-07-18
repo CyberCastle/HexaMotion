@@ -57,7 +57,7 @@ class LegPoser {
 
     // Modifiers
     inline void setCurrentTipPose(const RobotModel &model, const Pose &current) {
-        leg_.setCurrentTipPositionGlobal(model, current.position);
+        leg_.setCurrentTipPositionGlobal(current.position);
         current_tip_pose_ = current;
     }
     inline void setTargetTipPose(const Pose &target) { target_tip_pose_ = target; }
