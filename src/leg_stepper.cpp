@@ -205,9 +205,8 @@ void LegStepper::updateTipPosition(double step_length, double time_delta, bool r
     // Usar el step_length configurado si no se pasa uno explícito
     double used_step_length = (step_length_ > 0.0) ? step_length_ : step_length;
 
-    // TODO: Use dynamic gait parameters to adjust step length
     // Update dynamic timing parameters (OpenSHC equivalent)
-    // updateDynamicTiming(used_step_length, time_delta);
+    updateDynamicTiming(used_step_length, time_delta);
 
     // Obtener parámetros de la configuración de marcha actual
     const auto &config = robot_model_.getParams().dynamic_gait;
