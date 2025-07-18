@@ -79,10 +79,6 @@ void LegStepper::updateStepCycle(double normalized_phase, double step_length, do
 
     // 4. Update tip position and trajectories
     updateTipPosition(step_length, time_delta, false, false);
-
-    // 5. Synchronize with hardware leg
-    // TODO: ¿Auto-sync with leg hardware?
-    // autoSyncWithLeg();
 }
 
 void LegStepper::calculateStepProgress(double normalized_phase, const StepCycle &step) {
@@ -428,9 +424,4 @@ void LegStepper::updateDynamicTiming(double step_length, double time_delta) {
         swing_delta_t_ = config.swing_phase * time_delta;
         stance_delta_t_ = config.stance_phase * time_delta;
     }
-}
-
-void LegStepper::autoSyncWithLeg() {
-    // Synchronize leg state: apply IK to reach current tip pose and update FK
-    leg_.applyIK(current_tip_pose_);
 }

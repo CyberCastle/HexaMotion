@@ -117,14 +117,6 @@ class LegStepper {
     void generateStanceControlNodes(double stride_scaler);
     void forceNormalTouchdown();
 
-    /**
-     * @brief Automatically synchronize internal state with Leg object
-     * This method ensures that all calculated trajectory data is properly
-     * synchronized with the Leg object, eliminating the need for external
-     * synchronization calls like LocomotionSystem::updateModel()
-     */
-    void autoSyncWithLeg();
-
   private:
     // Internal helper methods
     void updateStepState(const StepCycle &step);
