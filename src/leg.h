@@ -289,12 +289,6 @@ class Leg {
     Point3D constrainToWorkspace(const Point3D &target) const;
 
     /**
-     * @brief Check if current joint angles are within limits.
-     * @return True if all joints are within limits
-     */
-    bool checkJointLimits() const;
-
-    /**
      * @brief Get joint limit proximity (1.0 = far from limits, 0.0 = at limits).
      * @return Proximity value (0.0 to 1.0)
      */

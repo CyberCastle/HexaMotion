@@ -90,18 +90,13 @@ bool Leg::applyIK(const Point3D &target_position) {
     JointAngles new_angles = model_.inverseKinematicsCurrentGlobalCoordinates(
         leg_id_, joint_angles_, target_position);
 
-    // Temporarily update angles to validate limits
-    JointAngles original_angles = joint_angles_;
-    joint_angles_ = new_angles;
-
-    // Validate limits with new angles
-    if (!checkJointLimits()) {
-        // Restore original angles if limits are violated
-        joint_angles_ = original_angles;
+    // Validate limits before updating member variables
+    if (!model_.checkJointLimits(leg_id_, new_angles)) {
         return false;
     }
 
-    // Update tip position via FK to ensure consistency
+    // Update joint angles and tip position
+    joint_angles_ = new_angles;
     updateTipPosition();
     return true;
 }
@@ -134,16 +129,6 @@ Point3D Leg::constrainToWorkspace(const Point3D &target) const {
     }
 
     return target;
-}
-
-bool Leg::checkJointLimits() const {
-    const Parameters &params = model_.getParams();
-    return (joint_angles_.coxa >= params.coxa_angle_limits[0] &&
-            joint_angles_.coxa <= params.coxa_angle_limits[1] &&
-            joint_angles_.femur >= params.femur_angle_limits[0] &&
-            joint_angles_.femur <= params.femur_angle_limits[1] &&
-            joint_angles_.tibia >= params.tibia_angle_limits[0] &&
-            joint_angles_.tibia <= params.tibia_angle_limits[1]);
 }
 
 double Leg::getJointLimitProximity() const {
