@@ -1,4 +1,5 @@
 #include "walk_controller.h"
+#include "body_pose_config.h"
 #include "gait_config_factory.h"
 #include "hexamotion_constants.h"
 #include "leg_stepper.h"
@@ -13,7 +14,7 @@
 #include <string>
 #include <vector>
 
-WalkController::WalkController(RobotModel &m, Leg legs[NUM_LEGS])
+WalkController::WalkController(RobotModel &m, Leg legs[NUM_LEGS], const BodyPoseConfiguration &pose_config)
     : model(m), terrain_adaptation_(m), body_pose_controller_(nullptr), velocity_limits_(m),
       step_clearance_(30.0), step_depth_(10.0),
       desired_linear_velocity_(0, 0, 0), desired_angular_velocity_(0.0),
@@ -37,11 +38,20 @@ WalkController::WalkController(RobotModel &m, Leg legs[NUM_LEGS])
 
     // Create LegStepper objects for each leg
     for (int i = 0; i < NUM_LEGS; i++) {
-        // Calculate default stance position for each leg
-        Point3D default_stance = calculateDefaultStancePosition(i);
+
+        // Use leg stance position to calculate identity tip pose
+        const LegStancePosition leg_stance_position = pose_config.leg_stance_positions[i];
+
+        // Calculate the identity tip pose from the leg stance position
+        // This assumes the stance position is in the robot's body frame
+        // and the Z coordinate is set to 0 for the identity pose
+        Point3D identity_tip_pose = Point3D(
+            leg_stance_position.x,
+            leg_stance_position.y,
+            leg_stance_position.z); // Use standing height
 
         // Crear LegStepper con referencias a los validadores
-        auto stepper = std::make_shared<LegStepper>(i, default_stance, legs[i], model,
+        auto stepper = std::make_shared<LegStepper>(i, identity_tip_pose, legs[i], model,
                                                     walkspace_analyzer_.get(), workspace_validator_.get());
         leg_steppers_.push_back(stepper);
     }
@@ -425,7 +435,8 @@ void WalkController::updateWalk(const Point3D &linear_velocity_input, double ang
 
     // Update walk plane pose through BodyPoseController
     if (body_pose_controller_) {
-        body_pose_controller_->updateWalkPlanePose(legs_array_);
+        // TODO: Use unified interface for walk plane pose update
+        //  body_pose_controller_->updateWalkPlanePose(legs_array_);
     }
     odometry_ideal_ = odometry_ideal_ + calculateOdometry(time_delta_);
 
@@ -464,8 +475,6 @@ void WalkController::updateWalk(const Point3D &linear_velocity_input, double ang
         generateWalkspace();
     }
 }
-
-// Walk plane functionality moved to BodyPoseController::updateWalkPlanePose()
 
 Point3D WalkController::calculateOdometry(double time_period) {
     Point3D desired_linear_velocity(desired_linear_velocity_.x, desired_linear_velocity_.y, 0);
@@ -667,26 +676,6 @@ bool WalkController::checkTerrainConditions() const {
 
     // For now, return false (no challenging terrain)
     return false;
-}
-
-// TODO: Use defines
-Point3D WalkController::calculateDefaultStancePosition(int leg_index) {
-    const auto &params = model.getParams();
-
-    // Use the same base positions as the main model
-    Point3D base_pos = model.getLegBasePosition(leg_index);
-    double base_x = base_pos.x;
-    double base_y = base_pos.y;
-    double leg_reach = params.coxa_length + params.femur_length + params.tibia_length;
-    double safe_reach = leg_reach * 0.65f; // 65% safety margin
-    double base_angle = model.getLegBaseAngleOffset(leg_index);
-    double default_foot_x = base_x + safe_reach * cos(base_angle);
-    double default_foot_y = base_y + safe_reach * sin(base_angle);
-
-    // Z coordinate is set to 0 for default stance
-    // This is an identity position, or neutral, which is not adjusted to the terrain.
-    // This position must be dynamically adjusted to the robot's pose.
-    return Point3D(default_foot_x, default_foot_y, 0);
 }
 
 double WalkController::calculateLegReach() const {

@@ -78,7 +78,7 @@ bool LocomotionSystem::initialize(IIMUInterface *imu, IFSRInterface *fsr, IServo
 
     // Initialize controllers with proper architecture
     body_pose_ctrl = new BodyPoseController(model, pose_config);
-    walk_ctrl = new WalkController(model, legs);
+    walk_ctrl = new WalkController(model, legs, pose_config);
     admittance_ctrl = new AdmittanceController(model, imu_interface, fsr_interface);
     velocity_controller = new CartesianVelocityController(model);
 

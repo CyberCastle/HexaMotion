@@ -1,6 +1,7 @@
 #ifndef WALK_CONTROLLER_H
 #define WALK_CONTROLLER_H
 
+#include "body_pose_config.h"
 #include "body_pose_controller.h"
 #include "gait_config.h"
 #include "gait_config_factory.h"
@@ -25,10 +26,6 @@ enum LegState {
     LEG_MANUAL_TO_WALKING = -2, //< The leg is in 'manual to walking' state - transitioning from 'manual' to 'walking' state
 };
 
-// StepCycle is now defined in leg_stepper.h to avoid duplication
-
-// WalkState and StepState are defined above
-
 /**
  * @brief Complete walking controller with OpenSHC architecture
  */
@@ -38,8 +35,9 @@ class WalkController {
      * @brief Constructor with robot model and leg references
      * @param m Robot model for kinematics and parameters
      * @param legs Array of references to the actual Leg objects from LocomotionSystem
+     * @param pose_config Body pose configuration containing standing pose joints
      */
-    WalkController(RobotModel &m, Leg legs[NUM_LEGS]);
+    WalkController(RobotModel &m, Leg legs[NUM_LEGS], const BodyPoseConfiguration &pose_config);
 
     /**
      * @brief Destructor
@@ -322,9 +320,6 @@ class WalkController {
     double calculateStabilityIndex() const;
     bool checkTerrainConditions() const;
     double calculateLegReach() const;
-
-    // Declaración del método auxiliar para la posición de apoyo por defecto
-    Point3D calculateDefaultStancePosition(int leg_index);
 };
 
 #endif // WALK_CONTROLLER_H

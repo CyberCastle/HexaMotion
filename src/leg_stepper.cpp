@@ -81,7 +81,8 @@ void LegStepper::updateStepCycle(double normalized_phase, double step_length, do
     updateTipPosition(step_length, time_delta, false, false);
 
     // 5. Synchronize with hardware leg
-    autoSyncWithLeg();
+    // TODO: ¿Auto-sync with leg hardware?
+    // autoSyncWithLeg();
 }
 
 void LegStepper::calculateStepProgress(double normalized_phase, const StepCycle &step) {
@@ -208,8 +209,9 @@ void LegStepper::updateTipPosition(double step_length, double time_delta, bool r
     // Usar el step_length configurado si no se pasa uno explícito
     double used_step_length = (step_length_ > 0.0) ? step_length_ : step_length;
 
+    // TODO: Use dynamic gait parameters to adjust step length
     // Update dynamic timing parameters (OpenSHC equivalent)
-    updateDynamicTiming(used_step_length, time_delta);
+    // updateDynamicTiming(used_step_length, time_delta);
 
     // Obtener parámetros de la configuración de marcha actual
     const auto &config = robot_model_.getParams().dynamic_gait;
@@ -217,11 +219,6 @@ void LegStepper::updateTipPosition(double step_length, double time_delta, bool r
 
     // Usar la frecuencia de control del sistema
     double control_frequency = robot_model_.getParams().control_frequency;
-
-    // Calcular velocidad lineal basada en step_length y frecuencia de control
-    // double linear_velocity_x = used_step_length * control_frequency / 2.0;
-    // double linear_velocity_y = 0.0;
-    // double angular_velocity = 0.0;
 
     // Actualizar stride vector
     updateStride();
@@ -289,17 +286,12 @@ void LegStepper::updateTipPosition(double step_length, double time_delta, bool r
         current_tip_velocity_ = bezier_velocity / time_delta;
     }
 
-    // Synchronize with leg: use autoSync for stance, manual set for swing to preserve bezier trajectory
-    if (step_state_ == STEP_STANCE || step_state_ == STEP_FORCE_STANCE) {
-        autoSyncWithLeg();
-    } else {
-        // SWING: directly set tip position and joint angles based on IK
-        leg_.setCurrentTipPositionGlobal(robot_model_, current_tip_pose_);
-        // Compute joint angles for swing pose
-        JointAngles angles = robot_model_.inverseKinematicsCurrentGlobalCoordinates(
-            leg_index_, leg_.getJointAngles(), current_tip_pose_);
-        leg_.setJointAngles(angles);
-    }
+    // Synchronize with leg after trajectory generation
+    // Update leg global position and compute IK for both stance and swing
+    leg_.setCurrentTipPositionGlobal(robot_model_, current_tip_pose_);
+    JointAngles angles = robot_model_.inverseKinematicsCurrentGlobalCoordinates(
+        leg_index_, leg_.getJointAngles(), current_tip_pose_);
+    leg_.setJointAngles(angles);
 }
 
 // OpenSHC-style position delta calculation
