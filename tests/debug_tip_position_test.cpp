@@ -43,9 +43,9 @@ void debugTipPositionGeneration(LegStepper &stepper, Leg &leg, const RobotModel 
     stepper.setPhase(5);
     stepper.setStepProgress(0.5);
 
-    // CRITICAL: Initialize timing parameters by calling updateTipPosition first
-    // This will internally call updateDynamicTiming() and generate control nodes
-    stepper.updateTipPosition(20.0, 0.02, false, false);
+    // CRITICAL: Initialize timing parameters by calling updateTipPositionIterative first
+    // This will internally call calculateSwingTiming() and generate control nodes
+    stepper.updateTipPositionIterative(20, 0.02, false, false);
 
     // Now display the control nodes that were generated
     std::cout << "\nSwing control nodes (primary):" << std::endl;
@@ -66,29 +66,37 @@ void debugTipPositionGeneration(LegStepper &stepper, Leg &leg, const RobotModel 
 
     // Generate complete swing trajectory (0% to 100%)
     std::cout << "\n=== COMPLETE SWING TRAJECTORY ===" << std::endl;
-    std::cout << "Step | Progress | Position (x, y, z) | Curve Used" << std::endl;
-    std::cout << "-----+----------+-------------------+-----------" << std::endl;
+    std::cout << "Step | Iteration | Position (x, y, z) | Delta (x, y, z)" << std::endl;
+    std::cout << "-----+-----------+-------------------+----------------" << std::endl;
 
-    for (int step = 0; step <= 20; step++) {
-        double progress = step / 20.0; // 0.0 to 1.0
-        stepper.setStepProgress(progress);
+    // Reset to initial position for trajectory generation
+    stepper.setCurrentTipPose(initial_position);
+    Point3D previous_pos = initial_position;
 
-        // Update tip position for this progress
-        stepper.updateTipPosition(20.0, 0.02, false, false);
-        Point3D pos = leg.getCurrentTipPositionGlobal();
+    for (int iteration = 1; iteration <= 20; iteration++) {
+        // Update tip position using iteration-based approach (OpenSHC style)
+        stepper.updateTipPositionIterative(iteration, 0.02, false, false);
+        Point3D pos = stepper.getCurrentTipPose();
+        Point3D delta = pos - previous_pos;
 
-        std::string curve_used = (progress < 0.5) ? "Primary" : "Secondary";
+        std::string curve_used = (iteration <= 10) ? "Primary" : "Secondary";
 
-        printf("%4d | %8.3f | (%8.3f, %8.3f, %8.3f) | %s\n",
-               step, progress, pos.x, pos.y, pos.z, curve_used.c_str());
+        printf("%4d | %9d | (%8.3f, %8.3f, %8.3f) | (%6.3f, %6.3f, %6.3f) %s\n",
+               iteration, iteration, pos.x, pos.y, pos.z, delta.x, delta.y, delta.z, curve_used.c_str());
+
+        previous_pos = pos;
     }
 
-    // Reset to original state
-    stepper.setStepProgress(0.5);
-    stepper.updateTipPosition(20.0, 0.02, false, false);
+    // Reset to original state and test final position (complete swing)
+    stepper.setCurrentTipPose(initial_position);
 
-    Point3D final_position = leg.getCurrentTipPositionGlobal();
-    std::cout << "\nFinal tip position (progress=0.5): (" << final_position.x << ", " << final_position.y << ", " << final_position.z << ")" << std::endl;
+    // Execute complete swing trajectory to get final landing position
+    for (int iter = 1; iter <= 20; iter++) {
+        stepper.updateTipPositionIterative(iter, 0.02, false, false);
+    }
+
+    Point3D final_position = stepper.getCurrentTipPose();
+    std::cout << "\nFinal tip position (iteration=20, complete swing): (" << final_position.x << ", " << final_position.y << ", " << final_position.z << ")" << std::endl;
 
     double position_change = (final_position - initial_position).norm();
     std::cout << "Position change magnitude: " << position_change << " mm" << std::endl;
@@ -96,28 +104,24 @@ void debugTipPositionGeneration(LegStepper &stepper, Leg &leg, const RobotModel 
     // Verify joint limits for extreme positions
     std::cout << "\n=== JOINT LIMITS VERIFICATION ===" << std::endl;
     bool all_valid = true;
-    for (int step = 0; step <= 20; step++) {
-        double progress = step / 20.0;
-        stepper.setStepProgress(progress);
-        stepper.updateTipPosition(20.0, 0.02, false, false);
+    stepper.setCurrentTipPose(initial_position); // Reset position
 
+    for (int iteration = 1; iteration <= 20; iteration++) {
+        stepper.updateTipPositionIterative(iteration, 0.02, false, false);
+        Point3D pos = stepper.getCurrentTipPose();
+
+        // Apply IK to get joint angles
+        leg.applyIK(pos);
         JointAngles angles = leg.getJointAngles();
         bool valid = model.checkJointLimits(stepper.getLegIndex(), angles);
 
         if (!valid) {
-            Point3D pos = leg.getCurrentTipPositionGlobal();
-            printf("❌ Invalid joint limits at progress %.3f: position (%.3f, %.3f, %.3f)\n",
-                   progress, pos.x, pos.y, pos.z);
+            printf("❌ Invalid joint limits at iteration %d: position (%.3f, %.3f, %.3f)\n",
+                   iteration, pos.x, pos.y, pos.z);
             printf("   Joint angles: coxa=%.1f°, femur=%.1f°, tibia=%.1f°\n",
-                   angles.coxa, angles.femur, angles.tibia);
+                   angles.coxa * 180.0 / M_PI, angles.femur * 180.0 / M_PI, angles.tibia * 180.0 / M_PI);
             all_valid = false;
         }
-    }
-
-    if (all_valid) {
-        std::cout << "✅ All positions have valid joint limits" << std::endl;
-    } else {
-        std::cout << "❌ Some positions have invalid joint limits" << std::endl;
     }
 }
 
@@ -180,6 +184,10 @@ int main() {
     // Create LegStepper for leg 0 using the correct identity tip pose
     LegStepper stepper(0, identity_tip_pose, test_leg, model, &walkspace_analyzer, &workspace_validator);
     stepper.setDefaultTipPose(identity_tip_pose);
+
+    // *** CONFIGURAR SWING CLEARANCE EXPLÍCITAMENTE PARA DEBUGGING ***
+    stepper.setSwingClearance(Point3D(0, 0, 45.0)); // 45mm de elevación como en el test principal
+    std::cout << "Swing clearance configurado manualmente: (0, 0, 45)" << std::endl;
 
     debugTipPositionGeneration(stepper, test_leg, model);
 

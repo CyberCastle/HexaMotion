@@ -44,11 +44,11 @@ WalkController::WalkController(RobotModel &m, Leg legs[NUM_LEGS], const BodyPose
 
         // Calculate the identity tip pose from the leg stance position
         // This assumes the stance position is in the robot's body frame
-        // and the Z coordinate is set to 0 for the identity pose
+        // For HexaMotion, use actual standing height instead of Z=0
         Point3D identity_tip_pose = Point3D(
             leg_stance_position.x,
             leg_stance_position.y,
-            leg_stance_position.z); // Use standing height
+            leg_stance_position.z); // Use standing height for HexaMotion compatibility
 
         // Crear LegStepper con referencias a los validadores
         auto stepper = std::make_shared<LegStepper>(i, identity_tip_pose, legs[i], model,
@@ -112,16 +112,12 @@ void WalkController::applyGaitConfigToLegSteppers(const GaitConfiguration &gait_
                               static_cast<double>(gait_config.step_cycle.period_);
         leg_stepper->setPhaseOffset(phase_offset);
 
-        // Configuración de parámetros de marcha
-        leg_stepper->setStepLength(gait_config.step_length);
-        leg_stepper->setSwingHeight(gait_config.swing_height);
-        leg_stepper->setBodyClearance(gait_config.body_clearance);
-        leg_stepper->setStanceSpanModifier(gait_config.stance_span_modifier);
-
-        // Configurar swing_clearance_ basado en swing_height de la marcha
-        // En OpenSHC, swing_clearance_ se inicializa con swing_height en dirección normal al plano de marcha
+        // OpenSHC: Configurar swing_clearance basado en swing_height de la marcha
         Point3D swing_clearance(0.0, 0.0, gait_config.swing_height);
         leg_stepper->setSwingClearance(swing_clearance);
+
+        // OpenSHC: Configurar velocidad deseada para el cálculo de stride
+        leg_stepper->setDesiredVelocity(desired_linear_velocity_, desired_angular_velocity_);
     }
 
     // Actualizar parámetros de adaptación al terreno
@@ -410,25 +406,38 @@ void WalkController::updateWalk(const Point3D &linear_velocity_input, double ang
     }
 
     // Calculate gait coordination data for each leg (NO POSITION UPDATES)
-    for (auto &leg_stepper : leg_steppers_) {
+    for (int i = 0; i < NUM_LEGS && i < leg_steppers_.size(); i++) {
+        auto leg_stepper = leg_steppers_[i];
 
         // Set desired velocity for the leg stepper
         leg_stepper->setDesiredVelocity(desired_linear_velocity_, desired_angular_velocity_);
 
-        // Calculate local phase using global phase and leg offset (OpenSHC equivalent)
+        // OpenSHC: Calcular iteración actual basada en el global_phase_
+        int current_iteration = global_phase_;
+
+        // OpenSHC: Determinar estado de la pierna basado en offset de fase
         double offset = leg_stepper->getPhaseOffset(); // This is normalized [0,1]
         int leg_phase = (global_phase_ + static_cast<int>(offset * current_gait_config_.step_cycle.period_)) %
                         current_gait_config_.step_cycle.period_;
 
-        // Update leg stepper's internal phase
-        leg_stepper->setPhase(leg_phase);
+        // OpenSHC: Determinar si está en swing o stance usando la configuración real
+        int stance_period = current_gait_config_.step_cycle.stance_period_;
+        bool in_swing = (leg_phase >= stance_period);
 
-        // Calculate normalized local phase for trajectory calculation
-        double local_phase = static_cast<double>(leg_phase) /
-                             static_cast<double>(current_gait_config_.step_cycle.period_);
+        // Actualizar el estado en LegStepper
+        if (in_swing && leg_stepper->getStepState() != STEP_SWING) {
+            leg_stepper->setStepState(STEP_SWING);
+            leg_stepper->initializeSwingPeriod(1);
+        } else if (!in_swing && leg_stepper->getStepState() != STEP_STANCE) {
+            leg_stepper->setStepState(STEP_STANCE);
+        }
 
-        // Update step cycle with unified method (OpenSHC equivalent)
-        leg_stepper->updateStepCycle(local_phase, getStepLength(), time_delta_);
+        // Actualizar el estado en el sistema de legs (importante para detección de cambios de fase)
+        StepPhase leg_step_phase = in_swing ? SWING_PHASE : STANCE_PHASE;
+        legs_array_[i].setStepPhase(leg_step_phase);
+
+        // OpenSHC: Llamar al método iterativo principal
+        leg_stepper->updateTipPositionIterative(current_iteration, time_delta_, false, false);
     }
 
     // Update walk plane pose through BodyPoseController

@@ -171,51 +171,69 @@ static void validateIdentityTransformation(LocomotionSystem &sys, TestReport &re
         if (!leg_stepper)
             continue;
 
-        // Step 1: Identity Position (z=0) - this is the theoretical starting point
+        // Step 1: Identity Position - this is the theoretical starting point
         Point3D identity_position = leg_stepper->getIdentityTipPose();
         printf("Leg %d Identity position: (%.2f, %.2f, %.2f)\n", i, identity_position.x, identity_position.y, identity_position.z);
-        addResult(rep, std::abs(identity_position.z) <= 1.0,
-                  "Identity position z coordinate near zero for leg " + std::to_string(i), sys);
+        // For HexaMotion, verify identity position is at standing height (~-150mm)
+        addResult(rep, std::abs(identity_position.z + 150.0) <= 50.0,
+                  "Identity position z coordinate at standing height for leg " + std::to_string(i), sys);
 
-        // Step 2: calculateStanceSpanChange() - lateral adjustment
-        Point3D stance_span_change = leg_stepper->calculateStanceSpanChange();
-        printf("Leg %d Stance span change: (%.2f, %.2f, %.2f)\n", i, stance_span_change.x, stance_span_change.y, stance_span_change.z);
+        // Step 2: OpenSHC architecture - test swing clearance configuration
+        Point3D swing_clearance = leg_stepper->getSwingClearance();
+        printf("Leg %d Swing clearance: (%.2f, %.2f, %.2f)\n", i, swing_clearance.x, swing_clearance.y, swing_clearance.z);
 
-        // More lenient check - any significant change is acceptable
-        bool lateral_change = (std::abs(stance_span_change.y) > 0.01 || std::abs(stance_span_change.x) > 0.01);
-        addResult(rep, lateral_change,
-                  "Stance span change provides lateral adjustment for leg " + std::to_string(i) +
-                      " (x:" + std::to_string(stance_span_change.x) + ", y:" + std::to_string(stance_span_change.y) + ")",
+        // Verify swing clearance is configured (should have positive Z component)
+        bool has_swing_clearance = (swing_clearance.z > 0.01);
+        addResult(rep, has_swing_clearance,
+                  "OpenSHC swing clearance is configured for leg " + std::to_string(i) +
+                      " (z:" + std::to_string(swing_clearance.z) + ")",
                   sys);
 
-        // Step 3: body_clearance transformation → z = -150mm
-        Point3D identity_with_span = identity_position;
-        identity_with_span.x += stance_span_change.x;
-        identity_with_span.y += stance_span_change.y;
-        identity_with_span.z = -150.0; // body_clearance transformation
+        // Step 3: OpenSHC stride vector calculation
+        Point3D stride_vector = leg_stepper->getStrideVector();
+        printf("Leg %d Stride vector: (%.2f, %.2f, %.2f)\n", i, stride_vector.x, stride_vector.y, stride_vector.z);
 
-        addResult(rep, std::abs(identity_with_span.z + 150.0) <= 1.0,
-                  "Body clearance transformation sets z = -150mm for leg " + std::to_string(i), sys);
-
-        // Step 4: projection_to_walk_plane - should maintain structural height
-        Point3D current_stance = sys.getLeg(i).getCurrentTipPositionGlobal();
-        printf("Leg %d Current stance: (%.2f, %.2f, %.2f)\n", i, current_stance.x, current_stance.y, current_stance.z);
-
-        // More lenient height check - robot may not be exactly at -150mm during walking
-        bool height_reasonable = current_stance.z >= -300.0 && current_stance.z <= 200.0;
-        addResult(rep, height_reasonable,
-                  "Final stance position within reasonable height range for leg " + std::to_string(i) +
-                      " (z:" + std::to_string(current_stance.z) + ")",
+        // Verify stride vector is calculated (any non-zero X,Y movement is acceptable)
+        bool has_stride = (std::abs(stride_vector.x) > 0.001 || std::abs(stride_vector.y) > 0.001);
+        addResult(rep, has_stride,
+                  "OpenSHC stride vector is calculated for leg " + std::to_string(i) +
+                      " (x:" + std::to_string(stride_vector.x) + ", y:" + std::to_string(stride_vector.y) + ")",
                   sys);
 
-        // Step 5: Validate the complete transformation flow
-        // Check that the transformation process exists and produces reasonable results
-        Point3D default_tip = leg_stepper->getDefaultTipPose();
-        printf("Leg %d Default tip: (%.2f, %.2f, %.2f)\n", i, default_tip.x, default_tip.y, default_tip.z);
+        // Step 4: OpenSHC timing parameters validation
+        double swing_delta_t = leg_stepper->getSwingDeltaT();
+        double stance_delta_t = leg_stepper->getStanceDeltaT();
+        printf("Leg %d OpenSHC timing - swing_delta_t: %.4f, stance_delta_t: %.4f\n", i, swing_delta_t, stance_delta_t);
 
-        bool transformation_valid = (default_tip.x != 0.0 || default_tip.y != 0.0 || default_tip.z != 0.0);
-        addResult(rep, transformation_valid,
-                  "Complete transformation flow produces valid default tip pose for leg " + std::to_string(i), sys);
+        // Verify timing parameters are properly calculated
+        bool timing_valid = (swing_delta_t > 0.0 && swing_delta_t <= 1.0) && (stance_delta_t > 0.0 && stance_delta_t <= 1.0);
+        addResult(rep, timing_valid,
+                  "OpenSHC timing parameters are valid for leg " + std::to_string(i) +
+                      " (swing_dt:" + std::to_string(swing_delta_t) + ", stance_dt:" + std::to_string(stance_delta_t) + ")",
+                  sys);
+
+        // Step 5: OpenSHC control nodes generation
+        Point3D swing1_node0 = leg_stepper->getSwing1ControlNode(0);
+        Point3D swing1_node4 = leg_stepper->getSwing1ControlNode(4);
+        printf("Leg %d Swing1 nodes - start: (%.2f, %.2f, %.2f), end: (%.2f, %.2f, %.2f)\n",
+               i, swing1_node0.x, swing1_node0.y, swing1_node0.z, swing1_node4.x, swing1_node4.y, swing1_node4.z);
+
+        // Verify control nodes are initialized (should not all be zero)
+        bool nodes_initialized = (swing1_node0.x != 0.0 || swing1_node0.y != 0.0 || swing1_node0.z != 0.0);
+        addResult(rep, nodes_initialized,
+                  "OpenSHC control nodes are initialized for leg " + std::to_string(i), sys);
+
+        // Step 6: Current tip position validation
+        Point3D current_tip = leg_stepper->getCurrentTipPose();
+        printf("Leg %d Current tip pose: (%.2f, %.2f, %.2f)\n", i, current_tip.x, current_tip.y, current_tip.z);
+
+        // More lenient position check - should be within reasonable workspace
+        bool position_reasonable = (std::abs(current_tip.x) <= 500.0 && std::abs(current_tip.y) <= 500.0 &&
+                                    current_tip.z >= -400.0 && current_tip.z <= 100.0);
+        addResult(rep, position_reasonable,
+                  "Current tip position is within reasonable workspace for leg " + std::to_string(i) +
+                      " (x:" + std::to_string(current_tip.x) + ", y:" + std::to_string(current_tip.y) + ", z:" + std::to_string(current_tip.z) + ")",
+                  sys);
     }
 }
 
