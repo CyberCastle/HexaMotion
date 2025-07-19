@@ -132,6 +132,12 @@ class LegStepper {
     int stance_iterations_;
     int current_iteration_;
 
+    // Swing state management (OpenSHC style)
+    bool swing_initialized_;
+    bool nodes_generated_;
+    int last_swing_iteration_;
+    int last_swing_start_iteration_;
+
     // Bezier control nodes (5 nodes for quartic curves)
     Point3D swing_1_nodes_[5];
     Point3D swing_2_nodes_[5];

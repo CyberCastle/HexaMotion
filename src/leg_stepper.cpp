@@ -34,6 +34,12 @@ LegStepper::LegStepper(int leg_index, const Point3D &identity_tip_pose, Leg &leg
     stance_iterations_ = 0;
     current_iteration_ = 0;
 
+    // Initialize swing state management
+    swing_initialized_ = false;
+    nodes_generated_ = false;
+    last_swing_iteration_ = -1;
+    last_swing_start_iteration_ = -1;
+
     // Initialize velocity and movement vectors
     desired_linear_velocity_ = Point3D(0, 0, 0);
     desired_angular_velocity_ = 0.0;
@@ -112,13 +118,22 @@ void LegStepper::calculateSwingTiming(double time_delta) {
 }
 
 void LegStepper::initializeSwingPeriod(int iteration) {
-    // Save initial tip position/velocity like OpenSHC
-    if (iteration == 1) {
+    // Initialize swing origin position and velocity on first call or swing reset
+    // In OpenSHC, this typically happens when entering swing state
+    
+    // Reset swing initialization if we're starting a new swing cycle
+    if (iteration == 1 || iteration < last_swing_iteration_) {
+        swing_initialized_ = false;
+    }
+    
+    if (!swing_initialized_) {
         swing_origin_tip_position_ = current_tip_pose_;
         swing_origin_tip_velocity_ = current_tip_velocity_;
-        current_iteration_ = 1;
+        swing_initialized_ = true;
     }
+    
     current_iteration_ = iteration;
+    last_swing_iteration_ = iteration;
 }
 
 // OpenSHC primary swing control nodes generation with controlled elevation
@@ -259,38 +274,65 @@ void LegStepper::updateTipPositionIterative(int iteration, double time_delta, bo
     // Update stride vector FIRST
     updateStride();
 
-    // Calculate target tip pose like OpenSHC
-    // Target should be stride distance from current position, but at SAME Z level as start
-    target_tip_pose_ = current_tip_pose_ + Point3D(stride_vector_.x * 0.5, stride_vector_.y * 0.5, 0.0);
+    // Calculate target tip pose like OpenSHC - it should be the FINAL position after the stride
+    // In OpenSHC, target_tip_pose is the desired final position, not a relative movement
+    if (step_state_ == STEP_SWING) {
+        // For swing: target is starting position + full stride vector
+        target_tip_pose_ = swing_origin_tip_position_ + stride_vector_;
+        // Keep same Z level as the origin (ground level movement)
+        target_tip_pose_.z = swing_origin_tip_position_.z;
+    } else {
+        // For stance: target would be different calculation
+        target_tip_pose_ = current_tip_pose_ + Point3D(stride_vector_.x * 0.5, stride_vector_.y * 0.5, 0.0);
+    }
 
     if (step_state_ == STEP_SWING) {
         // Initialize swing period on first iteration
         initializeSwingPeriod(iteration);
 
-        // Determine which half of swing we're in
-        bool first_half = iteration <= swing_iterations_ / 2;
+        // Generate control nodes ONLY once at the beginning of swing
+        
+        // Detect if this is a new swing cycle (reset on iteration 1 or when we restart swing)
+        if (iteration == 1 || (iteration <= swing_iterations_ && last_swing_start_iteration_ > iteration)) {
+            nodes_generated_ = false;
+            last_swing_start_iteration_ = iteration;
+        }
+        
+        if (!nodes_generated_) {
+            generatePrimarySwingControlNodes();
+            generateSecondarySwingControlNodes(false); // ground_contact = false for now
+            nodes_generated_ = true;
+        }
 
-        // Generate control nodes
-        generatePrimarySwingControlNodes();
-        generateSecondarySwingControlNodes(!first_half && false); // ground_contact = false for now
+        // Determine which half of swing we're in based on actual swing progress
+        int swing_iteration = iteration % swing_iterations_;
+        if (swing_iteration == 0) swing_iteration = swing_iterations_; // Handle modulo edge case
+        
+        int half_iterations = swing_iterations_ / 2;
+        bool first_half = swing_iteration <= half_iterations;
 
         // Calculate absolute position using OpenSHC approach
         Point3D new_position = current_tip_pose_;
         double time_input = 0.0;
 
         if (first_half) {
-            // For first half: map iteration 1->swing_iterations_/2 to time 0->1
-            int half_iterations = swing_iterations_ / 2;
-            if (iteration <= half_iterations && half_iterations > 0) {
-                time_input = (double)(iteration - 1) / (double)(half_iterations - 1);
-                time_input = std::max(0.0, std::min(1.0, time_input)); // Clamp to [0,1]
-                new_position = math_utils::quarticBezier(swing_1_nodes_, time_input);
+            // For first half: map swing_iteration 1->half_iterations to time 0->1
+            if (half_iterations > 1) {
+                time_input = (double)(swing_iteration - 1) / (double)(half_iterations - 1);
+            } else {
+                time_input = 0.0;
             }
+            time_input = std::max(0.0, std::min(1.0, time_input)); // Clamp to [0,1]
+            new_position = math_utils::quarticBezier(swing_1_nodes_, time_input);
         } else {
-            // For second half: map iteration swing_iterations_/2+1->swing_iterations_ to time 0->1
-            int half_iterations = swing_iterations_ / 2;
+            // For second half: map swing_iteration (half_iterations+1)->swing_iterations_ to time 0->1
             int second_half_start = half_iterations + 1;
-            time_input = (double)(iteration - second_half_start) / (double)(half_iterations - 1);
+            int second_half_iterations = swing_iterations_ - half_iterations;
+            if (second_half_iterations > 1) {
+                time_input = (double)(swing_iteration - second_half_start) / (double)(second_half_iterations - 1);
+            } else {
+                time_input = 0.0;
+            }
             time_input = std::max(0.0, std::min(1.0, time_input)); // Clamp to [0,1]
             new_position = math_utils::quarticBezier(swing_2_nodes_, time_input);
         }
