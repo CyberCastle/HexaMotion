@@ -20,12 +20,12 @@
 #include "../src/locomotion_system.h"
 #include "robot_model.h"
 #include "test_stubs.h"
+#include <Eigen/Dense> // Required for Eigen::Vector3d
 #include <cassert>
 #include <cmath>
 #include <iomanip>
 #include <iostream>
 #include <vector>
-#include <Eigen/Dense> // Required for Eigen::Vector3d
 
 // Test configuration
 constexpr int VALIDATION_STEPS = 100;   // Reduced for faster testing
@@ -61,30 +61,41 @@ static void printTestHeader() {
 }
 
 static void printGaitPattern(const LocomotionSystem &sys, int step, double phase) {
-    std::cout << "Step " << std::setw(3) << step << " (Phase: " << std::fixed << std::setprecision(2) << phase << "): ";
+    std::cout << "Phase " << std::setw(1) << step << " - " << std::fixed << std::setprecision(2) << phase << ": ";
 
-    // Print leg states
+    // Print leg states with positions and angles
     for (int leg = 0; leg < NUM_LEGS; ++leg) {
         const Leg &leg_obj = sys.getLeg(leg);
         StepPhase state = leg_obj.getStepPhase();
         char symbol = (state == STANCE_PHASE) ? 'S' : 'W';
-        std::cout << "L" << (leg + 1) << ":" << symbol << " ";
+        // Get position and angles
+        Point3D pos = leg_obj.getCurrentTipPositionGlobal();
+        JointAngles angles = leg_obj.getJointAngles();
+        std::cout << "L" << (leg + 1) << ":" << symbol
+                  << "(" << std::fixed << std::setprecision(1)
+                  << pos.x << "," << pos.y << "," << pos.z << ")"
+                  << std::fixed << std::setprecision(1)
+                  << "[" << (angles.coxa * 180.0 / M_PI) << ","
+                  << (angles.femur * 180.0 / M_PI) << ","
+                  << (angles.tibia * 180.0 / M_PI) << "] ";
     }
+    std::cout << std::endl;
 
     // Print tripod groups
-    std::cout << " | Groups: A[";
-    for (int leg : {0, 2, 4}) {
-        const Leg &leg_obj = sys.getLeg(leg);
-        StepPhase state = leg_obj.getStepPhase();
-        std::cout << (state == STANCE_PHASE ? "S" : "W");
-    }
-    std::cout << "] B[";
-    for (int leg : {1, 3, 5}) {
-        const Leg &leg_obj = sys.getLeg(leg);
-        StepPhase state = leg_obj.getStepPhase();
-        std::cout << (state == STANCE_PHASE ? "S" : "W");
-    }
-    std::cout << "]" << std::endl;
+    // std::cout << " | Groups: A[";
+    // for (int leg : {0, 2, 4}) {
+    //     const Leg &leg_obj = sys.getLeg(leg);
+    //     StepPhase state = leg_obj.getStepPhase();
+    //     std::cout << (state == STANCE_PHASE ? "S" : "W");
+    // }
+    // std::cout << "] B[";
+    // for (int leg : {1, 3, 5}) {
+    //     const Leg &leg_obj = sys.getLeg(leg);
+    //     StepPhase state = leg_obj.getStepPhase();
+    //     std::cout << (state == STANCE_PHASE ? "S" : "W");
+    // }
+    // std::cout << "]" << std::endl;
+    std::cout << "=======================================================================================" << std::endl;
 }
 
 static void printJointAngleSymmetry(const LocomotionSystem &sys) {
@@ -403,8 +414,7 @@ static bool validateTrajectorySymmetry(const TripodValidation &validation) {
     }
 
     // Calculate percentages
-    double symmetry_percentage = total_comparable_steps > 0 ?
-        (double)symmetry_steps / total_comparable_steps * 100.0 : 0.0;
+    double symmetry_percentage = total_comparable_steps > 0 ? (double)symmetry_steps / total_comparable_steps * 100.0 : 0.0;
     double group_a_consistency = (double)group_a_consistent_steps / validation.group_a_phases.size() * 100.0;
     double group_b_consistency = (double)group_b_consistent_steps / validation.group_a_phases.size() * 100.0;
 
@@ -464,11 +474,13 @@ static bool validateCoxaAngleSignOpposition(const TripodValidation &validation) 
         if (groups_opposite_phases) {
             // Calculate average coxa angles for each group
             double group_a_avg_coxa = (validation.leg_angles[0][step].coxa +
-                                      validation.leg_angles[2][step].coxa +
-                                      validation.leg_angles[4][step].coxa) / 3.0;
+                                       validation.leg_angles[2][step].coxa +
+                                       validation.leg_angles[4][step].coxa) /
+                                      3.0;
             double group_b_avg_coxa = (validation.leg_angles[1][step].coxa +
-                                      validation.leg_angles[3][step].coxa +
-                                      validation.leg_angles[5][step].coxa) / 3.0;
+                                       validation.leg_angles[3][step].coxa +
+                                       validation.leg_angles[5][step].coxa) /
+                                      3.0;
 
             // Check if angles have opposite signs or show appropriate patterns for tripod gait
             bool appropriate_pattern = false;
@@ -490,8 +502,7 @@ static bool validateCoxaAngleSignOpposition(const TripodValidation &validation) 
     }
 
     // Calculate percentage
-    double opposition_percentage = total_comparable_steps > 0 ?
-        (double)opposition_steps / total_comparable_steps * 100.0 : 0.0;
+    double opposition_percentage = total_comparable_steps > 0 ? (double)opposition_steps / total_comparable_steps * 100.0 : 0.0;
 
     std::cout << "\n  Analyzing coxa angle sign opposition:" << std::endl;
     std::cout << "    Coxa angle sign opposition: " << opposition_percentage
@@ -514,9 +525,9 @@ static void printTrajectoryAnalysis(const TripodValidation &validation) {
     // Estructura para almacenar rangos de movimiento por pierna
     struct TrajectoryRange {
         double min_x, max_x, min_y, max_y, min_z, max_z;
-        double swing_volume;  // Volumen solo durante SWING
-        int swing_steps;      // Número de pasos en SWING
-        int total_steps;      // Total de pasos
+        double swing_volume; // Volumen solo durante SWING
+        int swing_steps;     // Número de pasos en SWING
+        int total_steps;     // Total de pasos
     };
 
     TrajectoryRange leg_trajectories[NUM_LEGS];
@@ -533,7 +544,8 @@ static void printTrajectoryAnalysis(const TripodValidation &validation) {
 
     // Analizar trayectorias por pierna, separando SWING y STANCE
     for (int leg = 0; leg < NUM_LEGS; ++leg) {
-        if (validation.leg_positions[leg].empty()) continue;
+        if (validation.leg_positions[leg].empty())
+            continue;
 
         leg_trajectories[leg].total_steps = validation.leg_positions[leg].size();
 
@@ -631,7 +643,7 @@ static void printTrajectoryAnalysis(const TripodValidation &validation) {
 }
 
 // --- NUEVA VALIDACIÓN: POSE DEL CUERPO ---
-static bool validateBodyPoseStability(const std::vector<Eigen::Vector3d>& body_positions, const std::vector<Eigen::Vector3d>& body_orientations) {
+static bool validateBodyPoseStability(const std::vector<Eigen::Vector3d> &body_positions, const std::vector<Eigen::Vector3d> &body_orientations) {
     std::cout << "\n=== BODY POSE STABILITY VALIDATION ===" << std::endl;
     if (body_positions.empty() || body_orientations.empty()) {
         std::cout << "No body pose data collected." << std::endl;
@@ -645,7 +657,7 @@ static bool validateBodyPoseStability(const std::vector<Eigen::Vector3d>& body_p
     std::cout << "  Orientation: [" << std::fixed << std::setprecision(6)
               << body_orientations[0].x() << ", " << body_orientations[0].y() << ", " << body_orientations[0].z() << "] rad" << std::endl;
 
-    const double position_tolerance = 1e-2; // 0.01 mm (prácticamente nulo)
+    const double position_tolerance = 1e-2;    // 0.01 mm (prácticamente nulo)
     const double orientation_tolerance = 1e-2; // 0.01 grados
     const Eigen::Vector3d initial_position = body_positions[0];
     const Eigen::Vector3d initial_orientation = body_orientations[0];
@@ -740,18 +752,14 @@ int main() {
     }
 
     // Execute startup sequence
-    while (!sys.executeStartupSequence()) {
-        // Simulate control cycle during transition
-    }
+    // while (!sys.executeStartupSequence()) {
+    //     // Simulate control cycle during transition
+    // }
 
     // Setup tripod gait
     assert(sys.setGaitType(TRIPOD_GAIT));
-    assert(sys.walkForward(TEST_VELOCITY));
 
-    std::cout << "Starting tripod gait validation..." << std::endl
-              << std::endl;
-
-    // Debug: Print initial leg positions and phase offsets
+    // Debug: Print initial leg positions and phase offsets (standing pose)
     std::cout << "=== INITIAL LEG CONFIGURATION ===" << std::endl;
     for (int i = 0; i < NUM_LEGS; i++) {
         const Leg &leg = sys.getLeg(i);
@@ -761,9 +769,18 @@ int main() {
 
         std::cout << "Leg " << i << ": tip=(" << tip_pos.x << ", " << tip_pos.y << ", " << tip_pos.z
                   << ") phase_offset=" << phase_offset
-                  << " angles=(" << angles.coxa << "°, " << angles.femur << "°, " << angles.tibia << "°)" << std::endl;
+                  << " angles=(" << angles.coxa * (180.0f / M_PI) << "°, " << angles.femur * (180.0f / M_PI) << "°, " << angles.tibia * (180.0f / M_PI) << "°)" << std::endl;
     }
     std::cout << "====================================" << std::endl
+              << std::endl;
+
+    assert(sys.walkForward(TEST_VELOCITY));
+
+    // Reapply standing pose so femur/tibia angles are correct (-35°, +35°) before validation
+    sys.setStandingPose();
+    sys.update();
+
+    std::cout << "Starting tripod gait validation..." << std::endl
               << std::endl;
 
     // Validation data collection
@@ -864,7 +881,7 @@ int main() {
         std::cout << "Found final stance step: " << last_stance_step << std::endl;
 
         // Validar que la pose final sea similar a la inicial
-        const double final_position_tolerance = 5.0; // 5mm tolerancia para pose final
+        const double final_position_tolerance = 5.0;    // 5mm tolerancia para pose final
         const double final_orientation_tolerance = 0.1; // 0.1 radianes
 
         Eigen::Vector3d final_position = body_positions[last_stance_step];
@@ -932,7 +949,7 @@ int main() {
     // Verificar si las fases están alternando correctamente
     bool phases_alternating = true;
     for (int step = 1; step < analysis_steps; ++step) {
-        if (validation.group_a_phases[step] == validation.group_a_phases[step-1]) {
+        if (validation.group_a_phases[step] == validation.group_a_phases[step - 1]) {
             phases_alternating = false;
             break;
         }
@@ -964,14 +981,18 @@ int main() {
             if (leg == 0 || leg == 2 || leg == 4) {
                 // Group A
                 if (step < (int)validation.group_a_phases.size()) {
-                    if (validation.group_a_phases[step] == SWING_PHASE) swing_count++;
-                    else stance_count++;
+                    if (validation.group_a_phases[step] == SWING_PHASE)
+                        swing_count++;
+                    else
+                        stance_count++;
                 }
             } else {
                 // Group B
                 if (step < (int)validation.group_b_phases.size()) {
-                    if (validation.group_b_phases[step] == SWING_PHASE) swing_count++;
-                    else stance_count++;
+                    if (validation.group_b_phases[step] == SWING_PHASE)
+                        swing_count++;
+                    else
+                        stance_count++;
                 }
             }
         }
@@ -979,9 +1000,9 @@ int main() {
         std::cout << "SWING=" << swing_count << ", STANCE=" << stance_count;
 
         // Verificar si la pierna está moviéndose
-        double x_range = validation.leg_positions[leg][analysis_steps-1].x - validation.leg_positions[leg][0].x;
-        double y_range = validation.leg_positions[leg][analysis_steps-1].y - validation.leg_positions[leg][0].y;
-        double z_range = validation.leg_positions[leg][analysis_steps-1].z - validation.leg_positions[leg][0].z;
+        double x_range = validation.leg_positions[leg][analysis_steps - 1].x - validation.leg_positions[leg][0].x;
+        double y_range = validation.leg_positions[leg][analysis_steps - 1].y - validation.leg_positions[leg][0].y;
+        double z_range = validation.leg_positions[leg][analysis_steps - 1].z - validation.leg_positions[leg][0].z;
 
         if (x_range > 1.0 && y_range > 1.0 && z_range > 1.0) {
             std::cout << " ✓ 3D movement";

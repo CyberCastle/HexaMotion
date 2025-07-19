@@ -1,11 +1,11 @@
-#include "leg_stepper.h"
-#include "hexamotion_constants.h"
-#include "math_utils.h"
+#include "leg_stepper_openshc.h"
+#include "../src/hexamotion_constants.h"
+#include "../src/math_utils.h"
 #include <algorithm>
 #include <cmath>
 
-LegStepper::LegStepper(int leg_index, const Point3D &identity_tip_pose, Leg &leg, RobotModel &robot_model,
-                       WalkspaceAnalyzer *walkspace_analyzer, WorkspaceValidator *workspace_validator)
+LegStepperOpenSHC::LegStepperOpenSHC(int leg_index, const Point3D &identity_tip_pose, Leg &leg, RobotModel &robot_model,
+                                     WalkspaceAnalyzer *walkspace_analyzer, WorkspaceValidator *workspace_validator)
     : leg_index_(leg_index),
       leg_(leg),
       robot_model_(robot_model),
@@ -42,12 +42,12 @@ LegStepper::LegStepper(int leg_index, const Point3D &identity_tip_pose, Leg &leg
     swing_clearance_ = Point3D(0, 0, 0);
 }
 
-void LegStepper::setDesiredVelocity(const Point3D &linear_velocity, double angular_velocity) {
+void LegStepperOpenSHC::setDesiredVelocity(const Point3D &linear_velocity, double angular_velocity) {
     desired_linear_velocity_ = linear_velocity;
     desired_angular_velocity_ = angular_velocity;
 }
 
-void LegStepper::updateStride() {
+void LegStepperOpenSHC::updateStride() {
     // Simplified stride calculation based on velocity
     double control_frequency = robot_model_.getParams().control_frequency;
     double time_delta = 1.0 / control_frequency;
@@ -69,7 +69,7 @@ void LegStepper::updateStride() {
     }
 }
 
-void LegStepper::calculateSwingTiming(double time_delta) {
+void LegStepperOpenSHC::calculateSwingTiming(double time_delta) {
     // OpenSHC timing calculation
     double swing_period_ratio = 0.5; // 50% of step cycle is swing
     double control_frequency = robot_model_.getParams().control_frequency;
@@ -104,7 +104,7 @@ void LegStepper::calculateSwingTiming(double time_delta) {
         stance_delta_t_ = 0.1; // 10 iterations per stance
 }
 
-void LegStepper::initializeSwingPeriod(int iteration) {
+void LegStepperOpenSHC::initializeSwingPeriod(int iteration) {
     // Save initial tip position/velocity like OpenSHC
     if (iteration == 1) {
         swing_origin_tip_position_ = current_tip_pose_;
@@ -118,7 +118,7 @@ void LegStepper::initializeSwingPeriod(int iteration) {
     current_iteration_ = iteration;
 }
 
-void LegStepper::generatePrimarySwingControlNodes() {
+void LegStepperOpenSHC::generatePrimarySwingControlNodes() {
     // OpenSHC primary swing control nodes generation
 
     // If swing_origin_tip_position_ is not set, use current position
@@ -149,7 +149,7 @@ void LegStepper::generatePrimarySwingControlNodes() {
     swing_1_nodes_[4] = mid_tip_position;
 }
 
-void LegStepper::generateSecondarySwingControlNodes(bool ground_contact) {
+void LegStepperOpenSHC::generateSecondarySwingControlNodes(bool ground_contact) {
     // OpenSHC secondary swing control nodes generation
 
     Point3D final_tip_velocity = stride_vector_ * -1.0; // OpenSHC uses negative stride
@@ -179,7 +179,7 @@ void LegStepper::generateSecondarySwingControlNodes(bool ground_contact) {
     }
 }
 
-void LegStepper::generateStanceControlNodes(double stride_scaler) {
+void LegStepperOpenSHC::generateStanceControlNodes(double stride_scaler) {
     // OpenSHC stance control nodes generation
 
     // If stance_origin_tip_position_ is not set, use current position
@@ -198,7 +198,7 @@ void LegStepper::generateStanceControlNodes(double stride_scaler) {
     stance_nodes_[4] = stance_target_position;
 }
 
-void LegStepper::updateTipPositionIterative(int iteration, double time_delta, bool rough_terrain_mode, bool force_normal_touchdown) {
+void LegStepperOpenSHC::updateTipPositionIterative(int iteration, double time_delta, bool rough_terrain_mode, bool force_normal_touchdown) {
     // OpenSHC-style iterative update
 
     // Calculate swing timing if not already done
@@ -317,8 +317,8 @@ void LegStepper::updateTipPositionIterative(int iteration, double time_delta, bo
     }
 }
 
-void LegStepper::printDebugInfo() const {
-    std::cout << "=== LegStepper Debug Info ===" << std::endl;
+void LegStepperOpenSHC::printDebugInfo() const {
+    std::cout << "=== LegStepperOpenSHC Debug Info ===" << std::endl;
     std::cout << "Leg index: " << leg_index_ << std::endl;
     std::cout << "Step state: " << (step_state_ == STEP_SWING ? "SWING" : "STANCE") << std::endl;
     std::cout << "Current iteration: " << current_iteration_ << std::endl;

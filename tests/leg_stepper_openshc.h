@@ -1,30 +1,25 @@
-#ifndef LEG_STEPPER_H
-#define LEG_STEPPER_H
+#ifndef LEG_STEPPER_OPENSHC_H
+#define LEG_STEPPER_OPENSHC_H
 
+#include "../src/leg_stepper.h" // Include for enum definitions
 #include "leg.h"
 #include "robot_model.h"
 #include "walkspace_analyzer.h"
 #include "workspace_validator.h"
 
-// Enum definitions needed by LegStepper
-enum StepState {
-    STEP_SWING,        //< The leg step cycle is in 'swing' state, the forward 'in air' progression of the step cycle
-    STEP_STANCE,       //< The leg step cycle is in 'stance' state, the backward 'on ground' regression of the step cycle
-    STEP_FORCE_STANCE, //< State used to force a 'stance' state in non-standard instances
-    STEP_FORCE_STOP,   //< State used to force the step cycle to stop iterating
-    STEP_STATE_COUNT,  //< Misc enum defining number of Step States
-};
-
 /**
- * @brief Leg stepper class for individual leg trajectory control (OpenSHC equivalent)
+ * @brief LegStepper implementación basada en flujo de OpenSHC
  *
- * ✅ CORRECTED: LegStepper is now independent and does NOT depend on WalkController
+ * Esta clase implementa el comportamiento exacto de OpenSHC:
+ * - Flujo iterativo secuencial
+ * - Acumulación de deltas incremental
+ * - Timing correcto basado en iteraciones
  */
-class LegStepper {
+class LegStepperOpenSHC {
   public:
-    // Modificar el constructor para aceptar los validadores
-    LegStepper(int leg_index, const Point3D &identity_tip_pose, Leg &leg, RobotModel &robot_model,
-               WalkspaceAnalyzer *walkspace_analyzer, WorkspaceValidator *workspace_validator);
+    // Constructor
+    LegStepperOpenSHC(int leg_index, const Point3D &identity_tip_pose, Leg &leg, RobotModel &robot_model,
+                      WalkspaceAnalyzer *walkspace_analyzer, WorkspaceValidator *workspace_validator);
 
     // Accessors
     int getLegIndex() const { return leg_index_; }
@@ -73,14 +68,15 @@ class LegStepper {
     void printDebugInfo() const;
 
   private:
+    // Basic properties
     int leg_index_;
     Leg &leg_;
-    RobotModel &robot_model_; // Store robot model for kinematics
+    RobotModel &robot_model_;
     Point3D identity_tip_pose_;
     Point3D default_tip_pose_;
     Point3D origin_tip_pose_;
     Point3D target_tip_pose_;
-    Point3D current_tip_pose_; //< Current tip pose calculated by stepper
+    Point3D current_tip_pose_;
 
     // Walking state
     Point3D desired_linear_velocity_;
@@ -117,4 +113,4 @@ class LegStepper {
     WorkspaceValidator *workspace_validator_ = nullptr;
 };
 
-#endif // LEG_STEPPER_H
+#endif // LEG_STEPPER_OPENSHC_H

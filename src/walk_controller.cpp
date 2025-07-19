@@ -107,21 +107,18 @@ void WalkController::applyGaitConfigToLegSteppers(const GaitConfiguration &gait_
         if (!leg_stepper)
             continue;
 
-        // Offset de fase normalizado [0,1]
+        // Calcular offset de fase normalizado [0,1] para cada pata
         double phase_offset = static_cast<double>(gait_config.offsets.getForLegIndex(i) * gait_config.phase_config.phase_offset) /
                               static_cast<double>(gait_config.step_cycle.period_);
-        leg_stepper->setPhaseOffset(phase_offset);
-
-        // Configuración de parámetros de marcha
-        leg_stepper->setStepLength(gait_config.step_length);
-        leg_stepper->setSwingHeight(gait_config.swing_height);
-        leg_stepper->setBodyClearance(gait_config.body_clearance);
-        leg_stepper->setStanceSpanModifier(gait_config.stance_span_modifier);
 
         // Configurar swing_clearance_ basado en swing_height de la marcha
         // En OpenSHC, swing_clearance_ se inicializa con swing_height en dirección normal al plano de marcha
         Point3D swing_clearance(0.0, 0.0, gait_config.swing_height);
         leg_stepper->setSwingClearance(swing_clearance);
+
+        // Almacenar parámetros de configuración en el leg object directamente
+        // ya que LegStepper no maneja estos parámetros
+        legs_array_[i].setPhaseOffset(phase_offset);
     }
 
     // Actualizar parámetros de adaptación al terreno
@@ -411,14 +408,11 @@ void WalkController::updateWalk(const Point3D &linear_velocity_input, double ang
 
     // Calculate gait coordination data for each leg (NO POSITION UPDATES)
     for (auto &leg_stepper : leg_steppers_) {
-        // Set walk state in LegStepper for coordination only
-        leg_stepper->setWalkState(walk_state_);
-
         // Set desired velocity for the leg stepper
         leg_stepper->setDesiredVelocity(desired_linear_velocity_, desired_angular_velocity_);
 
         // Calculate local phase using global phase and leg offset (OpenSHC equivalent)
-        double offset = leg_stepper->getPhaseOffset(); // This is normalized [0,1]
+        double offset = legs_array_[leg_stepper->getLegIndex()].getPhaseOffset(); // Get from leg object instead
         int leg_phase = (global_phase_ + static_cast<int>(offset * current_gait_config_.step_cycle.period_)) %
                         current_gait_config_.step_cycle.period_;
 
@@ -429,8 +423,26 @@ void WalkController::updateWalk(const Point3D &linear_velocity_input, double ang
         double local_phase = static_cast<double>(leg_phase) /
                              static_cast<double>(current_gait_config_.step_cycle.period_);
 
-        // Update step cycle with unified method (OpenSHC equivalent)
-        leg_stepper->updateStepCycle(local_phase, getStepLength(), time_delta_);
+        // Update step cycle progress
+        leg_stepper->setStepProgress(local_phase);
+
+        // Determine step state based on phase (OpenSHC equivalent)
+        if (leg_phase >= current_gait_config_.step_cycle.swing_start_ &&
+            leg_phase < current_gait_config_.step_cycle.swing_end_) {
+            if (leg_stepper->getStepState() != STEP_SWING) {
+                // Transition to swing
+                leg_stepper->setStepState(STEP_SWING);
+            }
+        } else {
+            if (leg_stepper->getStepState() != STEP_STANCE) {
+                // Transition to stance
+                leg_stepper->setStepState(STEP_STANCE);
+            }
+        }
+
+        // Use OpenSHC iterative update with current iteration based on phase
+        int current_iteration = static_cast<int>(local_phase * 100) + 1; // Scale to iteration count
+        leg_stepper->updateTipPositionIterative(current_iteration, time_delta_, false, false);
     }
 
     // Update walk plane pose through BodyPoseController

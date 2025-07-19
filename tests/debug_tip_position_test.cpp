@@ -114,11 +114,11 @@ void debugTipPositionGeneration(LegStepper &stepper, Leg &leg, const RobotModel 
         }
     }
 
-    if (all_valid) {
-        std::cout << "✅ All positions have valid joint limits" << std::endl;
-    } else {
-        std::cout << "❌ Some positions have invalid joint limits" << std::endl;
-    }
+    //     if (all_valid) {
+    //         std::cout << "✅ All positions have valid joint limits" << std::endl;
+    //     } else {
+    //         std::cout << "❌ Some positions have invalid joint limits" << std::endl;
+    //     }
 }
 
 int main() {
