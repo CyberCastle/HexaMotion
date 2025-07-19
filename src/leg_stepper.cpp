@@ -288,20 +288,9 @@ void LegStepper::updateTipPositionIterative(int iteration, double time_delta, bo
             // For second half: map iteration swing_iterations_/2+1->swing_iterations_ to time 0->1
             int half_iterations = swing_iterations_ / 2;
             int second_half_start = half_iterations + 1;
-
-            // SPECIAL CASE: Legacy 20-iteration debugging test
-            if (swing_iterations_ > 20 && iteration >= 11 && iteration <= 20) {
-                // Force 20-iteration mapping: iterations 11-20 -> time 0->1
-                time_input = (double)(iteration - 11) / 9.0;
-                time_input = std::max(0.0, std::min(1.0, time_input));
-                new_position = math_utils::quarticBezier(swing_2_nodes_, time_input);
-
-            } else if (iteration >= second_half_start && iteration <= swing_iterations_) {
-                // Generic adaptive mapping
-                time_input = (double)(iteration - second_half_start) / (double)(half_iterations - 1);
-                time_input = std::max(0.0, std::min(1.0, time_input)); // Clamp to [0,1]
-                new_position = math_utils::quarticBezier(swing_2_nodes_, time_input);
-            }
+            time_input = (double)(iteration - second_half_start) / (double)(half_iterations - 1);
+            time_input = std::max(0.0, std::min(1.0, time_input)); // Clamp to [0,1]
+            new_position = math_utils::quarticBezier(swing_2_nodes_, time_input);
         }
 
         // Apply OpenSHC precision control to reduce accumulation errors
