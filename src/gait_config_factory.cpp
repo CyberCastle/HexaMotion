@@ -38,7 +38,10 @@ GaitConfiguration createWaveGaitConfig(const Parameters &params) {
     config.swing_height = params.standing_height * params.gait_factors.wave_height_factor;
     config.body_clearance = params.standing_height;
     int total_phase = config.phase_config.stance_phase + config.phase_config.swing_phase;
-    config.step_frequency = 1.0 / (total_phase * 0.01);
+
+    // Use OpenSHC-compatible frequency: 1.0 Hz step frequency (standard)
+    config.step_frequency = 1.0; // Hz - matches OpenSHC default step frequency
+
     config.max_velocity = 50.0;
     config.stability_factor = 0.95;
     config.supports_rough_terrain = true;
@@ -80,7 +83,10 @@ GaitConfiguration createTripodGaitConfig(const Parameters &params) {
     config.swing_height = params.standing_height * params.gait_factors.tripod_height_factor;
     config.body_clearance = params.standing_height;
     int total_phase = config.phase_config.stance_phase + config.phase_config.swing_phase;
-    config.step_frequency = 1.0 / (total_phase * 0.01);
+
+    // Use OpenSHC-compatible frequency: 1.0 Hz step frequency (standard)
+    config.step_frequency = 1.0; // Hz - matches OpenSHC default step frequency
+
     config.max_velocity = 100.0;
     config.stability_factor = 0.75;
     config.supports_rough_terrain = false;
@@ -129,11 +135,14 @@ GaitConfiguration createRippleGaitConfig(const Parameters &params) {
     config.swing_height = params.standing_height * params.gait_factors.ripple_height_factor;
     config.body_clearance = params.standing_height;
     int total_phase = config.phase_config.stance_phase + config.phase_config.swing_phase;
-    config.step_frequency = 1.0 / (total_phase * 0.01); // Assuming 10ms iterations
-    config.max_velocity = 150.0;                        // Faster movement
-    config.stability_factor = 0.60;                     // Moderate stability
-    config.supports_rough_terrain = false;              // Less suitable for rough terrain
-    config.stance_span_modifier = 0.2;                  // OpenSHC: valor por defecto para tripod gait
+
+    // Use OpenSHC-compatible frequency: 1.0 Hz step frequency (standard)
+    config.step_frequency = 1.0; // Hz - matches OpenSHC default step frequency
+
+    config.max_velocity = 150.0;           // Faster movement
+    config.stability_factor = 0.60;        // Moderate stability
+    config.supports_rough_terrain = false; // Less suitable for rough terrain
+    config.stance_span_modifier = 0.2;     // OpenSHC: valor por defecto para tripod gait
 
     // Velocity limits parameters (unified configuration)
     config.stance_ratio = (double)config.phase_config.stance_phase / total_phase;
@@ -171,7 +180,10 @@ GaitConfiguration createMetachronalGaitConfig(const Parameters &params) {
     config.swing_height = params.standing_height * params.gait_factors.metachronal_height_factor;
     config.body_clearance = params.standing_height;
     int total_phase = config.phase_config.stance_phase + config.phase_config.swing_phase;
-    config.step_frequency = 1.0 / (total_phase * 0.01);
+
+    // Use OpenSHC-compatible frequency: 1.0 Hz step frequency (standard)
+    config.step_frequency = 1.0; // Hz - matches OpenSHC default step frequency
+
     config.max_velocity = 80.0;     // Adaptive speed
     config.stability_factor = 0.85; // High stability with adaptation
     config.supports_rough_terrain = true;

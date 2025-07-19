@@ -81,29 +81,31 @@ void LegStepper::updateStride() {
 }
 
 void LegStepper::calculateSwingTiming(double time_delta) {
-    // OpenSHC timing calculation - FULLY ADAPTIVE TO FREQUENCY
-    double swing_period_ratio = 0.5; // 50% of step cycle is swing
-    double step_frequency = 1.0;     // Hz - should come from gait configuration
+    // OpenSHC-compatible timing calculation using proper gait configuration
+    // Note: This method should be called with gait parameters, but for now we use defaults
+    // In full implementation, these should come from GaitConfiguration
 
-    // Calculate total swing period in seconds based on step frequency
-    double swing_period_seconds = swing_period_ratio / step_frequency;
+    double step_frequency = 1.0; // Hz - OpenSHC default (should come from gait configuration)
+    double swing_ratio = 0.5;    // Default 50% swing time (should come from gait configuration)
+    double stance_ratio = 0.5;   // Default 50% stance time (should come from gait configuration)
 
-    // Calculate number of iterations for ENTIRE swing period based on control frequency
-    swing_iterations_ = int(swing_period_seconds / time_delta);
-    swing_iterations_ = (swing_iterations_ % 2 == 0) ? swing_iterations_ : swing_iterations_ + 1; // Must be even
+    // OpenSHC formula: swing_iterations = int((swing_period/period) / (frequency * time_delta))
+    // where swing_period = swing_ratio * period, and period = 1.0 (normalized)
+    swing_iterations_ = int((swing_ratio / 1.0) / (step_frequency * time_delta));
 
-    // Ensure minimum iterations for stability (frequency-independent)
-    if (swing_iterations_ < 4)
-        swing_iterations_ = 4;
+    // Ensure minimum iterations for Bezier curve development
+    if (swing_iterations_ < 10)
+        swing_iterations_ = 10;
 
-    // Time delta for each bezier curve (half of swing period)
+    // Make even for proper primary/secondary curve split
+    if (swing_iterations_ % 2 != 0)
+        swing_iterations_++;
+
+    // Time delta for each bezier curve (split swing period in half for primary/secondary)
     swing_delta_t_ = 1.0 / (swing_iterations_ / 2.0);
 
-    // Calculate stance timing
-    double stance_period_ratio = 1.0 - swing_period_ratio;
-    double stance_period_seconds = stance_period_ratio / step_frequency;
-    stance_iterations_ = int(stance_period_seconds / time_delta);
-
+    // Calculate stance timing using same formula
+    stance_iterations_ = int((stance_ratio / 1.0) / (step_frequency * time_delta));
     if (stance_iterations_ < 2)
         stance_iterations_ = 2;
     stance_delta_t_ = 1.0 / stance_iterations_;
