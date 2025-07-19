@@ -59,10 +59,6 @@ void LegStepper::setDesiredVelocity(const Point3D &linear_velocity, double angul
     desired_angular_velocity_ = angular_velocity;
 }
 
-// =================================================================================================
-// OPENSHC-STYLE IMPLEMENTATION (PRIMARY METHODS)
-// =================================================================================================
-
 void LegStepper::updateStride() {
     // Calculate stride vector from velocity (OpenSHC approach)
     double control_frequency = robot_model_.getParams().control_frequency;
@@ -123,8 +119,8 @@ void LegStepper::initializeSwingPeriod(int iteration) {
     current_iteration_ = iteration;
 }
 
+// OpenSHC primary swing control nodes generation with controlled elevation
 void LegStepper::generatePrimarySwingControlNodes() {
-    // OpenSHC primary swing control nodes generation with controlled elevation
 
     // If swing_origin_tip_position_ is not set, use current position
     if (swing_origin_tip_position_.norm() < 1e-6) {
@@ -134,7 +130,6 @@ void LegStepper::generatePrimarySwingControlNodes() {
     // Calculate target position for primary swing (halfway point)
     Point3D mid_tip_position = (swing_origin_tip_position_ + target_tip_pose_) * 0.5;
 
-    // CRITICAL FIX: Control the maximum elevation directly
     // Instead of adding swing_clearance_ to max Z, use it as the TOTAL elevation
     double max_elevation_z = swing_origin_tip_position_.z + swing_clearance_.z;
     mid_tip_position.z = max_elevation_z;
@@ -169,8 +164,8 @@ void LegStepper::generatePrimarySwingControlNodes() {
     swing_1_nodes_[4].z = max_elevation_z;
 }
 
+// OpenSHC secondary swing control nodes generation with controlled descent
 void LegStepper::generateSecondarySwingControlNodes(bool ground_contact) {
-    // OpenSHC secondary swing control nodes generation with controlled descent
 
     // Start from the peak position (last node of primary curve)
     Point3D peak_position = swing_1_nodes_[4];
