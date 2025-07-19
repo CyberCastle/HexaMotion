@@ -411,8 +411,6 @@ void WalkController::updateWalk(const Point3D &linear_velocity_input, double ang
 
     // Calculate gait coordination data for each leg (NO POSITION UPDATES)
     for (auto &leg_stepper : leg_steppers_) {
-        // Set walk state in LegStepper for coordination only
-        leg_stepper->setWalkState(walk_state_);
 
         // Set desired velocity for the leg stepper
         leg_stepper->setDesiredVelocity(desired_linear_velocity_, desired_angular_velocity_);

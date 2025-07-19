@@ -1,10 +1,9 @@
 #include "leg_stepper.h"
 #include "hexamotion_constants.h"
 #include "math_utils.h"
+#include "velocity_limits.h"
 #include <algorithm>
 #include <cmath>
-
-#include "velocity_limits.h"
 
 LegStepper::LegStepper(int leg_index, const Point3D &identity_tip_pose, Leg &leg, RobotModel &robot_model,
                        WalkspaceAnalyzer *walkspace_analyzer, WorkspaceValidator *workspace_validator)
@@ -24,7 +23,6 @@ LegStepper::LegStepper(int leg_index, const Point3D &identity_tip_pose, Leg &leg
     phase_ = 0;
     step_progress_ = 0.0;
     step_state_ = STEP_STANCE;
-    current_walk_state_ = WALK_STOPPED;
     swing_delta_t_ = 0.0;
     stance_delta_t_ = 0.0;
     touchdown_detection_ = false;
@@ -71,36 +69,11 @@ void LegStepper::updateStepCycle(double normalized_phase, double step_length, do
     // 1. Update step state (STANCE/SWING)
     updateStepState(step_cycle);
 
-    // 2. Calculate step progress
-    calculateStepProgress(normalized_phase, step_cycle);
-
-    // 3. Update dynamic timing parameters
+    // 2. Update dynamic timing parameters
     updateDynamicTiming(step_length, time_delta);
 
-    // 4. Update tip position and trajectories
+    // 3. Update tip position and trajectories
     updateTipPosition(step_length, time_delta, false, false);
-}
-
-void LegStepper::calculateStepProgress(double normalized_phase, const StepCycle &step) {
-    step_progress_ = normalized_phase;
-
-    // Update at_correct_phase_ and completed_first_step_ based on walk state
-    if (current_walk_state_ == WALK_STARTING) {
-        // During starting, check if we're at the correct phase for this leg
-        if (step_state_ == STEP_STANCE && step_progress_ < 0.1) {
-            at_correct_phase_ = true;
-            completed_first_step_ = true;
-        }
-    } else if (current_walk_state_ == WALK_STOPPING) {
-        // During stopping, check if we're back to default position
-        Point3D error = current_tip_pose_ - default_tip_pose_;
-        if (error.norm() < 5.0) { // 5mm tolerance
-            at_correct_phase_ = true;
-        }
-    } else if (current_walk_state_ == WALK_MOVING) {
-        at_correct_phase_ = true;
-        completed_first_step_ = true;
-    }
 }
 
 void LegStepper::updateStepState(const StepCycle &step) {

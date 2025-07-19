@@ -2,7 +2,6 @@
 #define GAIT_CONFIG_H
 
 #include "hexamotion_constants.h"
-#include "leg_stepper.h"
 #include <array>
 #include <map>
 #include <string>
@@ -17,6 +16,20 @@
  * - Leg offset multipliers define the phase timing for each leg
  * - Configuration parameters match OpenSHC's gait.yaml structure
  */
+
+/**
+ * @brief Step cycle timing parameters (OpenSHC equivalent)
+ */
+struct StepCycle {
+    double frequency_;  //< Step frequency in Hz
+    int period_;        //< Total step cycle length in iterations
+    int swing_period_;  //< Swing period length in iterations
+    int stance_period_; //< Stance period length in iterations
+    int stance_end_;    //< Iteration when stance period ends
+    int swing_start_;   //< Iteration when swing period starts
+    int swing_end_;     //< Iteration when swing period ends
+    int stance_start_;  //< Iteration when stance period starts
+};
 
 /**
  * @brief Gait phase configuration (OpenSHC equivalent)
@@ -64,10 +77,10 @@ struct GaitConfiguration {
     StepCycle step_cycle;         //< StepCycle calculado y listo para usar
 
     // Gait-specific parameters
-    double step_frequency; //< Step frequency in Hz (calculated from phase config)
-    double step_length;    //< Default step length in mm
-    double swing_height;   //< Swing trajectory height in mm
-    double body_clearance; //< Body clearance above ground in mm
+    double step_frequency;             //< Step frequency in Hz (calculated from phase config)
+    double step_length;                //< Default step length in mm
+    double swing_height;               //< Swing trajectory height in mm
+    double body_clearance;             //< Body clearance above ground in mm
     double stance_span_modifier = 0.0; // Modificador de span lateral de apoyo (OpenSHC compatible)
 
     // Gait performance parameters

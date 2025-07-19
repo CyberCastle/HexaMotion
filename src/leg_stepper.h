@@ -1,19 +1,11 @@
 #ifndef LEG_STEPPER_H
 #define LEG_STEPPER_H
 
+#include "gait_config.h" // For StepCycle definition
 #include "leg.h"
 #include "robot_model.h"
 #include "walkspace_analyzer.h"
 #include "workspace_validator.h"
-
-// Enum definitions needed by LegStepper
-enum WalkState {
-    WALK_STARTING,    //< The walk controller cycle is in 'starting' state (transitioning from 'stopped' to 'moving')
-    WALK_MOVING,      //< The walk controller cycle is in a 'moving' state (the primary walking state)
-    WALK_STOPPING,    //< The walk controller cycle is in a 'stopping' state (transitioning from 'moving' to 'stopped')
-    WALK_STOPPED,     //< The walk controller cycle is in a 'stopped' state (state whilst velocity input is zero)
-    WALK_STATE_COUNT, //< Misc enum defining number of Walk States
-};
 
 enum StepState {
     STEP_SWING,        //< The leg step cycle is in 'swing' state, the forward 'in air' progression of the step cycle
@@ -21,20 +13,6 @@ enum StepState {
     STEP_FORCE_STANCE, //< State used to force a 'stance' state in non-standard instances
     STEP_FORCE_STOP,   //< State used to force the step cycle to stop iterating
     STEP_STATE_COUNT,  //< Misc enum defining number of Step States
-};
-
-/**
- * @brief Step cycle timing parameters (OpenSHC equivalent)
- */
-struct StepCycle {
-    double frequency_;  //< Step frequency in Hz
-    int period_;        //< Total step cycle length in iterations
-    int swing_period_;  //< Swing period length in iterations
-    int stance_period_; //< Stance period length in iterations
-    int stance_end_;    //< Iteration when stance period ends
-    int swing_start_;   //< Iteration when swing period starts
-    int swing_end_;     //< Iteration when swing period ends
-    int stance_start_;  //< Iteration when stance period starts
 };
 
 /**
@@ -49,8 +27,6 @@ struct LegStepperExternalTarget {
 
 /**
  * @brief Leg stepper class for individual leg trajectory control (OpenSHC equivalent)
- *
- * ✅ CORRECTED: LegStepper is now independent and does NOT depend on WalkController
  */
 class LegStepper {
   public:
@@ -66,9 +42,6 @@ class LegStepper {
     Point3D getDefaultTipPose() const { return default_tip_pose_; }
     Point3D getIdentityTipPose() const { return identity_tip_pose_; }
     Point3D getTargetTipPose() const { return target_tip_pose_; }
-    WalkState getWalkState() const { return current_walk_state_; } // Internal state
-    Point3D getWalkPlane() const { return walk_plane_; }
-    Point3D getWalkPlaneNormal() const { return walk_plane_normal_; }
     StepState getStepState() const { return step_state_; }
     int getPhase() const { return phase_; }
     double getPhaseOffset() const { return leg_.getPhaseOffset(); }
@@ -97,7 +70,6 @@ class LegStepper {
     void setTouchdownDetection(bool detection) { touchdown_detection_ = detection; }
     void setExternalTarget(const LegStepperExternalTarget &target) { external_target_ = target; }
     void setExternalDefault(const LegStepperExternalTarget &default_pos) { external_default_ = default_pos; }
-    void setWalkState(WalkState state) { current_walk_state_ = state; } // Set by WalkController
     void setStepLength(double length) { step_length_ = length; }
     void setSwingHeight(double height) { swing_height_ = height; }
     void setBodyClearance(double clearance) { body_clearance_ = clearance; }
@@ -120,7 +92,6 @@ class LegStepper {
   private:
     // Internal helper methods
     void updateStepState(const StepCycle &step);
-    void calculateStepProgress(double normalized_phase, const StepCycle &step);
     void updateDynamicTiming(double step_length, double time_delta);
 
     int leg_index_;
@@ -150,7 +121,6 @@ class LegStepper {
     int phase_;
     double step_progress_;
     StepState step_state_;
-    WalkState current_walk_state_; // Internal walk state
 
     // Timing
     double swing_delta_t_;

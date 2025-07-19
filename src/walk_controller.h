@@ -5,7 +5,7 @@
 #include "body_pose_controller.h"
 #include "gait_config.h"
 #include "gait_config_factory.h"
-#include "leg_stepper.h" // Include for StepCycle definition
+#include "leg_stepper.h" // Include for LegStepper definition
 #include "math_utils.h"
 #include "robot_model.h"
 #include "terrain_adaptation.h"
@@ -24,6 +24,17 @@ enum LegState {
     LEG_STATE_COUNT,            //< Misc enum defining number of LegStates
     LEG_WALKING_TO_MANUAL = -1, //< The leg is in 'walking to manual' state - transitioning from 'walking' to 'manual' state
     LEG_MANUAL_TO_WALKING = -2, //< The leg is in 'manual to walking' state - transitioning from 'manual' to 'walking' state
+};
+
+/**
+ * @brief Walk states for walk controller cycle (OpenSHC equivalent)
+ */
+enum WalkState {
+    WALK_STARTING,    //< The walk controller cycle is in 'starting' state (transitioning from 'stopped' to 'moving')
+    WALK_MOVING,      //< The walk controller cycle is in a 'moving' state (the primary walking state)
+    WALK_STOPPING,    //< The walk controller cycle is in a 'stopping' state (transitioning from 'moving' to 'stopped')
+    WALK_STOPPED,     //< The walk controller cycle is in a 'stopped' state (state whilst velocity input is zero)
+    WALK_STATE_COUNT, //< Misc enum defining number of Walk States
 };
 
 /**
