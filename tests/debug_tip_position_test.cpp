@@ -328,11 +328,15 @@ int main() {
     stepper.setSwingClearance(swing_clearance);
     std::cout << "Swing clearance configurado desde tripod gait: (0, 0, " << tripod_config.swing_height << ")" << std::endl;
 
+    // Configure step cycle time from tripod gait configuration
+    stepper.setStepCycleTime(tripod_config.step_cycle_time);
+    std::cout << "Step cycle time configurado desde tripod gait: " << tripod_config.step_cycle_time << " seconds" << std::endl;
+
     // Configure velocity to generate proper stride using tripod gait step length
     // Calculate velocity from step_length and step_frequency
     double desired_velocity = tripod_config.step_length * tripod_config.step_frequency * 0.1; // 10% of max
     stepper.setDesiredVelocity(Point3D(desired_velocity, 0, 0), 0.0);
-    stepper.updateStride(); // This will calculate stride_vector_ automatically
+    stepper.updateStride(); // This will calculate stride_vector_ automatically using step_cycle_time
     Point3D calculated_stride = stepper.getStrideVector();
     std::cout << "Velocidad configurada: " << desired_velocity << " mm/s" << std::endl;
     std::cout << "Stride vector calculado: (" << calculated_stride.x << ", " << calculated_stride.y << ", " << calculated_stride.z << ")" << std::endl;

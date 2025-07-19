@@ -41,6 +41,9 @@ GaitConfiguration createWaveGaitConfig(const Parameters &params) {
 
     // Use OpenSHC-compatible frequency: 1.0 Hz step frequency (standard)
     config.step_frequency = 1.0; // Hz - matches OpenSHC default step frequency
+    
+    // Calculate step cycle time (fundamental parameter in OpenSHC)
+    config.step_cycle_time = 1.0 / config.step_frequency; // seconds per complete cycle
 
     config.max_velocity = 50.0;
     config.stability_factor = 0.95;
@@ -86,6 +89,9 @@ GaitConfiguration createTripodGaitConfig(const Parameters &params) {
 
     // Use OpenSHC-compatible frequency: 1.0 Hz step frequency (standard)
     config.step_frequency = 1.0; // Hz - matches OpenSHC default step frequency
+    
+    // Calculate step cycle time (fundamental parameter in OpenSHC)
+    config.step_cycle_time = 1.0 / config.step_frequency; // seconds per complete cycle
 
     config.max_velocity = 100.0;
     config.stability_factor = 0.75;
@@ -138,6 +144,9 @@ GaitConfiguration createRippleGaitConfig(const Parameters &params) {
 
     // Use OpenSHC-compatible frequency: 1.0 Hz step frequency (standard)
     config.step_frequency = 1.0; // Hz - matches OpenSHC default step frequency
+    
+    // Calculate step cycle time (fundamental parameter in OpenSHC)
+    config.step_cycle_time = 1.0 / config.step_frequency; // seconds per complete cycle
 
     config.max_velocity = 150.0;           // Faster movement
     config.stability_factor = 0.60;        // Moderate stability
@@ -183,6 +192,9 @@ GaitConfiguration createMetachronalGaitConfig(const Parameters &params) {
 
     // Use OpenSHC-compatible frequency: 1.0 Hz step frequency (standard)
     config.step_frequency = 1.0; // Hz - matches OpenSHC default step frequency
+    
+    // Calculate step cycle time (fundamental parameter in OpenSHC)
+    config.step_cycle_time = 1.0 / config.step_frequency; // seconds per complete cycle
 
     config.max_velocity = 80.0;     // Adaptive speed
     config.stability_factor = 0.85; // High stability with adaptation

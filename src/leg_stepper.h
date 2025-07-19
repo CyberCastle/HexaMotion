@@ -83,6 +83,7 @@ class LegStepper {
     void setCompletedFirstStep(bool completed) { completed_first_step_ = completed; }
     void setAtCorrectPhase(bool at_correct) { at_correct_phase_ = at_correct; }
     void setSwingClearance(const Point3D &clearance) { swing_clearance_ = clearance; }
+    void setStepCycleTime(double step_cycle_time) { step_cycle_time_ = step_cycle_time; }
 
     // OpenSHC-specific workflow methods
     void initializeSwingPeriod(int iteration);
@@ -131,6 +132,7 @@ class LegStepper {
     int swing_iterations_;
     int stance_iterations_;
     int current_iteration_;
+    double step_cycle_time_; // Complete step cycle time in seconds (from gait configuration)
 
     // Swing state management (OpenSHC style)
     bool swing_initialized_;

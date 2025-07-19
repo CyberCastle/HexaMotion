@@ -33,6 +33,7 @@ LegStepper::LegStepper(int leg_index, const Point3D &identity_tip_pose, Leg &leg
     swing_iterations_ = 0;
     stance_iterations_ = 0;
     current_iteration_ = 0;
+    step_cycle_time_ = 1.0; // Default 1 second cycle time
 
     // Initialize swing state management
     swing_initialized_ = false;
@@ -70,19 +71,22 @@ void LegStepper::updateStride() {
     double control_frequency = robot_model_.getParams().control_frequency;
     double time_delta = 1.0 / control_frequency;
 
-    // Stride should be proportional to velocity and step duration
-    double step_duration = 1.0;                                      // Assume 1 second step cycle for testing
-    stride_vector_ = desired_linear_velocity_ * (time_delta * 10.0); // Scale for visible movement
-
-    // IMPORTANT: Stride should only affect X,Y movement, not Z
+    // OpenSHC approach: Stride should be proportional to velocity and complete step cycle time
+    // In OpenSHC, stride_vector represents the TOTAL displacement during one complete step cycle
+    // Use the step cycle time from gait configuration
+    double step_cycle_time = step_cycle_time_; // From gait configuration
+    
+    // Calculate stride as: velocity * total_step_time
+    // This gives us the total displacement the leg tip should travel during one complete step cycle
+    stride_vector_ = desired_linear_velocity_ * step_cycle_time;    // IMPORTANT: Stride should only affect X,Y movement, not Z
     // Z movement is handled by swing clearance, not stride
     stride_vector_.z = 0.0;
 
-    // Apply minimum stride constraint for testing
+    // Apply minimum stride constraint for testing visibility
     double stride_magnitude = stride_vector_.norm();
     if (stride_magnitude < 0.5) {
-        // Generate small but visible stride for testing
-        stride_vector_ = Point3D(1.0, 0.0, 0.0); // 1mm forward stride
+        // Generate small but visible stride for testing when velocity is very low
+        stride_vector_ = Point3D(1.0, 0.0, 0.0); // 1mm forward stride minimum
     }
 }
 
@@ -274,16 +278,20 @@ void LegStepper::updateTipPositionIterative(int iteration, double time_delta, bo
     // Update stride vector FIRST
     updateStride();
 
-    // Calculate target tip pose like OpenSHC - it should be the FINAL position after the stride
-    // In OpenSHC, target_tip_pose is the desired final position, not a relative movement
+    // Calculate target tip pose like OpenSHC
+    // In OpenSHC, target_tip_pose is the FINAL desired position after completing the stride
+    // This is calculated ONCE at the beginning of swing and remains constant throughout the swing cycle
     if (step_state_ == STEP_SWING) {
-        // For swing: target is starting position + full stride vector
+        // For swing phase: target is the swing origin position + complete stride vector
+        // This represents where the leg should be at the END of the swing phase
         target_tip_pose_ = swing_origin_tip_position_ + stride_vector_;
-        // Keep same Z level as the origin (ground level movement)
+        // Keep same Z level as the origin (ground level)
         target_tip_pose_.z = swing_origin_tip_position_.z;
     } else {
-        // For stance: target would be different calculation
-        target_tip_pose_ = current_tip_pose_ + Point3D(stride_vector_.x * 0.5, stride_vector_.y * 0.5, 0.0);
+        // For stance phase: target moves progressively backward relative to body
+        // During stance, the body moves forward while leg stays on ground
+        target_tip_pose_ = swing_origin_tip_position_ - stride_vector_;
+        target_tip_pose_.z = swing_origin_tip_position_.z;
     }
 
     if (step_state_ == STEP_SWING) {

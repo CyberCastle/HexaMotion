@@ -78,6 +78,7 @@ struct GaitConfiguration {
 
     // Gait-specific parameters
     double step_frequency;             //< Step frequency in Hz (calculated from phase config)
+    double step_cycle_time;            //< Complete step cycle time in seconds (1.0 / step_frequency)
     double step_length;                //< Default step length in mm
     double swing_height;               //< Swing trajectory height in mm
     double body_clearance;             //< Body clearance above ground in mm
