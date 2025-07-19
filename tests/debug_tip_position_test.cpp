@@ -185,7 +185,7 @@ void debugTipPositionGeneration(LegStepper &stepper, Leg &leg, const RobotModel 
         // Show delta magnitude for debugging
         double delta_magnitude = position_delta.norm();
 
-        std::string curve_used = (iteration <= swing_iterations/2) ? "Primary" : "Secondary";
+        std::string curve_used = (iteration <= swing_iterations / 2) ? "Primary" : "Secondary";
         std::string reach_status = bezier_reachable ? "R" : "X";
         std::string ik_status = manual_ik_success ? "IK✓" : "IK❌";
 
