@@ -75,10 +75,10 @@ void LegStepper::updateStride() {
     // In OpenSHC, stride_vector represents the TOTAL displacement during one complete step cycle
     // Use the step cycle time from gait configuration
     double step_cycle_time = step_cycle_time_; // From gait configuration
-    
+
     // Calculate stride as: velocity * total_step_time
     // This gives us the total displacement the leg tip should travel during one complete step cycle
-    stride_vector_ = desired_linear_velocity_ * step_cycle_time;    // IMPORTANT: Stride should only affect X,Y movement, not Z
+    stride_vector_ = desired_linear_velocity_ * step_cycle_time; // IMPORTANT: Stride should only affect X,Y movement, not Z
     // Z movement is handled by swing clearance, not stride
     stride_vector_.z = 0.0;
 
