@@ -84,6 +84,7 @@ class LegStepper {
     void setAtCorrectPhase(bool at_correct) { at_correct_phase_ = at_correct; }
     void setSwingClearance(const Point3D &clearance) { swing_clearance_ = clearance; }
     void setStepCycleTime(double step_cycle_time) { step_cycle_time_ = step_cycle_time; }
+    double getStepCycleTime() const { return step_cycle_time_; }
 
     // OpenSHC-specific workflow methods
     void initializeSwingPeriod(int iteration);

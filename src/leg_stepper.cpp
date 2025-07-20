@@ -73,20 +73,24 @@ void LegStepper::updateStride() {
 
     // OpenSHC approach: Stride should be proportional to velocity and complete step cycle time
     // In OpenSHC, stride_vector represents the TOTAL displacement during one complete step cycle
+    // However, the target calculation uses stride_vector * 0.5, so we need to account for this
     // Use the step cycle time from gait configuration
     double step_cycle_time = step_cycle_time_; // From gait configuration
 
-    // Calculate stride as: velocity * total_step_time
-    // This gives us the total displacement the leg tip should travel during one complete step cycle
-    stride_vector_ = desired_linear_velocity_ * step_cycle_time; // IMPORTANT: Stride should only affect X,Y movement, not Z
+    // Calculate the desired displacement during swing phase
+    Point3D desired_swing_displacement = desired_linear_velocity_ * step_cycle_time;
+
+    // Since OpenSHC target calculation uses stride_vector * 0.5, we need to double it
+    // to get the actual swing displacement we want
+    stride_vector_ = desired_swing_displacement * 2.0; // IMPORTANT: Stride should only affect X,Y movement, not Z
     // Z movement is handled by swing clearance, not stride
     stride_vector_.z = 0.0;
 
     // Apply minimum stride constraint for testing visibility
     double stride_magnitude = stride_vector_.norm();
-    if (stride_magnitude < 0.5) {
+    if (stride_magnitude < 1.0) {
         // Generate small but visible stride for testing when velocity is very low
-        stride_vector_ = Point3D(1.0, 0.0, 0.0); // 1mm forward stride minimum
+        stride_vector_ = Point3D(2.0, 0.0, 0.0); // 2mm stride_vector (1mm actual displacement)
     }
 }
 
@@ -140,115 +144,79 @@ void LegStepper::initializeSwingPeriod(int iteration) {
     last_swing_iteration_ = iteration;
 }
 
-// OpenSHC primary swing control nodes generation with controlled elevation
 void LegStepper::generatePrimarySwingControlNodes() {
+    // OpenSHC exact implementation
+    Point3D mid_tip_position = (swing_origin_tip_position_ + target_tip_pose_) / 2.0;
+    mid_tip_position.z = std::max(swing_origin_tip_position_.z, target_tip_pose_.z);
+    mid_tip_position = mid_tip_position + swing_clearance_;
 
-    // If swing_origin_tip_position_ is not set, use current position
-    if (swing_origin_tip_position_.norm() < 1e-6) {
-        swing_origin_tip_position_ = current_tip_pose_;
-    }
-
-    // Calculate target position for primary swing (halfway point)
-    Point3D mid_tip_position = (swing_origin_tip_position_ + target_tip_pose_) * 0.5;
-
-    // Instead of adding swing_clearance_ to max Z, use it as the TOTAL elevation
-    double max_elevation_z = swing_origin_tip_position_.z + swing_clearance_.z;
-    mid_tip_position.z = max_elevation_z;
-
-    // Apply lateral shift (OpenSHC swing width) - smaller for controlled movement
-    double mid_lateral_shift = 5.0; // Reduced from 10.0 for more controlled swing
+    double mid_lateral_shift = 5.0; // swing_width parameter equivalent
     bool positive_y_axis = (identity_tip_pose_.y > 0.0);
     mid_tip_position.y += positive_y_axis ? mid_lateral_shift : -mid_lateral_shift;
 
-    // Calculate velocity-based node separation with controlled scaling
-    double time_delta = 1.0 / robot_model_.getParams().control_frequency;
-    Point3D velocity_separation = swing_origin_tip_velocity_ * 0.1 * time_delta; // Much smaller factor
+    // OpenSHC exact formula: walker_->getTimeDelta() / swing_delta_t_
+    double time_delta = 0.02; // 50Hz control loop like OpenSHC
+    Point3D stance_node_seperation = swing_origin_tip_velocity_ * 0.25 * (time_delta / swing_delta_t_);
 
-    // Design control nodes for smooth, controlled elevation
-    // Node 0: Start position
+    // Control nodes for primary swing quartic bezier curves
+    // Set for position continuity at transition between stance and primary swing curves (C0 Smoothness)
     swing_1_nodes_[0] = swing_origin_tip_position_;
-
-    // Node 1: Slight forward movement, no elevation
-    swing_1_nodes_[1] = swing_origin_tip_position_ + velocity_separation;
-    swing_1_nodes_[1].z = swing_origin_tip_position_.z;
-
-    // Node 2: More forward, start elevating (25% of max elevation)
-    swing_1_nodes_[2] = swing_origin_tip_position_ + velocity_separation * 2.0;
-    swing_1_nodes_[2].z = swing_origin_tip_position_.z + swing_clearance_.z * 0.25;
-
-    // Node 3: Near peak position (75% of max elevation)
-    swing_1_nodes_[3] = mid_tip_position;
-    swing_1_nodes_[3].z = swing_origin_tip_position_.z + swing_clearance_.z * 0.75;
-
-    // Node 4: Peak position (100% of max elevation)
+    // Set for velocity continuity at transition between stance and primary swing curves (C1 Smoothness)
+    swing_1_nodes_[1] = swing_origin_tip_position_ + stance_node_seperation;
+    // Set for acceleration continuity at transition between stance and primary swing curves (C2 Smoothness)
+    swing_1_nodes_[2] = swing_origin_tip_position_ + stance_node_seperation * 2.0;
+    // Set for acceleration continuity at transition between swing curves (C2 Smoothness for symetric curves)
+    swing_1_nodes_[3] = (mid_tip_position + swing_1_nodes_[2]) / 2.0;
+    swing_1_nodes_[3].z = mid_tip_position.z;
+    // Set to default tip position so max swing height and transition to 2nd swing curve occurs at default tip position
     swing_1_nodes_[4] = mid_tip_position;
-    swing_1_nodes_[4].z = max_elevation_z;
 }
 
-// OpenSHC secondary swing control nodes generation with controlled descent
 void LegStepper::generateSecondarySwingControlNodes(bool ground_contact) {
+    // Follow OpenSHC exact implementation for maximum precision
 
-    // Start from the peak position (last node of primary curve)
-    Point3D peak_position = swing_1_nodes_[4];
+    // Calculate final tip velocity for stance transition (OpenSHC formula)
+    double time_delta = 0.02; // OpenSHC standard: 50Hz control loop
+    Point3D final_tip_velocity = stride_vector_ * (-1.0) * (stance_delta_t_ / time_delta);
+    Point3D stance_node_seperation = final_tip_velocity * 0.25 * (time_delta / swing_delta_t_);
 
-    // Calculate final landing position (target with original Z)
-    Point3D final_landing_position = target_tip_pose_;
-    final_landing_position.z = swing_origin_tip_position_.z; // Return to ground level
+    // Control nodes for secondary swing quartic bezier curves
+    // Set for position continuity at transition between primary and secondary swing curves (C0 Smoothness)
+    swing_2_nodes_[0] = swing_1_nodes_[4];
+    // Set for velocity continuity at transition between primary and secondary swing curves (C1 Smoothness)
+    swing_2_nodes_[1] = swing_1_nodes_[4] - (swing_1_nodes_[3] - swing_1_nodes_[4]);
+    // Set for acceleration continuity at transition between secondary swing and stance curves (C2 Smoothness)
+    swing_2_nodes_[2] = target_tip_pose_ - stance_node_seperation * 2.0;
+    // Set for velocity continuity at transition between secondary swing and stance curves (C1 Smoothness)
+    swing_2_nodes_[3] = target_tip_pose_ - stance_node_seperation;
+    // Set for position continuity at transition between secondary swing and stance curves (C0 Smoothness)
+    swing_2_nodes_[4] = target_tip_pose_;
 
-    // Calculate controlled descent path
-    Point3D velocity_separation = stride_vector_ * 0.1; // Controlled movement
-
-    // Design control nodes for smooth descent
-    // Node 0: Peak position (start of secondary curve)
-    swing_2_nodes_[0] = peak_position;
-
-    // Node 1: Start descent (75% of max elevation)
-    swing_2_nodes_[1] = peak_position;
-    swing_2_nodes_[1].z = swing_origin_tip_position_.z + swing_clearance_.z * 0.75;
-    swing_2_nodes_[1].x += velocity_separation.x * 0.5;
-    swing_2_nodes_[1].y += velocity_separation.y * 0.5;
-
-    // Node 2: Mid descent (50% of max elevation)
-    swing_2_nodes_[2] = final_landing_position;
-    swing_2_nodes_[2].z = swing_origin_tip_position_.z + swing_clearance_.z * 0.5;
-    swing_2_nodes_[2].x -= velocity_separation.x * 0.5;
-    swing_2_nodes_[2].y -= velocity_separation.y * 0.5;
-
-    // Node 3: Near ground (25% of max elevation)
-    swing_2_nodes_[3] = final_landing_position;
-    swing_2_nodes_[3].z = swing_origin_tip_position_.z + swing_clearance_.z * 0.25;
-    swing_2_nodes_[3].x -= velocity_separation.x * 0.25;
-    swing_2_nodes_[3].y -= velocity_separation.y * 0.25;
-
-    // Node 4: Final landing position (ground level)
-    swing_2_nodes_[4] = final_landing_position;
-
-    // Handle ground contact (OpenSHC behavior) - override if needed
+    // Stops further movement of tip position in direction normal to walk plane
     if (ground_contact) {
-        // Force immediate touchdown
-        for (int i = 0; i < 5; i++) {
-            swing_2_nodes_[i].z = swing_origin_tip_position_.z;
-        }
+        swing_2_nodes_[0] = current_tip_pose_ + stance_node_seperation * 0.0;
+        swing_2_nodes_[1] = current_tip_pose_ + stance_node_seperation * 1.0;
+        swing_2_nodes_[2] = current_tip_pose_ + stance_node_seperation * 2.0;
+        swing_2_nodes_[3] = current_tip_pose_ + stance_node_seperation * 3.0;
+        swing_2_nodes_[4] = current_tip_pose_ + stance_node_seperation * 4.0;
     }
 }
 
 void LegStepper::generateStanceControlNodes(double stride_scaler) {
-    // OpenSHC stance control nodes generation
+    // OpenSHC exact implementation
+    Point3D stance_node_seperation = stride_vector_ * stride_scaler * (-0.25);
 
-    // If stance_origin_tip_position_ is not set, use current position
-    if (stance_origin_tip_position_.norm() < 1e-6) {
-        stance_origin_tip_position_ = current_tip_pose_;
-    }
-
-    Point3D stance_target_position = stance_origin_tip_position_ + stride_vector_ * stride_scaler;
-    Point3D stance_node_separation = stride_vector_ * stride_scaler * -0.25; // OpenSHC uses negative scaler
-
-    // Control nodes for quartic Bézier stance curve (OpenSHC style)
-    stance_nodes_[0] = stance_origin_tip_position_;
-    stance_nodes_[1] = stance_origin_tip_position_ + stance_node_separation * 0.25;
-    stance_nodes_[2] = stance_origin_tip_position_ + stance_node_separation * 0.5;
-    stance_nodes_[3] = stance_origin_tip_position_ + stance_node_separation * 0.75;
-    stance_nodes_[4] = stance_target_position;
+    // Control nodes for stance quartic bezier curve
+    // Set as initial tip position
+    stance_nodes_[0] = stance_origin_tip_position_ + stance_node_seperation * 0.0;
+    // Set for constant velocity in stance period
+    stance_nodes_[1] = stance_origin_tip_position_ + stance_node_seperation * 1.0;
+    // Set for constant velocity in stance period
+    stance_nodes_[2] = stance_origin_tip_position_ + stance_node_seperation * 2.0;
+    // Set for constant velocity in stance period
+    stance_nodes_[3] = stance_origin_tip_position_ + stance_node_seperation * 3.0;
+    // Set as target tip position
+    stance_nodes_[4] = stance_origin_tip_position_ + stance_node_seperation * 4.0;
 }
 
 void LegStepper::updateTipPositionIterative(int iteration, double time_delta, bool rough_terrain_mode, bool force_normal_touchdown) {
@@ -278,21 +246,8 @@ void LegStepper::updateTipPositionIterative(int iteration, double time_delta, bo
     // Update stride vector FIRST
     updateStride();
 
-    // Calculate target tip pose like OpenSHC
-    // In OpenSHC, target_tip_pose is the FINAL desired position after completing the stride
-    // This is calculated ONCE at the beginning of swing and remains constant throughout the swing cycle
-    if (step_state_ == STEP_SWING) {
-        // For swing phase: target is the swing origin position + complete stride vector
-        // This represents where the leg should be at the END of the swing phase
-        target_tip_pose_ = swing_origin_tip_position_ + stride_vector_;
-        // Keep same Z level as the origin (ground level)
-        target_tip_pose_.z = swing_origin_tip_position_.z;
-    } else {
-        // For stance phase: target moves progressively backward relative to body
-        // During stance, the body moves forward while leg stays on ground
-        target_tip_pose_ = swing_origin_tip_position_ - stride_vector_;
-        target_tip_pose_.z = swing_origin_tip_position_.z;
-    }
+    // Generate default target (OpenSHC exact formula)
+    target_tip_pose_ = default_tip_pose_ + stride_vector_ * 0.5;
 
     if (step_state_ == STEP_SWING) {
         // Initialize swing period on first iteration

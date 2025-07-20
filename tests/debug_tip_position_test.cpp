@@ -60,16 +60,16 @@ void debugTipPositionGeneration(LegStepper &stepper, Leg &leg, const RobotModel 
     std::cout << "Stride vector: (" << stepper.getStrideVector().x << ", " << stepper.getStrideVector().y << ", " << stepper.getStrideVector().z << ")" << std::endl;
     std::cout << "Swing clearance: (" << stepper.getSwingClearance().x << ", " << stepper.getSwingClearance().y << ", " << stepper.getSwingClearance().z << ")" << std::endl;
 
-    // Test with desired velocity like in the original test
-    stepper.setDesiredVelocity(Point3D(0.0, 0.0, 0.0), 0.0);
-    stepper.updateStride();
-    std::cout << "\nAfter setting zero velocity:" << std::endl;
-    std::cout << "Stride vector: (" << stepper.getStrideVector().x << ", " << stepper.getStrideVector().y << ", " << stepper.getStrideVector().z << ")" << std::endl;
+    // Use the stride that was already configured in main() from tripod gait
+    // DON'T override with zero velocity - keep the calculated stride
+    Point3D current_stride = stepper.getStrideVector();
+    std::cout << "\nUsing stride calculated from tripod gait velocity:" << std::endl;
+    std::cout << "Stride vector: (" << current_stride.x << ", " << current_stride.y << ", " << current_stride.z << ")" << std::endl;
 
-    // Test with velocity using gait configuration parameters
-    Point3D initial_velocity = Point3D(gait_config.max_velocity * 0.1, 0, 0); // 10% of max velocity
-    stepper.setSwingOriginTipVelocity(initial_velocity);
-    std::cout << "\nAfter setting swing origin velocity to (" << initial_velocity.x << ", 0, 0) from gait config:" << std::endl;
+    // Calculate velocity from current stride for debugging
+    double step_cycle_time = stepper.getStepCycleTime();
+    Point3D calculated_velocity = current_stride / step_cycle_time;
+    std::cout << "Calculated velocity from stride: (" << calculated_velocity.x << ", " << calculated_velocity.y << ", " << calculated_velocity.z << ") mm/s" << std::endl;
 
     // Set stepper to swing state with gait configuration
     stepper.setStepState(STEP_SWING);
@@ -105,6 +105,9 @@ void debugTipPositionGeneration(LegStepper &stepper, Leg &leg, const RobotModel 
     stepper.updateTipPositionIterative(1, iteration_time, false, false);
 
     // Now display the control nodes that were generated
+    std::cout << "\nTarget tip pose: (" << stepper.getTargetTipPose().x << ", " << stepper.getTargetTipPose().y << ", " << stepper.getTargetTipPose().z << ")" << std::endl;
+    std::cout << "Expected stride displacement: " << stepper.getStrideVector().norm() << " mm" << std::endl;
+
     std::cout << "\nSwing control nodes (primary):" << std::endl;
     for (int i = 0; i < 5; i++) {
         Point3D node = stepper.getSwing1ControlNode(i);
@@ -206,10 +209,28 @@ void debugTipPositionGeneration(LegStepper &stepper, Leg &leg, const RobotModel 
     }
 
     Point3D final_position = stepper.getCurrentTipPose();
+    Point3D target_position = stepper.getTargetTipPose();
+    Point3D expected_stride = stepper.getStrideVector();
+
     std::cout << "\nFinal tip position (iteration=" << swing_iterations << ", complete swing): (" << final_position.x << ", " << final_position.y << ", " << final_position.z << ")" << std::endl;
+    std::cout << "Target tip position: (" << target_position.x << ", " << target_position.y << ", " << target_position.z << ")" << std::endl;
+    std::cout << "Expected stride vector: (" << expected_stride.x << ", " << expected_stride.y << ", " << expected_stride.z << ")" << std::endl;
 
     double position_change = (final_position - initial_position).norm();
-    std::cout << "Position change magnitude: " << position_change << " mm" << std::endl;
+    double target_error = (final_position - target_position).norm();
+
+    // In OpenSHC logic, the expected swing displacement is stride_vector * 0.5
+    double expected_swing_displacement = expected_stride.norm() * 0.5;
+    double expected_distance = expected_stride.norm();
+    double swing_precision_percentage = (position_change / expected_swing_displacement) * 100.0;
+    double stride_precision_percentage = (position_change / expected_distance) * 100.0;
+
+    std::cout << "Actual position change magnitude: " << position_change << " mm" << std::endl;
+    std::cout << "Expected swing displacement (stride*0.5): " << expected_swing_displacement << " mm" << std::endl;
+    std::cout << "Expected stride vector magnitude: " << expected_distance << " mm" << std::endl;
+    std::cout << "Target position error: " << target_error << " mm" << std::endl;
+    std::cout << "Swing precision achieved: " << swing_precision_percentage << "% of expected swing displacement" << std::endl;
+    std::cout << "Stride precision achieved: " << stride_precision_percentage << "% of expected stride" << std::endl;
 
     // Verify joint limits for extreme positions
     std::cout << "\n=== JOINT LIMITS VERIFICATION ===" << std::endl;
@@ -333,12 +354,12 @@ int main() {
     std::cout << "Step cycle time configurado desde tripod gait: " << tripod_config.step_cycle_time << " seconds" << std::endl;
 
     // Configure velocity to generate proper stride using tripod gait step length
-    // Calculate velocity from step_length and step_frequency
-    double desired_velocity = tripod_config.step_length * tripod_config.step_frequency * 0.1; // 10% of max
+    // Calculate velocity from step_length and step_frequency for FULL stride (not 10%)
+    double desired_velocity = tripod_config.step_length * tripod_config.step_frequency; // 100% for full stride
     stepper.setDesiredVelocity(Point3D(desired_velocity, 0, 0), 0.0);
     stepper.updateStride(); // This will calculate stride_vector_ automatically using step_cycle_time
     Point3D calculated_stride = stepper.getStrideVector();
-    std::cout << "Velocidad configurada: " << desired_velocity << " mm/s" << std::endl;
+    std::cout << "Velocidad configurada: " << desired_velocity << " mm/s (para stride completo)" << std::endl;
     std::cout << "Stride vector calculado: (" << calculated_stride.x << ", " << calculated_stride.y << ", " << calculated_stride.z << ")" << std::endl;
 
     // Configure timing parameters from tripod gait
