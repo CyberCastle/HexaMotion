@@ -107,6 +107,9 @@ class LegStepper {
     void generateSecondarySwingControlNodes(bool ground_contact = false);
     void generateStanceControlNodes(double stride_scaler = 1.0);
 
+    // OpenSHC-style stride scaler calculation
+    double calculateStanceStrideScaler();
+
   private:
     // Basic properties
     int leg_index_;
