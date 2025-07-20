@@ -59,6 +59,7 @@ class LegStepper {
     Point3D getSwing1ControlNode(int i) const { return swing_1_nodes_[i]; }
     Point3D getSwing2ControlNode(int i) const { return swing_2_nodes_[i]; }
     Point3D getStanceControlNode(int i) const { return stance_nodes_[i]; }
+    Point3D getSwingClearance() const { return swing_clearance_; }
 
     // OpenSHC-specific accessors
     int getSwingIterations() const { return swing_iterations_; }

@@ -87,10 +87,10 @@ void debugTipPositionGeneration(LegStepper &stepper, Leg &leg, const RobotModel 
 
     // Configure iteration count using OpenSHC-compatible calculation
     // OpenSHC formula: swing_iterations = int((swing_period/period) / (frequency * time_delta))
-    double time_delta = 0.02;                                 // OpenSHC standard: 50Hz control loop (0.02s per iteration)
-    double period = 1.0;                                      // Complete gait cycle period in seconds
-    double swing_period = period * gait_config.swing_ratio;   // Time spent in swing phase
-    double stance_period = period * gait_config.stance_ratio; // Time spent in stance phase
+    double time_delta = 0.02;                                     // OpenSHC standard: 50Hz control loop (0.02s per iteration)
+    double period = 1.0;                                          // Complete gait cycle period in seconds
+    double swing_period = period * gait_config.getSwingRatio();   // Time spent in swing phase
+    double stance_period = period * gait_config.getStanceRatio(); // Time spent in stance phase
 
     // Calculate iterations using OpenSHC method
     int swing_iterations = (int)((swing_period / period) / (gait_config.getStepFrequency() * time_delta));
@@ -487,23 +487,13 @@ int main() {
     stepper.setDefaultTipPose(identity_tip_pose);
 
     // *** CONFIGURAR USANDO PARÁMETROS DEL TRIPOD GAIT ***
-    // Configure swing clearance using tripod gait swing height
-    Point3D swing_clearance(0, 0, tripod_config.swing_height);
-    stepper.setSwingClearance(swing_clearance);
-    std::cout << "Swing clearance configurado desde tripod gait: (0, 0, " << tripod_config.swing_height << ")" << std::endl;
-
     // Configure StepCycle from tripod gait configuration (OpenSHC style)
     StepCycle step_cycle = tripod_config.generateStepCycle();
     stepper.setStepCycle(step_cycle);
     std::cout << "StepCycle configurado desde tripod gait: frequency=" << step_cycle.frequency_ << "Hz, period=" << step_cycle.period_ << std::endl;
 
-    // *** ALL GAIT PARAMETERS NOW CONFIGURED VIA WalkController::applyGaitConfigToLegSteppers() ***
-    // The WalkController automatically applies all GaitConfiguration parameters including:
-    // - stance_ratio, swing_ratio, step_frequency from tripod_config
-    // This ensures OpenSHC exact alignment without manual configuration
-    stepper.setStanceRatio(tripod_config.getStanceRatio());
-    stepper.setSwingRatio(tripod_config.getSwingRatio());
-    stepper.setStepFrequency(tripod_config.getStepFrequency());
+    // Note: All other gait parameters are now configured through the StepCycle structure
+    // The stepper will use the StepCycle values directly via generateStepCycle()
     std::cout << "Gait parameters configured from GaitConfiguration (OpenSHC exact):" << std::endl;
     std::cout << "  Stance ratio: " << tripod_config.getStanceRatio() << std::endl;
     std::cout << "  Swing ratio: " << tripod_config.getSwingRatio() << std::endl;
@@ -523,7 +513,7 @@ int main() {
     // Configure timing parameters from tripod gait
     // Use stance and swing ratios for phase calculations
     int total_iterations = 20; // Test iterations
-    int swing_iterations = (int)(total_iterations * tripod_config.swing_ratio);
+    int swing_iterations = (int)(total_iterations * tripod_config.getSwingRatio());
     int stance_iterations = total_iterations - swing_iterations;
     std::cout << "Timing configurado - Total: " << total_iterations << ", Swing: " << swing_iterations << ", Stance: " << stance_iterations << std::endl;
 
