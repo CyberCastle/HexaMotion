@@ -24,7 +24,7 @@
  *
  * Typical usage for kinematic control:
  *   1. leg.setDesiredTipPose(target_position);
- *   2. leg.applyIK(robot_model);
+ *   2. leg.applyIK(); // No need to pass RobotModel - it's stored as a reference
  *
  * ---
  *
@@ -34,6 +34,9 @@
  * - Kinematic state and transforms
  * - Gait phase and contact state
  * - DH parameters and workspace information
+ *
+ * The class stores a reference to the RobotModel to avoid redundant parameter passing
+ * and improve performance by eliminating duplicate model references in method calls.
  *
  * Based on OpenSHC's Leg class concept but adapted for HexaMotion's architecture.
  */
@@ -107,7 +110,7 @@ class Leg {
     /**
      * @brief Set the current tip position in global coordinates
      */
-    bool setCurrentTipPositionGlobal(const RobotModel &model, const Point3D &position);
+    bool setCurrentTipPositionGlobal(const Point3D &position);
 
     /**
      * @brief Get leg base position in world coordinates.
@@ -117,33 +120,36 @@ class Leg {
 
     /**
      * @brief Update tip position from current joint angles.
-     * @param model Robot model for FK calculation
      */
-    void updateTipPosition(const RobotModel &model);
+    void updateTipPosition();
 
     // ===== KINEMATIC STATE =====
 
     /**
-     * @brief Update inverse kinematics and joint angles.
-     * @param model Robot model for IK calculations
-     * @param target_position Target tip position
-     * @return True if IK succeeds
+     * @brief Apply inverse kinematics to reach a target position and update joint angles & tip position.
+     * @param target_position Desired global tip position
+     * @return True if IK succeeds within joint limits
      */
-    bool updateInverseKinematics(const RobotModel &model, const Point3D &target_position);
+    bool applyIK(const Point3D &target_position);
+
+    /**
+     * @brief Apply OpenSHC-style delta-based IK for real-time control
+     * @param target_position Desired global tip position
+     * @return True if IK succeeds within joint limits
+     */
+    bool applyIKWithDelta(const Point3D &target_position);
 
     /**
      * @brief Get current DH transform matrix.
-     * @param model Robot model for transform calculation
      * @return 4x4 DH transform matrix
      */
-    Eigen::Matrix4d getTransform(const RobotModel &model) const;
+    Eigen::Matrix4d getTransform() const;
 
     /**
      * @brief Get Jacobian matrix for this leg.
-     * @param model Robot model for Jacobian calculation
      * @return 3x3 Jacobian matrix
      */
-    Eigen::Matrix3d getJacobian(const RobotModel &model) const;
+    Eigen::Matrix3d getJacobian() const;
 
     // ===== GAIT AND CONTACT STATE =====
 
@@ -277,63 +283,43 @@ class Leg {
 
     /**
      * @brief Check if target position is reachable.
-     * @param model Robot model for workspace validation
      * @param target Target position to check
      * @return True if target is within workspace
      */
-    bool isTargetReachable(const RobotModel &model, const Point3D &target) const;
+    bool isTargetReachable(const Point3D &target) const;
 
     /**
      * @brief Constrain target to workspace boundary.
-     * @param model Robot model for workspace calculation
      * @param target Target position to constrain
      * @return Constrained position within workspace
      */
-    Point3D constrainToWorkspace(const RobotModel &model, const Point3D &target) const;
-
-    /**
-     * @brief Check if current joint angles are within limits.
-     * @param params Robot parameters containing joint limits
-     * @return True if all joints are within limits
-     */
-    bool checkJointLimits(const Parameters &params) const;
+    Point3D constrainToWorkspace(const Point3D &target) const;
 
     /**
      * @brief Get joint limit proximity (1.0 = far from limits, 0.0 = at limits).
-     * @param params Robot parameters containing joint limits
      * @return Proximity value (0.0 to 1.0)
      */
-    double getJointLimitProximity(const Parameters &params) const;
+    double getJointLimitProximity() const;
 
     /**
      * @brief Constrain joint angles to limits.
-     * @param params Robot parameters containing joint limits
      */
-    void constrainJointLimits(const Parameters &params);
+    void constrainJointLimits();
 
     // ===== INITIALIZATION =====
 
     /**
      * @brief Initialize leg with default stance position.
-     * @param model Robot model for initialization
      * @param default_stance Default stance pose
      */
-    void initialize(const RobotModel &model, const Pose &default_stance);
+    void initialize(const Pose &default_stance);
 
     /**
      * @brief Reset leg to default configuration.
-     * @param model Robot model for reset
      */
-    void reset(const RobotModel &model);
+    void reset();
 
     // ===== UTILITY FUNCTIONS =====
-
-    /**
-     * @brief Get leg reach distance.
-     * @param params Robot parameters
-     * @return Maximum reach distance
-     */
-    double getLegReach(const Parameters &params) const;
 
     /**
      * @brief Calculate distance from current tip to target.
@@ -355,17 +341,18 @@ class Leg {
      */
     bool isInDefaultStance(double tolerance = 5.0) const;
 
-    // Set desired tip position in global coordinates
-    void setDesiredTipPositionGlobal(const Point3D &desired_position);
-    Point3D getDesiredTipPositionGlobal() const { return desired_tip_position_; }
-
-    // Apply inverse kinematics (OpenSHC architecture)
-    bool applyIK(const RobotModel &model);
-
-    // Apply inverse kinematics with position delta (OpenSHC architecture)
-    bool applyIKWithDelta(const RobotModel &model, const Point3D &position_delta);
+    /**
+     * @brief Calculate position delta in leg frame for synchronization
+     * @param desired_position Desired tip position
+     * @param current_position Current tip position
+     * @return Position delta in leg frame coordinates
+     */
+    Point3D calculatePositionDelta(const Point3D &desired_position, const Point3D &current_position) const;
 
   private:
+    // ===== ROBOT MODEL REFERENCE =====
+    const RobotModel &model_; //< Reference to robot model for all calculations
+
     // ===== IDENTIFICATION =====
     int leg_id_;      //< Leg identification number (0-5)
     String leg_name_; //< Leg name string
@@ -392,14 +379,10 @@ class Leg {
     JointAngles default_angles_;   //< Default joint angles
     Point3D default_tip_position_; //< Default tip position
 
-    // Desired tip position
-    Point3D desired_tip_position_; //< Desired tip position
-
     /**
      * @brief Calculate base position from robot parameters.
-     * @param params Robot parameters
      */
-    void calculateBasePosition(const RobotModel &model);
+    void calculateBasePosition();
 };
 
 #endif // LEG_H

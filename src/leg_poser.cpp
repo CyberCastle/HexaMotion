@@ -56,10 +56,9 @@ bool LegPoser::stepToPosition(const Pose &target_tip_pose, const Pose &target_po
     // Get time_delta from robot model parameters (OpenSHC style)
     double time_delta = 1.0 / robot_model_.getParams().control_frequency;
     int num_iterations = std::max(1, static_cast<int>(std::round(time_to_step / time_delta)));
-    double delta_t = 1.0 / num_iterations;
 
     master_iteration_count_++;
-    double completion_ratio = static_cast<double>(master_iteration_count_ - 1) / static_cast<double>(num_iterations);
+    double completion_ratio = static_cast<double>(master_iteration_count_) / static_cast<double>(num_iterations);
 
     // Check if transition is needed
     Point3D origin_pos = origin_tip_pose_.position;
@@ -79,7 +78,7 @@ bool LegPoser::stepToPosition(const Pose &target_tip_pose, const Pose &target_po
     // If no significant movement needed and no lift height, complete immediately
     if (distance < TIP_TOLERANCE && lift_height == 0.0) {
         first_iteration_ = true;
-        current_tip_pose_ = origin_tip_pose_;
+        current_tip_pose_ = target_tip_pose;
         leg_completed_step_ = true;
         return true;
     }
@@ -90,28 +89,26 @@ bool LegPoser::stepToPosition(const Pose &target_tip_pose, const Pose &target_po
         generateSecondarySwingControlNodes(origin_pos, target_pos, lift_height);
     }
 
-    // Calculate time input using delta_t (OpenSHC style)
-    double time_input = master_iteration_count_ * delta_t;
+    // Calculate time input for bezier curve progression
+    double time_input = completion_ratio;
 
     // Calculate swing iteration count and determine which bezier curve to use
     int half_swing_iteration = num_iterations / 2;
-    int swing_iteration_count = (master_iteration_count_ + (num_iterations - 1)) % num_iterations + 1;
-
     Point3D new_tip_position;
 
     // Use dual quartic bezier curves for swing trajectory (OpenSHC style)
-    if (swing_iteration_count <= half_swing_iteration) {
+    if (master_iteration_count_ <= half_swing_iteration) {
         // First half of swing - use primary bezier curve
-        time_input = swing_iteration_count * delta_t * 2.0;
+        time_input = (2.0 * static_cast<double>(master_iteration_count_)) / static_cast<double>(num_iterations);
         new_tip_position = math_utils::quarticBezier(control_nodes_primary_, time_input);
     } else {
         // Second half of swing - use secondary bezier curve
-        time_input = (swing_iteration_count - half_swing_iteration) * delta_t * 2.0;
+        time_input = (2.0 * static_cast<double>(master_iteration_count_ - half_swing_iteration)) / static_cast<double>(num_iterations);
         new_tip_position = math_utils::quarticBezier(control_nodes_secondary_, time_input);
     }
 
     // Update current tip pose
-    current_tip_pose_ = Pose(new_tip_position, Eigen::Vector3d(0, 0, 0));
+    current_tip_pose_ = Pose(new_tip_position, target_tip_pose.rotation);
 
     autoSyncWithLeg();
 
@@ -119,6 +116,7 @@ bool LegPoser::stepToPosition(const Pose &target_tip_pose, const Pose &target_po
     if (master_iteration_count_ >= num_iterations) {
         first_iteration_ = true;
         leg_completed_step_ = true;
+        current_tip_pose_ = target_tip_pose; // Ensure exact final position
         return true;
     } else {
         return false;
@@ -168,12 +166,12 @@ void LegPoser::updateAutoPose(int phase) {
 
     // Roll compensation based on leg position (Y-axis variation)
     // Legs on opposite sides of Y-axis get opposite compensation
-    double roll_factor = sin(math_utils::degreesToRadians(leg_angle));
+    double roll_factor = sin(leg_angle);
     y_compensation = body_clearance * 0.008 * roll_factor * sin(phase_ratio * 4.0 * M_PI);
 
     // Pitch compensation based on leg position (X-axis variation)
     // Legs on opposite sides of X-axis get opposite compensation
-    double pitch_factor = cos(math_utils::degreesToRadians(leg_angle));
+    double pitch_factor = cos(leg_angle);
     x_compensation = body_clearance * 0.008 * pitch_factor * cos(phase_ratio * 4.0 * M_PI);
 
     // Additional stability compensation for tripod gait
@@ -200,7 +198,7 @@ void LegPoser::updateAutoPose(int phase) {
 
     // Only apply compensation if it's above a minimum threshold to avoid jitter
     if (compensation_magnitude > 0.5) { // 0.5mm threshold
-        leg_.setCurrentTipPositionGlobal(robot_model_, auto_pose_.position);
+        leg_.setCurrentTipPositionGlobal(auto_pose_.position);
 
         // Recalculate joint angles for the new position using current angles as starting point
         JointAngles current_angles = leg_.getJointAngles();
@@ -254,16 +252,6 @@ void LegPoser::generateSecondarySwingControlNodes(const Point3D &origin_pos, con
 }
 
 void LegPoser::autoSyncWithLeg() {
-
-    // 1. Synchronize current tip position
-    leg_.setCurrentTipPositionGlobal(robot_model_, current_tip_pose_.position);
-
-    // 2. Synchronize desired tip position
-    leg_.setDesiredTipPositionGlobal(target_tip_pose_.position);
-
-    // 3. Apply IK to calculate joint angles
-    leg_.applyIK(robot_model_);
-
-    // 4. Update tip position to ensure consistency
-    leg_.updateTipPosition(robot_model_);
+    // Synchronize leg state with current target pose using IK and FK
+    leg_.applyIK(current_tip_pose_.position);
 }

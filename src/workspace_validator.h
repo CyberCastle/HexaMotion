@@ -1,8 +1,8 @@
 #ifndef WORKSPACE_VALIDATOR_H
 #define WORKSPACE_VALIDATOR_H
 
-#include "robot_model.h"
 #include "hexamotion_constants.h"
+#include "robot_model.h"
 #include <cmath>
 
 class RobotModel; // Forward declaration
@@ -46,8 +46,8 @@ struct WorkspaceBounds {
     bool has_height_restrictions;
     double min_height;
     double max_height;
-    double min_radius;        // Added for compatibility
-    double max_radius;        // Added for compatibility
+    double min_radius;       // Added for compatibility
+    double max_radius;       // Added for compatibility
     Point3D center_position; // Added for center position tracking
 };
 
@@ -90,6 +90,8 @@ struct ValidationResult {
     bool is_within_joint_limits;
     double distance_from_base;
     double collision_risk_factor;
+    bool is_valid;
+    Point3D safe_position;
 
     bool isValid() const {
         return is_reachable && is_collision_free && is_within_joint_limits;
@@ -136,7 +138,7 @@ class WorkspaceValidator {
      * @return Risk factor (0.0 = no risk, 1.0 = high risk)
      */
     double checkCollisionRisk(int leg_index, const Point3D &target_position,
-                             const Point3D current_leg_positions[NUM_LEGS]) const;
+                              const Point3D current_leg_positions[NUM_LEGS]) const;
 
     /**
      * @brief Constrain position to valid workspace
@@ -315,8 +317,6 @@ class WorkspaceValidator {
      * @brief Transform target from leg-local to global coordinates
      */
     Point3D legLocalToGlobal(int leg_index, const Point3D &local_pos) const;
-
-
 
     /**
      * @brief Apply collision avoidance adjustment (internal implementation)

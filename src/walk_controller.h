@@ -1,9 +1,11 @@
 #ifndef WALK_CONTROLLER_H
 #define WALK_CONTROLLER_H
 
+#include "body_pose_config.h"
+#include "body_pose_controller.h"
 #include "gait_config.h"
 #include "gait_config_factory.h"
-#include "leg_stepper.h" // Include for StepCycle definition
+#include "leg_stepper.h" // Include for LegStepper definition
 #include "math_utils.h"
 #include "robot_model.h"
 #include "terrain_adaptation.h"
@@ -24,9 +26,16 @@ enum LegState {
     LEG_MANUAL_TO_WALKING = -2, //< The leg is in 'manual to walking' state - transitioning from 'manual' to 'walking' state
 };
 
-// StepCycle is now defined in leg_stepper.h to avoid duplication
-
-// WalkState and StepState are defined above
+/**
+ * @brief Walk states for walk controller cycle (OpenSHC equivalent)
+ */
+enum WalkState {
+    WALK_STARTING,    //< The walk controller cycle is in 'starting' state (transitioning from 'stopped' to 'moving')
+    WALK_MOVING,      //< The walk controller cycle is in a 'moving' state (the primary walking state)
+    WALK_STOPPING,    //< The walk controller cycle is in a 'stopping' state (transitioning from 'moving' to 'stopped')
+    WALK_STOPPED,     //< The walk controller cycle is in a 'stopped' state (state whilst velocity input is zero)
+    WALK_STATE_COUNT, //< Misc enum defining number of Walk States
+};
 
 /**
  * @brief Complete walking controller with OpenSHC architecture
@@ -37,8 +46,9 @@ class WalkController {
      * @brief Constructor with robot model and leg references
      * @param m Robot model for kinematics and parameters
      * @param legs Array of references to the actual Leg objects from LocomotionSystem
+     * @param pose_config Body pose configuration containing standing pose joints
      */
-    WalkController(RobotModel &m, Leg legs[NUM_LEGS]);
+    WalkController(RobotModel &m, Leg legs[NUM_LEGS], const BodyPoseConfiguration &pose_config);
 
     /**
      * @brief Destructor
@@ -69,14 +79,15 @@ class WalkController {
                     const Eigen::Vector3d &current_body_position, const Eigen::Vector3d &current_body_orientation);
 
     /**
-     * @brief Update walk plane estimation
-     */
-    void updateWalkPlane();
-
-    /**
      * @brief Calculate odometry for the given time period
      */
     Point3D calculateOdometry(double time_period);
+
+    /**
+     * @brief Set body pose controller reference for walk plane functionality
+     * @param controller Pointer to BodyPoseController instance
+     */
+    void setBodyPoseController(BodyPoseController *controller) { body_pose_controller_ = controller; }
 
     /**
      * @brief Estimate gravity vector
@@ -93,8 +104,20 @@ class WalkController {
     double getDesiredAngularVelocity() const { return desired_angular_velocity_; }
     WalkState getWalkState() const { return walk_state_; }
     std::map<int, double> getWalkspace() const { return walkspace_; }
-    Point3D getWalkPlane() const { return walk_plane_; }
-    Point3D getWalkPlaneNormal() const { return walk_plane_normal_; }
+    // Walk plane functionality moved to BodyPoseController
+    Point3D getWalkPlane() const {
+        return body_pose_controller_ ? body_pose_controller_->getWalkPlanePose().position : Point3D(0, 0, 0);
+    }
+    Point3D getWalkPlaneNormal() const {
+        if (body_pose_controller_) {
+            // Extract normal from walk plane pose quaternion
+            Pose pose = body_pose_controller_->getWalkPlanePose();
+            Eigen::Vector3d z_axis(0, 0, 1);
+            Eigen::Vector3d normal = pose.rotation * z_axis;
+            return Point3D(normal.x(), normal.y(), normal.z());
+        }
+        return Point3D(0, 0, 1);
+    }
     Point3D getOdometryIdeal() const { return odometry_ideal_; }
     std::shared_ptr<LegStepper> getLegStepper(int leg_index) const;
 
@@ -200,8 +223,10 @@ class WalkController {
      * @return Stance duration (0-1)
      */
     double getStanceDuration() const {
-        return (double)current_gait_config_.phase_config.stance_phase /
-               (current_gait_config_.phase_config.stance_phase + current_gait_config_.phase_config.swing_phase);
+        // Return normalized value [0.0-1.0] for stance duration
+        double total_period = current_gait_config_.phase_config.stance_phase +
+                              current_gait_config_.phase_config.swing_phase;
+        return total_period > 0 ? static_cast<double>(current_gait_config_.phase_config.stance_phase) / total_period : 0.0;
     }
 
     /**
@@ -219,6 +244,21 @@ class WalkController {
      */
     double getCycleFrequency() const { return current_gait_config_.step_frequency; }
 
+    /**
+     * @brief Get calculated leg trajectory information for locomotion system
+     * @param leg_index Index of the leg (0-5)
+     * @return Calculated tip position and trajectory information
+     */
+    struct LegTrajectoryInfo {
+        Point3D target_position;
+        StepPhase step_phase;
+        double phase_progress;
+        bool is_stance;
+        Point3D velocity;
+    };
+
+    LegTrajectoryInfo getLegTrajectoryInfo(int leg_index) const;
+
   private:
     RobotModel &model;
 
@@ -231,8 +271,9 @@ class WalkController {
     double desired_angular_velocity_;
     WalkState walk_state_;
     std::map<int, double> walkspace_;
-    Point3D walk_plane_;
-    Point3D walk_plane_normal_;
+    // Walk plane functionality moved to BodyPoseController
+    // Point3D walk_plane_;
+    // Point3D walk_plane_normal_;
     Point3D odometry_ideal_;
     int pose_state_;
 
@@ -262,6 +303,9 @@ class WalkController {
     // Terrain adaptation system
     TerrainAdaptation terrain_adaptation_;
 
+    // Body pose controller reference for walk plane functionality
+    BodyPoseController *body_pose_controller_;
+
     // Velocity limits system
     VelocityLimits velocity_limits_;
     VelocityLimits::LimitValues current_velocity_limits_;
@@ -276,14 +320,17 @@ class WalkController {
     // Collision avoidance: track current leg positions
     Point3D current_leg_positions_[NUM_LEGS];
 
+    // Reference to legs array for body pose controller updates
+    Leg *legs_array_;
+
+    // Global phase counter for gait coordination (OpenSHC equivalent)
+    int global_phase_;
+
     // Helper methods
     // Helper methods
     double calculateStabilityIndex() const;
     bool checkTerrainConditions() const;
     double calculateLegReach() const;
-
-    // Declaración del método auxiliar para la posición de apoyo por defecto
-    Point3D calculateDefaultStancePosition(int leg_index);
 };
 
 #endif // WALK_CONTROLLER_H

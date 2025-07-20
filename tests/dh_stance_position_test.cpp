@@ -1,7 +1,7 @@
-#include <iostream>
-#include <iomanip>
 #include "../src/body_pose_config_factory.h"
 #include "../src/robot_model.h"
+#include <iomanip>
+#include <iostream>
 
 int main() {
     std::cout << "=== DH-Based Stance Position Test ===" << std::endl;
@@ -31,7 +31,7 @@ int main() {
 
     // Test the DH-based stance position calculation
     std::cout << "Calculating stance positions using DH parameters..." << std::endl;
-    auto stance_positions = calculateHexagonalStancePositions(params);
+    auto stance_positions = getDefaultStandPositions(params);
 
     std::cout << std::endl;
     std::cout << "Stance Positions (DH-based calculation):" << std::endl;
@@ -42,9 +42,9 @@ int main() {
 
     for (int i = 0; i < NUM_LEGS; i++) {
         double actual_radius = sqrt(stance_positions[i].x * stance_positions[i].x +
-                                   stance_positions[i].y * stance_positions[i].y);
+                                    stance_positions[i].y * stance_positions[i].y);
 
-        std::cout << " L" << (i+1) << " | "
+        std::cout << " L" << (i + 1) << " | "
                   << std::fixed << std::setprecision(1) << std::setw(6) << stance_positions[i].x << " | "
                   << std::setw(6) << stance_positions[i].y << " | "
                   << std::setw(10) << actual_radius << std::endl;
@@ -68,7 +68,7 @@ int main() {
         Point3D fk_position = robot_model.forwardKinematicsGlobalCoordinates(i, neutral_angles);
         double fk_radius = sqrt(fk_position.x * fk_position.x + fk_position.y * fk_position.y);
 
-        std::cout << " L" << (i+1) << " | "
+        std::cout << " L" << (i + 1) << " | "
                   << std::fixed << std::setprecision(1) << std::setw(6) << base_pos.x << ","
                   << std::setw(6) << base_pos.y << " | "
                   << std::setw(6) << fk_position.x << ","
@@ -80,7 +80,7 @@ int main() {
         double y_diff = std::abs(fk_position.y - stance_positions[i].y);
 
         if (x_diff > 0.1 || y_diff > 0.1) {
-            std::cout << "❌ ERROR: Leg " << (i+1) << " position mismatch!" << std::endl;
+            std::cout << "❌ ERROR: Leg " << (i + 1) << " position mismatch!" << std::endl;
             std::cout << "  DH calculation: (" << stance_positions[i].x << ", " << stance_positions[i].y << ")" << std::endl;
             std::cout << "  Direct FK: (" << fk_position.x << ", " << fk_position.y << ")" << std::endl;
             return 1;
@@ -101,12 +101,12 @@ int main() {
         double x_diff = std::abs(analytical_x - stance_positions[i].x);
         double y_diff = std::abs(analytical_y - stance_positions[i].y);
 
-        std::cout << " L" << (i+1) << " | "
+        std::cout << " L" << (i + 1) << " | "
                   << std::fixed << std::setprecision(1) << std::setw(6) << analytical_x << ","
                   << std::setw(6) << analytical_y << " | "
                   << std::setw(6) << stance_positions[i].x << ","
                   << std::setw(6) << stance_positions[i].y << " | "
-                  << std::setw(9) << sqrt(x_diff*x_diff + y_diff*y_diff) << std::endl;
+                  << std::setw(9) << sqrt(x_diff * x_diff + y_diff * y_diff) << std::endl;
     }
 
     std::cout << std::endl;

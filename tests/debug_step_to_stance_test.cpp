@@ -1,7 +1,7 @@
-#include "robot_model.h"
-#include "../src/body_pose_controller.h"
 #include "../src/body_pose_config_factory.h"
+#include "../src/body_pose_controller.h"
 #include "../src/leg.h"
+#include "robot_model.h"
 #include "test_stubs.h"
 #include <iostream>
 
@@ -17,7 +17,7 @@ int main() {
     Pose default_stance(Point3D(0, 0, -p.robot_height), Eigen::Vector3d(0, 0, 0));
     for (int i = 0; i < NUM_LEGS; i++) {
         legs.emplace_back(i, model);
-        legs[i].initialize(model, default_stance);
+        legs[i].initialize(default_stance);
     }
 
     // Create body pose configuration

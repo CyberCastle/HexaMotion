@@ -287,7 +287,7 @@ class KinematicsValidator {
             // angle_calculus.cpp asume que el leg se mueve verticalmente desde el cuerpo
             // Necesitamos crear un target que represente la altura deseada
             JointAngles zero_angles(0, 0, 0);
-            Point3D base_global = model->getAnalyticLegBasePosition(0);
+            Point3D base_global = model->getLegBasePosition(0);
 
             // Target en la misma posición X,Y que la base, pero con la altura deseada
             Point3D target_global;

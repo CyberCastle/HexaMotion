@@ -283,7 +283,7 @@ int main() {
     std::cout << "  - Altura robot: " << p.robot_height << "mm" << std::endl;
 
     // Definir las alturas objetivo a probar - ajustadas para las limitaciones reales
-    std::vector<double> target_heights = {140.0}; // Rango de alturas a probar
+    std::vector<double> target_heights = {150.0}; // Rango de alturas a probar
 
     for (double target_height : target_heights) {
         std::cout << "\n"
