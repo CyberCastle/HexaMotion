@@ -27,10 +27,17 @@ struct LegStepperExternalTarget {
 
 /**
  * @brief Leg stepper class for individual leg trajectory control (OpenSHC equivalent)
+ *
+ * This implementation follows OpenSHC's exact philosophy:
+ * - Iterative sequential flow (not normalized phase-based)
+ * - Delta accumulation using quarticBezierDot derivatives
+ * - Two-phase swing control (swing_1_nodes, swing_2_nodes)
+ * - Timing based on iteration counters and delta_t values
+ * - Precision control to minimize accumulated errors
  */
 class LegStepper {
   public:
-    // Modificar el constructor para aceptar los validadores
+    // Constructor
     LegStepper(int leg_index, const Point3D &identity_tip_pose, Leg &leg, RobotModel &robot_model,
                WalkspaceAnalyzer *walkspace_analyzer, WorkspaceValidator *workspace_validator);
 
@@ -53,12 +60,20 @@ class LegStepper {
     Point3D getSwing1ControlNode(int i) const { return swing_1_nodes_[i]; }
     Point3D getSwing2ControlNode(int i) const { return swing_2_nodes_[i]; }
     Point3D getStanceControlNode(int i) const { return stance_nodes_[i]; }
-    LegStepperExternalTarget getExternalTarget() const { return external_target_; }
-    LegStepperExternalTarget getExternalDefault() const { return external_default_; }
+
+    // OpenSHC-specific accessors
+    int getSwingIterations() const { return swing_iterations_; }
+    int getStanceIterations() const { return stance_iterations_; }
+    int getCurrentIteration() const { return current_iteration_; }
+    double getSwingDeltaT() const { return swing_delta_t_; }
+    double getStanceDeltaT() const { return stance_delta_t_; }
 
     // Modifiers
     void setDesiredVelocity(const Point3D &linear_velocity, double angular_velocity);
-    void setCurrentTipPose(const Point3D &pose) { leg_.setCurrentTipPositionGlobal(pose); }
+    void setCurrentTipPose(const Point3D &pose) {
+        current_tip_pose_ = pose;
+        leg_.setCurrentTipPositionGlobal(pose);
+    }
     void setDefaultTipPose(const Point3D &pose) { default_tip_pose_ = pose; }
     void setStepState(StepState state) { step_state_ = state; }
     void setPhase(int phase) { phase_ = phase; }
@@ -67,36 +82,36 @@ class LegStepper {
     void setSwingOriginTipVelocity(const Point3D &velocity) { swing_origin_tip_velocity_ = velocity; }
     void setCompletedFirstStep(bool completed) { completed_first_step_ = completed; }
     void setAtCorrectPhase(bool at_correct) { at_correct_phase_ = at_correct; }
-    void setTouchdownDetection(bool detection) { touchdown_detection_ = detection; }
-    void setExternalTarget(const LegStepperExternalTarget &target) { external_target_ = target; }
-    void setExternalDefault(const LegStepperExternalTarget &default_pos) { external_default_ = default_pos; }
-    void setStepLength(double length) { step_length_ = length; }
-    void setSwingHeight(double height) { swing_height_ = height; }
-    void setBodyClearance(double clearance) { body_clearance_ = clearance; }
-    void setStanceSpanModifier(double modifier) { stance_span_modifier_ = modifier; }
     void setSwingClearance(const Point3D &clearance) { swing_clearance_ = clearance; }
+    void setStepCycleTime(double step_cycle_time) { step_cycle_time_ = step_cycle_time; }
+    double getStepCycleTime() const { return step_cycle_time_; }
+    void setStanceRatio(double stance_ratio) { stance_ratio_ = stance_ratio; }
+    double getStanceRatio() const { return stance_ratio_; }
+    void setSwingRatio(double swing_ratio) { swing_ratio_ = swing_ratio; }
+    double getSwingRatio() const { return swing_ratio_; }
+    void setStepFrequency(double step_frequency) { step_frequency_ = step_frequency; }
+    double getStepFrequency() const { return step_frequency_; }
+    void setSwingWidth(double swing_width) { swing_width_ = swing_width; }
+    double getSwingWidth() const { return swing_width_; }
+    void setControlFrequency(double control_frequency) { control_frequency_ = control_frequency; }
+    double getControlFrequency() const { return control_frequency_; }
 
-    // Main unified update method (OpenSHC equivalent)
-    void updateStepCycle(double normalized_phase, double step_length, double time_delta);
-
-    // Internal helper methods
+    // OpenSHC-specific workflow methods
+    void initializeSwingPeriod(int iteration);
+    void calculateSwingTiming(double time_delta);
     void updateStride();
-    Point3D calculateStanceSpanChange();
-    void updateDefaultTipPosition();
-    void updateTipPosition(double step_length, double time_delta, bool rough_terrain_mode, bool force_normal_touchdown);
+    void updateTipPositionIterative(int iteration, double time_delta, bool rough_terrain_mode = false, bool force_normal_touchdown = false);
+
+    // Control node generation (OpenSHC style)
     void generatePrimarySwingControlNodes();
-    void generateSecondarySwingControlNodes(bool ground_contact);
-    void generateStanceControlNodes(double stride_scaler);
-    void forceNormalTouchdown();
+    void generateSecondarySwingControlNodes(bool ground_contact = false);
+    void generateStanceControlNodes(double stride_scaler = 1.0);
 
   private:
-    // Internal helper methods
-    void updateStepState(const StepCycle &step);
-    void updateDynamicTiming(double step_length, double time_delta);
-
+    // Basic properties
     int leg_index_;
     Leg &leg_;
-    RobotModel &robot_model_; // Store robot model for kinematics
+    RobotModel &robot_model_;
     Point3D identity_tip_pose_;
     Point3D default_tip_pose_;
     Point3D origin_tip_pose_;
@@ -122,23 +137,29 @@ class LegStepper {
     double step_progress_;
     StepState step_state_;
 
-    // Timing
+    // OpenSHC timing parameters
     double swing_delta_t_;
     double stance_delta_t_;
+    int swing_iterations_;
+    int stance_iterations_;
+    int current_iteration_;
+    double step_cycle_time_;   // Complete step cycle time in seconds (from gait configuration)
+    double stance_ratio_;      // Stance ratio from gait configuration (OpenSHC exact)
+    double swing_ratio_;       // Swing ratio from gait configuration (OpenSHC exact)
+    double step_frequency_;    // Step frequency from gait configuration (OpenSHC exact)
+    double swing_width_;       // Lateral shift at mid-swing (OpenSHC mid_lateral_shift)
+    double control_frequency_; // Control loop frequency (defines time_delta)
 
-    // External targets
-    LegStepperExternalTarget external_target_;
-    LegStepperExternalTarget external_default_;
-    bool touchdown_detection_;
+    // Swing state management (OpenSHC style)
+    bool swing_initialized_;
+    bool nodes_generated_;
+    int last_swing_iteration_;
+    int last_swing_start_iteration_;
 
     // Bezier control nodes (5 nodes for quartic curves)
     Point3D swing_1_nodes_[5];
     Point3D swing_2_nodes_[5];
     Point3D stance_nodes_[5];
-    double step_length_ = 0.0;
-    double swing_height_ = 0.0;
-    double body_clearance_ = 0.0;
-    double stance_span_modifier_ = 0.0;
 
     WalkspaceAnalyzer *walkspace_analyzer_ = nullptr;
     WorkspaceValidator *workspace_validator_ = nullptr;

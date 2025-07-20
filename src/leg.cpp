@@ -67,7 +67,7 @@ bool Leg::setCurrentTipPositionGlobal(const Point3D &position) {
     double dz = target.z - leg_base.z;
     double distance = sqrt(dx * dx + dy * dy + dz * dz);
 
-    double max_reach = getLegReach();
+    double max_reach = model_.getLegReach();
 
     if (distance > max_reach) {
         // TODO: OpenSHC approach: could adjust position to be within reach
@@ -86,9 +86,35 @@ bool Leg::setCurrentTipPositionGlobal(const Point3D &position) {
  * @return True if IK succeeds within joint limits
  */
 bool Leg::applyIK(const Point3D &target_position) {
-    // Compute new joint angles via IK
+    // OpenSHC approach: Make target reachable before applying IK
+    Point3D reachable_target = model_.makeReachable(leg_id_, target_position);
+
+    // Compute new joint angles via IK using the reachable target
     JointAngles new_angles = model_.inverseKinematicsCurrentGlobalCoordinates(
-        leg_id_, joint_angles_, target_position);
+        leg_id_, joint_angles_, reachable_target);
+
+    // Validate limits before updating member variables
+    if (!model_.checkJointLimits(leg_id_, new_angles)) {
+        return false;
+    }
+
+    // Update joint angles and tip position
+    joint_angles_ = new_angles;
+    updateTipPosition();
+    return true;
+}
+
+/**
+ * @brief Apply OpenSHC-style delta-based IK for real-time control
+ * @param target_position Desired global tip position
+ * @return True if IK succeeds within joint limits
+ */
+bool Leg::applyIKWithDelta(const Point3D &target_position) {
+    // OpenSHC approach: Make target reachable before applying IK
+    Point3D reachable_target = model_.makeReachable(leg_id_, target_position);
+
+    // Use OpenSHC-style delta-based IK for real-time control
+    JointAngles new_angles = model_.applyIKWithDelta(leg_id_, reachable_target, joint_angles_);
 
     // Validate limits before updating member variables
     if (!model_.checkJointLimits(leg_id_, new_angles)) {
@@ -110,18 +136,22 @@ Eigen::Matrix3d Leg::getJacobian() const {
 }
 
 bool Leg::isTargetReachable(const Point3D &target) const {
-    // Use RobotModel's workspace validation
-    // This is a simplified check - full validation should be implemented
-    double distance = sqrt(target.x * target.x + target.y * target.y + target.z * target.z);
-    double max_reach = getLegReach();
+    // OpenSHC approach: Simple geometric check based on distance from base
+    // OpenSHC doesn't typically reject positions but instead uses makeReachable() to adjust them
+    Point3D base_pos = getBasePosition();
+    double distance = sqrt(pow(target.x - base_pos.x, 2) +
+                           pow(target.y - base_pos.y, 2) +
+                           pow(target.z - base_pos.z, 2));
+    double max_reach = model_.getLegReach();
 
+    // Simple distance check - OpenSHC style
     return distance <= max_reach;
 }
 
 Point3D Leg::constrainToWorkspace(const Point3D &target) const {
     // Simple workspace constraint - scale target to max reach if outside
     double distance = sqrt(target.x * target.x + target.y * target.y + target.z * target.z);
-    double max_reach = getLegReach();
+    double max_reach = model_.getLegReach();
 
     if (distance > max_reach) {
         double scale = max_reach / distance;
@@ -191,13 +221,6 @@ void Leg::reset() {
 
     // Update FK
     updateTipPosition();
-}
-
-double Leg::getLegReach() const {
-    const Parameters &params = model_.getParams();
-    // Maximum reach is femur + tibia lengths (coxa only provides lateral offset)
-    // The coxa rotates around Z-axis and doesn't extend the radial reach
-    return params.femur_length + params.tibia_length;
 }
 
 double Leg::getDistanceToTarget(const Point3D &target) const {

@@ -554,6 +554,12 @@ class RobotModel {
      */
     Pose getPoseLegFrame(int leg_index, const JointAngles &joint_angles, const Pose &robot_frame_pose = Pose::Identity()) const;
 
+    /**
+     * @brief Get leg reach distance.
+     * @return Maximum reach distance
+     */
+    double getLegReach() const;
+
     /** Get the DH position of the leg base (without joint transformations) */
     Point3D getLegBasePosition(int leg_index) const;
 
@@ -602,18 +608,6 @@ class RobotModel {
                                         const JointAngles &current_angles) const;
 
     /**
-     * @brief Apply inverse kinematics using local leg coordinates with success indicator (OpenSHC-style)
-     * This method follows OpenSHC's applyIK approach and returns success/failure status.
-     *
-     * @param leg Leg index (0-5)
-     * @param global_target Target position in global robot coordinates
-     * @param current_angles Current joint angles for initial guess
-     * @return Success indicator (1.0 for success, 0.0 for failure)
-     */
-    double applyIKLocalCoordinates(int leg, const Point3D &global_target,
-                                   const JointAngles &current_angles) const;
-
-    /**
      * @brief Transform global position to local leg coordinates (OpenSHC-style)
      * This method transforms a position from global robot coordinates to local leg coordinates,
      * following OpenSHC's getPoseJointFrame approach.
@@ -640,31 +634,35 @@ class RobotModel {
                                               const JointAngles &current_angles) const;
 
     /**
-     * @brief Set desired tip pose in global coordinates and apply IK (OpenSHC-style)
-     * This method follows OpenSHC's setDesiredTipPose and applyIK pattern.
+     * @brief Make a position reachable by constraining it to leg workspace (OpenSHC-style)
+     * This function follows OpenSHC's approach to automatically adjust positions that are
+     * outside the leg's workspace to be within reachable bounds.
      *
-     * @param leg Leg index (0-5)
-     * @param global_desired_pose Desired tip pose in global robot coordinates
-     * @param current_angles Current joint angles for initial guess
-     * @return Success indicator (1.0 for success, 0.0 for failure)
+     * @param leg_index Index of the leg (0-5)
+     * @param reference_tip_position Target position that may be outside workspace
+     * @return Adjusted position that is guaranteed to be within leg workspace
      */
-    double setDesiredTipPoseAndApplyIK(int leg, const Point3D &global_desired_pose,
-                                       const JointAngles &current_angles) const;
+    Point3D makeReachable(int leg_index, const Point3D &reference_tip_position) const;
 
     /**
-     * @brief Calculate position delta in local leg coordinates (OpenSHC-style)
-     * This method calculates the position difference between desired and current poses
-     * in local leg coordinates, following OpenSHC's applyIK approach.
-     *
-     * @param leg Leg index (0-5)
-     * @param global_desired_pose Desired tip pose in global coordinates
-     * @param global_current_pose Current tip pose in global coordinates
-     * @param current_angles Current joint angles for transformation
-     * @return Position delta in local leg coordinates
+     * @brief OpenSHC-style delta-based IK: Calculate position delta and apply single-step IK
+     * @param leg Leg index
+     * @param desired_position Desired global tip position
+     * @param current_angles Current joint angles
+     * @return Updated joint angles after delta-based IK
      */
-    Point3D calculatePositionDeltaLocalCoordinates(int leg, const Point3D &global_desired_pose,
-                                                   const Point3D &global_current_pose,
-                                                   const JointAngles &current_angles) const;
+    JointAngles applyIKWithDelta(int leg, const Point3D &desired_position,
+                                 const JointAngles &current_angles) const;
+
+    /**
+     * @brief OpenSHC-style single-step IK solver using position delta
+     * @param leg Leg index
+     * @param position_delta Position delta in leg frame (desired - current)
+     * @param current_angles Current joint angles
+     * @return Updated joint angles
+     */
+    JointAngles solveIKWithDelta(int leg, const Eigen::Vector3d &position_delta,
+                                 const JointAngles &current_angles) const;
 
     std::vector<Eigen::Matrix4d> buildDHTransforms(int leg, const JointAngles &q) const;
 

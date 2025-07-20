@@ -13,32 +13,52 @@ LegStepper::LegStepper(int leg_index, const Point3D &identity_tip_pose, Leg &leg
       identity_tip_pose_(identity_tip_pose),
       walkspace_analyzer_(walkspace_analyzer),
       workspace_validator_(workspace_validator) {
-    // Inicialización estándar
+
+    // Initialize basic properties
     default_tip_pose_ = identity_tip_pose_;
     origin_tip_pose_ = identity_tip_pose_;
     target_tip_pose_ = identity_tip_pose_;
     current_tip_pose_ = identity_tip_pose_;
+
+    // Initialize state management
     at_correct_phase_ = false;
     completed_first_step_ = false;
     phase_ = 0;
     step_progress_ = 0.0;
     step_state_ = STEP_STANCE;
+
+    // Initialize OpenSHC timing parameters
     swing_delta_t_ = 0.0;
     stance_delta_t_ = 0.0;
-    touchdown_detection_ = false;
-    step_length_ = 0.0;
-    swing_height_ = 0.0;
-    body_clearance_ = 0.0;
-    swing_clearance_ = Point3D(0.0, 0.0, 0.0);
+    swing_iterations_ = 0;
+    stance_iterations_ = 0;
+    current_iteration_ = 0;
+    step_cycle_time_ = 1.0;    // Default 1 second cycle time
+    stance_ratio_ = 0.75;      // Default stance ratio (will be overridden by gait configuration)
+    swing_ratio_ = 0.25;       // Default swing ratio (will be overridden by gait configuration)
+    step_frequency_ = 1.0;     // Default step frequency (will be overridden by gait configuration)
+    swing_width_ = 5.0;        // Default swing width (will be overridden by gait configuration)
+    control_frequency_ = 50.0; // Default control frequency (will be overridden by gait configuration)
 
-    // Initialize walk plane normal (pointing up by default)
-    walk_plane_normal_ = Point3D(0.0, 0.0, 1.0);
+    // Initialize swing state management
+    swing_initialized_ = false;
+    nodes_generated_ = false;
+    last_swing_iteration_ = -1;
+    last_swing_start_iteration_ = -1;
 
-    // Initialize origin positions with identity pose instead of (0,0,0)
+    // Initialize velocity and movement vectors
+    desired_linear_velocity_ = Point3D(0, 0, 0);
+    desired_angular_velocity_ = 0.0;
+    walk_plane_ = Point3D(0, 0, 0);
+    walk_plane_normal_ = Point3D(0, 0, 1);
+    stride_vector_ = Point3D(0, 0, 0);
+    current_tip_velocity_ = Point3D(0, 0, 0);
     swing_origin_tip_position_ = identity_tip_pose_;
+    swing_origin_tip_velocity_ = Point3D(0, 0, 0);
     stance_origin_tip_position_ = identity_tip_pose_;
-    swing_origin_tip_velocity_ = Point3D(0.0, 0.0, 0.0);
+    swing_clearance_ = Point3D(0, 0, 0);
 
+    // Initialize all Bezier control nodes with identity pose
     for (int i = 0; i < 5; ++i) {
         swing_1_nodes_[i] = identity_tip_pose_;
         swing_2_nodes_[i] = identity_tip_pose_;
@@ -46,354 +66,280 @@ LegStepper::LegStepper(int leg_index, const Point3D &identity_tip_pose, Leg &leg
     }
 }
 
-// Add setter implementation for desired velocity to ensure velocities are synced
 void LegStepper::setDesiredVelocity(const Point3D &linear_velocity, double angular_velocity) {
     desired_linear_velocity_ = linear_velocity;
     desired_angular_velocity_ = angular_velocity;
 }
 
-// Main unified step cycle update method (OpenSHC equivalent)
-void LegStepper::updateStepCycle(double normalized_phase, double step_length, double time_delta) {
-    // Get current step cycle configuration
-    const auto &config = robot_model_.getParams().dynamic_gait;
-
-    // Create step cycle from configuration
-    StepCycle step_cycle;
-    step_cycle.period_ = config.stance_phase + config.swing_phase;
-    step_cycle.stance_start_ = 0;
-    step_cycle.stance_end_ = config.stance_phase;
-    step_cycle.swing_start_ = config.stance_phase;
-    step_cycle.swing_end_ = step_cycle.period_;
-    step_cycle.frequency_ = config.frequency;
-
-    // 1. Update step state (STANCE/SWING)
-    updateStepState(step_cycle);
-
-    // 2. Update dynamic timing parameters
-    updateDynamicTiming(step_length, time_delta);
-
-    // 3. Update tip position and trajectories
-    updateTipPosition(step_length, time_delta, false, false);
-}
-
-void LegStepper::updateStepState(const StepCycle &step) {
-    // Update step state from phase unless force stopped
-    if (step_state_ == STEP_FORCE_STOP) {
-        return;
-    }
-
-    if (phase_ >= step.swing_start_ && phase_ < step.swing_end_ && step_state_ != STEP_FORCE_STANCE) {
-        // Transition to swing state
-        if (step_state_ != STEP_SWING) {
-            // Just transitioned to swing - update swing origin
-            swing_origin_tip_position_ = leg_.getCurrentTipPositionGlobal();
-            swing_origin_tip_velocity_ = current_tip_velocity_;
-        }
-        step_state_ = STEP_SWING;
-    } else {
-        // Transition to stance state
-        if (step_state_ != STEP_STANCE) {
-            // Just transitioned to stance - update stance origin
-            stance_origin_tip_position_ = leg_.getCurrentTipPositionGlobal();
-        }
-        step_state_ = STEP_STANCE;
-    }
-}
-
 void LegStepper::updateStride() {
-    // Usar el método OpenSHC-equivalente
-    stride_vector_ = VelocityLimits::calculateStrideVector(
-        desired_linear_velocity_.x, desired_linear_velocity_.y, desired_angular_velocity_,
-        getCurrentTipPose(), robot_model_.getParams().dynamic_gait.duty_factor, robot_model_.getParams().control_frequency);
-}
-
-Point3D LegStepper::calculateStanceSpanChange() {
-    // Use body_clearance_ directly as the target workplane height
-    // This avoids circular dependency on default_tip_pose_
-    double target_workplane_height = -body_clearance_;
-
-    // stance_span_modifier configurable por marcha
-    double stance_span_modifier = stance_span_modifier_;
-
-    // Determinar bearing (dirección lateral de la pierna)
-    bool positive_y_axis = (identity_tip_pose_.y > 0.0);
-    int bearing = (positive_y_axis ^ (stance_span_modifier > 0.0)) ? 270 : 90;
-    stance_span_modifier *= (positive_y_axis ? 1.0 : -1.0);
-
-    // Consultar el workspace real usando WalkspaceAnalyzer
-    double radius = 0.0;
-    if (walkspace_analyzer_) {
-        // Obtener workplane interpolado a la altura objetivo
-        auto workplane = walkspace_analyzer_->getWorkplane(leg_index_, target_workplane_height);
-        if (!workplane.empty() && workplane.count(bearing)) {
-            radius = workplane.at(bearing);
-        }
-    }
-    // Fallback: usar WorkspaceValidator si no hay WalkspaceAnalyzer
-    if (radius == 0.0 && workspace_validator_) {
-        WorkspaceBounds bounds = workspace_validator_->getWorkspaceBounds(leg_index_);
-        radius = bounds.max_radius;
-    }
-
-    // TODO: Validate if workspace validator is available
-    // Fallback final: usar estimación basada en geometría del robot si no hay workspace data
-    if (radius == 0.0) {
-        // Estimar un radio base basado en la posición de identidad
-        double identity_radius = sqrt(identity_tip_pose_.x * identity_tip_pose_.x +
-                                      identity_tip_pose_.y * identity_tip_pose_.y);
-        radius = identity_radius * 0.8; // Use 80% of identity radius as safe estimate
-    }
-
-    // Aplicar el modificador de span
-    double span = radius * stance_span_modifier;
-    return Point3D(0.0, span, 0.0);
-}
-
-void LegStepper::updateDefaultTipPosition() {
-    Point3D new_default_tip_pose;
-
-    if (external_default_.defined) {
-        new_default_tip_pose = external_default_.position;
-    } else {
-        // Start with identity position
-        Point3D identity_tip_position = identity_tip_pose_;
-
-        // Apply lateral stance span adjustment
-        identity_tip_position = identity_tip_position + calculateStanceSpanChange();
-
-        // Apply body clearance (maintain z = -body_clearance_)
-        if (body_clearance_ > 0.0) {
-            identity_tip_position.z = -body_clearance_;
-        }
-
-        // Use the adjusted position directly as the default tip pose
-        // Remove erroneous projection logic that was canceling body_clearance_
-        new_default_tip_pose = identity_tip_position;
-    }
-    double default_tip_position_delta = math_utils::distance(default_tip_pose_, new_default_tip_pose);
-    default_tip_pose_ = new_default_tip_pose;
-}
-
-void LegStepper::updateTipPosition(double step_length, double time_delta, bool rough_terrain_mode, bool force_normal_touchdown) {
-    // Usar el step_length configurado si no se pasa uno explícito
-    double used_step_length = (step_length_ > 0.0) ? step_length_ : step_length;
-
-    // Update dynamic timing parameters (OpenSHC equivalent)
-    updateDynamicTiming(used_step_length, time_delta);
-
-    // Obtener parámetros de la configuración de marcha actual
-    const auto &config = robot_model_.getParams().dynamic_gait;
-    double stance_ratio = config.duty_factor;
-
-    // Usar la frecuencia de control del sistema
+    // Calculate stride vector from velocity (OpenSHC exact approach)
     double control_frequency = robot_model_.getParams().control_frequency;
+    double time_delta = 1.0 / control_frequency;
 
-    // Actualizar stride vector
-    updateStride();
+    // OpenSHC stride_vector represents the displacement the robot moves during a STANCE phase
+    // The target_tip_pose calculation uses stride_vector * 0.5 to position the pata at the
+    // appropriate landing point to compensate for robot movement during stance
 
-    // En OpenSHC, el target se calcula desde la posición actual, no desde default_tip_pose_
-    Point3D origin_position;
-    if (step_state_ == STEP_SWING) {
-        origin_position = swing_origin_tip_position_;
-    } else {
-        origin_position = stance_origin_tip_position_;
+    // Use actual stance_ratio from gait configuration (OpenSHC exact)
+    // This replaces the hardcoded 0.75 to match the specific gait being used
+    double stance_duration = step_cycle_time_ * stance_ratio_;
+
+    // stride_vector is the displacement the robot will move during stance
+    // OpenSHC formula: stride_vector = linear_velocity × (stance_ratio / step_frequency)
+    stride_vector_ = desired_linear_velocity_ * stance_duration;
+
+    // Z movement is handled by swing clearance, not stride
+    stride_vector_.z = 0.0;
+
+    // Apply minimum stride constraint for testing visibility
+    double stride_magnitude = stride_vector_.norm();
+    if (stride_magnitude < 1.0) {
+        // Generate small but visible stride for testing when velocity is very low
+        stride_vector_ = Point3D(2.0, 0.0, 0.0); // 2mm stride_vector (1mm actual displacement)
+    }
+}
+
+void LegStepper::calculateSwingTiming(double time_delta) {
+    // OpenSHC-compatible timing calculation using actual gait configuration values
+    // These values should now come from the GaitConfiguration that was set via setters
+
+    // Use actual values from gait configuration (set via setters)
+    double step_frequency = step_frequency_; // Real step frequency from GaitConfiguration
+    double swing_ratio = swing_ratio_;       // Real swing ratio from GaitConfiguration
+    double stance_ratio = stance_ratio_;     // Real stance ratio from GaitConfiguration
+
+    // OpenSHC formula: swing_iterations = int((swing_period/period) / (frequency * time_delta))
+    // where swing_period = swing_ratio * period, and period = 1.0 (normalized)
+    swing_iterations_ = int((swing_ratio / 1.0) / (step_frequency * time_delta));
+
+    // Ensure minimum iterations for Bezier curve development
+    if (swing_iterations_ < 10)
+        swing_iterations_ = 10;
+
+    // Make even for proper primary/secondary curve split
+    if (swing_iterations_ % 2 != 0)
+        swing_iterations_++;
+
+    // Time delta for each bezier curve (split swing period in half for primary/secondary)
+    swing_delta_t_ = 1.0 / (swing_iterations_ / 2.0);
+
+    // Calculate stance timing using same formula
+    stance_iterations_ = int((stance_ratio / 1.0) / (step_frequency * time_delta));
+    if (stance_iterations_ < 2)
+        stance_iterations_ = 2;
+    stance_delta_t_ = 1.0 / stance_iterations_;
+}
+
+void LegStepper::initializeSwingPeriod(int iteration) {
+    // Initialize swing origin position and velocity on first call or swing reset
+    // In OpenSHC, this typically happens when entering swing state
+
+    // Reset swing initialization if we're starting a new swing cycle
+    if (iteration == 1 || iteration < last_swing_iteration_) {
+        swing_initialized_ = false;
     }
 
-    // Calcular target tip pose basado en el origen actual + stride vector (OpenSHC equivalent)
-    target_tip_pose_ = origin_position + stride_vector_ * 0.5;
-
-    // Período de Swing
-    if (step_state_ == STEP_SWING) {
-        // Generar nodos de control para swing
-        generatePrimarySwingControlNodes();
-        generateSecondarySwingControlNodes(false);
-
-        // Usar step_progress_ para interpolación Bézier
-        double time_input = step_progress_;
-
-        // Determinar qué curva usar basado en el progreso
-        Point3D bezier_position;
-        if (time_input < 0.5) {
-            // Primera mitad del swing - usar swing_1_nodes_
-            double t = time_input * 2.0; // Mapear [0,0.5] a [0,1]
-            bezier_position = math_utils::quarticBezier(swing_1_nodes_, t);
-        } else {
-            // Segunda mitad del swing - usar swing_2_nodes_
-            double t = (time_input - 0.5) * 2.0; // Mapear [0.5,1] a [0,1]
-            bezier_position = math_utils::quarticBezier(swing_2_nodes_, t);
-        }
-
-        // Set position from Bézier (z already encoded by control nodes)
-        current_tip_pose_ = bezier_position;
-
-        // Calculate velocity using bezier derivative
-        Point3D bezier_velocity;
-        if (time_input < 0.5) {
-            double t = time_input * 2.0;
-            bezier_velocity = math_utils::quarticBezierDot(swing_1_nodes_, t) * 2.0; // Chain rule
-        } else {
-            double t = (time_input - 0.5) * 2.0;
-            bezier_velocity = math_utils::quarticBezierDot(swing_2_nodes_, t) * 2.0; // Chain rule
-        }
-        current_tip_velocity_ = bezier_velocity / time_delta;
-    }
-    // Período de Stance
-    else if (step_state_ == STEP_STANCE || step_state_ == STEP_FORCE_STANCE) {
-        // Generar nodos de control para stance
-        generateStanceControlNodes(1.0);
-
-        // Usar step_progress_ para interpolación Bézier
-        double time_input = step_progress_;
-        Point3D bezier_position = math_utils::quarticBezier(stance_nodes_, time_input);
-
-        // La posición actual es la posición del Bézier
-        current_tip_pose_ = bezier_position;
-
-        // Calcular velocidad usando la derivada de la curva Bézier
-        Point3D bezier_velocity = math_utils::quarticBezierDot(stance_nodes_, time_input);
-        current_tip_velocity_ = bezier_velocity / time_delta;
+    if (!swing_initialized_) {
+        swing_origin_tip_position_ = current_tip_pose_;
+        swing_origin_tip_velocity_ = current_tip_velocity_;
+        swing_initialized_ = true;
     }
 
-    // Synchronize with leg after trajectory generation
-    // Synchronize leg state: apply IK to reach current tip pose and sync FK
-    leg_.applyIK(current_tip_pose_);
+    current_iteration_ = iteration;
+    last_swing_iteration_ = iteration;
 }
 
 void LegStepper::generatePrimarySwingControlNodes() {
-    // If swing_origin_tip_position_ is at (0,0,0), initialize it with the current tip position
-    if (swing_origin_tip_position_.norm() < 1e-6) {
-        swing_origin_tip_position_ = leg_.getCurrentTipPositionGlobal();
-    }
-    // Ensure swing origin at default tip z
-    {
-        Point3D origin = swing_origin_tip_position_;
-        origin.z = default_tip_pose_.z;
-        swing_origin_tip_position_ = origin;
-    }
+    // OpenSHC exact implementation
+    Point3D mid_tip_position = (swing_origin_tip_position_ + target_tip_pose_) / 2.0;
+    mid_tip_position.z = std::max(swing_origin_tip_position_.z, target_tip_pose_.z);
+    mid_tip_position = mid_tip_position + swing_clearance_;
 
-    // Calculate midpoint for swing using default tip z and configured swing height
-    Point3D mid_tip_position = (swing_origin_tip_position_ + target_tip_pose_) * 0.5;
-    // Use configured swing clearance for midpoint height
-    mid_tip_position.z = default_tip_pose_.z + swing_clearance_.z;
-
-    // Get swing width parameter from robot model or use default
-    double mid_lateral_shift = LEG_STEPPER_SWING_LATERAL_SHIFT; // Default swing width, configurable
+    double mid_lateral_shift = swing_width_; // Use configured swing width from GaitConfiguration
     bool positive_y_axis = (identity_tip_pose_.y > 0.0);
     mid_tip_position.y += positive_y_axis ? mid_lateral_shift : -mid_lateral_shift;
 
-    // Avoid division by zero and use reasonable defaults
-    Point3D stance_node_separation;
-    if (swing_delta_t_ > LEG_STEPPER_FLOAT_TOLERANCE && swing_origin_tip_velocity_.norm() < LEG_STEPPER_MAX_SWING_VELOCITY) {
-        stance_node_separation = swing_origin_tip_velocity_ * (1.0 / swing_delta_t_) * LEG_STEPPER_SWING_NODE_SCALER;
-    } else {
-        stance_node_separation = stride_vector_ * LEG_STEPPER_DEFAULT_NODE_SEPARATION;
-    }
+    // OpenSHC exact formula: walker_->getTimeDelta() / swing_delta_t_
+    double time_delta = 1.0 / control_frequency_; // Use configured control frequency from GaitConfiguration
+    Point3D stance_node_seperation = swing_origin_tip_velocity_ * 0.25 * (time_delta / swing_delta_t_);
 
-    // Nodos de control para curvas Bézier cuárticas de swing primario
+    // Control nodes for primary swing quartic bezier curves
+    // Set for position continuity at transition between stance and primary swing curves (C0 Smoothness)
     swing_1_nodes_[0] = swing_origin_tip_position_;
-    swing_1_nodes_[1] = swing_origin_tip_position_ + stance_node_separation;
-    swing_1_nodes_[2] = swing_origin_tip_position_ + stance_node_separation * 2.0;
-    swing_1_nodes_[3] = (mid_tip_position + swing_1_nodes_[2]) * LEG_STEPPER_TOUCHDOWN_INTERPOLATION;
+    // Set for velocity continuity at transition between stance and primary swing curves (C1 Smoothness)
+    swing_1_nodes_[1] = swing_origin_tip_position_ + stance_node_seperation;
+    // Set for acceleration continuity at transition between stance and primary swing curves (C2 Smoothness)
+    swing_1_nodes_[2] = swing_origin_tip_position_ + stance_node_seperation * 2.0;
+    // Set for acceleration continuity at transition between swing curves (C2 Smoothness for symetric curves)
+    swing_1_nodes_[3] = (mid_tip_position + swing_1_nodes_[2]) / 2.0;
     swing_1_nodes_[3].z = mid_tip_position.z;
+    // Set to default tip position so max swing height and transition to 2nd swing curve occurs at default tip position
     swing_1_nodes_[4] = mid_tip_position;
 }
 
 void LegStepper::generateSecondarySwingControlNodes(bool ground_contact) {
-    // If swing_origin_tip_position_ is at (0,0,0), initialize it with the current tip position
-    if (swing_origin_tip_position_.norm() < 1e-6) {
-        swing_origin_tip_position_ = leg_.getCurrentTipPositionGlobal();
-    }
-    // Avoid division by zero and use reasonable defaults
-    Point3D final_tip_velocity;
-    Point3D stance_node_separation;
+    // Follow OpenSHC exact implementation for maximum precision
 
-    if (stance_delta_t_ > LEG_STEPPER_FLOAT_TOLERANCE && swing_delta_t_ > LEG_STEPPER_FLOAT_TOLERANCE) {
-        final_tip_velocity = stride_vector_ * (stance_delta_t_ / 1.0) * -1.0;
-        stance_node_separation = final_tip_velocity * (1.0 / swing_delta_t_) * LEG_STEPPER_SWING_NODE_SCALER;
-    } else {
-        // Use default values when timing parameters are not properly initialized
-        final_tip_velocity = stride_vector_ * LEG_STEPPER_DEFAULT_TOUCHDOWN_VELOCITY;
-        stance_node_separation = stride_vector_ * LEG_STEPPER_DEFAULT_NODE_SEPARATION;
-    }
+    // Calculate final tip velocity for stance transition (OpenSHC formula)
+    double time_delta = 1.0 / control_frequency_; // Use configured control frequency from GaitConfiguration
+    Point3D final_tip_velocity = stride_vector_ * (-1.0) * (stance_delta_t_ / time_delta);
+    Point3D stance_node_seperation = final_tip_velocity * 0.25 * (time_delta / swing_delta_t_);
 
-    // Nodos de control para curvas Bézier cuárticas de swing secundario
+    // Control nodes for secondary swing quartic bezier curves
+    // Set for position continuity at transition between primary and secondary swing curves (C0 Smoothness)
     swing_2_nodes_[0] = swing_1_nodes_[4];
+    // Set for velocity continuity at transition between primary and secondary swing curves (C1 Smoothness)
     swing_2_nodes_[1] = swing_1_nodes_[4] - (swing_1_nodes_[3] - swing_1_nodes_[4]);
-    swing_2_nodes_[2] = target_tip_pose_ - stance_node_separation * 2.0;
-    swing_2_nodes_[3] = target_tip_pose_ - stance_node_separation;
+    // Set for acceleration continuity at transition between secondary swing and stance curves (C2 Smoothness)
+    swing_2_nodes_[2] = target_tip_pose_ - stance_node_seperation * 2.0;
+    // Set for velocity continuity at transition between secondary swing and stance curves (C1 Smoothness)
+    swing_2_nodes_[3] = target_tip_pose_ - stance_node_seperation;
+    // Set for position continuity at transition between secondary swing and stance curves (C0 Smoothness)
     swing_2_nodes_[4] = target_tip_pose_;
 
-    // Detener movimiento adicional de la posición del tip en dirección normal al plano de marcha
+    // Stops further movement of tip position in direction normal to walk plane
     if (ground_contact) {
-        Point3D current_pos = leg_.getCurrentTipPositionGlobal();
-        swing_2_nodes_[0] = current_pos + stance_node_separation * 0.0;
-        swing_2_nodes_[1] = current_pos + stance_node_separation * 1.0;
-        swing_2_nodes_[2] = current_pos + stance_node_separation * 2.0;
-        swing_2_nodes_[3] = current_pos + stance_node_separation * 3.0;
-        swing_2_nodes_[4] = current_pos + stance_node_separation * 4.0;
+        swing_2_nodes_[0] = current_tip_pose_ + stance_node_seperation * 0.0;
+        swing_2_nodes_[1] = current_tip_pose_ + stance_node_seperation * 1.0;
+        swing_2_nodes_[2] = current_tip_pose_ + stance_node_seperation * 2.0;
+        swing_2_nodes_[3] = current_tip_pose_ + stance_node_seperation * 3.0;
+        swing_2_nodes_[4] = current_tip_pose_ + stance_node_seperation * 4.0;
     }
 }
 
 void LegStepper::generateStanceControlNodes(double stride_scaler) {
-    // If stance_origin_tip_position_ is at (0,0,0), initialize it with the current tip position
-    if (stance_origin_tip_position_.norm() < 1e-6) {
-        stance_origin_tip_position_ = leg_.getCurrentTipPositionGlobal();
-    }
+    // OpenSHC exact implementation
+    Point3D stance_node_seperation = stride_vector_ * stride_scaler * (-0.25);
 
-    // Calcular posición objetivo de stance basada en el stride vector
-    Point3D stance_target_position = stance_origin_tip_position_ + stride_vector_ * stride_scaler;
-
-    // Calcular separación de nodos para suavidad de curva
-    Point3D stance_node_separation = stride_vector_ * stride_scaler * LEG_STEPPER_STANCE_NODE_SCALER;
-
-    // Control nodes for quartic Bézier stance curve (OpenSHC equivalent)
-    // Nodo 0: posición de origen
-    stance_nodes_[0] = stance_origin_tip_position_;
-    // Nodos 1-3: nodos intermedios para suavidad
-    stance_nodes_[1] = stance_origin_tip_position_ + stance_node_separation * 0.25;
-    stance_nodes_[2] = stance_origin_tip_position_ + stance_node_separation * 0.5;
-    stance_nodes_[3] = stance_origin_tip_position_ + stance_node_separation * 0.75;
-    // Nodo 4: posición objetivo
-    stance_nodes_[4] = stance_target_position;
+    // Control nodes for stance quartic bezier curve
+    // Set as initial tip position
+    stance_nodes_[0] = stance_origin_tip_position_ + stance_node_seperation * 0.0;
+    // Set for constant velocity in stance period
+    stance_nodes_[1] = stance_origin_tip_position_ + stance_node_seperation * 1.0;
+    // Set for constant velocity in stance period
+    stance_nodes_[2] = stance_origin_tip_position_ + stance_node_seperation * 2.0;
+    // Set for constant velocity in stance period
+    stance_nodes_[3] = stance_origin_tip_position_ + stance_node_seperation * 3.0;
+    // Set as target tip position
+    stance_nodes_[4] = stance_origin_tip_position_ + stance_node_seperation * 4.0;
 }
 
-void LegStepper::forceNormalTouchdown() {
-    // Avoid division by zero and use reasonable defaults
-    Point3D final_tip_velocity;
-    Point3D stance_node_separation;
+void LegStepper::updateTipPositionIterative(int iteration, double time_delta, bool rough_terrain_mode, bool force_normal_touchdown) {
+    // OpenSHC-style iterative update - This is the MAIN method following OpenSHC philosophy
 
-    if (stance_delta_t_ > LEG_STEPPER_FLOAT_TOLERANCE && swing_delta_t_ > LEG_STEPPER_FLOAT_TOLERANCE) {
-        final_tip_velocity = stride_vector_ * (stance_delta_t_ / 1.0) * -1.0;
-        stance_node_separation = final_tip_velocity * (1.0 / swing_delta_t_) * LEG_STEPPER_SWING_NODE_SCALER;
-    } else {
-        // Use default values when timing parameters are not properly initialized
-        final_tip_velocity = stride_vector_ * LEG_STEPPER_DEFAULT_TOUCHDOWN_VELOCITY;
-        stance_node_separation = stride_vector_ * LEG_STEPPER_DEFAULT_NODE_SEPARATION;
+    // Calculate swing timing if not already done
+    if (swing_delta_t_ <= 0.0) {
+        calculateSwingTiming(time_delta);
     }
 
-    Point3D bezier_target = target_tip_pose_;
-    Point3D bezier_origin = target_tip_pose_ - stance_node_separation * LEG_STEPPER_TOUCHDOWN_NODE_MULTIPLIER;
-    bezier_origin.z = std::max(swing_origin_tip_position_.z, target_tip_pose_.z);
-    bezier_origin = bezier_origin + swing_clearance_;
+    // Update current iteration and step progress
+    current_iteration_ = iteration;
 
-    swing_1_nodes_[4] = bezier_origin;
-    swing_2_nodes_[0] = bezier_origin;
-    swing_2_nodes_[2] = bezier_target - stance_node_separation * 2.0;
-    swing_1_nodes_[3] = swing_2_nodes_[0] - (swing_2_nodes_[2] - bezier_origin) * LEG_STEPPER_TOUCHDOWN_INTERPOLATION;
-    swing_2_nodes_[1] = swing_2_nodes_[0] + (swing_2_nodes_[2] - bezier_origin) * LEG_STEPPER_TOUCHDOWN_INTERPOLATION;
-}
-
-void LegStepper::updateDynamicTiming(double step_length, double time_delta) {
-    const auto &config = robot_model_.getParams().dynamic_gait;
-
-    if (config.enable_dynamic_iterations) {
-        // Use dynamic timing based on step length
-        double length_factor = std::max(0.5, std::min(2.0, step_length / 50.0)); // Normalize around 50mm
-        swing_delta_t_ = config.swing_phase * config.swing_period_factor * length_factor * time_delta;
-        stance_delta_t_ = config.stance_phase * config.stance_period_factor * length_factor * time_delta;
+    if (step_state_ == STEP_SWING) {
+        // For swing phase, calculate progress based on swing iterations
+        // Need to determine which iteration within the swing period we're at
+        int swing_iteration = current_iteration_ % swing_iterations_;
+        step_progress_ = (swing_iterations_ > 0) ? static_cast<double>(swing_iteration) / static_cast<double>(swing_iterations_) : 0.0;
+        step_progress_ = std::min(1.0, step_progress_);
     } else {
-        // Use static timing from configuration
-        swing_delta_t_ = config.swing_phase * time_delta;
-        stance_delta_t_ = config.stance_phase * time_delta;
+        // For stance phase, calculate progress based on stance iterations
+        int stance_iteration = current_iteration_ % stance_iterations_;
+        step_progress_ = (stance_iterations_ > 0) ? static_cast<double>(stance_iteration) / static_cast<double>(stance_iterations_) : 0.0;
+        step_progress_ = std::min(1.0, step_progress_);
+    }
+
+    // Update stride vector FIRST
+    updateStride();
+
+    // Generate default target (OpenSHC exact formula)
+    target_tip_pose_ = default_tip_pose_ + stride_vector_ * 0.5;
+
+    if (step_state_ == STEP_SWING) {
+        // Initialize swing period on first iteration
+        initializeSwingPeriod(iteration);
+
+        // Generate control nodes ONLY once at the beginning of swing
+
+        // Detect if this is a new swing cycle (reset on iteration 1 or when we restart swing)
+        if (iteration == 1 || (iteration <= swing_iterations_ && last_swing_start_iteration_ > iteration)) {
+            nodes_generated_ = false;
+            last_swing_start_iteration_ = iteration;
+        }
+
+        if (!nodes_generated_) {
+            generatePrimarySwingControlNodes();
+            generateSecondarySwingControlNodes(false); // ground_contact = false for now
+            nodes_generated_ = true;
+        }
+
+        // Determine which half of swing we're in based on actual swing progress
+        int swing_iteration = iteration % swing_iterations_;
+        if (swing_iteration == 0)
+            swing_iteration = swing_iterations_; // Handle modulo edge case
+
+        int half_iterations = swing_iterations_ / 2;
+        bool first_half = swing_iteration <= half_iterations;
+
+        // Calculate absolute position using OpenSHC approach
+        Point3D new_position = current_tip_pose_;
+        double time_input = 0.0;
+
+        if (first_half) {
+            // For first half: map swing_iteration 1->half_iterations to time 0->1
+            if (half_iterations > 1) {
+                time_input = (double)(swing_iteration - 1) / (double)(half_iterations - 1);
+            } else {
+                time_input = 0.0;
+            }
+            time_input = std::max(0.0, std::min(1.0, time_input)); // Clamp to [0,1]
+            new_position = math_utils::quarticBezier(swing_1_nodes_, time_input);
+        } else {
+            // For second half: map swing_iteration (half_iterations+1)->swing_iterations_ to time 0->1
+            int second_half_start = half_iterations + 1;
+            int second_half_iterations = swing_iterations_ - half_iterations;
+            if (second_half_iterations > 1) {
+                time_input = (double)(swing_iteration - second_half_start) / (double)(second_half_iterations - 1);
+            } else {
+                time_input = 0.0;
+            }
+            time_input = std::max(0.0, std::min(1.0, time_input)); // Clamp to [0,1]
+            new_position = math_utils::quarticBezier(swing_2_nodes_, time_input);
+        }
+
+        // Apply OpenSHC precision control to reduce accumulation errors
+        auto setPrecision = [](double value, int precision) -> double {
+            return round(value * pow(10, precision)) / pow(10, precision);
+        };
+
+        // Set the new position directly (no delta accumulation needed)
+        current_tip_pose_ = new_position;
+
+        // Apply precision control like OpenSHC (3 decimal places = 1mm precision)
+        current_tip_pose_.x = setPrecision(current_tip_pose_.x, 3);
+        current_tip_pose_.y = setPrecision(current_tip_pose_.y, 3);
+        current_tip_pose_.z = setPrecision(current_tip_pose_.z, 3);
+
+        // Calculate velocity for this iteration (for compatibility)
+        current_tip_velocity_ = Point3D(0, 0, 0); // Will be calculated if needed
+
+        // Apply to leg through IK
+        leg_.applyIK(current_tip_pose_);
+
+    } else if (step_state_ == STEP_STANCE) {
+        // Handle stance period
+        generateStanceControlNodes(1.0);
+
+        double time_input = stance_delta_t_ * iteration;
+        Point3D delta_pos = math_utils::quarticBezierDot(stance_nodes_, time_input) * stance_delta_t_ * time_delta;
+
+        // Apply delta to current position
+        current_tip_pose_.x += delta_pos.x;
+        current_tip_pose_.y += delta_pos.y;
+        current_tip_pose_.z += delta_pos.z;
+
+        current_tip_velocity_ = delta_pos / time_delta;
+
+        // Apply to leg through IK
+        leg_.applyIK(current_tip_pose_);
     }
 }

@@ -1,46 +1,3 @@
-/**
- * @file locomotion_system.h
- * @brief Locomotion Control System inspired by OpenSHC
- * @author BlightHunter Team
- * @version 1.0
- * @date 2024
- *
- * REQUIRED INPUT PARAMETERS:
- * ==========================
- *
- * PHYSICAL DIMENSIONS:
- * - HEXAGON_RADIUS: Body hexagon radius (mm) [Typical: 150-200mm]
- * - COXA_LENGTH: Coxa segment length (mm) [Typical: 40-60mm]
- * - FEMUR_LENGTH: Femur segment length (mm) [Typical: 80-120mm]
- * - TIBIA_LENGTH: Tibia segment length (mm) [Typical: 100-150mm]
- *
- * CONFIGURATION ANGLES:
- * - LEG_ANGLE_OFFSET: Angle between legs (60° for hexapod)
- * - COXA_ANGLE_LIMITS: Coxa angle limits [min_angle, max_angle] (degrees)
- * - FEMUR_ANGLE_LIMITS: Femur angle limits [min_angle, max_angle] (degrees)
- * - TIBIA_ANGLE_LIMITS: Tibia angle limits [min_angle, max_angle] (degrees)
- *
- * ROBOT CHARACTERISTICS:
- * - ROBOT_HEIGHT: Nominal robot height (mm) [Typical: 80-150mm]
- * - ROBOT_WEIGHT: Robot weight (kg) [Used for stability calculations]
- * - CENTER_OF_MASS: Center of mass coordinates [x, y, z] (mm)
- *
- * DENAVIT-HARTENBERG PARAMETERS:
- * - DH_PARAMETERS: 6x4 matrix with [a, alpha, d, theta] for each joint
- *
- * SENSOR SETTINGS:
- * - IMU_CALIBRATION_OFFSET: IMU calibration offset [roll, pitch, yaw] (degrees)
- * - FSR_TOUCHDOWN_THRESHOLD: FSR touchdown detection threshold (ADC units)
- * - FSR_LIFTOFF_THRESHOLD: FSR liftoff detection threshold (ADC units)
- * - FSR_MAX_PRESSURE: Maximum detectable FSR pressure (N or kg)
- *
- * CONTROL PARAMETERS:
- * - MAX_VELOCITY: Maximum locomotion speed (mm/s)
- * - MAX_ANGULAR_VELOCITY: Maximum angular velocity (degrees/s)
- * - STABILITY_MARGIN: Minimum stability margin (mm)
- * - CONTROL_FREQUENCY: Control frequency (Hz) [Typical: 50-100Hz]
- */
-
 #ifndef LOCOMOTION_SYSTEM_H
 #define LOCOMOTION_SYSTEM_H
 
@@ -115,7 +72,6 @@ class LocomotionSystem {
     double commanded_linear_velocity_ = 0.0;
     double commanded_angular_velocity_ = 0.0;
 
-    Point3D transformWorldToBody(const Point3D &p_world) const;
     bool setLegJointAngles(int leg_index, const JointAngles &q);
 
   public:
@@ -213,14 +169,6 @@ class LocomotionSystem {
     /** Immediately stop all leg motion. */
     bool stopMovement();
 
-    // Orientation control
-    /** Maintain a desired body orientation. */
-    bool maintainOrientation(const Eigen::Vector3d &target_orientation);
-    /** Level the body if tilt is detected. */
-    bool correctBodyTilt();
-    /** Compute orientation error between desired and current pose. */
-    Eigen::Vector3d calculateOrientationError();
-
     // Stability analysis
     /** Verify that current pose maintains stability margin. */
     bool checkStabilityMargin();
@@ -240,8 +188,6 @@ class LocomotionSystem {
     // Leg state management
     /** Update leg contact states based on FSR sensor readings. */
     void updateLegStates();
-    /** Reproject standing feet positions during body orientation changes. */
-    void reprojectStandingFeet();
 
     // System update
     /** Update all controllers and state machines. */
@@ -270,10 +216,6 @@ class LocomotionSystem {
     // Setters
     /** Replace the current parameter set. */
     bool setParameters(const Parameters &new_params);
-    /** Set the control loop frequency. */
-    bool setControlFrequency(double frequency);
-    /** Configure step height and length (delegated to WalkController). */
-    bool setStepParameters(double height, double length);
 
     // Smooth trajectory configuration (OpenSHC-style movement)
     /** Configure smooth trajectory interpolation from current servo positions. */
@@ -321,7 +263,6 @@ class LocomotionSystem {
     double constrainAngle(double angle, double min_angle, double max_angle);
     bool validateParameters();
     bool checkJointLimits(int leg_index, const JointAngles &angles);
-    double calculateLegReach() const;
 
     // Adaptive control
     void adaptGaitToTerrain();

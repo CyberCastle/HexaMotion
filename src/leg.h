@@ -133,6 +133,13 @@ class Leg {
     bool applyIK(const Point3D &target_position);
 
     /**
+     * @brief Apply OpenSHC-style delta-based IK for real-time control
+     * @param target_position Desired global tip position
+     * @return True if IK succeeds within joint limits
+     */
+    bool applyIKWithDelta(const Point3D &target_position);
+
+    /**
      * @brief Get current DH transform matrix.
      * @return 4x4 DH transform matrix
      */
@@ -313,12 +320,6 @@ class Leg {
     void reset();
 
     // ===== UTILITY FUNCTIONS =====
-
-    /**
-     * @brief Get leg reach distance.
-     * @return Maximum reach distance
-     */
-    double getLegReach() const;
 
     /**
      * @brief Calculate distance from current tip to target.
