@@ -443,47 +443,24 @@ Point3D RobotModel::transformLocalToGlobalCoordinates(int leg, const Point3D &lo
     return global_pose.position;
 }
 
-double RobotModel::setDesiredTipPoseAndApplyIK(int leg, const Point3D &global_desired_pose,
-                                               const JointAngles &current_angles) const {
-    // Get current tip pose in global coordinates
-    Point3D global_current_pose = forwardKinematicsGlobalCoordinates(leg, current_angles);
+// OpenSHC-style delta-based IK: Calculate position delta and apply single-step IK
+JointAngles RobotModel::applyIKWithDelta(int leg, const Point3D &desired_position,
+                                         const JointAngles &current_angles) const {
+    // Calculate current position
+    Point3D current_position = forwardKinematicsGlobalCoordinates(leg, current_angles);
 
-    // Calculate position delta in local coordinates using existing method
-    Point3D local_position_delta = calculatePositionDeltaLocalCoordinates(leg, global_desired_pose,
-                                                                          global_current_pose, current_angles);
+    // OpenSHC approach: Calculate position delta in leg frame
+    Point3D current_pos_leg_frame = transformGlobalToLocalCoordinates(leg, current_position, current_angles);
+    Point3D desired_pos_leg_frame = transformGlobalToLocalCoordinates(leg, desired_position, current_angles);
 
-    // Check if delta is reasonable (OpenSHC validation)
-    if (local_position_delta.norm() > 100.0) { // 100mm sanity check - reasonable max step size
-        return 0.0;                            // Failure
-    }
+    // Position delta (desired - current) in leg frame
+    Eigen::Vector3d position_delta;
+    position_delta << (desired_pos_leg_frame.x - current_pos_leg_frame.x),
+        (desired_pos_leg_frame.y - current_pos_leg_frame.y),
+        (desired_pos_leg_frame.z - current_pos_leg_frame.z);
 
-    // Transform desired pose to local coordinates for IK solving
-    Point3D local_desired_pose = transformGlobalToLocalCoordinates(leg, global_desired_pose, current_angles);
-
-    // Solve IK in local coordinates
-    JointAngles new_angles = solveIK(leg, local_desired_pose, current_angles);
-
-    // Validate solution and check accuracy
-    if (!checkJointLimits(leg, new_angles)) {
-        return 0.0; // Failure
-    }
-
-    // Calculate final tip position to check accuracy
-    Point3D final_global_pose = forwardKinematicsGlobalCoordinates(leg, new_angles);
-    double position_error = math_utils::distance(final_global_pose, global_desired_pose);
-
-    return (position_error <= IK_TOLERANCE) ? 1.0 : 0.0; // Success if error within tolerance
-}
-
-Point3D RobotModel::calculatePositionDeltaLocalCoordinates(int leg, const Point3D &global_desired_pose,
-                                                           const Point3D &global_current_pose,
-                                                           const JointAngles &current_angles) const {
-    // Transform both poses to local coordinates (OpenSHC approach)
-    Point3D local_desired_pose = transformGlobalToLocalCoordinates(leg, global_desired_pose, current_angles);
-    Point3D local_current_pose = transformGlobalToLocalCoordinates(leg, global_current_pose, current_angles);
-
-    // Calculate delta in local coordinates
-    return local_desired_pose - local_current_pose;
+    // Apply single-step IK using delta (OpenSHC style)
+    return solveIKWithDelta(leg, position_delta, current_angles);
 }
 
 JointAngles RobotModel::estimateInitialAngles(int leg, const Point3D &target_position) const {
@@ -533,4 +510,72 @@ JointAngles RobotModel::estimateInitialAngles(int leg, const Point3D &target_pos
     // Method 3: Return the conservative estimate as it's more likely to be stable
     // This approach prioritizes stability over precision, which is better for hexapods
     return conservative_estimate;
+}
+
+Point3D RobotModel::makeReachable(int leg_index, const Point3D &reference_tip_position) const {
+    // OpenSHC-style makeReachable: constrain position to leg workspace
+    Point3D leg_base = getLegBasePosition(leg_index);
+
+    // Calculate vector from leg base to target
+    Point3D target_vector = reference_tip_position - leg_base;
+    double distance_to_target = target_vector.norm();
+
+    // Get maximum reachable distance (conservative estimate)
+    double max_reach = params.femur_length + params.tibia_length;
+    double safety_margin = 0.95; // 95% of max reach for stability
+    double safe_max_reach = max_reach * safety_margin;
+
+    // If target is beyond safe reach, scale it to be within reach
+    if (distance_to_target > safe_max_reach) {
+        // Scale the vector to safe reach distance
+        Point3D safe_direction = target_vector / distance_to_target;
+        Point3D safe_position = leg_base + safe_direction * safe_max_reach;
+
+        // Maintain original Z coordinate if reasonable
+        if (std::abs(reference_tip_position.z - leg_base.z) < max_reach * 0.8) {
+            safe_position.z = reference_tip_position.z;
+        }
+
+        return safe_position;
+    }
+
+    // Target is already reachable
+    return reference_tip_position;
+}
+
+// OpenSHC-style single-step IK solver using position delta
+JointAngles RobotModel::solveIKWithDelta(int leg, const Eigen::Vector3d &position_delta,
+                                         const JointAngles &current_angles) const {
+    // OpenSHC approach: Single-step DLS solution using position delta directly
+    const double dls_coefficient = IK_DLS_COEFFICIENT;
+
+    // Calculate Jacobian at current configuration
+    Eigen::Matrix3d jacobian_pos = calculateJacobian(leg, current_angles, Point3D(0, 0, 0));
+
+    // Damped Least Squares (DLS) solution - OpenSHC style
+    Eigen::Matrix3d JJT = jacobian_pos * jacobian_pos.transpose();
+    Eigen::Matrix3d identity = Eigen::Matrix3d::Identity();
+    Eigen::Matrix3d damped_inv = (JJT + dls_coefficient * dls_coefficient * identity).inverse();
+    Eigen::Matrix3d jacobian_inverse = jacobian_pos.transpose() * damped_inv;
+
+    // Calculate joint angle changes using position delta (OpenSHC approach)
+    Eigen::Vector3d angle_delta = jacobian_inverse * position_delta;
+
+    // Apply joint angle changes to current configuration
+    JointAngles new_angles = current_angles;
+    new_angles.coxa += angle_delta(0);
+    new_angles.femur += angle_delta(1);
+    new_angles.tibia += angle_delta(2);
+
+    // Normalize angles to [-PI, PI]
+    new_angles.coxa = normalizeAngle(new_angles.coxa);
+    new_angles.femur = normalizeAngle(new_angles.femur);
+    new_angles.tibia = normalizeAngle(new_angles.tibia);
+
+    // Apply joint limits (OpenSHC style clamping)
+    if (params.ik.clamp_joints) {
+        clampJointAngles(new_angles);
+    }
+
+    return new_angles;
 }

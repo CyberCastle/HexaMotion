@@ -666,6 +666,37 @@ class RobotModel {
                                                    const Point3D &global_current_pose,
                                                    const JointAngles &current_angles) const;
 
+    /**
+     * @brief Make a position reachable by constraining it to leg workspace (OpenSHC-style)
+     * This function follows OpenSHC's approach to automatically adjust positions that are
+     * outside the leg's workspace to be within reachable bounds.
+     *
+     * @param leg_index Index of the leg (0-5)
+     * @param reference_tip_position Target position that may be outside workspace
+     * @return Adjusted position that is guaranteed to be within leg workspace
+     */
+    Point3D makeReachable(int leg_index, const Point3D &reference_tip_position) const;
+
+    /**
+     * @brief OpenSHC-style delta-based IK: Calculate position delta and apply single-step IK
+     * @param leg Leg index
+     * @param desired_position Desired global tip position
+     * @param current_angles Current joint angles
+     * @return Updated joint angles after delta-based IK
+     */
+    JointAngles applyIKWithDelta(int leg, const Point3D &desired_position,
+                                 const JointAngles &current_angles) const;
+
+    /**
+     * @brief OpenSHC-style single-step IK solver using position delta
+     * @param leg Leg index
+     * @param position_delta Position delta in leg frame (desired - current)
+     * @param current_angles Current joint angles
+     * @return Updated joint angles
+     */
+    JointAngles solveIKWithDelta(int leg, const Eigen::Vector3d &position_delta,
+                                 const JointAngles &current_angles) const;
+
     std::vector<Eigen::Matrix4d> buildDHTransforms(int leg, const JointAngles &q) const;
 
   private:

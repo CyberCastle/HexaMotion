@@ -86,9 +86,35 @@ bool Leg::setCurrentTipPositionGlobal(const Point3D &position) {
  * @return True if IK succeeds within joint limits
  */
 bool Leg::applyIK(const Point3D &target_position) {
-    // Compute new joint angles via IK
+    // OpenSHC approach: Make target reachable before applying IK
+    Point3D reachable_target = model_.makeReachable(leg_id_, target_position);
+
+    // Compute new joint angles via IK using the reachable target
     JointAngles new_angles = model_.inverseKinematicsCurrentGlobalCoordinates(
-        leg_id_, joint_angles_, target_position);
+        leg_id_, joint_angles_, reachable_target);
+
+    // Validate limits before updating member variables
+    if (!model_.checkJointLimits(leg_id_, new_angles)) {
+        return false;
+    }
+
+    // Update joint angles and tip position
+    joint_angles_ = new_angles;
+    updateTipPosition();
+    return true;
+}
+
+/**
+ * @brief Apply OpenSHC-style delta-based IK for real-time control
+ * @param target_position Desired global tip position
+ * @return True if IK succeeds within joint limits
+ */
+bool Leg::applyIKWithDelta(const Point3D &target_position) {
+    // OpenSHC approach: Make target reachable before applying IK
+    Point3D reachable_target = model_.makeReachable(leg_id_, target_position);
+
+    // Use OpenSHC-style delta-based IK for real-time control
+    JointAngles new_angles = model_.applyIKWithDelta(leg_id_, reachable_target, joint_angles_);
 
     // Validate limits before updating member variables
     if (!model_.checkJointLimits(leg_id_, new_angles)) {
