@@ -85,6 +85,16 @@ class LegStepper {
     void setSwingClearance(const Point3D &clearance) { swing_clearance_ = clearance; }
     void setStepCycleTime(double step_cycle_time) { step_cycle_time_ = step_cycle_time; }
     double getStepCycleTime() const { return step_cycle_time_; }
+    void setStanceRatio(double stance_ratio) { stance_ratio_ = stance_ratio; }
+    double getStanceRatio() const { return stance_ratio_; }
+    void setSwingRatio(double swing_ratio) { swing_ratio_ = swing_ratio; }
+    double getSwingRatio() const { return swing_ratio_; }
+    void setStepFrequency(double step_frequency) { step_frequency_ = step_frequency; }
+    double getStepFrequency() const { return step_frequency_; }
+    void setSwingWidth(double swing_width) { swing_width_ = swing_width; }
+    double getSwingWidth() const { return swing_width_; }
+    void setControlFrequency(double control_frequency) { control_frequency_ = control_frequency; }
+    double getControlFrequency() const { return control_frequency_; }
 
     // OpenSHC-specific workflow methods
     void initializeSwingPeriod(int iteration);
@@ -134,6 +144,11 @@ class LegStepper {
     int stance_iterations_;
     int current_iteration_;
     double step_cycle_time_; // Complete step cycle time in seconds (from gait configuration)
+    double stance_ratio_;    // Stance ratio from gait configuration (OpenSHC exact)
+    double swing_ratio_;     // Swing ratio from gait configuration (OpenSHC exact)
+    double step_frequency_;  // Step frequency from gait configuration (OpenSHC exact)
+    double swing_width_;     // Lateral shift at mid-swing (OpenSHC mid_lateral_shift)
+    double control_frequency_; // Control loop frequency (defines time_delta)
 
     // Swing state management (OpenSHC style)
     bool swing_initialized_;

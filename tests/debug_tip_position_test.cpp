@@ -393,6 +393,18 @@ int main() {
     stepper.setStepCycleTime(tripod_config.step_cycle_time);
     std::cout << "Step cycle time configurado desde tripod gait: " << tripod_config.step_cycle_time << " seconds" << std::endl;
 
+    // *** ALL GAIT PARAMETERS NOW CONFIGURED VIA WalkController::applyGaitConfigToLegSteppers() ***
+    // The WalkController automatically applies all GaitConfiguration parameters including:
+    // - stance_ratio, swing_ratio, step_frequency from tripod_config
+    // This ensures OpenSHC exact alignment without manual configuration
+    stepper.setStanceRatio(tripod_config.stance_ratio);
+    stepper.setSwingRatio(tripod_config.swing_ratio);
+    stepper.setStepFrequency(tripod_config.step_frequency);
+    std::cout << "Gait parameters configured from GaitConfiguration (OpenSHC exact):" << std::endl;
+    std::cout << "  Stance ratio: " << tripod_config.stance_ratio << std::endl;
+    std::cout << "  Swing ratio: " << tripod_config.swing_ratio << std::endl;
+    std::cout << "  Step frequency: " << tripod_config.step_frequency << " Hz" << std::endl;
+
     // Configure velocity to generate proper stride using tripod gait step length
     // Use a more realistic velocity for hexapod locomotion (20-30 mm/s typical)
     // Instead of full step_length * frequency which would be too fast

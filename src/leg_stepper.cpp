@@ -34,6 +34,11 @@ LegStepper::LegStepper(int leg_index, const Point3D &identity_tip_pose, Leg &leg
     stance_iterations_ = 0;
     current_iteration_ = 0;
     step_cycle_time_ = 1.0; // Default 1 second cycle time
+    stance_ratio_ = 0.75;   // Default stance ratio (will be overridden by gait configuration)
+    swing_ratio_ = 0.25;    // Default swing ratio (will be overridden by gait configuration)
+    step_frequency_ = 1.0;  // Default step frequency (will be overridden by gait configuration)
+    swing_width_ = 5.0;     // Default swing width (will be overridden by gait configuration)
+    control_frequency_ = 50.0; // Default control frequency (will be overridden by gait configuration)
 
     // Initialize swing state management
     swing_initialized_ = false;
@@ -75,11 +80,12 @@ void LegStepper::updateStride() {
     // The target_tip_pose calculation uses stride_vector * 0.5 to position the pata at the
     // appropriate landing point to compensate for robot movement during stance
 
-    // For a typical gait, stance_duration / total_cycle_duration ≈ 0.75 (75% stance, 25% swing)
-    double stance_ratio = 0.75; // Typical hexapod gait ratio
-    double stance_duration = step_cycle_time_ * stance_ratio;
+    // Use actual stance_ratio from gait configuration (OpenSHC exact)
+    // This replaces the hardcoded 0.75 to match the specific gait being used
+    double stance_duration = step_cycle_time_ * stance_ratio_;
 
     // stride_vector is the displacement the robot will move during stance
+    // OpenSHC formula: stride_vector = linear_velocity × (stance_ratio / step_frequency)
     stride_vector_ = desired_linear_velocity_ * stance_duration;
 
     // Z movement is handled by swing clearance, not stride
@@ -94,13 +100,13 @@ void LegStepper::updateStride() {
 }
 
 void LegStepper::calculateSwingTiming(double time_delta) {
-    // OpenSHC-compatible timing calculation using proper gait configuration
-    // Note: This method should be called with gait parameters, but for now we use defaults
-    // In full implementation, these should come from GaitConfiguration
+    // OpenSHC-compatible timing calculation using actual gait configuration values
+    // These values should now come from the GaitConfiguration that was set via setters
 
-    double step_frequency = 1.0; // Hz - OpenSHC default (should come from gait configuration)
-    double swing_ratio = 0.5;    // Default 50% swing time (should come from gait configuration)
-    double stance_ratio = 0.5;   // Default 50% stance time (should come from gait configuration)
+    // Use actual values from gait configuration (set via setters)
+    double step_frequency = step_frequency_; // Real step frequency from GaitConfiguration
+    double swing_ratio = swing_ratio_;       // Real swing ratio from GaitConfiguration
+    double stance_ratio = stance_ratio_;     // Real stance ratio from GaitConfiguration
 
     // OpenSHC formula: swing_iterations = int((swing_period/period) / (frequency * time_delta))
     // where swing_period = swing_ratio * period, and period = 1.0 (normalized)
@@ -149,12 +155,12 @@ void LegStepper::generatePrimarySwingControlNodes() {
     mid_tip_position.z = std::max(swing_origin_tip_position_.z, target_tip_pose_.z);
     mid_tip_position = mid_tip_position + swing_clearance_;
 
-    double mid_lateral_shift = 5.0; // swing_width parameter equivalent
+    double mid_lateral_shift = swing_width_; // Use configured swing width from GaitConfiguration
     bool positive_y_axis = (identity_tip_pose_.y > 0.0);
     mid_tip_position.y += positive_y_axis ? mid_lateral_shift : -mid_lateral_shift;
 
     // OpenSHC exact formula: walker_->getTimeDelta() / swing_delta_t_
-    double time_delta = 0.02; // 50Hz control loop like OpenSHC
+    double time_delta = 1.0 / control_frequency_; // Use configured control frequency from GaitConfiguration
     Point3D stance_node_seperation = swing_origin_tip_velocity_ * 0.25 * (time_delta / swing_delta_t_);
 
     // Control nodes for primary swing quartic bezier curves
@@ -175,7 +181,7 @@ void LegStepper::generateSecondarySwingControlNodes(bool ground_contact) {
     // Follow OpenSHC exact implementation for maximum precision
 
     // Calculate final tip velocity for stance transition (OpenSHC formula)
-    double time_delta = 0.02; // OpenSHC standard: 50Hz control loop
+    double time_delta = 1.0 / control_frequency_; // Use configured control frequency from GaitConfiguration
     Point3D final_tip_velocity = stride_vector_ * (-1.0) * (stance_delta_t_ / time_delta);
     Point3D stance_node_seperation = final_tip_velocity * 0.25 * (time_delta / swing_delta_t_);
 

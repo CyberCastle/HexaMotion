@@ -107,6 +107,16 @@ void WalkController::applyGaitConfigToLegSteppers(const GaitConfiguration &gait_
         if (!leg_stepper)
             continue;
 
+        // Timing parameters from gait configuration
+        leg_stepper->setStepCycleTime(gait_config.step_cycle_time);
+        leg_stepper->setStanceRatio(gait_config.stance_ratio);
+        leg_stepper->setSwingRatio(gait_config.swing_ratio);
+        leg_stepper->setStepFrequency(gait_config.step_frequency);
+        
+        // OpenSHC trajectory parameters from gait configuration
+        leg_stepper->setSwingWidth(gait_config.swing_width);
+        leg_stepper->setControlFrequency(gait_config.control_frequency);
+
         // Offset de fase normalizado [0,1]
         double phase_offset = static_cast<double>(gait_config.offsets.getForLegIndex(i) * gait_config.phase_config.phase_offset) /
                               static_cast<double>(gait_config.step_cycle.period_);
