@@ -394,12 +394,13 @@ int main() {
     std::cout << "Step cycle time configurado desde tripod gait: " << tripod_config.step_cycle_time << " seconds" << std::endl;
 
     // Configure velocity to generate proper stride using tripod gait step length
-    // Calculate velocity from step_length and step_frequency for FULL stride (not 10%)
-    double desired_velocity = tripod_config.step_length * tripod_config.step_frequency; // 100% for full stride
+    // Use a more realistic velocity for hexapod locomotion (20-30 mm/s typical)
+    // Instead of full step_length * frequency which would be too fast
+    double desired_velocity = 5.0; // mm/s - realistic hexapod forward velocity
     stepper.setDesiredVelocity(Point3D(desired_velocity, 0, 0), 0.0);
     stepper.updateStride(); // This will calculate stride_vector_ automatically using step_cycle_time
     Point3D calculated_stride = stepper.getStrideVector();
-    std::cout << "Velocidad configurada: " << desired_velocity << " mm/s (para stride completo)" << std::endl;
+    std::cout << "Velocidad configurada: " << desired_velocity << " mm/s (velocidad realista para hexápodo)" << std::endl;
     std::cout << "Stride vector calculado: (" << calculated_stride.x << ", " << calculated_stride.y << ", " << calculated_stride.z << ")" << std::endl;
 
     // Configure timing parameters from tripod gait

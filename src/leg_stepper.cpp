@@ -67,22 +67,21 @@ void LegStepper::setDesiredVelocity(const Point3D &linear_velocity, double angul
 }
 
 void LegStepper::updateStride() {
-    // Calculate stride vector from velocity (OpenSHC approach)
+    // Calculate stride vector from velocity (OpenSHC exact approach)
     double control_frequency = robot_model_.getParams().control_frequency;
     double time_delta = 1.0 / control_frequency;
 
-    // OpenSHC approach: Stride should be proportional to velocity and complete step cycle time
-    // In OpenSHC, stride_vector represents the TOTAL displacement during one complete step cycle
-    // However, the target calculation uses stride_vector * 0.5, so we need to account for this
-    // Use the step cycle time from gait configuration
-    double step_cycle_time = step_cycle_time_; // From gait configuration
+    // OpenSHC stride_vector represents the displacement the robot moves during a STANCE phase
+    // The target_tip_pose calculation uses stride_vector * 0.5 to position the pata at the
+    // appropriate landing point to compensate for robot movement during stance
 
-    // Calculate the desired displacement during swing phase
-    Point3D desired_swing_displacement = desired_linear_velocity_ * step_cycle_time;
+    // For a typical gait, stance_duration / total_cycle_duration ≈ 0.75 (75% stance, 25% swing)
+    double stance_ratio = 0.75; // Typical hexapod gait ratio
+    double stance_duration = step_cycle_time_ * stance_ratio;
 
-    // Since OpenSHC target calculation uses stride_vector * 0.5, we need to double it
-    // to get the actual swing displacement we want
-    stride_vector_ = desired_swing_displacement * 2.0; // IMPORTANT: Stride should only affect X,Y movement, not Z
+    // stride_vector is the displacement the robot will move during stance
+    stride_vector_ = desired_linear_velocity_ * stance_duration;
+
     // Z movement is handled by swing clearance, not stride
     stride_vector_.z = 0.0;
 
