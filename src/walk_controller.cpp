@@ -101,26 +101,26 @@ bool WalkController::setGaitByName(const std::string &gait_name) {
 }
 
 void WalkController::applyGaitConfigToLegSteppers(const GaitConfiguration &gait_config) {
-    // Aplicar todos los parámetros relevantes de GaitConfiguration a cada LegStepper
+    // Generate StepCycle for this gait once
+    StepCycle step_cycle = gait_config.generateStepCycle();
+
+    // Apply StepCycle and gait configuration to each LegStepper
     for (int i = 0; i < NUM_LEGS && i < leg_steppers_.size(); i++) {
         auto leg_stepper = leg_steppers_[i];
         if (!leg_stepper)
             continue;
 
-        // Timing parameters from gait configuration
-        leg_stepper->setStepCycleTime(gait_config.step_cycle_time);
-        leg_stepper->setStanceRatio(gait_config.stance_ratio);
-        leg_stepper->setSwingRatio(gait_config.swing_ratio);
-        leg_stepper->setStepFrequency(gait_config.step_frequency);
-        leg_stepper->setStepClearanceHeight(gait_config.swing_height);
+        // Set StepCycle (OpenSHC style - single call instead of multiple parameters)
+        leg_stepper->setStepCycle(step_cycle);
 
-        // OpenSHC trajectory parameters from gait configuration
+        // Set gait-specific parameters (not part of StepCycle)
         leg_stepper->setSwingWidth(gait_config.swing_width);
         leg_stepper->setControlFrequency(gait_config.control_frequency);
+        leg_stepper->setStepClearanceHeight(gait_config.swing_height);
 
-        // Offset de fase normalizado [0,1]
+        // Calculate phase offset using StepCycle period
         double phase_offset = static_cast<double>(gait_config.offsets.getForLegIndex(i) * gait_config.phase_config.phase_offset) /
-                              static_cast<double>(gait_config.step_cycle.period_);
+                              static_cast<double>(step_cycle.period_);
         leg_stepper->setPhaseOffset(phase_offset);
 
         // OpenSHC: Configurar velocidad deseada para el cálculo de stride
@@ -208,20 +208,13 @@ bool WalkController::validateVelocityCommand(double vx, double vy, double omega)
 }
 
 void WalkController::updateVelocityLimits(double frequency, double stance_ratio, double time_to_max_stride) {
-    // Update the current gait configuration directly
-    current_gait_config_.step_frequency = frequency;
-    current_gait_config_.stance_ratio = stance_ratio;
-    current_gait_config_.swing_ratio = 1.0 - stance_ratio; // Complement
+    // Update time_to_max_stride if provided
     current_gait_config_.time_to_max_stride = time_to_max_stride;
 
-    // Update phase configuration to maintain consistency
-    double total_ratio = current_gait_config_.stance_ratio + current_gait_config_.swing_ratio;
-    if (total_ratio > 0) {
-        int total_phase = current_gait_config_.step_cycle.period_;
-        current_gait_config_.phase_config.stance_phase = (int)(stance_ratio * total_phase / total_ratio);
-        current_gait_config_.phase_config.swing_phase = total_phase - current_gait_config_.phase_config.stance_phase;
-    }
+    // Note: step_frequency, stance_ratio, and swing_ratio are now calculated from phase_config
+    // If dynamic frequency updates are needed, they should modify phase_config and regenerate StepCycle
 
+    // For now, we don't dynamically update phase ratios as they are intrinsic to each gait type
     // Use unified interface
     velocity_limits_.updateGaitParameters(current_gait_config_);
 }
@@ -409,7 +402,8 @@ void WalkController::updateWalk(const Point3D &linear_velocity_input, double ang
 
     // Increment global phase counter (OpenSHC equivalent)
     if (walk_state_ == WALK_MOVING || walk_state_ == WALK_STARTING) {
-        global_phase_ = (global_phase_ + 1) % current_gait_config_.step_cycle.period_;
+        StepCycle step_cycle = current_gait_config_.generateStepCycle();
+        global_phase_ = (global_phase_ + 1) % step_cycle.period_;
     }
 
     // Calculate gait coordination data for each leg (NO POSITION UPDATES)
@@ -424,11 +418,12 @@ void WalkController::updateWalk(const Point3D &linear_velocity_input, double ang
 
         // OpenSHC: Determinar estado de la pierna basado en offset de fase
         double offset = leg_stepper->getPhaseOffset(); // This is normalized [0,1]
-        int leg_phase = (global_phase_ + static_cast<int>(offset * current_gait_config_.step_cycle.period_)) %
-                        current_gait_config_.step_cycle.period_;
+        StepCycle step_cycle = current_gait_config_.generateStepCycle();
+        int leg_phase = (global_phase_ + static_cast<int>(offset * step_cycle.period_)) %
+                        step_cycle.period_;
 
         // OpenSHC: Determinar si está en swing o stance usando la configuración real
-        int stance_period = current_gait_config_.step_cycle.stance_period_;
+        int stance_period = step_cycle.stance_period_;
         bool in_swing = (leg_phase >= stance_period);
 
         // Actualizar el estado en LegStepper

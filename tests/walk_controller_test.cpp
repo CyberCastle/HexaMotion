@@ -975,16 +975,16 @@ void testGaitConfigurationValidation(const Parameters &p, BodyPoseController &po
     GaitConfiguration gait_config = createTripodGaitConfig(p);
     std::cout << "  GaitConfiguration created with parameters:" << std::endl;
     std::cout << "    Gait name: " << gait_config.gait_name << std::endl;
-    std::cout << "    Step frequency: " << gait_config.step_frequency << " Hz" << std::endl;
+    std::cout << "    Step frequency: " << gait_config.getStepFrequency() << " Hz" << std::endl;
     std::cout << "    Step length: " << gait_config.step_length << " mm" << std::endl;
     std::cout << "    Swing height: " << gait_config.swing_height << " mm" << std::endl;
     std::cout << "    Body clearance: " << gait_config.body_clearance << " mm" << std::endl;
     std::cout << "    Stability factor: " << gait_config.stability_factor << std::endl;
-    std::cout << "    Stance ratio: " << gait_config.stance_ratio << std::endl;
-    std::cout << "    Swing ratio: " << gait_config.swing_ratio << std::endl;
+    std::cout << "    Stance ratio: " << gait_config.getStanceRatio() << std::endl;
+    std::cout << "    Swing ratio: " << gait_config.getSwingRatio() << std::endl;
 
     // Validate gait configuration parameters
-    assert(gait_config.step_frequency > 0.0);
+    assert(gait_config.getStepFrequency() > 0.0);
     assert(gait_config.step_length > 0.0);
     assert(gait_config.swing_height > 0.0);
     assert(gait_config.body_clearance > 0.0);

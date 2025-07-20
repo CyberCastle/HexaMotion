@@ -74,11 +74,8 @@ struct GaitConfiguration {
     std::string gait_name;        //< Name of the gait (e.g., "tripod_gait", "wave_gait")
     GaitPhaseConfig phase_config; //< Phase timing configuration
     LegOffsetMultipliers offsets; //< Leg offset multipliers
-    StepCycle step_cycle;         //< StepCycle calculado y listo para usar
 
     // Gait-specific parameters
-    double step_frequency;             //< Step frequency in Hz (calculated from phase config)
-    double step_cycle_time;            //< Complete step cycle time in seconds (1.0 / step_frequency)
     double step_length;                //< Default step length in mm
     double swing_height;               //< Swing trajectory height in mm
     double body_clearance;             //< Body clearance above ground in mm
@@ -92,15 +89,28 @@ struct GaitConfiguration {
     double max_velocity;         //< Maximum walking velocity in mm/s
     double stability_factor;     //< Stability factor (0.0-1.0, higher = more stable)
     bool supports_rough_terrain; //< Whether gait supports rough terrain adaptation
-
-    // Velocity limits parameters (unified configuration)
-    double stance_ratio;       //< Ratio of stance phase (0.0 - 1.0)
-    double swing_ratio;        //< Ratio of swing phase (0.0 - 1.0)
-    double time_to_max_stride; //< Time to reach maximum stride (s)
+    double time_to_max_stride;   //< Time to reach maximum stride (s)
 
     // Gait description
     std::string description;             //< Human-readable description of the gait
     std::vector<std::string> step_order; //< Order of leg movements in the gait
+
+    // Methods to generate StepCycle for this gait
+    StepCycle generateStepCycle(double step_frequency = 1.0) const {
+        StepCycle step_cycle;
+        int total_phase = phase_config.stance_phase + phase_config.swing_phase;
+
+        step_cycle.frequency_ = step_frequency;
+        step_cycle.period_ = total_phase;
+        step_cycle.stance_period_ = phase_config.stance_phase;
+        step_cycle.swing_period_ = phase_config.swing_phase;
+        step_cycle.stance_start_ = 0;
+        step_cycle.stance_end_ = phase_config.stance_phase;
+        step_cycle.swing_start_ = phase_config.stance_phase;
+        step_cycle.swing_end_ = total_phase;
+
+        return step_cycle;
+    }
 
     // Helper methods for velocity limits compatibility
     double getStanceRatio() const {
@@ -111,6 +121,14 @@ struct GaitConfiguration {
     double getSwingRatio() const {
         return (double)phase_config.swing_phase /
                (phase_config.stance_phase + phase_config.swing_phase);
+    }
+
+    double getStepFrequency() const {
+        return 1.0; // Default OpenSHC step frequency
+    }
+
+    double getStepCycleTime() const {
+        return 1.0 / getStepFrequency();
     }
 };
 

@@ -33,10 +33,18 @@ LegStepper::LegStepper(int leg_index, const Point3D &identity_tip_pose, Leg &leg
     swing_iterations_ = 0;
     stance_iterations_ = 0;
     current_iteration_ = 0;
-    step_cycle_time_ = 1.0;        // Default 1 second cycle time
-    stance_ratio_ = 0.75;          // Default stance ratio (will be overridden by gait configuration)
-    swing_ratio_ = 0.25;           // Default swing ratio (will be overridden by gait configuration)
-    step_frequency_ = 1.0;         // Default step frequency (will be overridden by gait configuration)
+
+    // Initialize StepCycle with default values (will be overridden by gait configuration)
+    step_cycle_.frequency_ = 1.0;
+    step_cycle_.period_ = 4;
+    step_cycle_.stance_period_ = 3;
+    step_cycle_.swing_period_ = 1;
+    step_cycle_.stance_start_ = 0;
+    step_cycle_.stance_end_ = 3;
+    step_cycle_.swing_start_ = 3;
+    step_cycle_.swing_end_ = 4;
+
+    // Initialize gait configuration parameters (not part of StepCycle)
     swing_width_ = 5.0;            // Default swing width (will be overridden by gait configuration)
     control_frequency_ = 50.0;     // Default control frequency (will be overridden by gait configuration)
     step_clearance_height_ = 20.0; // Default step clearance height in mm (will be overridden by gait configuration)
@@ -98,29 +106,22 @@ void LegStepper::updateStride() {
     // Combination and scaling (OpenSHC exact)
     stride_vector_ = stride_vector_linear + stride_vector_angular;
 
-    // OpenSHC scaling: stride_vector_ *= (on_ground_ratio / step.frequency_);
-    // StepCycle step = walker_->getStepCycle();
-    // double on_ground_ratio = double(step.stance_period_) / step.period_;
-    // stride_vector_ *= (on_ground_ratio / step.frequency_);
-
-    // Use our configuration values (equivalent calculation)
-    double on_ground_ratio = stance_ratio_; // stance_ratio_ = stance_period / total_period
-    stride_vector_ = stride_vector_ * (on_ground_ratio / step_frequency_);
+    // Use StepCycle configuration values (OpenSHC equivalent calculation)
+    double on_ground_ratio = double(step_cycle_.stance_period_) / double(step_cycle_.period_);
+    stride_vector_ = stride_vector_ * (on_ground_ratio / step_cycle_.frequency_);
 
     // Swing clearance (OpenSHC exact)
-    // swing_clearance_ = walker_->getStepClearance() * walk_plane_normal_.normalized();
-    // Note: step_clearance_height_ should be set from parameters (equivalent to walker_->getStepClearance())
     swing_clearance_ = walk_plane_normal_.normalized() * step_clearance_height_;
 }
 
 void LegStepper::calculateSwingTiming(double time_delta) {
-    // OpenSHC-compatible timing calculation using actual gait configuration values
-    // These values should now come from the GaitConfiguration that was set via setters
+    // OpenSHC-compatible timing calculation using StepCycle values
+    // These values come from the StepCycle that was set via setStepCycle()
 
-    // Use actual values from gait configuration (set via setters)
-    double step_frequency = step_frequency_; // Real step frequency from GaitConfiguration
-    double swing_ratio = swing_ratio_;       // Real swing ratio from GaitConfiguration
-    double stance_ratio = stance_ratio_;     // Real stance ratio from GaitConfiguration
+    // Use actual values from StepCycle (OpenSHC exact)
+    double step_frequency = step_cycle_.frequency_; // Real step frequency from StepCycle
+    double swing_ratio = double(step_cycle_.swing_period_) / double(step_cycle_.period_);
+    double stance_ratio = double(step_cycle_.stance_period_) / double(step_cycle_.period_);
 
     // OpenSHC formula: swing_iterations = int((swing_period/period) / (frequency * time_delta))
     // where swing_period = swing_ratio * period, and period = 1.0 (normalized)
