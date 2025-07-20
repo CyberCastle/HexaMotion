@@ -396,6 +396,12 @@ Pose RobotModel::getPoseLegFrame(int leg_index, const JointAngles &joint_angles,
     return robot_frame_pose.transform(transform.inverse());
 }
 
+double RobotModel::getLegReach() const {
+    // Maximum reach is femur + tibia lengths (coxa only provides lateral offset)
+    // The coxa rotates around Z-axis and doesn't extend the radial reach
+    return params.femur_length + params.tibia_length;
+}
+
 JointAngles RobotModel::calculateTargetFromCurrentPosition(int leg, const JointAngles &current_angles,
                                                            const Pose &current_pose, const Point3D &target_in_current_frame) const {
     // OpenSHC logic: transform target from current pose frame to robot frame

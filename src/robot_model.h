@@ -554,6 +554,12 @@ class RobotModel {
      */
     Pose getPoseLegFrame(int leg_index, const JointAngles &joint_angles, const Pose &robot_frame_pose = Pose::Identity()) const;
 
+    /**
+     * @brief Get leg reach distance.
+     * @return Maximum reach distance
+     */
+    double getLegReach() const;
+
     /** Get the DH position of the leg base (without joint transformations) */
     Point3D getLegBasePosition(int leg_index) const;
 
@@ -602,18 +608,6 @@ class RobotModel {
                                         const JointAngles &current_angles) const;
 
     /**
-     * @brief Apply inverse kinematics using local leg coordinates with success indicator (OpenSHC-style)
-     * This method follows OpenSHC's applyIK approach and returns success/failure status.
-     *
-     * @param leg Leg index (0-5)
-     * @param global_target Target position in global robot coordinates
-     * @param current_angles Current joint angles for initial guess
-     * @return Success indicator (1.0 for success, 0.0 for failure)
-     */
-    double applyIKLocalCoordinates(int leg, const Point3D &global_target,
-                                   const JointAngles &current_angles) const;
-
-    /**
      * @brief Transform global position to local leg coordinates (OpenSHC-style)
      * This method transforms a position from global robot coordinates to local leg coordinates,
      * following OpenSHC's getPoseJointFrame approach.
@@ -638,33 +632,6 @@ class RobotModel {
      */
     Point3D transformLocalToGlobalCoordinates(int leg, const Point3D &local_position,
                                               const JointAngles &current_angles) const;
-
-    /**
-     * @brief Set desired tip pose in global coordinates and apply IK (OpenSHC-style)
-     * This method follows OpenSHC's setDesiredTipPose and applyIK pattern.
-     *
-     * @param leg Leg index (0-5)
-     * @param global_desired_pose Desired tip pose in global robot coordinates
-     * @param current_angles Current joint angles for initial guess
-     * @return Success indicator (1.0 for success, 0.0 for failure)
-     */
-    double setDesiredTipPoseAndApplyIK(int leg, const Point3D &global_desired_pose,
-                                       const JointAngles &current_angles) const;
-
-    /**
-     * @brief Calculate position delta in local leg coordinates (OpenSHC-style)
-     * This method calculates the position difference between desired and current poses
-     * in local leg coordinates, following OpenSHC's applyIK approach.
-     *
-     * @param leg Leg index (0-5)
-     * @param global_desired_pose Desired tip pose in global coordinates
-     * @param global_current_pose Current tip pose in global coordinates
-     * @param current_angles Current joint angles for transformation
-     * @return Position delta in local leg coordinates
-     */
-    Point3D calculatePositionDeltaLocalCoordinates(int leg, const Point3D &global_desired_pose,
-                                                   const Point3D &global_current_pose,
-                                                   const JointAngles &current_angles) const;
 
     /**
      * @brief Make a position reachable by constraining it to leg workspace (OpenSHC-style)

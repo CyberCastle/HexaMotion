@@ -322,12 +322,6 @@ class Leg {
     // ===== UTILITY FUNCTIONS =====
 
     /**
-     * @brief Get leg reach distance.
-     * @return Maximum reach distance
-     */
-    double getLegReach() const;
-
-    /**
      * @brief Calculate distance from current tip to target.
      * @param target Target position
      * @return Distance in mm

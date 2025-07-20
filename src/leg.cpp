@@ -67,7 +67,7 @@ bool Leg::setCurrentTipPositionGlobal(const Point3D &position) {
     double dz = target.z - leg_base.z;
     double distance = sqrt(dx * dx + dy * dy + dz * dz);
 
-    double max_reach = getLegReach();
+    double max_reach = model_.getLegReach();
 
     if (distance > max_reach) {
         // TODO: OpenSHC approach: could adjust position to be within reach
@@ -142,7 +142,7 @@ bool Leg::isTargetReachable(const Point3D &target) const {
     double distance = sqrt(pow(target.x - base_pos.x, 2) +
                            pow(target.y - base_pos.y, 2) +
                            pow(target.z - base_pos.z, 2));
-    double max_reach = getLegReach();
+    double max_reach = model_.getLegReach();
 
     // Simple distance check - OpenSHC style
     return distance <= max_reach;
@@ -151,7 +151,7 @@ bool Leg::isTargetReachable(const Point3D &target) const {
 Point3D Leg::constrainToWorkspace(const Point3D &target) const {
     // Simple workspace constraint - scale target to max reach if outside
     double distance = sqrt(target.x * target.x + target.y * target.y + target.z * target.z);
-    double max_reach = getLegReach();
+    double max_reach = model_.getLegReach();
 
     if (distance > max_reach) {
         double scale = max_reach / distance;
@@ -221,13 +221,6 @@ void Leg::reset() {
 
     // Update FK
     updateTipPosition();
-}
-
-double Leg::getLegReach() const {
-    const Parameters &params = model_.getParams();
-    // Maximum reach is femur + tibia lengths (coxa only provides lateral offset)
-    // The coxa rotates around Z-axis and doesn't extend the radial reach
-    return params.femur_length + params.tibia_length;
 }
 
 double Leg::getDistanceToTarget(const Point3D &target) const {

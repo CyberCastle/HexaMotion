@@ -1,18 +1,3 @@
-/**
- * @file locomotion_system.cpp
- * @brief Implementation of the Locomotion Control System
- * @author BlightHunter Team
- * @version 1.0
- * @date 2024
- *
- * Implements control based on:
- * - Inverse kinematics using Denavit-Hartenberg parameters
- * - Jacobians for velocity control
- * - Gait planner with multiple gaits
- * - Orientation and stability control
- * - Principles of OpenSHC (Open Source Humanoid Control)
- */
-
 #include "locomotion_system.h"
 #include "body_pose_config_factory.h"
 #include "hexamotion_constants.h"
@@ -185,20 +170,6 @@ double LocomotionSystem::getJointLimitProximity(int leg_index, const JointAngles
     }
 
     return min_proximity;
-}
-
-/* Transform world point to body frame = Rᵀ·(p - p0) */
-Point3D LocomotionSystem::transformWorldToBody(const Point3D &p_world) const {
-    // Vector relative to the body center
-    Point3D rel(p_world.x - body_position[0],
-                p_world.y - body_position[1],
-                p_world.z - body_position[2]);
-
-    // Rotate with negative angles (inverse)
-    Eigen::Vector3d neg_rpy(math_utils::degreesToRadians(-body_orientation[0]),
-                            math_utils::degreesToRadians(-body_orientation[1]),
-                            math_utils::degreesToRadians(-body_orientation[2]));
-    return math_utils::rotatePoint(rel, neg_rpy);
 }
 
 /* Store angles both in RAM and servos */
@@ -423,52 +394,6 @@ bool LocomotionSystem::stopMovement() {
     return true;
 }
 
-// Orientation control
-bool LocomotionSystem::maintainOrientation(const Eigen::Vector3d &target_rpy) {
-    if (!system_enabled || !admittance_ctrl)
-        return false;
-    Point3D target(target_rpy.x(), target_rpy.y(), target_rpy.z());
-    Point3D current(body_orientation.x(), body_orientation.y(), body_orientation.z());
-    bool result = admittance_ctrl->maintainOrientation(target, current, dt);
-    body_orientation = Eigen::Vector3d(current.x, current.y, current.z);
-
-    // Reproject standing feet to maintain contact during orientation changes
-    reprojectStandingFeet();
-
-    return result;
-}
-
-void LocomotionSystem::reprojectStandingFeet() {
-    for (int leg = 0; leg < NUM_LEGS; ++leg) {
-        if (legs[leg].getStepPhase() != STANCE_PHASE)
-            continue;
-
-        // Current foot position world -> body
-        Point3D tip_body = transformWorldToBody(legs[leg].getCurrentTipPositionGlobal());
-
-        // IK for the new body orientation
-        JointAngles q_new = calculateInverseKinematics(leg, tip_body);
-
-        // Apply angles to servos and RAM - this will update both joint_angles and leg_positions internally
-        setLegJointAngles(leg, q_new);
-    }
-}
-
-// Automatic tilt correction
-bool LocomotionSystem::correctBodyTilt() {
-    Eigen::Vector3d target_orientation(0.0f, 0.0f, body_orientation[2]);
-    return maintainOrientation(target_orientation);
-}
-
-// Calculate orientation error
-Eigen::Vector3d LocomotionSystem::calculateOrientationError() {
-    if (!admittance_ctrl)
-        return Eigen::Vector3d::Zero();
-    Point3D current(body_orientation.x(), body_orientation.y(), body_orientation.z());
-    Point3D error = admittance_ctrl->orientationError(current);
-    return Eigen::Vector3d(error.x, error.y, error.z);
-}
-
 // Check stability margin
 bool LocomotionSystem::checkStabilityMargin() {
     if (!system_enabled || !admittance_ctrl)
@@ -574,9 +499,6 @@ bool LocomotionSystem::setBodyPose(const Eigen::Vector3d &position, const Eigen:
     body_position = position;
     body_orientation = orientation;
 
-    // Reproject standing feet to maintain contact during pose changes
-    reprojectStandingFeet();
-
     return true;
 }
 
@@ -640,9 +562,6 @@ bool LocomotionSystem::setBodyPoseSmooth(const Eigen::Vector3d &position, const 
     body_position = position;
     body_orientation = orientation;
 
-    // Reproject standing feet to maintain contact during pose changes
-    reprojectStandingFeet();
-
     return true;
 }
 
@@ -658,9 +577,6 @@ bool LocomotionSystem::setBodyPoseImmediate(const Eigen::Vector3d &position, con
 
     body_position = position;
     body_orientation = orientation;
-
-    // Reproject standing feet to maintain contact during pose changes
-    reprojectStandingFeet();
 
     return true;
 }
@@ -905,14 +821,6 @@ bool LocomotionSystem::setLegPosition(int leg_index, const Point3D &position) {
     return true;
 }
 
-bool LocomotionSystem::setStepParameters(double height, double length) {
-    // Use modern API to set step parameters
-    if (walk_ctrl) {
-        return walk_ctrl->setGaitByName(walk_ctrl->getCurrentGaitConfig().gait_name);
-    }
-    return false;
-}
-
 bool LocomotionSystem::setParameters(const Parameters &new_params) {
     // Validate new parameters
     if (new_params.hexagon_radius <= 0 || new_params.coxa_length <= 0 ||
@@ -923,20 +831,6 @@ bool LocomotionSystem::setParameters(const Parameters &new_params) {
 
     params = new_params;
     return validateParameters();
-}
-
-bool LocomotionSystem::setControlFrequency(double frequency) {
-    if (frequency < 10.0f || frequency > 200.0f) {
-        last_error = PARAMETER_ERROR;
-        return false;
-    }
-
-    params.control_frequency = frequency;
-    return true;
-}
-
-double LocomotionSystem::calculateLegReach() const {
-    return params.coxa_length + params.femur_length + params.tibia_length;
 }
 
 void LocomotionSystem::compensateForSlope() {
@@ -998,9 +892,6 @@ void LocomotionSystem::compensateForSlope() {
     // Clamp compensation
     body_orientation[0] = constrainAngle(body_orientation[0], -15.0f, 15.0f);
     body_orientation[1] = constrainAngle(body_orientation[1], -15.0f, 15.0f);
-
-    // Reproject standing feet after slope compensation changes body orientation
-    reprojectStandingFeet();
 }
 
 double LocomotionSystem::calculateDynamicStabilityIndex() {
