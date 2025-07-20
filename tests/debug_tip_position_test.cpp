@@ -211,10 +211,10 @@ void debugTipPositionGeneration(LegStepper &stepper, Leg &leg, const RobotModel 
 
         std::string curve_used = (iteration <= swing_iterations / 2) ? "Primary" : "Secondary";
         std::string reach_status = bezier_reachable ? "R" : "X";
-        std::string ik_status = (traditional_ik_success && delta_ik_success) ? "✓✓" : 
-                               (traditional_ik_success) ? "T✓" : 
-                               (delta_ik_success) ? "D✓" : "❌❌";
-        
+        std::string ik_status = (traditional_ik_success && delta_ik_success) ? "✓✓" : (traditional_ik_success) ? "T✓"
+                                                                                  : (delta_ik_success)         ? "D✓"
+                                                                                                               : "❌❌";
+
         // Compare IK methods performance
         std::string ik_method_comparison = "";
         if (std::abs(traditional_ik_error - delta_ik_error) > 1.0) { // Significant difference
