@@ -33,12 +33,13 @@ LegStepper::LegStepper(int leg_index, const Point3D &identity_tip_pose, Leg &leg
     swing_iterations_ = 0;
     stance_iterations_ = 0;
     current_iteration_ = 0;
-    step_cycle_time_ = 1.0;    // Default 1 second cycle time
-    stance_ratio_ = 0.75;      // Default stance ratio (will be overridden by gait configuration)
-    swing_ratio_ = 0.25;       // Default swing ratio (will be overridden by gait configuration)
-    step_frequency_ = 1.0;     // Default step frequency (will be overridden by gait configuration)
-    swing_width_ = 5.0;        // Default swing width (will be overridden by gait configuration)
-    control_frequency_ = 50.0; // Default control frequency (will be overridden by gait configuration)
+    step_cycle_time_ = 1.0;        // Default 1 second cycle time
+    stance_ratio_ = 0.75;          // Default stance ratio (will be overridden by gait configuration)
+    swing_ratio_ = 0.25;           // Default swing ratio (will be overridden by gait configuration)
+    step_frequency_ = 1.0;         // Default step frequency (will be overridden by gait configuration)
+    swing_width_ = 5.0;            // Default swing width (will be overridden by gait configuration)
+    control_frequency_ = 50.0;     // Default control frequency (will be overridden by gait configuration)
+    step_clearance_height_ = 20.0; // Default step clearance height in mm (will be overridden by gait configuration)
 
     // Initialize swing state management
     swing_initialized_ = false;
@@ -56,7 +57,6 @@ LegStepper::LegStepper(int leg_index, const Point3D &identity_tip_pose, Leg &leg
     swing_origin_tip_position_ = identity_tip_pose_;
     swing_origin_tip_velocity_ = Point3D(0, 0, 0);
     stance_origin_tip_position_ = identity_tip_pose_;
-    swing_clearance_ = Point3D(0, 0, 0);
 
     // Initialize all Bezier control nodes with identity pose
     for (int i = 0; i < 5; ++i) {
@@ -72,31 +72,45 @@ void LegStepper::setDesiredVelocity(const Point3D &linear_velocity, double angul
 }
 
 void LegStepper::updateStride() {
-    // Calculate stride vector from velocity (OpenSHC exact approach)
-    // Use consistent control frequency from LegStepper configuration (OpenSHC equivalent to walker_->getTimeDelta())
-    double time_delta = 1.0 / control_frequency_;
+    // OpenSHC exact implementation - no modifications
 
-    // OpenSHC stride_vector represents the displacement the robot moves during a STANCE phase
-    // The target_tip_pose calculation uses stride_vector * 0.5 to position the pata at the
-    // appropriate landing point to compensate for robot movement during stance
+    // TODO: Update walk plane and normal from external source (equivalent to walker_->getWalkPlane())
+    // These should be set by the higher-level controller
+    // walk_plane_ = walker_->getWalkPlane();
+    // walk_plane_normal_ = walker_->getWalkPlaneNormal();
 
-    // Use actual stance_ratio from gait configuration (OpenSHC exact)
-    // This replaces the hardcoded 0.75 to match the specific gait being used
-    double stance_duration = step_cycle_time_ * stance_ratio_;
+    // Linear stride vector (OpenSHC exact)
+    Point3D stride_vector_linear(desired_linear_velocity_.x, desired_linear_velocity_.y, 0.0);
 
-    // stride_vector is the displacement the robot will move during stance
-    // OpenSHC formula: stride_vector = linear_velocity × (stance_ratio / step_frequency)
-    stride_vector_ = desired_linear_velocity_ * stance_duration;
+    // Angular stride vector (OpenSHC exact implementation)
+    Point3D z_unit(0, 0, 1);
+    double dot_product = current_tip_pose_.x * z_unit.x + current_tip_pose_.y * z_unit.y + current_tip_pose_.z * z_unit.z;
+    Point3D projection_on_z = z_unit * dot_product;
+    Point3D radius = current_tip_pose_ - projection_on_z; // getRejection equivalent
 
-    // Z movement is handled by swing clearance, not stride
-    stride_vector_.z = 0.0;
+    Point3D angular_velocity_vector(0, 0, desired_angular_velocity_);
 
-    // Apply minimum stride constraint for testing visibility
-    double stride_magnitude = stride_vector_.norm();
-    if (stride_magnitude < 1.0) {
-        // Generate small but visible stride for testing when velocity is very low
-        stride_vector_ = Point3D(2.0, 0.0, 0.0); // 2mm stride_vector (1mm actual displacement)
-    }
+    Point3D stride_vector_angular;
+    stride_vector_angular.x = angular_velocity_vector.y * radius.z - angular_velocity_vector.z * radius.y;
+    stride_vector_angular.y = angular_velocity_vector.z * radius.x - angular_velocity_vector.x * radius.z;
+    stride_vector_angular.z = angular_velocity_vector.x * radius.y - angular_velocity_vector.y * radius.x;
+
+    // Combination and scaling (OpenSHC exact)
+    stride_vector_ = stride_vector_linear + stride_vector_angular;
+
+    // OpenSHC scaling: stride_vector_ *= (on_ground_ratio / step.frequency_);
+    // StepCycle step = walker_->getStepCycle();
+    // double on_ground_ratio = double(step.stance_period_) / step.period_;
+    // stride_vector_ *= (on_ground_ratio / step.frequency_);
+
+    // Use our configuration values (equivalent calculation)
+    double on_ground_ratio = stance_ratio_; // stance_ratio_ = stance_period / total_period
+    stride_vector_ = stride_vector_ * (on_ground_ratio / step_frequency_);
+
+    // Swing clearance (OpenSHC exact)
+    // swing_clearance_ = walker_->getStepClearance() * walk_plane_normal_.normalized();
+    // Note: step_clearance_height_ should be set from parameters (equivalent to walker_->getStepClearance())
+    swing_clearance_ = walk_plane_normal_.normalized() * step_clearance_height_;
 }
 
 void LegStepper::calculateSwingTiming(double time_delta) {

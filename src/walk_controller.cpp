@@ -112,6 +112,7 @@ void WalkController::applyGaitConfigToLegSteppers(const GaitConfiguration &gait_
         leg_stepper->setStanceRatio(gait_config.stance_ratio);
         leg_stepper->setSwingRatio(gait_config.swing_ratio);
         leg_stepper->setStepFrequency(gait_config.step_frequency);
+        leg_stepper->setStepClearanceHeight(gait_config.swing_height);
 
         // OpenSHC trajectory parameters from gait configuration
         leg_stepper->setSwingWidth(gait_config.swing_width);
@@ -121,10 +122,6 @@ void WalkController::applyGaitConfigToLegSteppers(const GaitConfiguration &gait_
         double phase_offset = static_cast<double>(gait_config.offsets.getForLegIndex(i) * gait_config.phase_config.phase_offset) /
                               static_cast<double>(gait_config.step_cycle.period_);
         leg_stepper->setPhaseOffset(phase_offset);
-
-        // OpenSHC: Configurar swing_clearance basado en swing_height de la marcha
-        Point3D swing_clearance(0.0, 0.0, gait_config.swing_height);
-        leg_stepper->setSwingClearance(swing_clearance);
 
         // OpenSHC: Configurar velocidad deseada para el cálculo de stride
         leg_stepper->setDesiredVelocity(desired_linear_velocity_, desired_angular_velocity_);
