@@ -177,6 +177,16 @@ GaitConfiguration createRippleGaitConfig(const Parameters &params) {
     config.description = "Ripple gait: Faster gait with overlapping leg movements";
     config.step_order = {"AR", "CL", "BR", "AL", "CR", "BL"};
 
+    // StepCycle
+    config.step_cycle.frequency_ = config.step_frequency;
+    config.step_cycle.period_ = total_phase;
+    config.step_cycle.stance_period_ = config.phase_config.stance_phase;
+    config.step_cycle.swing_period_ = config.phase_config.swing_phase;
+    config.step_cycle.stance_start_ = 0;
+    config.step_cycle.stance_end_ = config.phase_config.stance_phase;
+    config.step_cycle.swing_start_ = config.phase_config.stance_phase;
+    config.step_cycle.swing_end_ = total_phase;
+
     return config;
 }
 
@@ -229,6 +239,16 @@ GaitConfiguration createMetachronalGaitConfig(const Parameters &params) {
     // Description
     config.description = "Metachronal gait: Adaptive gait that adjusts to terrain conditions";
     config.step_order = {"AR", "CL", "BL", "AL", "CR", "BR"};
+
+    // StepCycle
+    config.step_cycle.frequency_ = config.step_frequency;
+    config.step_cycle.period_ = total_phase;
+    config.step_cycle.stance_period_ = config.phase_config.stance_phase;
+    config.step_cycle.swing_period_ = config.phase_config.swing_phase;
+    config.step_cycle.stance_start_ = 0;
+    config.step_cycle.stance_end_ = config.phase_config.stance_phase;
+    config.step_cycle.swing_start_ = config.phase_config.stance_phase;
+    config.step_cycle.swing_end_ = total_phase;
 
     return config;
 }
