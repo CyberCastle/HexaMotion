@@ -151,7 +151,7 @@ class LegStepper {
     double swing_ratio_;       // Swing ratio from gait configuration (OpenSHC exact)
     double step_frequency_;    // Step frequency from gait configuration (OpenSHC exact)
     double swing_width_;       // Lateral shift at mid-swing (OpenSHC mid_lateral_shift)
-    double control_frequency_; // Control loop frequency (defines time_delta)
+    double control_frequency_; // Control loop frequency (equivalent to OpenSHC walker_->getTimeDelta())
 
     // Swing state management (OpenSHC style)
     bool swing_initialized_;

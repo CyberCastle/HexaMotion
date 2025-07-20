@@ -73,8 +73,8 @@ void LegStepper::setDesiredVelocity(const Point3D &linear_velocity, double angul
 
 void LegStepper::updateStride() {
     // Calculate stride vector from velocity (OpenSHC exact approach)
-    double control_frequency = robot_model_.getParams().control_frequency;
-    double time_delta = 1.0 / control_frequency;
+    // Use consistent control frequency from LegStepper configuration (OpenSHC equivalent to walker_->getTimeDelta())
+    double time_delta = 1.0 / control_frequency_;
 
     // OpenSHC stride_vector represents the displacement the robot moves during a STANCE phase
     // The target_tip_pose calculation uses stride_vector * 0.5 to position the pata at the
