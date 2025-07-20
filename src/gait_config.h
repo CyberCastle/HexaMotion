@@ -83,10 +83,10 @@ struct GaitConfiguration {
     double swing_height;               //< Swing trajectory height in mm
     double body_clearance;             //< Body clearance above ground in mm
     double stance_span_modifier = 0.0; // Modificador de span lateral de apoyo (OpenSHC compatible)
-    
+
     // OpenSHC trajectory parameters
-    double swing_width;                //< Lateral shift at mid-swing position in mm (OpenSHC mid_lateral_shift)
-    double control_frequency;          //< Control loop frequency in Hz (defines time_delta)
+    double swing_width;       //< Lateral shift at mid-swing position in mm (OpenSHC mid_lateral_shift)
+    double control_frequency; //< Control loop frequency in Hz (defines time_delta)
 
     // Gait performance parameters
     double max_velocity;         //< Maximum walking velocity in mm/s

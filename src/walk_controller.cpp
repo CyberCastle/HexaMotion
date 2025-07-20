@@ -112,7 +112,7 @@ void WalkController::applyGaitConfigToLegSteppers(const GaitConfiguration &gait_
         leg_stepper->setStanceRatio(gait_config.stance_ratio);
         leg_stepper->setSwingRatio(gait_config.swing_ratio);
         leg_stepper->setStepFrequency(gait_config.step_frequency);
-        
+
         // OpenSHC trajectory parameters from gait configuration
         leg_stepper->setSwingWidth(gait_config.swing_width);
         leg_stepper->setControlFrequency(gait_config.control_frequency);

@@ -33,11 +33,11 @@ LegStepper::LegStepper(int leg_index, const Point3D &identity_tip_pose, Leg &leg
     swing_iterations_ = 0;
     stance_iterations_ = 0;
     current_iteration_ = 0;
-    step_cycle_time_ = 1.0; // Default 1 second cycle time
-    stance_ratio_ = 0.75;   // Default stance ratio (will be overridden by gait configuration)
-    swing_ratio_ = 0.25;    // Default swing ratio (will be overridden by gait configuration)
-    step_frequency_ = 1.0;  // Default step frequency (will be overridden by gait configuration)
-    swing_width_ = 5.0;     // Default swing width (will be overridden by gait configuration)
+    step_cycle_time_ = 1.0;    // Default 1 second cycle time
+    stance_ratio_ = 0.75;      // Default stance ratio (will be overridden by gait configuration)
+    swing_ratio_ = 0.25;       // Default swing ratio (will be overridden by gait configuration)
+    step_frequency_ = 1.0;     // Default step frequency (will be overridden by gait configuration)
+    swing_width_ = 5.0;        // Default swing width (will be overridden by gait configuration)
     control_frequency_ = 50.0; // Default control frequency (will be overridden by gait configuration)
 
     // Initialize swing state management

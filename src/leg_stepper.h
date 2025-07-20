@@ -143,11 +143,11 @@ class LegStepper {
     int swing_iterations_;
     int stance_iterations_;
     int current_iteration_;
-    double step_cycle_time_; // Complete step cycle time in seconds (from gait configuration)
-    double stance_ratio_;    // Stance ratio from gait configuration (OpenSHC exact)
-    double swing_ratio_;     // Swing ratio from gait configuration (OpenSHC exact)
-    double step_frequency_;  // Step frequency from gait configuration (OpenSHC exact)
-    double swing_width_;     // Lateral shift at mid-swing (OpenSHC mid_lateral_shift)
+    double step_cycle_time_;   // Complete step cycle time in seconds (from gait configuration)
+    double stance_ratio_;      // Stance ratio from gait configuration (OpenSHC exact)
+    double swing_ratio_;       // Swing ratio from gait configuration (OpenSHC exact)
+    double step_frequency_;    // Step frequency from gait configuration (OpenSHC exact)
+    double swing_width_;       // Lateral shift at mid-swing (OpenSHC mid_lateral_shift)
     double control_frequency_; // Control loop frequency (defines time_delta)
 
     // Swing state management (OpenSHC style)

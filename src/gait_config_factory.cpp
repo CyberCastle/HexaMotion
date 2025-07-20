@@ -37,11 +37,11 @@ GaitConfiguration createWaveGaitConfig(const Parameters &params) {
     config.step_length = leg_reach * params.gait_factors.wave_length_factor;
     config.swing_height = params.standing_height * params.gait_factors.wave_height_factor;
     config.body_clearance = params.standing_height;
-    
+
     // OpenSHC trajectory parameters
-    config.swing_width = 3.0;  // mm - smaller lateral shift for wave gait (more conservative)
+    config.swing_width = 3.0;                            // mm - smaller lateral shift for wave gait (more conservative)
     config.control_frequency = params.control_frequency; // Hz - use robot's control frequency
-    
+
     int total_phase = config.phase_config.stance_phase + config.phase_config.swing_phase;
 
     // Use OpenSHC-compatible frequency: 1.0 Hz step frequency (standard)
@@ -90,11 +90,11 @@ GaitConfiguration createTripodGaitConfig(const Parameters &params) {
     config.step_length = leg_reach * params.gait_factors.tripod_length_factor;
     config.swing_height = params.standing_height * params.gait_factors.tripod_height_factor;
     config.body_clearance = params.standing_height;
-    
+
     // OpenSHC trajectory parameters
-    config.swing_width = 5.0;  // mm - OpenSHC standard lateral shift at mid-swing
+    config.swing_width = 5.0;                            // mm - OpenSHC standard lateral shift at mid-swing
     config.control_frequency = params.control_frequency; // Hz - use robot's control frequency
-    
+
     int total_phase = config.phase_config.stance_phase + config.phase_config.swing_phase;
 
     // Use OpenSHC-compatible frequency: 1.0 Hz step frequency (standard)
@@ -150,11 +150,11 @@ GaitConfiguration createRippleGaitConfig(const Parameters &params) {
     config.step_length = leg_reach * params.gait_factors.ripple_length_factor;
     config.swing_height = params.standing_height * params.gait_factors.ripple_height_factor;
     config.body_clearance = params.standing_height;
-    
+
     // OpenSHC trajectory parameters
-    config.swing_width = 7.0;  // mm - larger lateral shift for ripple gait (more dynamic)
+    config.swing_width = 7.0;                            // mm - larger lateral shift for ripple gait (more dynamic)
     config.control_frequency = params.control_frequency; // Hz - use robot's control frequency
-    
+
     int total_phase = config.phase_config.stance_phase + config.phase_config.swing_phase;
 
     // Use OpenSHC-compatible frequency: 1.0 Hz step frequency (standard)
@@ -203,11 +203,11 @@ GaitConfiguration createMetachronalGaitConfig(const Parameters &params) {
     config.step_length = leg_reach * params.gait_factors.metachronal_length_factor;
     config.swing_height = params.standing_height * params.gait_factors.metachronal_height_factor;
     config.body_clearance = params.standing_height;
-    
+
     // OpenSHC trajectory parameters
-    config.swing_width = 4.0;  // mm - moderate lateral shift for metachronal gait (adaptive)
+    config.swing_width = 4.0;                            // mm - moderate lateral shift for metachronal gait (adaptive)
     config.control_frequency = params.control_frequency; // Hz - use robot's control frequency
-    
+
     int total_phase = config.phase_config.stance_phase + config.phase_config.swing_phase;
 
     // Use OpenSHC-compatible frequency: 1.0 Hz step frequency (standard)
