@@ -117,7 +117,12 @@ JointAngles RobotModel::solveIK(int leg, const Point3D &local_target, JointAngle
         current_angles.femur = normalizeAngle(current_angles.femur);
         current_angles.tibia = normalizeAngle(current_angles.tibia);
 
-        // Clamp to joint limits if enabled
+        // NOTE: OpenSHC approach - DO NOT clamp during iterations, let IK converge naturally
+        // Clamping will be applied at the end if needed
+    }
+
+    // Apply final clamping only after convergence (OpenSHC style)
+    if (params.ik.clamp_joints) {
         clampJointAngles(current_angles);
     }
 

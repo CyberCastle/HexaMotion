@@ -110,11 +110,15 @@ Eigen::Matrix3d Leg::getJacobian() const {
 }
 
 bool Leg::isTargetReachable(const Point3D &target) const {
-    // Use RobotModel's workspace validation
-    // This is a simplified check - full validation should be implemented
-    double distance = sqrt(target.x * target.x + target.y * target.y + target.z * target.z);
+    // OpenSHC approach: Simple geometric check based on distance from base
+    // OpenSHC doesn't typically reject positions but instead uses makeReachable() to adjust them
+    Point3D base_pos = getBasePosition();
+    double distance = sqrt(pow(target.x - base_pos.x, 2) +
+                           pow(target.y - base_pos.y, 2) +
+                           pow(target.z - base_pos.z, 2));
     double max_reach = getLegReach();
 
+    // Simple distance check - OpenSHC style
     return distance <= max_reach;
 }
 
