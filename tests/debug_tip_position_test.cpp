@@ -266,6 +266,25 @@ void debugTipPositionGeneration(LegStepper &stepper, Leg &leg, const RobotModel 
               << expected_stance_displacement.x << ", " << expected_stance_displacement.y
               << ", " << expected_stance_displacement.z << ")" << std::endl;
 
+    // DEBUG: Check stance control nodes BEFORE iteration starts
+    std::cout << "\n=== DEBUG: STANCE CONTROL NODES ANALYSIS ===" << std::endl;
+    // Force generation of stance nodes first
+    stepper.setCurrentTipPose(initial_position);
+    stepper.setStepState(STEP_STANCE);
+
+    // Generate stance nodes manually to inspect them
+    Point3D current_stride_vector = stepper.getStrideVector();
+    std::cout << "Current stride vector: (" << current_stride_vector.x << ", " << current_stride_vector.y << ", " << current_stride_vector.z << ")" << std::endl;
+
+    // We need to manually trigger stance node generation to see what's happening
+    stepper.updateTipPositionIterative(swing_iterations + 1, iteration_time, false, false);
+
+    std::cout << "\nStance control nodes:" << std::endl;
+    for (int i = 0; i < 5; i++) {
+        Point3D node = stepper.getStanceControlNode(i);
+        std::cout << "  Node " << i << ": (" << node.x << ", " << node.y << ", " << node.z << ")" << std::endl;
+    }
+
     // Generate stance trajectory
     std::cout << "\n=== STANCE TRAJECTORY WITH JOINT ANGLES (Gait: " << gait_config.gait_name << ") ===" << std::endl;
     std::cout << "Step | Position (x, y, z) | Coxa (deg) | Femur (deg) | Tibia (deg) | Radio | Delta R" << std::endl;
