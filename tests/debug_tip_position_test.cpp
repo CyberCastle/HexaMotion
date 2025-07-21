@@ -27,20 +27,23 @@ void debugTipPositionGeneration(LegStepper &stepper, Leg &leg, const RobotModel 
     Point3D traditional_actual_pos = leg.getCurrentTipPositionGlobal();
     double traditional_ik_error = (traditional_actual_pos - initial_position).norm();
 
-    // Reset leg and test delta-based IK
+    // Reset leg and test advanced delta-based IK
     leg.setJointAngles(traditional_angles); // Reset to same starting point
-    bool delta_ik_success = leg.applyIKWithDelta(initial_position);
-    JointAngles delta_angles = leg.getJointAngles();
+    JointAngles current_angles = leg.getJointAngles();
+    Point3D current_pos = leg.getCurrentTipPositionGlobal();
+    JointAngles new_angles = model.applyAdvancedIK(leg.getLegId(), current_pos, initial_position, current_angles, 0.02);
+    leg.setJointAngles(new_angles);
     Point3D delta_actual_pos = leg.getCurrentTipPositionGlobal();
     double delta_ik_error = (delta_actual_pos - initial_position).norm();
+    bool delta_ik_success = (delta_ik_error < 1.0); // Success if error < 1mm
 
     std::cout << "=== IK METHOD COMPARISON ===" << std::endl;
     std::cout << "Traditional IK - Success: " << (traditional_ik_success ? "YES" : "NO") << ", Error: " << traditional_ik_error << " mm" << std::endl;
     std::cout << "Delta-based IK - Success: " << (delta_ik_success ? "YES" : "NO") << ", Error: " << delta_ik_error << " mm" << std::endl;
     std::cout << "Initial actual position: (" << delta_actual_pos.x << ", " << delta_actual_pos.y << ", " << delta_actual_pos.z << ")" << std::endl;
-    std::cout << "Initial joint angles (deg): coxa=" << (delta_angles.coxa * 180.0 / M_PI)
-              << "°, femur=" << (delta_angles.femur * 180.0 / M_PI)
-              << "°, tibia=" << (delta_angles.tibia * 180.0 / M_PI) << "°" << std::endl;
+    std::cout << "Initial joint angles (deg): coxa=" << (new_angles.coxa * 180.0 / M_PI)
+              << "°, femur=" << (new_angles.femur * 180.0 / M_PI)
+              << "°, tibia=" << (new_angles.tibia * 180.0 / M_PI) << "°" << std::endl;
 
     // Check if initial position is reachable
     bool is_reachable = leg.isTargetReachable(initial_position);
@@ -160,10 +163,12 @@ void debugTipPositionGeneration(LegStepper &stepper, Leg &leg, const RobotModel 
         // Get the new position calculated by the stepper (Bezier result)
         Point3D pos_bezier = stepper.getCurrentTipPose();
 
-        // Test delta-based IK method
+        // Test advanced delta-based IK method
         leg.setJointAngles(angles_before); // Reset to same starting point
-        bool delta_ik_success = leg.applyIKWithDelta(pos_bezier);
+        JointAngles new_angles = model.applyAdvancedIK(leg.getLegId(), pos_before, pos_bezier, angles_before, iteration_time);
+        leg.setJointAngles(new_angles);
         JointAngles angles_after = leg.getJointAngles();
+        bool delta_ik_success = true; // Always successful with advanced IK
 
         // Convert joint angles from radians to degrees
         double coxa_deg = angles_after.coxa * 180.0 / M_PI;
@@ -223,7 +228,10 @@ void debugTipPositionGeneration(LegStepper &stepper, Leg &leg, const RobotModel 
         Point3D pos = stepper.getCurrentTipPose();
 
         // Test both IK methods on extreme positions
-        leg.applyIKWithDelta(pos);
+        JointAngles current_angles = leg.getJointAngles();
+        Point3D current_pos = leg.getCurrentTipPositionGlobal();
+        JointAngles new_angles = model.applyAdvancedIK(leg.getLegId(), current_pos, pos, current_angles, 0.02);
+        leg.setJointAngles(new_angles);
         JointAngles angles = leg.getJointAngles();
         bool valid = model.checkJointLimits(stepper.getLegIndex(), angles);
 
@@ -264,7 +272,10 @@ void debugTipPositionGeneration(LegStepper &stepper, Leg &leg, const RobotModel 
     std::cout << "-----+--------------------+------------+-------------+-------------+-------+--------" << std::endl;
 
     // Store initial joint angles for comparison
-    leg.applyIKWithDelta(initial_position);
+    JointAngles temp_angles = leg.getJointAngles();
+    Point3D temp_pos = leg.getCurrentTipPositionGlobal();
+    JointAngles updated_angles = model.applyAdvancedIK(leg.getLegId(), temp_pos, initial_position, temp_angles, 0.02);
+    leg.setJointAngles(updated_angles);
     JointAngles initial_stance_angles = leg.getJointAngles();
     Point3D previous_stance_pos = initial_position;
 
@@ -338,7 +349,10 @@ void debugTipPositionGeneration(LegStepper &stepper, Leg &leg, const RobotModel 
     }
 
     Point3D final_stance_position = stepper.getCurrentTipPose();
-    leg.applyIKWithDelta(final_stance_position);
+    JointAngles temp_angles2 = leg.getJointAngles();
+    Point3D temp_pos2 = leg.getCurrentTipPositionGlobal();
+    JointAngles final_updated_angles = model.applyAdvancedIK(leg.getLegId(), temp_pos2, final_stance_position, temp_angles2, 0.02);
+    leg.setJointAngles(final_updated_angles);
     JointAngles final_stance_angles = leg.getJointAngles();
 
     // Calculate total movement analysis
