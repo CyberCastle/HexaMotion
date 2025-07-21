@@ -308,15 +308,17 @@ void debugTipPositionGeneration(LegStepper &stepper, Leg &leg, const RobotModel 
     for (int iteration = swing_iterations + 1; iteration <= total_iterations; iteration++) {
         // Get joint angles before update
         JointAngles angles_before = leg.getJointAngles();
+        Point3D pos_before = leg.getCurrentTipPositionGlobal();
 
         // Update tip position for stance phase
         stepper.updateTipPositionIterative(iteration, iteration_time, false, false);
 
-        // Get new position and apply IK
+        // Get new position and apply advanced delta-based IK (consistent with swing phase)
         Point3D pos_stance = stepper.getCurrentTipPose();
 
         leg.setJointAngles(angles_before); // Reset to same starting point
-        leg.applyIK(pos_stance);
+        JointAngles new_angles = model.applyAdvancedIK(leg.getLegId(), pos_before, pos_stance, angles_before, iteration_time);
+        leg.setJointAngles(new_angles);
         JointAngles angles_after = leg.getJointAngles();
 
         // Calculate position delta in XY plane
@@ -536,7 +538,7 @@ int main() {
     // Use XY velocity to force significant coxa movement during stance
     // This will test if the IK system can handle XY plane displacements
     double desired_velocity_x = 30.0; // mm/s in X direction
-    double desired_velocity_y = 15.0; // mm/s in Y direction (added for XY plane movement)
+    double desired_velocity_y = 30.0; // mm/s in Y direction (added for XY plane movement)
     stepper.setDesiredVelocity(Point3D(desired_velocity_x, desired_velocity_y, 0), 0.0);
     stepper.updateStride(); // This will calculate stride_vector_ automatically using step_cycle_time
     Point3D calculated_stride = stepper.getStrideVector();
