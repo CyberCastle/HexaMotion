@@ -189,6 +189,13 @@ struct Point3D {
         return Point3D(x + other.x, y + other.y, z + other.z);
     }
 
+    Point3D &operator+=(const Point3D &other) {
+        x += other.x;
+        y += other.y;
+        z += other.z;
+        return *this;
+    }
+
     Point3D operator-(const Point3D &other) const {
         return Point3D(x - other.x, y - other.y, z - other.z);
     }

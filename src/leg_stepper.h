@@ -53,13 +53,13 @@ class LegStepper {
     int getPhase() const { return phase_; }
     double getPhaseOffset() const { return leg_.getPhaseOffset(); }
     Point3D getStrideVector() const { return stride_vector_; }
-    Point3D getSwingClearance() const { return swing_clearance_; }
     double getStepProgress() const { return step_progress_; }
     bool hasCompletedFirstStep() const { return completed_first_step_; }
     bool isAtCorrectPhase() const { return at_correct_phase_; }
     Point3D getSwing1ControlNode(int i) const { return swing_1_nodes_[i]; }
     Point3D getSwing2ControlNode(int i) const { return swing_2_nodes_[i]; }
     Point3D getStanceControlNode(int i) const { return stance_nodes_[i]; }
+    Point3D getSwingClearance() const { return swing_clearance_; }
 
     // OpenSHC-specific accessors
     int getSwingIterations() const { return swing_iterations_; }
@@ -82,19 +82,22 @@ class LegStepper {
     void setSwingOriginTipVelocity(const Point3D &velocity) { swing_origin_tip_velocity_ = velocity; }
     void setCompletedFirstStep(bool completed) { completed_first_step_ = completed; }
     void setAtCorrectPhase(bool at_correct) { at_correct_phase_ = at_correct; }
-    void setSwingClearance(const Point3D &clearance) { swing_clearance_ = clearance; }
-    void setStepCycleTime(double step_cycle_time) { step_cycle_time_ = step_cycle_time; }
-    double getStepCycleTime() const { return step_cycle_time_; }
-    void setStanceRatio(double stance_ratio) { stance_ratio_ = stance_ratio; }
-    double getStanceRatio() const { return stance_ratio_; }
-    void setSwingRatio(double swing_ratio) { swing_ratio_ = swing_ratio; }
-    double getSwingRatio() const { return swing_ratio_; }
-    void setStepFrequency(double step_frequency) { step_frequency_ = step_frequency; }
-    double getStepFrequency() const { return step_frequency_; }
+    void setWalkPlane(const Point3D &walk_plane) { walk_plane_ = walk_plane; }
+    Point3D getWalkPlane() const { return walk_plane_; }
+    void setWalkPlaneNormal(const Point3D &walk_plane_normal) { walk_plane_normal_ = walk_plane_normal; }
+    Point3D getWalkPlaneNormal() const { return walk_plane_normal_; }
+
+    // OpenSHC-style StepCycle interface
+    void setStepCycle(const StepCycle &step_cycle) { step_cycle_ = step_cycle; }
+    const StepCycle &getStepCycle() const { return step_cycle_; }
+
+    // Gait configuration parameters (not part of StepCycle)
     void setSwingWidth(double swing_width) { swing_width_ = swing_width; }
     double getSwingWidth() const { return swing_width_; }
     void setControlFrequency(double control_frequency) { control_frequency_ = control_frequency; }
     double getControlFrequency() const { return control_frequency_; }
+    void setStepClearanceHeight(double step_clearance_height) { step_clearance_height_ = step_clearance_height; }
+    double getStepClearanceHeight() const { return step_clearance_height_; }
 
     // OpenSHC-specific workflow methods
     void initializeSwingPeriod(int iteration);
@@ -106,6 +109,9 @@ class LegStepper {
     void generatePrimarySwingControlNodes();
     void generateSecondarySwingControlNodes(bool ground_contact = false);
     void generateStanceControlNodes(double stride_scaler = 1.0);
+
+    // OpenSHC-style stride scaler calculation
+    double calculateStanceStrideScaler();
 
   private:
     // Basic properties
@@ -128,7 +134,6 @@ class LegStepper {
     Point3D swing_origin_tip_position_;
     Point3D swing_origin_tip_velocity_;
     Point3D stance_origin_tip_position_;
-    Point3D swing_clearance_;
 
     // Phase and state management
     bool at_correct_phase_;
@@ -137,24 +142,27 @@ class LegStepper {
     double step_progress_;
     StepState step_state_;
 
-    // OpenSHC timing parameters
+    // OpenSHC timing parameters - use StepCycle instead of individual variables
+    StepCycle step_cycle_; // Complete step cycle timing (OpenSHC exact)
     double swing_delta_t_;
     double stance_delta_t_;
     int swing_iterations_;
     int stance_iterations_;
     int current_iteration_;
-    double step_cycle_time_;   // Complete step cycle time in seconds (from gait configuration)
-    double stance_ratio_;      // Stance ratio from gait configuration (OpenSHC exact)
-    double swing_ratio_;       // Swing ratio from gait configuration (OpenSHC exact)
-    double step_frequency_;    // Step frequency from gait configuration (OpenSHC exact)
-    double swing_width_;       // Lateral shift at mid-swing (OpenSHC mid_lateral_shift)
-    double control_frequency_; // Control loop frequency (defines time_delta)
+
+    // Gait configuration parameters (not part of StepCycle)
+    double swing_width_;           // Lateral shift at mid-swing (OpenSHC mid_lateral_shift)
+    double control_frequency_;     // Control loop frequency (equivalent to OpenSHC walker_->getTimeDelta())
+    double step_clearance_height_; // Step clearance height (equivalent to OpenSHC walker_->getStepClearance())
 
     // Swing state management (OpenSHC style)
     bool swing_initialized_;
     bool nodes_generated_;
     int last_swing_iteration_;
     int last_swing_start_iteration_;
+
+    // Additional swing trajectory variable (was missing)
+    Point3D swing_clearance_; // Swing clearance vector (OpenSHC)
 
     // Bezier control nodes (5 nodes for quartic curves)
     Point3D swing_1_nodes_[5];
