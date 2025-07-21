@@ -75,6 +75,7 @@ class LegStepper {
         leg_.setCurrentTipPositionGlobal(pose);
     }
     void setDefaultTipPose(const Point3D &pose) { default_tip_pose_ = pose; }
+    void setTargetTipPose(const Point3D &pose) { target_tip_pose_ = pose; }
     void setStepState(StepState state) { step_state_ = state; }
     void setPhase(int phase) { phase_ = phase; }
     void setStepProgress(double progress) { step_progress_ = progress; }
