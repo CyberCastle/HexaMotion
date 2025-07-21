@@ -449,26 +449,6 @@ Point3D RobotModel::transformLocalToGlobalCoordinates(int leg, const Point3D &lo
     return global_pose.position;
 }
 
-// OpenSHC-style delta-based IK: Calculate position delta and apply single-step IK
-JointAngles RobotModel::applyIKWithDelta(int leg, const Point3D &desired_position,
-                                         const JointAngles &current_angles) const {
-    // Calculate current position
-    Point3D current_position = forwardKinematicsGlobalCoordinates(leg, current_angles);
-
-    // OpenSHC approach: Calculate position delta in leg frame
-    Point3D current_pos_leg_frame = transformGlobalToLocalCoordinates(leg, current_position, current_angles);
-    Point3D desired_pos_leg_frame = transformGlobalToLocalCoordinates(leg, desired_position, current_angles);
-
-    // Position delta (desired - current) in leg frame
-    Eigen::Vector3d position_delta;
-    position_delta << (desired_pos_leg_frame.x - current_pos_leg_frame.x),
-        (desired_pos_leg_frame.y - current_pos_leg_frame.y),
-        (desired_pos_leg_frame.z - current_pos_leg_frame.z);
-
-    // Apply single-step IK using delta (OpenSHC style)
-    return solveIKWithDelta(leg, position_delta, current_angles);
-}
-
 JointAngles RobotModel::estimateInitialAngles(int leg, const Point3D &target_position) const {
     // Transform target to leg coordinate system for analysis
     Point3D local_target = transformGlobalToLocalLegCoordinates(leg, target_position);
@@ -549,39 +529,135 @@ Point3D RobotModel::makeReachable(int leg_index, const Point3D &reference_tip_po
     return reference_tip_position;
 }
 
-// OpenSHC-style single-step IK solver using position delta
-JointAngles RobotModel::solveIKWithDelta(int leg, const Eigen::Vector3d &position_delta,
-                                         const JointAngles &current_angles) const {
-    // OpenSHC approach: Single-step DLS solution using position delta directly
-    const double dls_coefficient = IK_DLS_COEFFICIENT;
+// ====================================================================
+// ADVANCED IK IMPLEMENTATION
+// ====================================================================
+// ====================================================================
 
-    // Calculate Jacobian at current configuration
+JointAngles RobotModel::applyAdvancedIK(int leg, const Point3D &current_tip_pose, const Point3D &desired_tip_pose,
+                                        const JointAngles &current_angles, double time_delta) const {
+    // Generate position delta vector in reference to the base of the leg (exact implementation)
+    Point3D leg_frame_desired = transformGlobalToLocalCoordinates(leg, desired_tip_pose, current_angles);
+    Point3D leg_frame_current = transformGlobalToLocalCoordinates(leg, current_tip_pose, current_angles);
+
+    Eigen::Vector3d position_delta;
+    position_delta << (leg_frame_desired.x - leg_frame_current.x),
+        (leg_frame_desired.y - leg_frame_current.y),
+        (leg_frame_desired.z - leg_frame_current.z);
+
+    // Create 6D delta vector (position only for now, rotation = 0)
+    Eigen::MatrixXd delta = Eigen::Matrix<double, 6, 1>::Zero();
+    delta(0) = position_delta[0];
+    delta(1) = position_delta[1];
+    delta(2) = position_delta[2];
+    // Note: rotation components (delta(3), delta(4), delta(5)) are zero for position-only IK
+
+    // Calculate change in joint positions for change in tip position using advanced IK
+    Eigen::Vector3d joint_position_delta = solveDeltaIK(leg, delta, current_angles);
+
+    // Convert delta to velocities
+    Eigen::Vector3d joint_velocities = joint_position_delta / time_delta;
+
+    // Apply joint limit cost function optimization
+    Eigen::Vector3d cost_gradient = calculateJointLimitCostGradient(current_angles, joint_velocities, leg);
+
+    // Final calculation: jacobian_inverse * delta + (identity - jacobian_inverse * jacobian) * cost_gradient
     Eigen::Matrix3d jacobian_pos = calculateJacobian(leg, current_angles, Point3D(0, 0, 0));
-
-    // Damped Least Squares (DLS) solution - OpenSHC style
-    Eigen::Matrix3d JJT = jacobian_pos * jacobian_pos.transpose();
     Eigen::Matrix3d identity = Eigen::Matrix3d::Identity();
-    Eigen::Matrix3d damped_inv = (JJT + dls_coefficient * dls_coefficient * identity).inverse();
+
+    // DLS calculation
+    const double dls_coeff = IK_DLS_COEFFICIENT;
+    Eigen::Matrix3d JJT = jacobian_pos * jacobian_pos.transpose();
+    Eigen::Matrix3d damped_inv = (JJT + dls_coeff * dls_coeff * identity).inverse();
     Eigen::Matrix3d jacobian_inverse = jacobian_pos.transpose() * damped_inv;
 
-    // Calculate joint angle changes using position delta (OpenSHC approach)
-    Eigen::Vector3d angle_delta = jacobian_inverse * position_delta;
+    // Combined solution with joint limit optimization
+    Eigen::Vector3d final_delta = jacobian_inverse * position_delta +
+                                  (identity - jacobian_inverse * jacobian_pos) * cost_gradient;
 
     // Apply joint angle changes to current configuration
     JointAngles new_angles = current_angles;
-    new_angles.coxa += angle_delta(0);
-    new_angles.femur += angle_delta(1);
-    new_angles.tibia += angle_delta(2);
+    new_angles.coxa += final_delta(0);
+    new_angles.femur += final_delta(1);
+    new_angles.tibia += final_delta(2);
 
     // Normalize angles to [-PI, PI]
     new_angles.coxa = normalizeAngle(new_angles.coxa);
     new_angles.femur = normalizeAngle(new_angles.femur);
     new_angles.tibia = normalizeAngle(new_angles.tibia);
 
-    // Apply joint limits (OpenSHC style clamping)
+    // Apply joint limits
     if (params.ik.clamp_joints) {
         clampJointAngles(new_angles);
     }
 
     return new_angles;
+}
+
+Eigen::Vector3d RobotModel::solveDeltaIK(int leg, const Eigen::MatrixXd &delta, const JointAngles &current_angles) const {
+    // Core IK method - exact replication for 3DOF case
+    // Calculate Jacobian
+    Eigen::Matrix3d jacobian_pos = calculateJacobian(leg, current_angles, Point3D(0, 0, 0));
+
+    // DLS Method
+    const double dls_coeff = IK_DLS_COEFFICIENT;
+    Eigen::Matrix3d identity = Eigen::Matrix3d::Identity();
+    Eigen::Matrix3d JJT = jacobian_pos * jacobian_pos.transpose();
+    Eigen::Matrix3d jacobian_inverse = jacobian_pos.transpose() *
+                                       (JJT + dls_coeff * dls_coeff * identity).inverse();
+
+    // Extract position part of delta (first 3 elements)
+    Eigen::Vector3d position_delta = delta.block<3, 1>(0, 0);
+
+    return jacobian_inverse * position_delta;
+}
+Eigen::Vector3d RobotModel::calculateJointLimitCostGradient(const JointAngles &current_angles,
+                                                            const Eigen::Vector3d &joint_velocities, int leg) const {
+    // OpenSHC exact joint limit cost function implementation
+    const double cost_weight = IK_JOINT_LIMIT_COST_WEIGHT;
+
+    Eigen::Vector3d position_cost_gradient = Eigen::Vector3d::Zero();
+    Eigen::Vector3d velocity_cost_gradient = Eigen::Vector3d::Zero();
+
+    double position_limit_cost = 0.0;
+    double velocity_limit_cost = 0.0;
+
+    // Joint angles array for easier iteration
+    double joint_positions[3] = {current_angles.coxa, current_angles.femur, current_angles.tibia};
+    double joint_limits_min[3] = {coxa_angle_limits_rad[0], femur_angle_limits_rad[0], tibia_angle_limits_rad[0]};
+    double joint_limits_max[3] = {coxa_angle_limits_rad[1], femur_angle_limits_rad[1], tibia_angle_limits_rad[1]};
+    double max_velocities[3] = {3.0, 3.0, 3.0}; // Typical max angular speeds (rad/s)    // Calculate cost function for each joint (exact implementation)
+    for (int i = 0; i < 3; ++i) {
+        // POSITION LIMITS
+        double joint_position_range = joint_limits_max[i] - joint_limits_min[i];
+        double position_range_centre = joint_limits_min[i] + joint_position_range / 2.0;
+
+        if (joint_position_range != 0.0) {
+            double pos_term = cost_weight * (joint_positions[i] - position_range_centre) / joint_position_range;
+            position_limit_cost += pos_term * pos_term;
+            position_cost_gradient[i] = -cost_weight * cost_weight *
+                                        (joint_positions[i] - position_range_centre) /
+                                        (joint_position_range * joint_position_range);
+        }
+
+        // VELOCITY LIMITS
+        double joint_velocity_range = 2 * max_velocities[i];
+        double velocity_range_centre = 0.0;
+        double vel_term = cost_weight * (joint_velocities[i] - velocity_range_centre) / joint_velocity_range;
+        velocity_limit_cost += vel_term * vel_term;
+        velocity_cost_gradient[i] = -cost_weight * cost_weight *
+                                    (joint_velocities[i] - velocity_range_centre) /
+                                    (joint_velocity_range * joint_velocity_range);
+    }
+
+    // Normalization
+    if (position_limit_cost > 0.0) {
+        position_cost_gradient *= 1.0 / sqrt(position_limit_cost);
+    }
+    if (velocity_limit_cost > 0.0) {
+        velocity_cost_gradient *= 1.0 / sqrt(velocity_limit_cost);
+    }
+
+    // Interpolation between position and velocity gradients (75% position, 25% velocity)
+    return 0.75 * position_cost_gradient + 0.25 * velocity_cost_gradient;
 }

@@ -105,16 +105,20 @@ bool Leg::applyIK(const Point3D &target_position) {
 }
 
 /**
- * @brief Apply OpenSHC-style delta-based IK for real-time control
+ * @brief Apply advanced IK implementation with delta calculation and joint optimization
+ * This method uses a robust IK solver that includes delta calculation and joint optimization
  * @param target_position Desired global tip position
  * @return True if IK succeeds within joint limits
  */
-bool Leg::applyIKWithDelta(const Point3D &target_position) {
-    // OpenSHC approach: Make target reachable before applying IK
+bool Leg::applyAdvancedIK(const Point3D &target_position) {
+    // Get current tip position
+    Point3D current_position = getCurrentTipPositionGlobal();
+
+    // Make target reachable before applying IK
     Point3D reachable_target = model_.makeReachable(leg_id_, target_position);
 
-    // Use OpenSHC-style delta-based IK for real-time control
-    JointAngles new_angles = model_.applyIKWithDelta(leg_id_, reachable_target, joint_angles_);
+    // Use advanced IK implementation
+    JointAngles new_angles = model_.applyAdvancedIK(leg_id_, current_position, reachable_target, joint_angles_);
 
     // Validate limits before updating member variables
     if (!model_.checkJointLimits(leg_id_, new_angles)) {
@@ -126,7 +130,6 @@ bool Leg::applyIKWithDelta(const Point3D &target_position) {
     updateTipPosition();
     return true;
 }
-
 Eigen::Matrix4d Leg::getTransform() const {
     return model_.legTransform(leg_id_, joint_angles_);
 }

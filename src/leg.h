@@ -133,11 +133,15 @@ class Leg {
     bool applyIK(const Point3D &target_position);
 
     /**
-     * @brief Apply OpenSHC-style delta-based IK for real-time control
+     * @brief Apply advanced IK implementation with delta calculation and joint optimization
+     * This method uses a robust IK solver that includes:
+     * - Position delta calculation in leg frame
+     * - DLS-based IK with joint limit cost function
+     * - Joint position updates with proper clamping
      * @param target_position Desired global tip position
      * @return True if IK succeeds within joint limits
      */
-    bool applyIKWithDelta(const Point3D &target_position);
+    bool applyAdvancedIK(const Point3D &target_position);
 
     /**
      * @brief Get current DH transform matrix.
