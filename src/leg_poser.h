@@ -127,31 +127,6 @@ class LegPoser {
         return stepToPosition(target_pose, Pose::Identity(), step_height, step_time, false);
     }
 
-    /**
-     * @brief Automatically synchronize internal state with Leg object
-     * This method ensures that all calculated pose data is properly
-     * synchronized with the Leg object, eliminating the need for external
-     * synchronization calls like LocomotionSystem::updateModel()
-     */
-    void autoSyncWithLeg();
-
-  private:
-    /**
-     * @brief Generate control nodes for primary swing bezier curve
-     * @param origin_pos Origin position
-     * @param target_pos Target position
-     * @param lift_height Lift height for the trajectory
-     */
-    void generatePrimarySwingControlNodes(const Point3D &origin_pos, const Point3D &target_pos, double lift_height);
-
-    /**
-     * @brief Generate control nodes for secondary swing bezier curve
-     * @param origin_pos Origin position
-     * @param target_pos Target position
-     * @param lift_height Lift height for the trajectory
-     */
-    void generateSecondarySwingControlNodes(const Point3D &origin_pos, const Point3D &target_pos, double lift_height);
-
   private:
     int leg_index_;           //< Index of the leg this poser controls
     Leg &leg_;                //< Reference to the Leg object this poser controls
@@ -167,10 +142,6 @@ class LegPoser {
     ExternalTarget external_target_; //< Externally set target tip pose object
 
     bool leg_completed_step_ = false; //< Flag denoting if leg has completed its required step in a sequence
-
-    // Bezier control nodes (5 nodes for quartic curves)
-    Point3D control_nodes_primary_[5];   //< Control nodes for primary swing bezier curve
-    Point3D control_nodes_secondary_[5]; //< Control nodes for secondary swing bezier curve
 
     // Constants
     static constexpr double JOINT_TOLERANCE = 0.01; // rad
