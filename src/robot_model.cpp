@@ -536,50 +536,52 @@ Point3D RobotModel::makeReachable(int leg_index, const Point3D &reference_tip_po
 
 JointAngles RobotModel::applyAdvancedIK(int leg, const Point3D &current_tip_pose, const Point3D &desired_tip_pose,
                                         const JointAngles &current_angles, double time_delta) const {
-    // Generate position delta vector in reference to the base of the leg (exact implementation)
-    Point3D leg_frame_desired = transformGlobalToLocalCoordinates(leg, desired_tip_pose, current_angles);
-    Point3D leg_frame_current = transformGlobalToLocalCoordinates(leg, current_tip_pose, current_angles);
-
+    // Following OpenSHC pattern exactly
+    // Calculate position delta in global coordinates
     Eigen::Vector3d position_delta;
-    position_delta << (leg_frame_desired.x - leg_frame_current.x),
-        (leg_frame_desired.y - leg_frame_current.y),
-        (leg_frame_desired.z - leg_frame_current.z);
+    position_delta << (desired_tip_pose.x - current_tip_pose.x),
+        (desired_tip_pose.y - current_tip_pose.y),
+        (desired_tip_pose.z - current_tip_pose.z);
 
-    // Create 6D delta vector (position only for now, rotation = 0)
+    // Create 6D delta vector (position only)
     Eigen::MatrixXd delta = Eigen::Matrix<double, 6, 1>::Zero();
     delta(0) = position_delta[0];
     delta(1) = position_delta[1];
     delta(2) = position_delta[2];
-    // Note: rotation components (delta(3), delta(4), delta(5)) are zero for position-only IK
 
-    // Calculate change in joint positions for change in tip position using advanced IK
-    Eigen::Vector3d joint_position_delta = solveDeltaIK(leg, delta, current_angles);
+    // Get basic joint delta from DLS method (like OpenSHC's jacobian_inverse * delta)
+    Eigen::Vector3d joint_delta = solveDeltaIK(leg, delta, current_angles);
 
-    // Convert delta to velocities
-    Eigen::Vector3d joint_velocities = joint_position_delta / time_delta;
+    // Calculate joint velocities for cost gradient (estimate from time_delta)
+    Eigen::Vector3d joint_velocities = Eigen::Vector3d::Zero();
+    if (time_delta > 0.0) {
+        joint_velocities = joint_delta / time_delta;
+    }
 
-    // Apply joint limit cost function optimization
+    // Apply OpenSHC joint limit cost gradient
+    // This matches: return jacobian_inverse * delta + (identity - jacobian_inverse * j) * combined_cost_gradient;
     Eigen::Vector3d cost_gradient = calculateJointLimitCostGradient(current_angles, joint_velocities, leg);
 
-    // Final calculation: jacobian_inverse * delta + (identity - jacobian_inverse * jacobian) * cost_gradient
+    // Calculate Jacobian for nullspace projection (OpenSHC approach)
     Eigen::Matrix3d jacobian_pos = calculateJacobian(leg, current_angles, Point3D(0, 0, 0));
-    Eigen::Matrix3d identity = Eigen::Matrix3d::Identity();
-
-    // DLS calculation
     const double dls_coeff = IK_DLS_COEFFICIENT;
+    Eigen::Matrix3d identity = Eigen::Matrix3d::Identity();
     Eigen::Matrix3d JJT = jacobian_pos * jacobian_pos.transpose();
-    Eigen::Matrix3d damped_inv = (JJT + dls_coeff * dls_coeff * identity).inverse();
-    Eigen::Matrix3d jacobian_inverse = jacobian_pos.transpose() * damped_inv;
+    Eigen::Matrix3d jacobian_inverse = jacobian_pos.transpose() *
+                                       (JJT + dls_coeff * dls_coeff * identity).inverse();
 
-    // Combined solution with joint limit optimization
-    Eigen::Vector3d final_delta = jacobian_inverse * position_delta +
-                                  (identity - jacobian_inverse * jacobian_pos) * cost_gradient;
+    // Apply nullspace projection: (I - J^+ * J) * cost_gradient
+    Eigen::Matrix3d nullspace_projector = identity - jacobian_inverse * jacobian_pos;
+    Eigen::Vector3d nullspace_motion = nullspace_projector * cost_gradient;
+
+    // Combine primary motion with nullspace motion (OpenSHC approach)
+    joint_delta += nullspace_motion;
 
     // Apply joint angle changes to current configuration
     JointAngles new_angles = current_angles;
-    new_angles.coxa += final_delta(0);
-    new_angles.femur += final_delta(1);
-    new_angles.tibia += final_delta(2);
+    new_angles.coxa += joint_delta(0);
+    new_angles.femur += joint_delta(1);
+    new_angles.tibia += joint_delta(2);
 
     // Normalize angles to [-PI, PI]
     new_angles.coxa = normalizeAngle(new_angles.coxa);
