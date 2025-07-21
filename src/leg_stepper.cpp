@@ -397,20 +397,13 @@ void LegStepper::updateTipPositionIterative(int iteration, double time_delta, bo
         // OpenSHC EXACT approach: Use derivative of bezier curve for velocity control
         // "Uses derivative of bezier curve to ensure correct velocity along ground, this means the position may not
         // reach the target but this is less important than ensuring correct velocity according to stride vector"
+
+        // OpenSHC exact calculation: iteration * stance_delta_t_ (1-based iteration)
         double time_input = stance_iteration * stance_delta_t_;
 
-        // Clamp time_input to valid range [0, 1]
-        if (time_input > 1.0)
-            time_input = 1.0;
-
-        // Calculate absolute position using OpenSHC approach (similar to swing)
-        Point3D new_position = math_utils::quarticBezier(stance_nodes_, time_input);
-
-        // Set the new position directly (consistent with swing phase)
-        current_tip_pose_ = new_position;
-
-        // Calculate velocity using derivative of bezier curve (OpenSHC approach)
+        // OpenSHC uses quarticBezierDot (derivative) + delta accumulation, NOT absolute position
         Point3D delta_pos = math_utils::quarticBezierDot(stance_nodes_, time_input) * stance_delta_t_;
+        current_tip_pose_ += delta_pos; // ACCUMULATE like OpenSHC, don't replace
         current_tip_velocity_ = delta_pos / time_delta;
 
         // Apply to leg through IK
