@@ -318,47 +318,29 @@ void LegStepper::updateTipPositionIterative(int iteration, double time_delta, bo
         int half_iterations = swing_iterations_ / 2;
         bool first_half = swing_iteration <= half_iterations;
 
-        // Calculate absolute position using OpenSHC approach
-        Point3D new_position = current_tip_pose_;
+        // Calculate absolute position using OpenSHC approach: quarticBezierDot + delta accumulation
+        Point3D delta_pos;
         double time_input = 0.0;
 
         if (first_half) {
-            // For first half: map swing_iteration 1->half_iterations to time 0->1
-            if (half_iterations > 1) {
-                time_input = (double)(swing_iteration - 1) / (double)(half_iterations - 1);
-            } else {
-                time_input = 0.0;
-            }
-            time_input = std::max(0.0, std::min(1.0, time_input)); // Clamp to [0,1]
-            new_position = math_utils::quarticBezier(swing_1_nodes_, time_input);
+            // OpenSHC exact calculation: swing_delta_t_ * iteration (1-based)
+            time_input = swing_delta_t_ * swing_iteration;
+
+            // OpenSHC pattern: Use quarticBezierDot for velocity-based calculation
+            delta_pos = math_utils::quarticBezierDot(swing_1_nodes_, time_input) * swing_delta_t_;
         } else {
-            // For second half: map swing_iteration (half_iterations+1)->swing_iterations_ to time 0->1
-            int second_half_start = half_iterations + 1;
-            int second_half_iterations = swing_iterations_ - half_iterations;
-            if (second_half_iterations > 1) {
-                time_input = (double)(swing_iteration - second_half_start) / (double)(second_half_iterations - 1);
-            } else {
-                time_input = 0.0;
-            }
-            time_input = std::max(0.0, std::min(1.0, time_input)); // Clamp to [0,1]
-            new_position = math_utils::quarticBezier(swing_2_nodes_, time_input);
+            // OpenSHC exact calculation: swing_delta_t_ * (iteration - swing_iterations / 2)
+            time_input = swing_delta_t_ * (swing_iteration - swing_iterations_ / 2);
+
+            // OpenSHC pattern: Use quarticBezierDot for velocity-based calculation
+            delta_pos = math_utils::quarticBezierDot(swing_2_nodes_, time_input) * swing_delta_t_;
         }
 
-        // Apply OpenSHC precision control to reduce accumulation errors
-        auto setPrecision = [](double value, int precision) -> double {
-            return round(value * pow(10, precision)) / pow(10, precision);
-        };
+        // OpenSHC pattern: Accumulate delta position instead of setting absolute position
+        current_tip_pose_ += delta_pos;
 
-        // Set the new position directly (no delta accumulation needed)
-        current_tip_pose_ = new_position;
-
-        // Apply precision control like OpenSHC (3 decimal places = 1mm precision)
-        current_tip_pose_.x = setPrecision(current_tip_pose_.x, 3);
-        current_tip_pose_.y = setPrecision(current_tip_pose_.y, 3);
-        current_tip_pose_.z = setPrecision(current_tip_pose_.z, 3);
-
-        // Calculate velocity for this iteration (for compatibility)
-        current_tip_velocity_ = Point3D(0, 0, 0); // Will be calculated if needed
+        // Calculate velocity for this iteration (OpenSHC pattern)
+        current_tip_velocity_ = delta_pos / time_delta;
 
         // Apply to leg through IK
         leg_.applyIK(current_tip_pose_);
