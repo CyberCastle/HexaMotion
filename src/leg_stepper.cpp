@@ -337,13 +337,11 @@ void LegStepper::updateTipPositionIterative(int iteration, double time_delta, bo
         }
 
         // OpenSHC pattern: Accumulate delta position instead of setting absolute position
-        current_tip_pose_ += delta_pos;
+        Point3D target_pose = current_tip_pose_ + delta_pos;
+        current_tip_pose_ = target_pose; // Update internal position (OpenSHC pattern - NO IK here)
 
         // Calculate velocity for this iteration (OpenSHC pattern)
         current_tip_velocity_ = delta_pos / time_delta;
-
-        // Apply to leg through IK
-        leg_.applyIK(current_tip_pose_);
 
     } else if (step_state_ == STEP_STANCE) {
         // Handle stance period - OpenSHC EXACT implementation
@@ -385,10 +383,8 @@ void LegStepper::updateTipPositionIterative(int iteration, double time_delta, bo
 
         // OpenSHC uses quarticBezierDot (derivative) + delta accumulation, NOT absolute position
         Point3D delta_pos = math_utils::quarticBezierDot(stance_nodes_, time_input) * stance_delta_t_;
-        current_tip_pose_ += delta_pos; // ACCUMULATE like OpenSHC, don't replace
-        current_tip_velocity_ = delta_pos / time_delta;
+        current_tip_pose_ += delta_pos; // ACCUMULATE like OpenSHC (NO IK here)
 
-        // Apply to leg through IK
-        leg_.applyIK(current_tip_pose_);
+        current_tip_velocity_ = delta_pos / time_delta;
     }
 }
