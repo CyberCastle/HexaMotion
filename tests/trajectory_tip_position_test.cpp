@@ -13,8 +13,15 @@
 #include <iostream>
 #include <vector>
 
+// Helper function to check if a position is reachable using OpenSHC-style WorkspaceValidator
+bool isPositionReachable(const RobotModel &model, int leg_id, const Point3D &position) {
+    // Use WorkspaceValidator::isReachable like in OpenSHC/LocomotionSystem
+    WorkspaceValidator temp_validator(model);
+    return temp_validator.isReachable(leg_id, position);
+}
+
 void debugTipPositionGeneration(LegStepper &stepper, Leg &leg, const RobotModel &model, const GaitConfiguration &gait_config) {
-    std::cout << "\n=== DEBUG: Tip Position Generation (Gait: " << gait_config.gait_name << ") ===" << std::endl;
+    std::cout << "\n=== TRAJECTORY: Tip Position Generation (Gait: " << gait_config.gait_name << ") ===" << std::endl;
 
     // Use the actual current position from the leg that was set up via StandingPose
     // This follows the complete BodyPoseConfiguration -> StandingPose -> leg pose flow
@@ -46,7 +53,7 @@ void debugTipPositionGeneration(LegStepper &stepper, Leg &leg, const RobotModel 
               << "°, tibia=" << (new_angles.tibia * 180.0 / M_PI) << "°" << std::endl;
 
     // Check if initial position is reachable
-    bool is_reachable = leg.isTargetReachable(initial_position);
+    bool is_reachable = isPositionReachable(model, leg.getLegId(), initial_position);
     std::cout << "Initial position reachable: " << (is_reachable ? "YES" : "NO") << std::endl;
 
     // Get leg reach information
@@ -60,8 +67,8 @@ void debugTipPositionGeneration(LegStepper &stepper, Leg &leg, const RobotModel 
     // Calculate workspace limits around current position for debug
     Point3D workspace_center = base_pos + Point3D(150, 0, -150); // Conservative reachable position
     double workspace_center_distance = (workspace_center - base_pos).norm();
-    bool workspace_center_reachable = leg.isTargetReachable(workspace_center);
-    std::cout << "Workspace center test: (" << workspace_center.x << ", " << workspace_center.y << ", " << workspace_center.z << ")" << std::endl;
+    bool workspace_center_reachable = isPositionReachable(model, leg.getLegId(), workspace_center);
+    std::cout << "Workspace center test: " << workspace_center.x << ", " << workspace_center.y << ", " << workspace_center.z << ")" << std::endl;
     std::cout << "Workspace center distance: " << workspace_center_distance << " mm, reachable: " << (workspace_center_reachable ? "YES" : "NO") << std::endl;
 
     // Debug stepper state before update
@@ -222,89 +229,89 @@ void debugTipPositionGeneration(LegStepper &stepper, Leg &leg, const RobotModel 
     if (target_error > 1.0) {
         std::cout << "\n🔧 APPLYING OpenSHC PRECISION CORRECTION (forceNormalTouchdown)" << std::endl;
         std::cout << "Target error " << target_error << "mm exceeds 1.0mm threshold" << std::endl;
-        
+
         // Reset stepper and apply precision correction using OpenSHC method
         stepper.setCurrentTipPose(initial_position);
-        
+
         // DIRECT CONTROL NODE MODIFICATION (OpenSHC exact approach)
         Point3D corrected_stride = stepper.getStrideVector();
         StepCycle corrected_cycle = stepper.getStepCycle();
         double corrected_time_delta = 1.0 / corrected_cycle.frequency_;
-        
+
         // Calculate final tip velocity for stance transition (OpenSHC formula)
         Point3D final_tip_velocity = corrected_stride * (-1.0) * (stepper.getStanceDeltaT() / corrected_time_delta);
         Point3D stance_node_separation = final_tip_velocity * 0.25 * (corrected_time_delta / stepper.getSwingDeltaT());
-        
+
         // OpenSHC forceNormalTouchdown: Modify control nodes directly
         Point3D bezier_target = target_position;
         Point3D bezier_origin = target_position - stance_node_separation * 4.0;
         bezier_origin.z = std::max(initial_position.z, target_position.z);
         bezier_origin = bezier_origin + stepper.getSwingClearance();
-        
+
         std::cout << "Bezier origin adjustment: (" << bezier_origin.x << ", " << bezier_origin.y << ", " << bezier_origin.z << ")" << std::endl;
         std::cout << "Bezier target: (" << bezier_target.x << ", " << bezier_target.y << ", " << bezier_target.z << ")" << std::endl;
         std::cout << "Stance node separation: (" << stance_node_separation.x << ", " << stance_node_separation.y << ", " << stance_node_separation.z << ")" << std::endl;
-        
+
         // Force exact control node modification (requires direct access to LegStepper internals)
         // Since we can't modify stepper internals directly, we'll use a mathematical approach
         // to calculate the corrected trajectory that compensates for Bézier overshoot
-        
+
         // Calculate the expected overshoot based on current error
         Point3D overshoot_vector = final_position - target_position;
         Point3D compensated_target = target_position - overshoot_vector;
-        
+
         std::cout << "Detected overshoot: (" << overshoot_vector.x << ", " << overshoot_vector.y << ", " << overshoot_vector.z << ")" << std::endl;
         std::cout << "Compensated target: (" << compensated_target.x << ", " << compensated_target.y << ", " << compensated_target.z << ")" << std::endl;
-        
+
         // Apply compensated target and regenerate trajectory
         stepper.setTargetTipPose(compensated_target);
         stepper.updateStride();
-        
+
         std::cout << "\n=== PRECISION-CORRECTED SWING TRAJECTORY ====" << std::endl;
-        
+
         // Re-execute swing with compensated target
         for (int iter = 1; iter <= swing_iterations; iter++) {
             stepper.updateTipPositionIterative(iter, iteration_time, false, false);
         }
-        
+
         Point3D corrected_final_position = stepper.getCurrentTipPose();
         double corrected_target_error = (corrected_final_position - target_position).norm();
-        
+
         std::cout << "Corrected final position: (" << corrected_final_position.x << ", " << corrected_final_position.y << ", " << corrected_final_position.z << ")" << std::endl;
         std::cout << "Corrected target error: " << corrected_target_error << " mm" << std::endl;
         std::cout << "Precision improvement: " << ((target_error - corrected_target_error) / target_error * 100.0) << "%" << std::endl;
-        
+
         if (corrected_target_error < target_error) {
             std::cout << "✅ PRECISION CORRECTION SUCCESSFUL: Error reduced" << std::endl;
         } else {
             std::cout << "⚠ PRECISION CORRECTION INEFFECTIVE: Error not reduced" << std::endl;
         }
-        
+
         // Try iterative correction for better precision
         if (corrected_target_error > 0.5) {
             std::cout << "\n🔄 APPLYING ITERATIVE PRECISION CORRECTION" << std::endl;
-            
+
             Point3D current_overshoot = corrected_final_position - target_position;
             Point3D double_compensated_target = compensated_target - current_overshoot;
-            
+
             std::cout << "Double compensation target: (" << double_compensated_target.x << ", " << double_compensated_target.y << ", " << double_compensated_target.z << ")" << std::endl;
-            
+
             stepper.setCurrentTipPose(initial_position);
             stepper.setTargetTipPose(double_compensated_target);
             stepper.updateStride();
-            
+
             // Re-execute with double compensation
             for (int iter = 1; iter <= swing_iterations; iter++) {
                 stepper.updateTipPositionIterative(iter, iteration_time, false, false);
             }
-            
+
             Point3D final_corrected_position = stepper.getCurrentTipPose();
             double final_corrected_error = (final_corrected_position - target_position).norm();
-            
+
             std::cout << "Final corrected position: (" << final_corrected_position.x << ", " << final_corrected_position.y << ", " << final_corrected_position.z << ")" << std::endl;
             std::cout << "Final corrected error: " << final_corrected_error << " mm" << std::endl;
             std::cout << "Total improvement: " << ((target_error - final_corrected_error) / target_error * 100.0) << "%" << std::endl;
-            
+
             if (final_corrected_error < 1.0) {
                 std::cout << "✅ ITERATIVE CORRECTION SUCCESSFUL: Error < 1.0mm" << std::endl;
             } else {
@@ -312,7 +319,7 @@ void debugTipPositionGeneration(LegStepper &stepper, Leg &leg, const RobotModel 
                 std::cout << "📝 NOTE: Bézier curve precision limits reached for this velocity/workspace combination" << std::endl;
             }
         }
-        
+
         // Restore original target for subsequent tests
         stepper.setTargetTipPose(target_position);
         stepper.updateStride();
@@ -537,7 +544,7 @@ void debugTipPositionGeneration(LegStepper &stepper, Leg &leg, const RobotModel 
 }
 
 int main() {
-    std::cout << "=== Debug Tip Position Test (Tripod Gait Configuration) ===" << std::endl;
+    std::cout << "=== Trajectory Tip Position Test (Tripod Gait Configuration) ===" << std::endl;
 
     // Initialize parameters
     Parameters p{};
@@ -639,58 +646,58 @@ int main() {
     // Configure velocity to generate proper stride using tripod gait step length
     // Use XY velocity to force significant coxa movement during stance
     // This will test if the IK system can handle XY plane displacements
-    
+
     // Start with desired velocity and check workspace constraints
     double desired_velocity_x = 60.0; // mm/s in X direction (increased for more stance movement)
     double desired_velocity_y = 60.0; // mm/s in Y direction (increased for more stance movement)
-    
+
     // Set initial velocity and calculate stride
     stepper.setDesiredVelocity(Point3D(desired_velocity_x, desired_velocity_y, 0), 0.0);
     stepper.updateStride();
     Point3D calculated_stride = stepper.getStrideVector();
-    
+
     // WORKSPACE VALIDATION: Check if target is reachable and adjust if necessary
     Point3D initial_target = identity_tip_pose + calculated_stride * 0.5;
-    bool target_reachable = test_legs[0].isTargetReachable(initial_target);
-    
+    bool target_reachable = isPositionReachable(model, test_legs[0].getLegId(), initial_target);
+
     std::cout << "Initial velocity: (" << desired_velocity_x << ", " << desired_velocity_y << ", 0) mm/s" << std::endl;
     std::cout << "Initial target: (" << initial_target.x << ", " << initial_target.y << ", " << initial_target.z << ")" << std::endl;
     std::cout << "Target reachable: " << (target_reachable ? "YES" : "NO") << std::endl;
-    
+
     // If not reachable, or if we want to optimize for better precision, adjust velocity
     if (!target_reachable) {
         std::cout << "⚠ WORKSPACE WARNING: Target not reachable, adjusting velocity..." << std::endl;
-        
+
         // Reduce velocity by 20% and try again
         desired_velocity_x *= 0.8;
         desired_velocity_y *= 0.8;
         stepper.setDesiredVelocity(Point3D(desired_velocity_x, desired_velocity_y, 0), 0.0);
         stepper.updateStride();
         calculated_stride = stepper.getStrideVector();
-        
+
         Point3D adjusted_target = identity_tip_pose + calculated_stride * 0.5;
-        bool adjusted_reachable = test_legs[0].isTargetReachable(adjusted_target);
-        
+        bool adjusted_reachable = isPositionReachable(model, test_legs[0].getLegId(), adjusted_target);
+
         std::cout << "Adjusted velocity: (" << desired_velocity_x << ", " << desired_velocity_y << ", 0) mm/s" << std::endl;
         std::cout << "Adjusted target: (" << adjusted_target.x << ", " << adjusted_target.y << ", " << adjusted_target.z << ")" << std::endl;
         std::cout << "Adjusted reachable: " << (adjusted_reachable ? "YES" : "NO") << std::endl;
     }
-    
+
     // Calculate distance from base to target for analysis
     Point3D base_pos = test_legs[0].getBasePosition();
     Point3D final_target = identity_tip_pose + calculated_stride * 0.5;
     double target_distance_from_base = (final_target - base_pos).norm();
     double max_reach = model.getLegReach();
     double reach_percentage = (target_distance_from_base / max_reach) * 100.0;
-    
+
     std::cout << "Final target distance from base: " << target_distance_from_base << " mm" << std::endl;
     std::cout << "Max leg reach: " << max_reach << " mm" << std::endl;
     std::cout << "Reach utilization: " << reach_percentage << "%" << std::endl;
-    
+
     if (reach_percentage > 95.0) {
         std::cout << "⚠ WARNING: Using >95% of leg reach - may cause precision issues" << std::endl;
     }
-    
+
     std::cout << "Velocidad configurada: (" << desired_velocity_x << ", " << desired_velocity_y << ", 0) mm/s para movimiento en plano XY" << std::endl;
     std::cout << "Stride vector calculado: (" << calculated_stride.x << ", " << calculated_stride.y << ", " << calculated_stride.z << ")" << std::endl;
 

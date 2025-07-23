@@ -139,60 +139,6 @@ Eigen::Matrix3d Leg::getJacobian() const {
     return model_.calculateJacobian(leg_id_, joint_angles_, tip_position_);
 }
 
-bool Leg::isTargetReachable(const Point3D &target) const {
-    // OpenSHC approach: Simple geometric check based on distance from base
-    // OpenSHC doesn't typically reject positions but instead uses makeReachable() to adjust them
-    Point3D base_pos = getBasePosition();
-    double distance = sqrt(pow(target.x - base_pos.x, 2) +
-                           pow(target.y - base_pos.y, 2) +
-                           pow(target.z - base_pos.z, 2));
-    double max_reach = model_.getLegReach();
-
-    // Simple distance check - OpenSHC style
-    return distance <= max_reach;
-}
-
-Point3D Leg::constrainToWorkspace(const Point3D &target) const {
-    // Simple workspace constraint - scale target to max reach if outside
-    double distance = sqrt(target.x * target.x + target.y * target.y + target.z * target.z);
-    double max_reach = model_.getLegReach();
-
-    if (distance > max_reach) {
-        double scale = max_reach / distance;
-        return Point3D(target.x * scale, target.y * scale, target.z * scale);
-    }
-
-    return target;
-}
-
-double Leg::getJointLimitProximity() const {
-    const Parameters &params = model_.getParams();
-    // Calculate proximity for each joint (1.0 = far from limits, 0.0 = at limits)
-    double coxa_range = params.coxa_angle_limits[1] - params.coxa_angle_limits[0];
-    double femur_range = params.femur_angle_limits[1] - params.femur_angle_limits[0];
-    double tibia_range = params.tibia_angle_limits[1] - params.tibia_angle_limits[0];
-
-    double coxa_proximity = 1.0 - abs(joint_angles_.coxa - (params.coxa_angle_limits[0] + coxa_range / 2)) / (coxa_range / 2);
-    double femur_proximity = 1.0 - abs(joint_angles_.femur - (params.femur_angle_limits[0] + femur_range / 2)) / (femur_range / 2);
-    double tibia_proximity = 1.0 - abs(joint_angles_.tibia - (params.tibia_angle_limits[0] + tibia_range / 2)) / (tibia_range / 2);
-
-    // Return minimum proximity (worst case)
-    return std::min({coxa_proximity, femur_proximity, tibia_proximity});
-}
-
-void Leg::constrainJointLimits() {
-    const Parameters &params = model_.getParams();
-    joint_angles_.coxa = std::max(params.coxa_angle_limits[0],
-                                  std::min(params.coxa_angle_limits[1], joint_angles_.coxa));
-    joint_angles_.femur = std::max(params.femur_angle_limits[0],
-                                   std::min(params.femur_angle_limits[1], joint_angles_.femur));
-    joint_angles_.tibia = std::max(params.tibia_angle_limits[0],
-                                   std::min(params.tibia_angle_limits[1], joint_angles_.tibia));
-
-    // Synchronize tip position after constraining angles
-    updateTipPosition();
-}
-
 void Leg::initialize(const Pose &default_stance) {
     // Calculate default tip position from stance pose
     Point3D stance_tip = default_stance.position;
