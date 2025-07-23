@@ -22,6 +22,80 @@
  */
 
 /**
+ * @brief Calculate joint angles for a given height using analytic IK
+ * @param target_height_mm Target height in millimeters.
+ * @param params Robot parameters containing dimensions and joint limits.
+ * @return Calculated individual servo angles or default values if no solution
+ *         is found.
+ */
+CalculatedServoAngles calculateServoAnglesForHeight(double target_height_mm, const Parameters &params) {
+    CalculatedServoAngles result{0.0, 0.0, 0.0, false};
+
+    // Based on analytic_robot_model.cpp leg transform:
+    // T = T_base * R_coxa * T_coxa * R_femur * T_femur * R_tibia * T_tibia
+    //
+    // For leg height calculation with coxa = 0° (radial stance):
+    // - T_base: hexagon_radius in XY plane (Z = 0)
+    // - R_coxa: rotation around Z axis (coxa = 0°)
+    // - T_coxa: translation along X axis (coxa_length)
+    // - R_femur: rotation around Y axis (femur angle)
+    // - T_femur: translation along X axis (femur_length)
+    // - R_tibia: rotation around Y axis (tibia angle)
+    // - T_tibia: translation along Z axis (-tibia_length)
+
+    // With coxa = 0°, the Z component of foot position is:
+    // Z = -femur_length * sin(femur_angle) - tibia_length * cos(femur_angle + tibia_angle)
+    //
+    // For standing pose, we want tibia to be vertical (pointing down):
+    // femur_angle + tibia_angle = 0° (so tibia points straight down)
+    // Therefore: tibia_angle = -femur_angle
+    //
+    // Substituting:
+    // Z = -femur_length * sin(femur_angle) - tibia_length * cos(0°)
+    // Z = -femur_length * sin(femur_angle) - tibia_length
+    //
+    // Solving for femur_angle:
+    // target_height = -femur_length * sin(femur_angle) - tibia_length
+    // sin(femur_angle) = -(target_height + tibia_length) / femur_length
+
+    double target_z = -target_height_mm; // Convert to negative Z (150 -> -150)
+    double sin_femur = -(target_z + params.tibia_length) / params.femur_length;
+
+    // Check if solution is physically possible
+    if (sin_femur < -1.0 || sin_femur > 1.0) {
+        return result; // No valid solution
+    }
+
+    // Calculate femur angle in radians
+    double femur_rad = std::asin(sin_femur);
+
+    // Calculate tibia angle in radians (to keep tibia vertical)
+    double tibia_rad = -femur_rad;
+
+    // Convert to degrees for limit checking (assuming limits are in degrees)
+    double femur_deg = femur_rad * 180.0 / M_PI;
+    double tibia_deg = tibia_rad * 180.0 / M_PI;
+
+    // Check servo limits
+    if (femur_deg < params.femur_angle_limits[0] ||
+        femur_deg > params.femur_angle_limits[1]) {
+        return result;
+    }
+    if (tibia_deg < params.tibia_angle_limits[0] ||
+        tibia_deg > params.tibia_angle_limits[1]) {
+        return result;
+    }
+
+    // Return angles in radians
+    result.femur = femur_rad;
+    result.tibia = tibia_rad;
+    result.coxa = 0.0; // Coxa remains at 0° for radial stance
+    result.valid = true;
+
+    return result;
+}
+
+/**
  * @brief Calculate hexagonal leg stance positions based on robot parameters
  * Following OpenSHC's stance positioning approach from default.yaml
  * Uses DH parameter-based forward kinematics for accurate stance positioning
@@ -36,17 +110,29 @@
  * @param params Robot parameters containing dimensions and joint limits.
  * @return Array of calculated stance positions in millimeters
  */
-std::array<LegStancePosition, NUM_LEGS> calculateHexagonalStancePositions(const Parameters &params) {
+std::array<LegStancePosition, NUM_LEGS> getDefaultStandPositions(const Parameters &params) {
     std::array<LegStancePosition, NUM_LEGS> positions;
 
     // Create a temporary RobotModel to use DH-based calculations
     RobotModel temp_model(params);
 
-    // Calculate stance positions using DH-based forward kinematics
-    // For stance positions, we use 0° angles (neutral position) as per AGENTS.md
-    // "Physically, if the robot has all servo angles at 0°, the femur remains horizontal,
-    // in line with the coxa. The tibia, on the other hand, remains vertical, perpendicular to the ground."
-    JointAngles neutral_angles(0.0, 0.0, 0.0); // All angles at 0° for neutral stance
+    // Calculate servo angles analytically to guarantee the desired height
+    CalculatedServoAngles calc =
+        calculateServoAnglesForHeight(params.standing_height, params);
+
+    JointAngles neutral_angles;
+    if (calc.valid) {
+        neutral_angles = JointAngles{
+            0.0, // Coxa angle is 0° for radial alignment
+            calc.femur,
+            calc.tibia};
+    } else {
+        neutral_angles = JointAngles{
+            0.0, // Coxa angle is 0° for radial alignment
+            0.0, // Femur angle is 0° for horizontal alignment
+            0.0  // Tibia angle is 0° for vertical alignment
+        };
+    }
 
     for (int i = 0; i < NUM_LEGS; i++) {
         // Use DH-based forward kinematics to calculate the foot position
@@ -56,52 +142,10 @@ std::array<LegStancePosition, NUM_LEGS> calculateHexagonalStancePositions(const 
         // Store the stance position (x, y coordinates only, z is the height)
         positions[i].x = foot_position.x;
         positions[i].y = foot_position.y;
+        positions[i].z = foot_position.z; // Use Z from FK for accurate stance height
     }
 
     return positions;
-}
-
-/**
- * @brief Calculate joint angles for a given height using analytic IK
- *
- * This helper mimics the logic from angle_calculus.cpp. It sweeps the
- * tibia angle (\f$\beta\f$) across its allowed range and solves for the
- * femur angle (\f$\alpha\f$) so the tibia remains as vertical as possible
- * while respecting the servo limits.
- *
- * @param target_height_mm Target height in millimeters.
- * @param params Robot parameters containing dimensions and joint limits.
- * @return Calculated individual servo angles or default values if no solution
- *         is found.
- */
-CalculatedServoAngles calculateServoAnglesForHeight(double target_height_mm, const Parameters &params) {
-    CalculatedServoAngles result{0.0, 0.0, 0.0, false};
-
-    const double B = params.femur_length;
-    const double C = params.tibia_length;
-
-    // Analytic geometry for a vertical tibia:
-    // H = C + B * sin(femur_angle)
-    double ratio = (target_height_mm - C) / B;
-    if (ratio < -1.0 || ratio > 1.0)
-        return result;
-
-    double femur_rad = std::asin(ratio);
-    double femur_deg = math_utils::radiansToDegrees(femur_rad);
-    double tibia_deg = -femur_deg; // Keep tibia vertical
-
-    // Check servo limits
-    if (femur_deg < params.femur_angle_limits[0] ||
-        femur_deg > params.femur_angle_limits[1])
-        return result;
-    if (tibia_deg < params.tibia_angle_limits[0] ||
-        tibia_deg > params.tibia_angle_limits[1])
-        return result;
-
-    result.femur = femur_deg;
-    result.tibia = tibia_deg;
-    result.valid = true;
-    return result;
 }
 
 /**
@@ -130,8 +174,8 @@ std::array<StandingPoseJoints, NUM_LEGS> getDefaultStandingPoseJoints(const Para
     for (int i = 0; i < NUM_LEGS; i++) {
         if (calc.valid) {
             joints[i].coxa = 0.0; // Coxa angle is 0° for radial alignment
-            joints[i].femur = math_utils::degreesToRadians(calc.femur);
-            joints[i].tibia = math_utils::degreesToRadians(calc.tibia);
+            joints[i].femur = calc.femur;
+            joints[i].tibia = calc.tibia;
         } else {
             // Fallback to a neutral configuration
             // Fine-tuned angles that achieve exactly -208mm height:
@@ -139,8 +183,8 @@ std::array<StandingPoseJoints, NUM_LEGS> getDefaultStandingPoseJoints(const Para
             // This is the precise configuration for the target robot height
             // calculated with finetune_angles_test.cpp
             joints[i].coxa = 0.0; // Coxa angle is 0° for radial alignment
-            joints[i].femur = math_utils::degreesToRadians(0.0);
-            joints[i].tibia = math_utils::degreesToRadians(0.0);
+            joints[i].femur = 0.0;
+            joints[i].tibia = 0.0;
         }
     }
 
@@ -155,7 +199,7 @@ std::array<StandingPoseJoints, NUM_LEGS> getDefaultStandingPoseJoints(const Para
  */
 BodyPoseConfiguration createPoseConfiguration(const Parameters &params, const std::string &config_type) {
     BodyPoseConfiguration config(params);
-    config.leg_stance_positions = calculateHexagonalStancePositions(params);
+    config.leg_stance_positions = getDefaultStandPositions(params);
     config.standing_pose_joints = getDefaultStandingPoseJoints(params);
 
     // OpenSHC equivalent pose controller parameters
@@ -165,11 +209,12 @@ BodyPoseConfiguration createPoseConfiguration(const Parameters &params, const st
 
     // OpenSHC equivalent body clearance and swing parameters
     config.body_clearance = params.standing_height; // Body clearance in millimeters - use standing_height for consistency
-    config.swing_height = 20.0f;                    // Default 20mm swing height (OpenSHC typical)
+    // Use swing height factor from gait factors for consistent swing amplitude
+    config.swing_height = static_cast<float>(params.standing_height * params.gait_factors.tripod_height_factor);
 
     // OpenSHC equivalent pose limits (from default.yaml)
     config.max_translation = {25.0f, 25.0f, 25.0f}; // 25mm translation limits
-    config.max_rotation = {0.250f, 0.250f, 0.250f}; // 0.25 radian rotation limits
+    config.max_rotation = {0.25f, 0.25f, 0.25f};    // 0.25 radian rotation limits
     config.max_translation_velocity = 50.0f;        // 50mm/s velocity limit
     config.max_rotation_velocity = 0.200f;          // 0.2 rad/s rotation limit
 

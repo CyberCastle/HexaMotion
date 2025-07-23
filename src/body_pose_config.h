@@ -23,6 +23,7 @@
 struct LegStancePosition {
     double x; //< X position relative to body center (millimeters)
     double y; //< Y position relative to body center (millimeters)
+    double z; //< Z position relative to body center (millimeters)
 };
 
 /**
@@ -30,9 +31,9 @@ struct LegStancePosition {
  * In OpenSHC, standing pose is configured, not calculated from kinematics
  */
 struct StandingPoseJoints {
-    double coxa;  //< Coxa joint angle in degrees
-    double femur; //< Femur joint angle in degrees
-    double tibia; //< Tibia joint angle in degrees
+    double coxa;  //< Coxa joint angle in radians
+    double femur; //< Femur joint angle in radians
+    double tibia; //< Tibia joint angle in radians
 };
 
 /**

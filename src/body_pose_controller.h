@@ -171,7 +171,11 @@ class BodyPoseController {
      * @brief Set current gait type for startup sequence selection
      * @param gait_type The GaitType enum value
      */
-    void setCurrentGaitType(GaitType gait_type) { current_gait_type_ = gait_type; }
+    void setCurrentGaitType(GaitType gait_type) {
+        current_gait_type_ = gait_type;
+        // Reset startup sequences for new gait
+        resetSequenceStates();
+    }
 
     /**
      * @brief Get current gait type
@@ -217,6 +221,13 @@ class BodyPoseController {
     void resetTrajectory();
     bool isTrajectoryInProgress() const { return trajectory_in_progress; }
 
+    // Walk plane pose system (OpenSHC equivalent)
+    void updateWalkPlanePose(Leg legs[NUM_LEGS]);
+    Pose getWalkPlanePose() const;
+    void setWalkPlanePose(const Pose &pose);
+    void setWalkPlanePoseEnabled(bool enabled);
+    bool isWalkPlanePoseEnabled() const;
+
   private:
     RobotModel &model;                      //< Reference to robot model
     BodyPoseConfiguration body_pose_config; //< Body pose configuration
@@ -250,6 +261,23 @@ class BodyPoseController {
 
     // executeShutdownSequence state variables (moved from static to class level)
     bool shutdown_sequence_initialized;
+
+    // OpenSHC walk plane pose system with Bézier curves
+    Pose walk_plane_pose_;              //< Current walk plane pose for body clearance maintenance
+    bool walk_plane_pose_enabled;       //< Enable/disable walk plane pose system
+    double walk_plane_update_threshold; //< Minimum change threshold for updates
+
+    // Bézier curve control system for smooth transitions
+    bool walk_plane_bezier_in_progress;              //< Whether a Bézier transition is in progress
+    double walk_plane_bezier_time;                   //< Current time in Bézier transition
+    double walk_plane_bezier_duration;               //< Duration of Bézier transition
+    Point3D walk_plane_position_nodes[5];            //< Position control nodes for quartic Bézier
+    Eigen::Quaterniond walk_plane_rotation_nodes[5]; //< Rotation control nodes for quartic Bézier
+
+    // Walk plane pose helper methods
+    Point3D calculateWalkPlaneNormal(Leg legs[NUM_LEGS]) const;
+    double calculateWalkPlaneHeight(Leg legs[NUM_LEGS]) const;
+    void applyWalkPlanePoseToBodyPosition(Eigen::Vector3d &position) const;
 
     // Tripod gait leg groupings (OpenSHC compatible)
     // Group A: AR (0), CR (2), BL (4) - Anterior Right, Center Right, Back Left

@@ -65,8 +65,8 @@ struct Parameters {
      * Equivalent to OpenSHC's trajectory interpolation system.
      */
     struct SmoothTrajectoryConfig {
-        bool use_current_servo_positions = true;           //< Use current servo positions as starting point for trajectories (OpenSHC-style)
-        bool enable_pose_interpolation = true;             //< Enable smooth pose interpolation between positions
+        bool use_current_servo_positions = false;          //< Use current servo positions as starting point for trajectories (OpenSHC-style)
+        bool enable_pose_interpolation = false;            //< Enable smooth pose interpolation between positions
         double interpolation_speed = MIN_SERVO_VELOCITY;   //< Interpolation speed factor (0.01-1.0, where 0.1 is smooth)
         double position_tolerance_mm = POSITION_TOLERANCE; //< Position tolerance for determining if servo has reached target
         uint8_t max_interpolation_steps = 20;              //< Maximum steps for pose interpolation
@@ -156,6 +156,9 @@ struct Parameters {
 
     // Tipo de gait seleccionado (OpenSHC compatible)
     std::string gait_type;
+
+    // Gait phase offset multiplier for tripod gait synchronization
+    double offset_multiplier = 0.5; // Default offset multiplier for tripod gait phase synchronization
 };
 
 enum GaitType {
@@ -184,6 +187,13 @@ struct Point3D {
     // Operator overloads
     Point3D operator+(const Point3D &other) const {
         return Point3D(x + other.x, y + other.y, z + other.z);
+    }
+
+    Point3D &operator+=(const Point3D &other) {
+        x += other.x;
+        y += other.y;
+        z += other.z;
+        return *this;
     }
 
     Point3D operator-(const Point3D &other) const {
@@ -551,6 +561,12 @@ class RobotModel {
      */
     Pose getPoseLegFrame(int leg_index, const JointAngles &joint_angles, const Pose &robot_frame_pose = Pose::Identity()) const;
 
+    /**
+     * @brief Get leg reach distance.
+     * @return Maximum reach distance
+     */
+    double getLegReach() const;
+
     /** Get the DH position of the leg base (without joint transformations) */
     Point3D getLegBasePosition(int leg_index) const;
 
@@ -599,18 +615,6 @@ class RobotModel {
                                         const JointAngles &current_angles) const;
 
     /**
-     * @brief Apply inverse kinematics using local leg coordinates with success indicator (OpenSHC-style)
-     * This method follows OpenSHC's applyIK approach and returns success/failure status.
-     *
-     * @param leg Leg index (0-5)
-     * @param global_target Target position in global robot coordinates
-     * @param current_angles Current joint angles for initial guess
-     * @return Success indicator (1.0 for success, 0.0 for failure)
-     */
-    double applyIKLocalCoordinates(int leg, const Point3D &global_target,
-                                   const JointAngles &current_angles) const;
-
-    /**
      * @brief Transform global position to local leg coordinates (OpenSHC-style)
      * This method transforms a position from global robot coordinates to local leg coordinates,
      * following OpenSHC's getPoseJointFrame approach.
@@ -637,32 +641,55 @@ class RobotModel {
                                               const JointAngles &current_angles) const;
 
     /**
-     * @brief Set desired tip pose in global coordinates and apply IK (OpenSHC-style)
-     * This method follows OpenSHC's setDesiredTipPose and applyIK pattern.
+     * @brief Make a position reachable by constraining it to leg workspace (OpenSHC-style)
+     * This function follows OpenSHC's approach to automatically adjust positions that are
+     * outside the leg's workspace to be within reachable bounds.
      *
-     * @param leg Leg index (0-5)
-     * @param global_desired_pose Desired tip pose in global robot coordinates
-     * @param current_angles Current joint angles for initial guess
-     * @return Success indicator (1.0 for success, 0.0 for failure)
+     * @param leg_index Index of the leg (0-5)
+     * @param reference_tip_position Target position that may be outside workspace
+     * @return Adjusted position that is guaranteed to be within leg workspace
      */
-    double setDesiredTipPoseAndApplyIK(int leg, const Point3D &global_desired_pose,
-                                       const JointAngles &current_angles) const;
+    Point3D makeReachable(int leg_index, const Point3D &reference_tip_position) const;
 
     /**
-     * @brief Calculate position delta in local leg coordinates (OpenSHC-style)
-     * This method calculates the position difference between desired and current poses
-     * in local leg coordinates, following OpenSHC's applyIK approach.
+     * @brief Complete IK solver with position delta calculation and joint limit optimization
+     * This function implements a robust IK method that:
+     * 1. Calculate position delta in leg frame (desired - current)
+     * 2. Apply DLS-based IK with joint limit cost function
+     * 3. Update joint positions with velocity clamping
      *
-     * @param leg Leg index (0-5)
-     * @param global_desired_pose Desired tip pose in global coordinates
-     * @param global_current_pose Current tip pose in global coordinates
-     * @param current_angles Current joint angles for transformation
-     * @return Position delta in local leg coordinates
+     * @param leg Leg index
+     * @param current_tip_pose Current tip position in global coordinates
+     * @param desired_tip_pose Desired tip position in global coordinates
+     * @param current_angles Current joint angles
+     * @param time_delta Time delta for velocity calculation (typically control frequency)
+     * @return Updated joint angles after advanced IK
      */
-    Point3D calculatePositionDeltaLocalCoordinates(int leg, const Point3D &global_desired_pose,
-                                                   const Point3D &global_current_pose,
-                                                   const JointAngles &current_angles) const;
+    JointAngles applyAdvancedIK(int leg, const Point3D &current_tip_pose, const Point3D &desired_tip_pose,
+                                const JointAngles &current_angles, double time_delta = 0.02) const;
 
+    /**
+     * @brief Joint limit cost function and gradient calculation
+     * Implements cost function optimization for joint position and velocity limits
+     *
+     * @param current_angles Current joint angles
+     * @param joint_velocities Joint velocities
+     * @param leg Leg index
+     * @return Combined cost gradient vector
+     */
+    Eigen::Vector3d calculateJointLimitCostGradient(const JointAngles &current_angles,
+                                                    const Eigen::Vector3d &joint_velocities, int leg) const;
+
+    /**
+     * @brief Core IK solver method with delta vector input (internal)
+     * Implements DLS-based IK for position delta calculation
+     *
+     * @param leg Leg index
+     * @param delta 6D delta vector (position + rotation, though we use only position)
+     * @param current_angles Current joint angles
+     * @return Joint position delta
+     */
+    Eigen::Vector3d solveDeltaIK(int leg, const Eigen::MatrixXd &delta, const JointAngles &current_angles) const;
     std::vector<Eigen::Matrix4d> buildDHTransforms(int leg, const JointAngles &q) const;
 
   private:

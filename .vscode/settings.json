@@ -74,6 +74,8 @@
         "chrono": "cpp",
         "thread": "cpp",
         "queue": "cpp",
-        "stack": "cpp"
+        "stack": "cpp",
+        "core": "cpp",
+        "map": "cpp"
     }
 }

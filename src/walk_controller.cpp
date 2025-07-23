@@ -1,4 +1,5 @@
 #include "walk_controller.h"
+#include "body_pose_config.h"
 #include "gait_config_factory.h"
 #include "hexamotion_constants.h"
 #include "leg_stepper.h"
@@ -13,13 +14,13 @@
 #include <string>
 #include <vector>
 
-WalkController::WalkController(RobotModel &m, Leg legs[NUM_LEGS])
-    : model(m), terrain_adaptation_(m), velocity_limits_(m),
+WalkController::WalkController(RobotModel &m, Leg legs[NUM_LEGS], const BodyPoseConfiguration &pose_config)
+    : model(m), terrain_adaptation_(m), body_pose_controller_(nullptr), velocity_limits_(m),
       step_clearance_(30.0), step_depth_(10.0),
       desired_linear_velocity_(0, 0, 0), desired_angular_velocity_(0.0),
       walk_state_(WALK_STOPPED), pose_state_(0),
       regenerate_walkspace_(false), legs_at_correct_phase_(0), legs_completed_first_step_(0),
-      return_to_default_attempted_(false) {
+      return_to_default_attempted_(false), legs_array_(legs) {
 
     // Initialize leg_steppers_ with references to actual legs from LocomotionSystem
     leg_steppers_.clear();
@@ -37,11 +38,20 @@ WalkController::WalkController(RobotModel &m, Leg legs[NUM_LEGS])
 
     // Create LegStepper objects for each leg
     for (int i = 0; i < NUM_LEGS; i++) {
-        // Calculate default stance position for each leg
-        Point3D default_stance = calculateDefaultStancePosition(i);
+
+        // Use leg stance position to calculate identity tip pose
+        const LegStancePosition leg_stance_position = pose_config.leg_stance_positions[i];
+
+        // Calculate the identity tip pose from the leg stance position
+        // This assumes the stance position is in the robot's body frame
+        // For HexaMotion, use actual standing height instead of Z=0
+        Point3D identity_tip_pose = Point3D(
+            leg_stance_position.x,
+            leg_stance_position.y,
+            leg_stance_position.z); // Use standing height for HexaMotion compatibility
 
         // Crear LegStepper con referencias a los validadores
-        auto stepper = std::make_shared<LegStepper>(i, default_stance, legs[i], model,
+        auto stepper = std::make_shared<LegStepper>(i, identity_tip_pose, legs[i], model,
                                                     walkspace_analyzer_.get(), workspace_validator_.get());
         leg_steppers_.push_back(stepper);
     }
@@ -86,34 +96,35 @@ bool WalkController::setGaitByName(const std::string &gait_name) {
         // Gait not found, return false
         return false;
     }
-    // Apply the gait configuration
+
     return setGaitConfiguration(gait_config);
 }
 
 void WalkController::applyGaitConfigToLegSteppers(const GaitConfiguration &gait_config) {
-    // Aplicar todos los parámetros relevantes de GaitConfiguration a cada LegStepper
+    // Generate StepCycle for this gait once
+    StepCycle step_cycle = gait_config.generateStepCycle();
+
+    // Apply StepCycle and gait configuration to each LegStepper
     for (int i = 0; i < NUM_LEGS && i < leg_steppers_.size(); i++) {
         auto leg_stepper = leg_steppers_[i];
         if (!leg_stepper)
             continue;
 
-        // Offset de fase normalizado [0,1]
+        // Set StepCycle (OpenSHC style - single call instead of multiple parameters)
+        leg_stepper->setStepCycle(step_cycle);
+
+        // Set gait-specific parameters (not part of StepCycle)
+        leg_stepper->setSwingWidth(gait_config.swing_width);
+        leg_stepper->setControlFrequency(gait_config.control_frequency);
+        leg_stepper->setStepClearanceHeight(gait_config.swing_height);
+
+        // Calculate phase offset using StepCycle period
         double phase_offset = static_cast<double>(gait_config.offsets.getForLegIndex(i) * gait_config.phase_config.phase_offset) /
-                              static_cast<double>(gait_config.step_cycle.period_);
+                              static_cast<double>(step_cycle.period_);
         leg_stepper->setPhaseOffset(phase_offset);
 
-        // Configuración de parámetros de marcha
-        leg_stepper->setStepLength(gait_config.step_length);
-        leg_stepper->setSwingHeight(gait_config.swing_height);
-        leg_stepper->setBodyClearance(gait_config.body_clearance);
-        leg_stepper->setStanceSpanModifier(gait_config.stance_span_modifier);
-
-        // Configurar swing_clearance_ basado en swing_height de la marcha
-        // En OpenSHC, swing_clearance_ se inicializa con swing_height en dirección normal al plano de marcha
-        Point3D swing_clearance(0.0, 0.0, gait_config.swing_height);
-        leg_stepper->setSwingClearance(swing_clearance);
-
-        // Si hay otros parámetros relevantes, configurarlos aquí
+        // OpenSHC: Configurar velocidad deseada para el cálculo de stride
+        leg_stepper->setDesiredVelocity(desired_linear_velocity_, desired_angular_velocity_);
     }
 
     // Actualizar parámetros de adaptación al terreno
@@ -197,20 +208,13 @@ bool WalkController::validateVelocityCommand(double vx, double vy, double omega)
 }
 
 void WalkController::updateVelocityLimits(double frequency, double stance_ratio, double time_to_max_stride) {
-    // Update the current gait configuration directly
-    current_gait_config_.step_frequency = frequency;
-    current_gait_config_.stance_ratio = stance_ratio;
-    current_gait_config_.swing_ratio = 1.0 - stance_ratio; // Complement
+    // Update time_to_max_stride if provided
     current_gait_config_.time_to_max_stride = time_to_max_stride;
 
-    // Update phase configuration to maintain consistency
-    double total_ratio = current_gait_config_.stance_ratio + current_gait_config_.swing_ratio;
-    if (total_ratio > 0) {
-        int total_phase = current_gait_config_.step_cycle.period_;
-        current_gait_config_.phase_config.stance_phase = (int)(stance_ratio * total_phase / total_ratio);
-        current_gait_config_.phase_config.swing_phase = total_phase - current_gait_config_.phase_config.stance_phase;
-    }
+    // Note: step_frequency, stance_ratio, and swing_ratio are now calculated from phase_config
+    // If dynamic frequency updates are needed, they should modify phase_config and regenerate StepCycle
 
+    // For now, we don't dynamically update phase ratios as they are intrinsic to each gait type
     // Use unified interface
     velocity_limits_.updateGaitParameters(current_gait_config_);
 }
@@ -236,8 +240,6 @@ VelocityLimits::WorkspaceConfig WalkController::getWorkspaceConfig() const {
 void WalkController::init(const Eigen::Vector3d &current_body_position, const Eigen::Vector3d &current_body_orientation) {
     time_delta_ = 0.01; // 10ms default
     walk_state_ = WALK_STOPPED;
-    walk_plane_ = Point3D(0, 0, 0);
-    walk_plane_normal_ = Point3D(0, 0, 1);
     odometry_ideal_ = Point3D(0, 0, 0);
 
     // Store current robot pose
@@ -274,6 +276,9 @@ void WalkController::init(const Eigen::Vector3d &current_body_position, const Ei
     // Init velocity input variables
     desired_linear_velocity_ = Point3D(0, 0, 0);
     desired_angular_velocity_ = 0;
+
+    // Initialize global phase counter
+    global_phase_ = 0;
 }
 
 void WalkController::updateWalk(const Point3D &linear_velocity_input, double angular_velocity_input,
@@ -356,24 +361,34 @@ void WalkController::updateWalk(const Point3D &linear_velocity_input, double ang
     // State transitions for Walk State Machine
     int leg_count = NUM_LEGS;
 
+    // Reset counters before checking leg states
+    legs_at_correct_phase_ = 0;
+    legs_completed_first_step_ = 0;
+
+    // Update state counters by querying each leg stepper
+    for (const auto &leg_stepper : leg_steppers_) {
+        if (leg_stepper->isAtCorrectPhase()) {
+            legs_at_correct_phase_++;
+        }
+        if (leg_stepper->hasCompletedFirstStep()) {
+            legs_completed_first_step_++;
+        }
+    }
+
     // State transition: STOPPED->STARTING
     if (walk_state_ == WALK_STOPPED && has_velocity_command) {
         walk_state_ = WALK_STARTING;
+        global_phase_ = 0; // Reset global phase counter
         // Inicializar LegSteppers solo con el offset y parámetros de GaitConfiguration
-        StepCycle step = current_gait_config_.step_cycle;
         for (auto &leg_stepper : leg_steppers_) {
             leg_stepper->setAtCorrectPhase(false);
             leg_stepper->setCompletedFirstStep(false);
             leg_stepper->setStepState(STEP_STANCE);
-            // Offset y parámetros ya aplicados en applyGaitConfigToLegSteppers
-            leg_stepper->updateStepState(step);
         }
         return;
     }
     // State transition: STARTING->MOVING
     else if (walk_state_ == WALK_STARTING && legs_at_correct_phase_ == leg_count && legs_completed_first_step_ == leg_count) {
-        legs_at_correct_phase_ = 0;
-        legs_completed_first_step_ = 0;
         walk_state_ = WALK_MOVING;
     }
     // State transition: MOVING->STOPPING
@@ -382,36 +397,63 @@ void WalkController::updateWalk(const Point3D &linear_velocity_input, double ang
     }
     // State transition: STOPPING->STOPPED
     else if (walk_state_ == WALK_STOPPING && legs_at_correct_phase_ == leg_count && pose_state_ == 0) {
-        legs_at_correct_phase_ = 0;
         walk_state_ = WALK_STOPPED;
     }
 
-    // Update walk/step state and tip position along trajectory for each leg
-    for (auto &leg_stepper : leg_steppers_) {
-        // Set walk state in LegStepper
-        leg_stepper->setWalkState(walk_state_);
-
-        // Advance phase for this leg
-        leg_stepper->iteratePhase(current_gait_config_.step_cycle);
-
-        // Calculate local phase using step cycle and leg offset
-        int current_phase = leg_stepper->getPhase();
-        double local_phase = static_cast<double>(current_phase) /
-                             static_cast<double>(current_gait_config_.step_cycle.period_);
-        // Usar los parámetros de marcha de GaitConfiguration
-        leg_stepper->updateWithPhase(local_phase, current_gait_config_.step_length, time_delta_);
+    // Increment global phase counter (OpenSHC equivalent)
+    if (walk_state_ == WALK_MOVING || walk_state_ == WALK_STARTING) {
+        StepCycle step_cycle = current_gait_config_.generateStepCycle();
+        global_phase_ = (global_phase_ + 1) % step_cycle.period_;
     }
 
-    updateWalkPlane();
+    // Calculate gait coordination data for each leg (NO POSITION UPDATES)
+    for (int i = 0; i < NUM_LEGS && i < leg_steppers_.size(); i++) {
+        auto leg_stepper = leg_steppers_[i];
+
+        // Set desired velocity for the leg stepper
+        leg_stepper->setDesiredVelocity(desired_linear_velocity_, desired_angular_velocity_);
+
+        // OpenSHC: Calcular iteración actual basada en el global_phase_
+        int current_iteration = global_phase_;
+
+        // OpenSHC: Determinar estado de la pierna basado en offset de fase
+        double offset = leg_stepper->getPhaseOffset(); // This is normalized [0,1]
+        StepCycle step_cycle = current_gait_config_.generateStepCycle();
+        int leg_phase = (global_phase_ + static_cast<int>(offset * step_cycle.period_)) %
+                        step_cycle.period_;
+
+        // OpenSHC: Determinar si está en swing o stance usando la configuración real
+        int stance_period = step_cycle.stance_period_;
+        bool in_swing = (leg_phase >= stance_period);
+
+        // Actualizar el estado en LegStepper
+        if (in_swing && leg_stepper->getStepState() != STEP_SWING) {
+            leg_stepper->setStepState(STEP_SWING);
+            leg_stepper->initializeSwingPeriod(1);
+        } else if (!in_swing && leg_stepper->getStepState() != STEP_STANCE) {
+            leg_stepper->setStepState(STEP_STANCE);
+        }
+
+        // Actualizar el estado en el sistema de legs (importante para detección de cambios de fase)
+        StepPhase leg_step_phase = in_swing ? SWING_PHASE : STANCE_PHASE;
+        legs_array_[i].setStepPhase(leg_step_phase);
+
+        // OpenSHC: Llamar al método iterativo principal
+        leg_stepper->updateTipPositionIterative(current_iteration, time_delta_, false, false);
+    }
+
+    // Update walk plane pose through BodyPoseController
+    if (body_pose_controller_) {
+        // TODO: Use unified interface for walk plane pose update
+        //  body_pose_controller_->updateWalkPlanePose(legs_array_);
+    }
     odometry_ideal_ = odometry_ideal_ + calculateOdometry(time_delta_);
 
     // Integrate WalkspaceAnalyzer for real-time analysis (OpenSHC equivalent)
     if (walkspace_analyzer_ && walkspace_analyzer_->isAnalysisEnabled()) {
-        // Update current leg positions for analysis
+        // Update current leg positions for analysis using current positions from legs_array_
         for (int i = 0; i < NUM_LEGS; i++) {
-            if (i < (int)leg_steppers_.size() && leg_steppers_[i]) {
-                current_leg_positions_[i] = leg_steppers_[i]->getCurrentTipPose();
-            }
+            current_leg_positions_[i] = legs_array_[i].getCurrentTipPositionGlobal();
         }
 
         // Perform real-time walkspace analysis
@@ -440,46 +482,6 @@ void WalkController::updateWalk(const Point3D &linear_velocity_input, double ang
 
     if (regenerate_walkspace_) {
         generateWalkspace();
-    }
-}
-
-// TODO: Use defines
-void WalkController::updateWalkPlane() {
-    std::vector<double> raw_A;
-    std::vector<double> raw_B;
-
-    if (NUM_LEGS >= 3) { // Minimum for plane estimation
-        for (auto &leg_stepper : leg_steppers_) {
-            Point3D default_tip_pose = leg_stepper->getDefaultTipPose();
-            raw_A.push_back(default_tip_pose.x);
-            raw_A.push_back(default_tip_pose.y);
-            raw_A.push_back(1.0);
-            raw_B.push_back(default_tip_pose.z);
-        }
-
-        // Implement proper least squares plane fitting
-        if (raw_A.size() >= 9) { // At least 3 legs * 3 coordinates
-            // Use least squares to fit plane: ax + by + c = z
-            int num_points = raw_A.size() / 3;
-
-            double a, b, c;
-            if (math_utils::solveLeastSquaresPlane(raw_A.data(), raw_B.data(), num_points, a, b, c)) {
-
-                // Normalize plane normal vector
-                double normal_magnitude = sqrt(a * a + b * b + 1.0);
-                walk_plane_normal_ = Point3D(-a / normal_magnitude, -b / normal_magnitude, 1.0 / normal_magnitude);
-
-                // Calculate walk plane center point
-                walk_plane_ = Point3D(0, 0, c);
-            } else {
-                // Fallback to horizontal plane
-                walk_plane_ = Point3D(0, 0, 0);
-                walk_plane_normal_ = Point3D(0, 0, 1);
-            }
-        }
-    } else {
-        walk_plane_ = Point3D(0, 0, 0);
-        walk_plane_normal_ = Point3D(0, 0, 1);
     }
 }
 
@@ -685,27 +687,49 @@ bool WalkController::checkTerrainConditions() const {
     return false;
 }
 
-// TODO: Use defines
-Point3D WalkController::calculateDefaultStancePosition(int leg_index) {
-    const auto &params = model.getParams();
-
-    // Use the same base positions as the main model
-    Point3D base_pos = model.getLegBasePosition(leg_index);
-    double base_x = base_pos.x;
-    double base_y = base_pos.y;
-    double leg_reach = params.coxa_length + params.femur_length + params.tibia_length;
-    double safe_reach = leg_reach * 0.65f; // 65% safety margin
-    double base_angle = model.getLegBaseAngleOffset(leg_index);
-    double default_foot_x = base_x + safe_reach * cos(base_angle);
-    double default_foot_y = base_y + safe_reach * sin(base_angle);
-
-    // Z coordinate is set to 0 for default stance
-    // This is an identity position, or neutral, which is not adjusted to the terrain.
-    // This position must be dynamically adjusted to the robot's pose.
-    return Point3D(default_foot_x, default_foot_y, 0);
-}
-
 double WalkController::calculateLegReach() const {
     const auto &params = model.getParams();
     return params.coxa_length + params.femur_length + params.tibia_length;
+}
+
+WalkController::LegTrajectoryInfo WalkController::getLegTrajectoryInfo(int leg_index) const {
+    LegTrajectoryInfo info;
+
+    if (leg_index < 0 || leg_index >= NUM_LEGS || leg_index >= (int)leg_steppers_.size()) {
+        // Return empty info for invalid index
+        info.target_position = Point3D(0, 0, 0);
+        info.step_phase = STANCE_PHASE;
+        info.phase_progress = 0.0;
+        info.is_stance = true;
+        info.velocity = Point3D(0, 0, 0);
+        return info;
+    }
+
+    auto leg_stepper = leg_steppers_[leg_index];
+    if (!leg_stepper) {
+        // Return empty info for null stepper
+        info.target_position = Point3D(0, 0, 0);
+        info.step_phase = STANCE_PHASE;
+        info.phase_progress = 0.0;
+        info.is_stance = true;
+        info.velocity = Point3D(0, 0, 0);
+        return info;
+    }
+
+    // Calculate target position based on current phase and gait parameters
+    double local_phase = leg_stepper->getStepProgress();
+    StepState step_state = leg_stepper->getStepState();
+
+    // Get current tip position from leg stepper (this is the calculated position)
+    info.target_position = leg_stepper->getCurrentTipPose();
+
+    // Convert StepState to StepPhase for compatibility
+    info.step_phase = (step_state == STEP_STANCE) ? STANCE_PHASE : SWING_PHASE;
+    info.phase_progress = local_phase;
+    info.is_stance = (step_state == STEP_STANCE);
+
+    // Calculate velocity based on desired velocity and leg stepper state
+    info.velocity = leg_stepper->getCurrentTipVelocity();
+
+    return info;
 }

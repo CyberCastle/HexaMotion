@@ -37,28 +37,19 @@ GaitConfiguration createWaveGaitConfig(const Parameters &params) {
     config.step_length = leg_reach * params.gait_factors.wave_length_factor;
     config.swing_height = params.standing_height * params.gait_factors.wave_height_factor;
     config.body_clearance = params.standing_height;
-    int total_phase = config.phase_config.stance_phase + config.phase_config.swing_phase;
-    config.step_frequency = 1.0 / (total_phase * 0.01);
+
+    // OpenSHC trajectory parameters
+    config.swing_width = 3.0;                            // mm - smaller lateral shift for wave gait (more conservative)
+    config.control_frequency = params.control_frequency; // Hz - use robot's control frequency
+
     config.max_velocity = 50.0;
     config.stability_factor = 0.95;
     config.supports_rough_terrain = true;
-
-    // Velocity limits parameters (unified configuration)
-    config.stance_ratio = (double)config.phase_config.stance_phase / total_phase;
-    config.swing_ratio = (double)config.phase_config.swing_phase / total_phase;
     config.time_to_max_stride = 2.0;   // Default conservative value for wave gait
     config.stance_span_modifier = 0.1; // OpenSHC: valor por defecto para wave gait
 
     config.description = "Wave gait: Most stable gait with sequential leg movement";
     config.step_order = {"AR", "CL", "BL", "AL", "CR", "BR"};
-    config.step_cycle.frequency_ = config.step_frequency;
-    config.step_cycle.period_ = total_phase;
-    config.step_cycle.stance_period_ = config.phase_config.stance_phase;
-    config.step_cycle.swing_period_ = config.phase_config.swing_phase;
-    config.step_cycle.stance_start_ = 0;
-    config.step_cycle.stance_end_ = config.phase_config.stance_phase;
-    config.step_cycle.swing_start_ = config.phase_config.stance_phase;
-    config.step_cycle.swing_end_ = total_phase;
     return config;
 }
 
@@ -79,29 +70,19 @@ GaitConfiguration createTripodGaitConfig(const Parameters &params) {
     config.step_length = leg_reach * params.gait_factors.tripod_length_factor;
     config.swing_height = params.standing_height * params.gait_factors.tripod_height_factor;
     config.body_clearance = params.standing_height;
-    int total_phase = config.phase_config.stance_phase + config.phase_config.swing_phase;
-    config.step_frequency = 1.0 / (total_phase * 0.01);
+
+    // OpenSHC trajectory parameters
+    config.swing_width = 5.0;                            // mm - OpenSHC standard lateral shift at mid-swing
+    config.control_frequency = params.control_frequency; // Hz - use robot's control frequency
+
     config.max_velocity = 100.0;
     config.stability_factor = 0.75;
-    config.supports_rough_terrain = true;
-
-    // Velocity limits parameters (unified configuration)
-    config.stance_ratio = (double)config.phase_config.stance_phase / total_phase;
-    config.swing_ratio = (double)config.phase_config.swing_phase / total_phase;
+    config.supports_rough_terrain = false;
     config.time_to_max_stride = 1.5;    // Faster than wave gait
     config.stance_span_modifier = 0.25; // OpenSHC: valor por defecto para tripod gait
 
     config.description = "Tripod gait: Balanced speed and stability with alternating tripods";
     config.step_order = {"AR/BL/CR", "AL/BR/CL"};
-    // StepCycle
-    config.step_cycle.frequency_ = config.step_frequency;
-    config.step_cycle.period_ = total_phase;
-    config.step_cycle.stance_period_ = config.phase_config.stance_phase;
-    config.step_cycle.swing_period_ = config.phase_config.swing_phase;
-    config.step_cycle.stance_start_ = 0;
-    config.step_cycle.stance_end_ = config.phase_config.stance_phase;
-    config.step_cycle.swing_start_ = config.phase_config.stance_phase;
-    config.step_cycle.swing_end_ = total_phase;
     return config;
 }
 
@@ -128,17 +109,16 @@ GaitConfiguration createRippleGaitConfig(const Parameters &params) {
     config.step_length = leg_reach * params.gait_factors.ripple_length_factor;
     config.swing_height = params.standing_height * params.gait_factors.ripple_height_factor;
     config.body_clearance = params.standing_height;
-    int total_phase = config.phase_config.stance_phase + config.phase_config.swing_phase;
-    config.step_frequency = 1.0 / (total_phase * 0.01); // Assuming 10ms iterations
-    config.max_velocity = 150.0;                        // Faster movement
-    config.stability_factor = 0.60;                     // Moderate stability
-    config.supports_rough_terrain = false;              // Less suitable for rough terrain
-    config.stance_span_modifier = 0.2;                  // OpenSHC: valor por defecto para tripod gait
 
-    // Velocity limits parameters (unified configuration)
-    config.stance_ratio = (double)config.phase_config.stance_phase / total_phase;
-    config.swing_ratio = (double)config.phase_config.swing_phase / total_phase;
-    config.time_to_max_stride = 1.0; // Fast acceleration
+    // OpenSHC trajectory parameters
+    config.swing_width = 7.0;                            // mm - larger lateral shift for ripple gait (more dynamic)
+    config.control_frequency = params.control_frequency; // Hz - use robot's control frequency
+
+    config.max_velocity = 150.0;           // Faster movement
+    config.stability_factor = 0.60;        // Moderate stability
+    config.supports_rough_terrain = false; // Less suitable for rough terrain
+    config.stance_span_modifier = 0.2;     // OpenSHC: valor por defecto para tripod gait
+    config.time_to_max_stride = 1.0;       // Fast acceleration
 
     // Description
     config.description = "Ripple gait: Faster gait with overlapping leg movements";
@@ -170,17 +150,16 @@ GaitConfiguration createMetachronalGaitConfig(const Parameters &params) {
     config.step_length = leg_reach * params.gait_factors.metachronal_length_factor;
     config.swing_height = params.standing_height * params.gait_factors.metachronal_height_factor;
     config.body_clearance = params.standing_height;
-    int total_phase = config.phase_config.stance_phase + config.phase_config.swing_phase;
-    config.step_frequency = 1.0 / (total_phase * 0.01);
+
+    // OpenSHC trajectory parameters
+    config.swing_width = 4.0;                            // mm - moderate lateral shift for metachronal gait (adaptive)
+    config.control_frequency = params.control_frequency; // Hz - use robot's control frequency
+
     config.max_velocity = 80.0;     // Adaptive speed
     config.stability_factor = 0.85; // High stability with adaptation
     config.supports_rough_terrain = true;
     config.stance_span_modifier = 0.15; // OpenSHC: valor por defecto para ripple gait
-
-    // Velocity limits parameters (unified configuration)
-    config.stance_ratio = (double)config.phase_config.stance_phase / total_phase;
-    config.swing_ratio = (double)config.phase_config.swing_phase / total_phase;
-    config.time_to_max_stride = 1.8; // Adaptive acceleration
+    config.time_to_max_stride = 1.8;    // Adaptive acceleration
 
     // Description
     config.description = "Metachronal gait: Adaptive gait that adjusts to terrain conditions";

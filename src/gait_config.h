@@ -2,7 +2,6 @@
 #define GAIT_CONFIG_H
 
 #include "hexamotion_constants.h"
-#include "leg_stepper.h"
 #include <array>
 #include <map>
 #include <string>
@@ -17,6 +16,20 @@
  * - Leg offset multipliers define the phase timing for each leg
  * - Configuration parameters match OpenSHC's gait.yaml structure
  */
+
+/**
+ * @brief Step cycle timing parameters (OpenSHC equivalent)
+ */
+struct StepCycle {
+    double frequency_;  //< Step frequency in Hz
+    int period_;        //< Total step cycle length in iterations
+    int swing_period_;  //< Swing period length in iterations
+    int stance_period_; //< Stance period length in iterations
+    int stance_end_;    //< Iteration when stance period ends
+    int swing_start_;   //< Iteration when swing period starts
+    int swing_end_;     //< Iteration when swing period ends
+    int stance_start_;  //< Iteration when stance period starts
+};
 
 /**
  * @brief Gait phase configuration (OpenSHC equivalent)
@@ -61,28 +74,43 @@ struct GaitConfiguration {
     std::string gait_name;        //< Name of the gait (e.g., "tripod_gait", "wave_gait")
     GaitPhaseConfig phase_config; //< Phase timing configuration
     LegOffsetMultipliers offsets; //< Leg offset multipliers
-    StepCycle step_cycle;         //< StepCycle calculado y listo para usar
 
     // Gait-specific parameters
-    double step_frequency; //< Step frequency in Hz (calculated from phase config)
-    double step_length;    //< Default step length in mm
-    double swing_height;   //< Swing trajectory height in mm
-    double body_clearance; //< Body clearance above ground in mm
+    double step_length;                //< Default step length in mm
+    double swing_height;               //< Swing trajectory height in mm
+    double body_clearance;             //< Body clearance above ground in mm
     double stance_span_modifier = 0.0; // Modificador de span lateral de apoyo (OpenSHC compatible)
+
+    // OpenSHC trajectory parameters
+    double swing_width;       //< Lateral shift at mid-swing position in mm (OpenSHC mid_lateral_shift)
+    double control_frequency; //< Control loop frequency in Hz (defines time_delta)
 
     // Gait performance parameters
     double max_velocity;         //< Maximum walking velocity in mm/s
     double stability_factor;     //< Stability factor (0.0-1.0, higher = more stable)
     bool supports_rough_terrain; //< Whether gait supports rough terrain adaptation
-
-    // Velocity limits parameters (unified configuration)
-    double stance_ratio;       //< Ratio of stance phase (0.0 - 1.0)
-    double swing_ratio;        //< Ratio of swing phase (0.0 - 1.0)
-    double time_to_max_stride; //< Time to reach maximum stride (s)
+    double time_to_max_stride;   //< Time to reach maximum stride (s)
 
     // Gait description
     std::string description;             //< Human-readable description of the gait
     std::vector<std::string> step_order; //< Order of leg movements in the gait
+
+    // Methods to generate StepCycle for this gait
+    StepCycle generateStepCycle(double step_frequency = 1.0) const {
+        StepCycle step_cycle;
+        int total_phase = phase_config.stance_phase + phase_config.swing_phase;
+
+        step_cycle.frequency_ = step_frequency;
+        step_cycle.period_ = total_phase;
+        step_cycle.stance_period_ = phase_config.stance_phase;
+        step_cycle.swing_period_ = phase_config.swing_phase;
+        step_cycle.stance_start_ = 0;
+        step_cycle.stance_end_ = phase_config.stance_phase;
+        step_cycle.swing_start_ = phase_config.stance_phase;
+        step_cycle.swing_end_ = total_phase;
+
+        return step_cycle;
+    }
 
     // Helper methods for velocity limits compatibility
     double getStanceRatio() const {
@@ -93,6 +121,14 @@ struct GaitConfiguration {
     double getSwingRatio() const {
         return (double)phase_config.swing_phase /
                (phase_config.stance_phase + phase_config.swing_phase);
+    }
+
+    double getStepFrequency() const {
+        return 1.0; // Default OpenSHC step frequency
+    }
+
+    double getStepCycleTime() const {
+        return 1.0 / getStepFrequency();
     }
 };
 

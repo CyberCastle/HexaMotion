@@ -38,7 +38,7 @@ static void addResult(TestReport &rep, bool ok, const std::string &msg,
     } else {
         rep.failed++;
         std::cout << "Test failed: " << msg << std::endl;
-        printDiagnostics(sys);
+        // printDiagnostics(sys);
     }
 }
 
@@ -53,7 +53,7 @@ static void validateGroupSync(const LocomotionSystem &sys, TestReport &rep) {
     addResult(rep, ok, "Tripod synchronization", sys);
 }
 
-static void validateSwingHeights(const LocomotionSystem &sys, TestReport &rep) {
+static void validateSwingHeights(LocomotionSystem &sys, TestReport &rep) {
     std::vector<int> swing;
     for (int i = 0; i < NUM_LEGS; ++i) {
         if (sys.getLegState(i) == SWING_PHASE)
@@ -63,6 +63,19 @@ static void validateSwingHeights(const LocomotionSystem &sys, TestReport &rep) {
     if (swing.size() == 3) {
         double z0 = sys.getLeg(swing[0]).getCurrentTipPositionGlobal().z;
         bool equal = true;
+
+        // Debug: Print swing progress for each leg
+        WalkController *wc = sys.getWalkController();
+        if (wc) {
+            std::cout << "Swing progress: ";
+            for (int i = 0; i < swing.size(); ++i) {
+                auto stepper = wc->getLegStepper(swing[i]);
+                double prog = stepper ? stepper->getStepProgress() : -1.0;
+                std::cout << "Leg" << swing[i] << "=" << prog << " ";
+            }
+            std::cout << std::endl;
+        }
+
         for (int i = 1; i < 3; ++i) {
             double zi = sys.getLeg(swing[i]).getCurrentTipPositionGlobal().z;
             if (std::abs(zi - z0) > 1.0)
@@ -122,7 +135,7 @@ static void validateSwingPeakSync(LocomotionSystem &sys, TestReport &rep) {
         bool near_mid = true;
         for (int idx = 0; idx < 3; ++idx) {
             auto stepper = wc->getLegStepper(swing[idx]);
-            double prog = stepper ? stepper->getSwingProgress() : -1.0;
+            double prog = stepper ? stepper->getStepProgress() : -1.0;
             if (prog < 0.45 || prog > 0.55)
                 near_mid = false;
         }
@@ -137,6 +150,90 @@ static void validateSwingPeakSync(LocomotionSystem &sys, TestReport &rep) {
             }
             addResult(rep, equal, "Swing legs peak height sync", sys);
         }
+    }
+}
+
+static void validateIdentityTransformation(LocomotionSystem &sys, TestReport &rep) {
+    WalkController *wc = sys.getWalkController();
+    if (!wc) {
+        addResult(rep, false, "Walk controller not available for identity transformation test", sys);
+        return;
+    }
+
+    // Test the identity position transformation flow for each leg
+    for (int i = 0; i < NUM_LEGS; ++i) {
+        if (sys.getLegState(i) != STANCE_PHASE) {
+            continue; // Only test stance legs
+        }
+
+        // Get the leg stepper to access transformation methods
+        auto leg_stepper = wc->getLegStepper(i);
+        if (!leg_stepper)
+            continue;
+
+        // Step 1: Identity Position - this is the theoretical starting point
+        Point3D identity_position = leg_stepper->getIdentityTipPose();
+        printf("Leg %d Identity position: (%.2f, %.2f, %.2f)\n", i, identity_position.x, identity_position.y, identity_position.z);
+        // For HexaMotion, verify identity position is at standing height (~-150mm)
+        addResult(rep, std::abs(identity_position.z + 150.0) <= 50.0,
+                  "Identity position z coordinate at standing height for leg " + std::to_string(i), sys);
+
+        // Step 2: OpenSHC architecture - test swing clearance configuration
+        Point3D swing_clearance = leg_stepper->getSwingClearance();
+        printf("Leg %d Swing clearance: (%.2f, %.2f, %.2f)\n", i, swing_clearance.x, swing_clearance.y, swing_clearance.z);
+
+        // Verify swing clearance is configured (should have positive Z component)
+        bool has_swing_clearance = (swing_clearance.z > 0.01);
+        addResult(rep, has_swing_clearance,
+                  "OpenSHC swing clearance is configured for leg " + std::to_string(i) +
+                      " (z:" + std::to_string(swing_clearance.z) + ")",
+                  sys);
+
+        // Step 3: OpenSHC stride vector calculation
+        Point3D stride_vector = leg_stepper->getStrideVector();
+        printf("Leg %d Stride vector: (%.2f, %.2f, %.2f)\n", i, stride_vector.x, stride_vector.y, stride_vector.z);
+
+        // Verify stride vector is calculated (any non-zero X,Y movement is acceptable)
+        bool has_stride = (std::abs(stride_vector.x) > 0.001 || std::abs(stride_vector.y) > 0.001);
+        addResult(rep, has_stride,
+                  "OpenSHC stride vector is calculated for leg " + std::to_string(i) +
+                      " (x:" + std::to_string(stride_vector.x) + ", y:" + std::to_string(stride_vector.y) + ")",
+                  sys);
+
+        // Step 4: OpenSHC timing parameters validation
+        double swing_delta_t = leg_stepper->getSwingDeltaT();
+        double stance_delta_t = leg_stepper->getStanceDeltaT();
+        printf("Leg %d OpenSHC timing - swing_delta_t: %.4f, stance_delta_t: %.4f\n", i, swing_delta_t, stance_delta_t);
+
+        // Verify timing parameters are properly calculated
+        bool timing_valid = (swing_delta_t > 0.0 && swing_delta_t <= 1.0) && (stance_delta_t > 0.0 && stance_delta_t <= 1.0);
+        addResult(rep, timing_valid,
+                  "OpenSHC timing parameters are valid for leg " + std::to_string(i) +
+                      " (swing_dt:" + std::to_string(swing_delta_t) + ", stance_dt:" + std::to_string(stance_delta_t) + ")",
+                  sys);
+
+        // Step 5: OpenSHC control nodes generation
+        Point3D swing1_node0 = leg_stepper->getSwing1ControlNode(0);
+        Point3D swing1_node4 = leg_stepper->getSwing1ControlNode(4);
+        printf("Leg %d Swing1 nodes - start: (%.2f, %.2f, %.2f), end: (%.2f, %.2f, %.2f)\n",
+               i, swing1_node0.x, swing1_node0.y, swing1_node0.z, swing1_node4.x, swing1_node4.y, swing1_node4.z);
+
+        // Verify control nodes are initialized (should not all be zero)
+        bool nodes_initialized = (swing1_node0.x != 0.0 || swing1_node0.y != 0.0 || swing1_node0.z != 0.0);
+        addResult(rep, nodes_initialized,
+                  "OpenSHC control nodes are initialized for leg " + std::to_string(i), sys);
+
+        // Step 6: Current tip position validation
+        Point3D current_tip = leg_stepper->getCurrentTipPose();
+        printf("Leg %d Current tip pose: (%.2f, %.2f, %.2f)\n", i, current_tip.x, current_tip.y, current_tip.z);
+
+        // More lenient position check - should be within reasonable workspace
+        bool position_reasonable = (std::abs(current_tip.x) <= 500.0 && std::abs(current_tip.y) <= 500.0 &&
+                                    current_tip.z >= -400.0 && current_tip.z <= 100.0);
+        addResult(rep, position_reasonable,
+                  "Current tip position is within reasonable workspace for leg " + std::to_string(i) +
+                      " (x:" + std::to_string(current_tip.x) + ", y:" + std::to_string(current_tip.y) + ", z:" + std::to_string(current_tip.z) + ")",
+                  sys);
     }
 }
 
@@ -212,6 +309,7 @@ int main() {
     int max_cycles = cycles * 10;
     int step = 0;
     for (; step < cycles && step < max_cycles; ++step) {
+        printf("=============================================================================Cycle %d/%d\n", step + 1, cycles);
         assert(sys.update());
         bool phase_change = false;
         for (int i = 0; i < NUM_LEGS; ++i) {
@@ -220,11 +318,13 @@ int main() {
                 phase_change = true;
             prev_phase[i] = ph;
         }
+        printDiagnostics(sys);
         if (phase_change) {
             validateGroupSync(sys, rep);
             validateSwingHeights(sys, rep);
             validateCoxaSymmetry(sys, rep);
             validateTrajectorySimilarity(sys, rep);
+            validateIdentityTransformation(sys, rep);
         }
         validateSwingPeakSync(sys, rep);
     }
