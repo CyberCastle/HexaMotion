@@ -75,7 +75,7 @@
 #define TIBIA_ANGLE_MAX 45.0f  // Maximum tibia angle (degrees)
 
 // Robot geometry angles
-#define FULL_ROTATION 360.0f    // Full rotation in degrees
+#define FULL_ROTATION 360.0f // Full rotation in degrees
 
 // Inverse kinematics starting poses (degrees)
 #define IK_PRIMARY_FEMUR_ANGLE -45.0f  // Primary IK guess femur angle
@@ -98,15 +98,15 @@
 #define DEFAULT_STEP_FREQUENCY 1.0     // Default step frequency (Hz)
 
 // Velocity scaling and coupling factors
-#define DEFAULT_ANGULAR_SCALING 1.0     // Default angular velocity scaling
-#define ANGULAR_LINEAR_COUPLING 0.3     // Coupling factor between angular and linear velocity
+#define DEFAULT_ANGULAR_SCALING 1.0        // Default angular velocity scaling
+#define ANGULAR_LINEAR_COUPLING 0.3        // Coupling factor between angular and linear velocity
 #define ANGULAR_ACCELERATION_FACTOR 2000.0 // Angular acceleration threshold (mm/s²)
-#define WORKSPACE_SCALING_FACTOR 0.5    // Workspace scaling factor
-#define WALKSPACE_SCALING_FACTOR 0.7    // Walkspace scaling factor
-#define MIN_SERVO_VELOCITY 0.1          // Minimum servo velocity (10% of max)
-#define FULL_ROTATION_DEGREES 360.0f     // Full rotation in degrees
-#define HALF_ROTATION_DEGREES 180.0f     // Half rotation in degrees
-#define BEARING_STEP_DEGREES 30.0f       // Bearing sampling step in degrees
+#define WORKSPACE_SCALING_FACTOR 0.5       // Workspace scaling factor
+#define WALKSPACE_SCALING_FACTOR 0.7       // Walkspace scaling factor
+#define MIN_SERVO_VELOCITY 0.1             // Minimum servo velocity (10% of max)
+#define FULL_ROTATION_DEGREES 360.0f       // Full rotation in degrees
+#define HALF_ROTATION_DEGREES 180.0f       // Half rotation in degrees
+#define BEARING_STEP_DEGREES 30.0f         // Bearing sampling step in degrees
 
 // ========================================================================
 // MATHEMATICAL CONSTANTS
@@ -127,10 +127,11 @@
 // ========================================================================
 
 // DLS (Damped Least Squares) IK parameters (OpenSHC-style)
-#define IK_DLS_COEFFICIENT 0.02f       // Damping factor for numerical stability in DLS method
-#define IK_TOLERANCE 1.0f              // Position tolerance for IK convergence (1mm)
-#define IK_DEFAULT_MAX_ITERATIONS 30   // Default maximum iterations for IK solver
-#define IK_MAX_ANGLE_STEP 5.0f         // Maximum angle change per IK iteration (degrees)
+#define IK_DLS_COEFFICIENT 0.02f        // Damping factor for numerical stability in DLS method
+#define IK_JOINT_LIMIT_COST_WEIGHT 0.1f // Gain used in determining cost weight for joints approaching limits (OpenSHC)
+#define IK_TOLERANCE 1.0f               // Position tolerance for IK convergence (1mm)
+#define IK_DEFAULT_MAX_ITERATIONS 30    // Default maximum iterations for IK solver
+#define IK_MAX_ANGLE_STEP 5.0f          // Maximum angle change per IK iteration (degrees)
 
 // Workspace analysis parameters
 #define WORKSPACE_RESOLUTION 10 // Discretization resolution for workspace analysis
@@ -151,9 +152,9 @@
 // TOLERANCE AND PRECISION CONSTANTS
 // ========================================================================
 
-#define FLOAT_TOLERANCE 1e-6f     // Standard floating point tolerance
-#define ANGLE_TOLERANCE 0.1f      // Angular tolerance (degrees)
-#define POSITION_TOLERANCE 1.0f   // Position tolerance (mm)
+#define FLOAT_TOLERANCE 1e-6f   // Standard floating point tolerance
+#define ANGLE_TOLERANCE 0.1f    // Angular tolerance (degrees)
+#define POSITION_TOLERANCE 1.0f // Position tolerance (mm)
 #define VELOCITY_THRESHOLD 1.0f // Minimum velocity to consider as moving (mm/s)
 
 // ========================================================================
@@ -161,14 +162,14 @@
 // ========================================================================
 
 // Auto-pose phase conversion constants
-#define AUTO_POSE_PHASE_CONVERSION_FACTOR 100.0f  // Conversion factor from gait phase (0.0-1.0) to phase (0-100)
-#define AUTO_POSE_GAIT_PHASE_THRESHOLD 0.5f       // Threshold for determining tripod gait group phases
+#define AUTO_POSE_PHASE_CONVERSION_FACTOR 100.0f   // Conversion factor from gait phase (0.0-1.0) to phase (0-100)
+#define AUTO_POSE_GAIT_PHASE_THRESHOLD 0.5f        // Threshold for determining tripod gait group phases
 #define AUTO_POSE_BODY_COMPENSATION_REDUCTION 0.5f // Reduction factor for body-level compensation amplitudes
 
 // Auto-pose default amplitudes (OpenSHC auto_pose.yaml equivalent)
-#define AUTO_POSE_DEFAULT_ROLL_AMPLITUDE 0.015f   // Default roll compensation amplitude (radians)
-#define AUTO_POSE_DEFAULT_PITCH_AMPLITUDE 0.020f  // Default pitch compensation amplitude (radians)
-#define AUTO_POSE_DEFAULT_Z_AMPLITUDE 0.020f      // Default Z compensation amplitude (millimeters)
+#define AUTO_POSE_DEFAULT_ROLL_AMPLITUDE 0.015f  // Default roll compensation amplitude (radians)
+#define AUTO_POSE_DEFAULT_PITCH_AMPLITUDE 0.020f // Default pitch compensation amplitude (radians)
+#define AUTO_POSE_DEFAULT_Z_AMPLITUDE 0.020f     // Default Z compensation amplitude (millimeters)
 
 // ========================================================================
 // SYSTEM STATE CONSTANTS
@@ -176,21 +177,21 @@
 
 // System states (OpenSHC equivalent)
 enum SystemState {
-    SYSTEM_UNKNOWN = 0,  // Unknown state
-    SYSTEM_PACKED = 1,   // Robot is packed/disabled
-    SYSTEM_READY = 2,    // Robot is ready but not walking
-    SYSTEM_RUNNING = 3   // Robot is running/walking
+    SYSTEM_UNKNOWN = 0, // Unknown state
+    SYSTEM_PACKED = 1,  // Robot is packed/disabled
+    SYSTEM_READY = 2,   // Robot is ready but not walking
+    SYSTEM_RUNNING = 3  // Robot is running/walking
 };
 
 // Startup sequence constants
-#define STARTUP_SEQUENCE_TIME 6.0f      // Time for startup sequence (seconds)
-#define SHUTDOWN_SEQUENCE_TIME 4.0f     // Time for shutdown sequence (seconds)
-#define STANCE_TRANSITION_HEIGHT 30.0f  // Height for stance transition (mm)
-#define STANCE_TRANSITION_TIME 0.5f     // Time for stance transition (seconds)
+#define STARTUP_SEQUENCE_TIME 6.0f     // Time for startup sequence (seconds)
+#define SHUTDOWN_SEQUENCE_TIME 4.0f    // Time for shutdown sequence (seconds)
+#define STANCE_TRANSITION_HEIGHT 30.0f // Height for stance transition (mm)
+#define STANCE_TRANSITION_TIME 0.5f    // Time for stance transition (seconds)
 
 // Progress constants
-#define PROGRESS_COMPLETE 100    // Sequence completed
-#define PROGRESS_GENERATING -1   // Sequence is being generated
+#define PROGRESS_COMPLETE 100  // Sequence completed
+#define PROGRESS_GENERATING -1 // Sequence is being generated
 
 #define LEG_STEPPER_DUTY_FACTOR 0.5
 #define LEG_STEPPER_FLOAT_TOLERANCE 1e-6f

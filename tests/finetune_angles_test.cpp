@@ -293,9 +293,9 @@ int main() {
 
         CalculatedServoAngles calc_angles = calculateServoAnglesForHeight(target_height, p);
         std::cout << "Ángulos calculados para altura objetivo:" << std::endl;
-        std::cout << "  - Coxa: " << calc_angles.coxa << "°" << std::endl;
-        std::cout << "  - Fémur: " << calc_angles.femur << "°" << std::endl;
-        std::cout << "  - Tibia: " << calc_angles.tibia << "°" << std::endl;
+        std::cout << "  - Coxa: " << calc_angles.coxa * (180.0 / M_PI) << "°" << std::endl;
+        std::cout << "  - Fémur: " << calc_angles.femur * (180.0 / M_PI) << "°" << std::endl;
+        std::cout << "  - Tibia: " << calc_angles.tibia * (180.0 / M_PI) << "°" << std::endl;
         std::cout << "  - Solución válida: " << (calc_angles.valid ? "SÍ" : "NO") << std::endl;
 
         // Buscar soluciones para esta altura con tolerancia aumentada

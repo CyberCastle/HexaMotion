@@ -189,6 +189,13 @@ struct Point3D {
         return Point3D(x + other.x, y + other.y, z + other.z);
     }
 
+    Point3D &operator+=(const Point3D &other) {
+        x += other.x;
+        y += other.y;
+        z += other.z;
+        return *this;
+    }
+
     Point3D operator-(const Point3D &other) const {
         return Point3D(x - other.x, y - other.y, z - other.z);
     }
@@ -645,25 +652,44 @@ class RobotModel {
     Point3D makeReachable(int leg_index, const Point3D &reference_tip_position) const;
 
     /**
-     * @brief OpenSHC-style delta-based IK: Calculate position delta and apply single-step IK
+     * @brief Complete IK solver with position delta calculation and joint limit optimization
+     * This function implements a robust IK method that:
+     * 1. Calculate position delta in leg frame (desired - current)
+     * 2. Apply DLS-based IK with joint limit cost function
+     * 3. Update joint positions with velocity clamping
+     *
      * @param leg Leg index
-     * @param desired_position Desired global tip position
+     * @param current_tip_pose Current tip position in global coordinates
+     * @param desired_tip_pose Desired tip position in global coordinates
      * @param current_angles Current joint angles
-     * @return Updated joint angles after delta-based IK
+     * @param time_delta Time delta for velocity calculation (typically control frequency)
+     * @return Updated joint angles after advanced IK
      */
-    JointAngles applyIKWithDelta(int leg, const Point3D &desired_position,
-                                 const JointAngles &current_angles) const;
+    JointAngles applyAdvancedIK(int leg, const Point3D &current_tip_pose, const Point3D &desired_tip_pose,
+                                const JointAngles &current_angles, double time_delta = 0.02) const;
 
     /**
-     * @brief OpenSHC-style single-step IK solver using position delta
-     * @param leg Leg index
-     * @param position_delta Position delta in leg frame (desired - current)
+     * @brief Joint limit cost function and gradient calculation
+     * Implements cost function optimization for joint position and velocity limits
+     *
      * @param current_angles Current joint angles
-     * @return Updated joint angles
+     * @param joint_velocities Joint velocities
+     * @param leg Leg index
+     * @return Combined cost gradient vector
      */
-    JointAngles solveIKWithDelta(int leg, const Eigen::Vector3d &position_delta,
-                                 const JointAngles &current_angles) const;
+    Eigen::Vector3d calculateJointLimitCostGradient(const JointAngles &current_angles,
+                                                    const Eigen::Vector3d &joint_velocities, int leg) const;
 
+    /**
+     * @brief Core IK solver method with delta vector input (internal)
+     * Implements DLS-based IK for position delta calculation
+     *
+     * @param leg Leg index
+     * @param delta 6D delta vector (position + rotation, though we use only position)
+     * @param current_angles Current joint angles
+     * @return Joint position delta
+     */
+    Eigen::Vector3d solveDeltaIK(int leg, const Eigen::MatrixXd &delta, const JointAngles &current_angles) const;
     std::vector<Eigen::Matrix4d> buildDHTransforms(int leg, const JointAngles &q) const;
 
   private:

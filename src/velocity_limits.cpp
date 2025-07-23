@@ -98,7 +98,7 @@ VelocityLimits::LimitValues VelocityLimits::getLimit(double bearing_degrees) con
 void VelocityLimits::generateLimits(const GaitConfiguration &gait_config) {
     // Convert unified configuration to internal format
     GaitConfig internal_config;
-    internal_config.frequency = gait_config.step_frequency;
+    internal_config.frequency = gait_config.getStepFrequency();
     internal_config.stance_ratio = gait_config.getStanceRatio();
     internal_config.swing_ratio = gait_config.getSwingRatio();
     internal_config.time_to_max_stride = gait_config.time_to_max_stride;
@@ -139,7 +139,7 @@ void VelocityLimits::calculateWorkspace(const GaitConfig &gait_config) {
 void VelocityLimits::calculateWorkspace(const GaitConfiguration &gait_config) {
     // Convert unified configuration to internal format
     GaitConfig internal_config;
-    internal_config.frequency = gait_config.step_frequency;
+    internal_config.frequency = gait_config.getStepFrequency();
     internal_config.stance_ratio = gait_config.getStanceRatio();
     internal_config.swing_ratio = gait_config.getSwingRatio();
     internal_config.time_to_max_stride = gait_config.time_to_max_stride;
@@ -258,7 +258,7 @@ void VelocityLimits::updateGaitParameters(const GaitConfig &gait_config) {
 void VelocityLimits::updateGaitParameters(const GaitConfiguration &gait_config) {
     // Convert unified configuration to internal format
     GaitConfig internal_config;
-    internal_config.frequency = gait_config.step_frequency;
+    internal_config.frequency = gait_config.getStepFrequency();
     internal_config.stance_ratio = gait_config.getStanceRatio();
     internal_config.swing_ratio = gait_config.getSwingRatio();
     internal_config.time_to_max_stride = gait_config.time_to_max_stride;
@@ -443,8 +443,8 @@ void VelocityLimits::setAngularVelocityScaling(double scaling) {
 }
 
 Point3D VelocityLimits::calculateStrideVector(double linear_velocity_x, double linear_velocity_y,
-                                             double angular_velocity, const Point3D& current_tip_position,
-                                             double stance_ratio, double step_frequency) {
+                                              double angular_velocity, const Point3D &current_tip_position,
+                                              double stance_ratio, double step_frequency) {
     // OpenSHC equivalent stride vector calculation
 
     // 1. Linear stride vector (OpenSHC: stride_vector_linear)

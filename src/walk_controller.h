@@ -95,7 +95,7 @@ class WalkController {
     Point3D estimateGravity() const;
 
     // Accessors
-    StepCycle getStepCycle() const { return current_gait_config_.step_cycle; }
+    StepCycle getStepCycle() const { return current_gait_config_.generateStepCycle(); }
     double getTimeDelta() const { return time_delta_; }
     double getStepClearance() const { return step_clearance_; }
     double getStepDepth() const { return step_depth_; }
@@ -242,7 +242,7 @@ class WalkController {
      * @brief Get current cycle frequency from gait configuration
      * @return Cycle frequency in Hz
      */
-    double getCycleFrequency() const { return current_gait_config_.step_frequency; }
+    double getCycleFrequency() const { return current_gait_config_.getStepFrequency(); }
 
     /**
      * @brief Get calculated leg trajectory information for locomotion system
@@ -263,7 +263,6 @@ class WalkController {
     RobotModel &model;
 
     // OpenSHC architecture components
-    StepCycle step_;
     double time_delta_;
     double step_clearance_;
     double step_depth_;

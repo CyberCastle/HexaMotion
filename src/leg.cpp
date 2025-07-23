@@ -16,7 +16,8 @@ Leg::Leg(int leg_id, const RobotModel &model)
     }
 
     // Calculate base position
-    calculateBasePosition();
+    base_position_ = model_.getLegBasePosition(leg_id_);
+    base_position_.z = 0.0;
 }
 
 void Leg::setJointAngles(const JointAngles &angles) {
@@ -105,16 +106,20 @@ bool Leg::applyIK(const Point3D &target_position) {
 }
 
 /**
- * @brief Apply OpenSHC-style delta-based IK for real-time control
+ * @brief Apply advanced IK implementation with delta calculation and joint optimization
+ * This method uses a robust IK solver that includes delta calculation and joint optimization
  * @param target_position Desired global tip position
  * @return True if IK succeeds within joint limits
  */
-bool Leg::applyIKWithDelta(const Point3D &target_position) {
-    // OpenSHC approach: Make target reachable before applying IK
+bool Leg::applyAdvancedIK(const Point3D &target_position) {
+    // Get current tip position
+    Point3D current_position = getCurrentTipPositionGlobal();
+
+    // Make target reachable before applying IK
     Point3D reachable_target = model_.makeReachable(leg_id_, target_position);
 
-    // Use OpenSHC-style delta-based IK for real-time control
-    JointAngles new_angles = model_.applyIKWithDelta(leg_id_, reachable_target, joint_angles_);
+    // Use advanced IK implementation
+    JointAngles new_angles = model_.applyAdvancedIK(leg_id_, current_position, reachable_target, joint_angles_);
 
     // Validate limits before updating member variables
     if (!model_.checkJointLimits(leg_id_, new_angles)) {
@@ -126,7 +131,6 @@ bool Leg::applyIKWithDelta(const Point3D &target_position) {
     updateTipPosition();
     return true;
 }
-
 Eigen::Matrix4d Leg::getTransform() const {
     return model_.legTransform(leg_id_, joint_angles_);
 }
@@ -241,23 +245,7 @@ bool Leg::isInDefaultStance(double tolerance) const {
     return math_utils::distance(tip_position_, default_tip_position_) <= tolerance;
 }
 
-// Calculate position delta in leg frame for synchronization
-Point3D Leg::calculatePositionDelta(const Point3D &desired_position, const Point3D &current_position) const {
-    // Use current joint angles to define the leg frame
-    JointAngles current_angles = joint_angles_;
-
-    // Transform positions to leg local coordinates
-    Point3D desired_local = model_.transformGlobalToLocalCoordinates(leg_id_, desired_position, current_angles);
-    Point3D current_local = model_.transformGlobalToLocalCoordinates(leg_id_, current_position, current_angles);
-
-    // Compute delta in leg frame
-    return Point3D(desired_local.x - current_local.x,
-                   desired_local.y - current_local.y,
-                   desired_local.z - current_local.z);
-}
-
 // ===== FSR CONTACT HISTORY METHODS =====
-
 void Leg::updateFSRHistory(bool in_contact, double pressure) {
     // Store contact state as 1.0 for contact, 0.0 for no contact
     double contact_value = in_contact ? 1.0 : 0.0;
@@ -338,15 +326,6 @@ bool Leg::shouldBeInStance(double global_gait_phase, double stance_duration) con
 bool Leg::shouldBeInSwing(double global_gait_phase, double stance_duration) const {
     double leg_phase = calculateLegPhase(global_gait_phase);
     return leg_phase >= stance_duration;
-}
-
-// Calculate base position from robot model
-void Leg::calculateBasePosition() {
-    double angle_rad = model_.getLegBaseAngleOffset(leg_id_);
-    const Parameters &params = model_.getParams();
-    base_position_.x = params.hexagon_radius * cos(angle_rad);
-    base_position_.y = params.hexagon_radius * sin(angle_rad);
-    base_position_.z = 0.0;
 }
 
 // Update tip position via forward kinematics

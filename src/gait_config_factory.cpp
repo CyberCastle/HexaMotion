@@ -42,34 +42,14 @@ GaitConfiguration createWaveGaitConfig(const Parameters &params) {
     config.swing_width = 3.0;                            // mm - smaller lateral shift for wave gait (more conservative)
     config.control_frequency = params.control_frequency; // Hz - use robot's control frequency
 
-    int total_phase = config.phase_config.stance_phase + config.phase_config.swing_phase;
-
-    // Use OpenSHC-compatible frequency: 1.0 Hz step frequency (standard)
-    config.step_frequency = 1.0; // Hz - matches OpenSHC default step frequency
-
-    // Calculate step cycle time (fundamental parameter in OpenSHC)
-    config.step_cycle_time = 1.0 / config.step_frequency; // seconds per complete cycle
-
     config.max_velocity = 50.0;
     config.stability_factor = 0.95;
     config.supports_rough_terrain = true;
-
-    // Velocity limits parameters (unified configuration)
-    config.stance_ratio = (double)config.phase_config.stance_phase / total_phase;
-    config.swing_ratio = (double)config.phase_config.swing_phase / total_phase;
     config.time_to_max_stride = 2.0;   // Default conservative value for wave gait
     config.stance_span_modifier = 0.1; // OpenSHC: valor por defecto para wave gait
 
     config.description = "Wave gait: Most stable gait with sequential leg movement";
     config.step_order = {"AR", "CL", "BL", "AL", "CR", "BR"};
-    config.step_cycle.frequency_ = config.step_frequency;
-    config.step_cycle.period_ = total_phase;
-    config.step_cycle.stance_period_ = config.phase_config.stance_phase;
-    config.step_cycle.swing_period_ = config.phase_config.swing_phase;
-    config.step_cycle.stance_start_ = 0;
-    config.step_cycle.stance_end_ = config.phase_config.stance_phase;
-    config.step_cycle.swing_start_ = config.phase_config.stance_phase;
-    config.step_cycle.swing_end_ = total_phase;
     return config;
 }
 
@@ -95,35 +75,14 @@ GaitConfiguration createTripodGaitConfig(const Parameters &params) {
     config.swing_width = 5.0;                            // mm - OpenSHC standard lateral shift at mid-swing
     config.control_frequency = params.control_frequency; // Hz - use robot's control frequency
 
-    int total_phase = config.phase_config.stance_phase + config.phase_config.swing_phase;
-
-    // Use OpenSHC-compatible frequency: 1.0 Hz step frequency (standard)
-    config.step_frequency = 1.0; // Hz - matches OpenSHC default step frequency
-
-    // Calculate step cycle time (fundamental parameter in OpenSHC)
-    config.step_cycle_time = 1.0 / config.step_frequency; // seconds per complete cycle
-
     config.max_velocity = 100.0;
     config.stability_factor = 0.75;
     config.supports_rough_terrain = false;
-
-    // Velocity limits parameters (unified configuration)
-    config.stance_ratio = (double)config.phase_config.stance_phase / total_phase;
-    config.swing_ratio = (double)config.phase_config.swing_phase / total_phase;
     config.time_to_max_stride = 1.5;    // Faster than wave gait
     config.stance_span_modifier = 0.25; // OpenSHC: valor por defecto para tripod gait
 
     config.description = "Tripod gait: Balanced speed and stability with alternating tripods";
     config.step_order = {"AR/BL/CR", "AL/BR/CL"};
-    // StepCycle
-    config.step_cycle.frequency_ = config.step_frequency;
-    config.step_cycle.period_ = total_phase;
-    config.step_cycle.stance_period_ = config.phase_config.stance_phase;
-    config.step_cycle.swing_period_ = config.phase_config.swing_phase;
-    config.step_cycle.stance_start_ = 0;
-    config.step_cycle.stance_end_ = config.phase_config.stance_phase;
-    config.step_cycle.swing_start_ = config.phase_config.stance_phase;
-    config.step_cycle.swing_end_ = total_phase;
     return config;
 }
 
@@ -155,37 +114,15 @@ GaitConfiguration createRippleGaitConfig(const Parameters &params) {
     config.swing_width = 7.0;                            // mm - larger lateral shift for ripple gait (more dynamic)
     config.control_frequency = params.control_frequency; // Hz - use robot's control frequency
 
-    int total_phase = config.phase_config.stance_phase + config.phase_config.swing_phase;
-
-    // Use OpenSHC-compatible frequency: 1.0 Hz step frequency (standard)
-    config.step_frequency = 1.0; // Hz - matches OpenSHC default step frequency
-
-    // Calculate step cycle time (fundamental parameter in OpenSHC)
-    config.step_cycle_time = 1.0 / config.step_frequency; // seconds per complete cycle
-
     config.max_velocity = 150.0;           // Faster movement
     config.stability_factor = 0.60;        // Moderate stability
     config.supports_rough_terrain = false; // Less suitable for rough terrain
     config.stance_span_modifier = 0.2;     // OpenSHC: valor por defecto para tripod gait
-
-    // Velocity limits parameters (unified configuration)
-    config.stance_ratio = (double)config.phase_config.stance_phase / total_phase;
-    config.swing_ratio = (double)config.phase_config.swing_phase / total_phase;
-    config.time_to_max_stride = 1.0; // Fast acceleration
+    config.time_to_max_stride = 1.0;       // Fast acceleration
 
     // Description
     config.description = "Ripple gait: Faster gait with overlapping leg movements";
     config.step_order = {"AR", "CL", "BR", "AL", "CR", "BL"};
-
-    // StepCycle
-    config.step_cycle.frequency_ = config.step_frequency;
-    config.step_cycle.period_ = total_phase;
-    config.step_cycle.stance_period_ = config.phase_config.stance_phase;
-    config.step_cycle.swing_period_ = config.phase_config.swing_phase;
-    config.step_cycle.stance_start_ = 0;
-    config.step_cycle.stance_end_ = config.phase_config.stance_phase;
-    config.step_cycle.swing_start_ = config.phase_config.stance_phase;
-    config.step_cycle.swing_end_ = total_phase;
 
     return config;
 }
@@ -218,37 +155,15 @@ GaitConfiguration createMetachronalGaitConfig(const Parameters &params) {
     config.swing_width = 4.0;                            // mm - moderate lateral shift for metachronal gait (adaptive)
     config.control_frequency = params.control_frequency; // Hz - use robot's control frequency
 
-    int total_phase = config.phase_config.stance_phase + config.phase_config.swing_phase;
-
-    // Use OpenSHC-compatible frequency: 1.0 Hz step frequency (standard)
-    config.step_frequency = 1.0; // Hz - matches OpenSHC default step frequency
-
-    // Calculate step cycle time (fundamental parameter in OpenSHC)
-    config.step_cycle_time = 1.0 / config.step_frequency; // seconds per complete cycle
-
     config.max_velocity = 80.0;     // Adaptive speed
     config.stability_factor = 0.85; // High stability with adaptation
     config.supports_rough_terrain = true;
     config.stance_span_modifier = 0.15; // OpenSHC: valor por defecto para ripple gait
-
-    // Velocity limits parameters (unified configuration)
-    config.stance_ratio = (double)config.phase_config.stance_phase / total_phase;
-    config.swing_ratio = (double)config.phase_config.swing_phase / total_phase;
-    config.time_to_max_stride = 1.8; // Adaptive acceleration
+    config.time_to_max_stride = 1.8;    // Adaptive acceleration
 
     // Description
     config.description = "Metachronal gait: Adaptive gait that adjusts to terrain conditions";
     config.step_order = {"AR", "CL", "BL", "AL", "CR", "BR"};
-
-    // StepCycle
-    config.step_cycle.frequency_ = config.step_frequency;
-    config.step_cycle.period_ = total_phase;
-    config.step_cycle.stance_period_ = config.phase_config.stance_phase;
-    config.step_cycle.swing_period_ = config.phase_config.swing_phase;
-    config.step_cycle.stance_start_ = 0;
-    config.step_cycle.stance_end_ = config.phase_config.stance_phase;
-    config.step_cycle.swing_start_ = config.phase_config.stance_phase;
-    config.step_cycle.swing_end_ = total_phase;
 
     return config;
 }
