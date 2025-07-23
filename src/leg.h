@@ -133,11 +133,15 @@ class Leg {
     bool applyIK(const Point3D &target_position);
 
     /**
-     * @brief Apply OpenSHC-style delta-based IK for real-time control
+     * @brief Apply advanced IK implementation with delta calculation and joint optimization
+     * This method uses a robust IK solver that includes:
+     * - Position delta calculation in leg frame
+     * - DLS-based IK with joint limit cost function
+     * - Joint position updates with proper clamping
      * @param target_position Desired global tip position
      * @return True if IK succeeds within joint limits
      */
-    bool applyIKWithDelta(const Point3D &target_position);
+    bool applyAdvancedIK(const Point3D &target_position);
 
     /**
      * @brief Get current DH transform matrix.
@@ -341,14 +345,6 @@ class Leg {
      */
     bool isInDefaultStance(double tolerance = 5.0) const;
 
-    /**
-     * @brief Calculate position delta in leg frame for synchronization
-     * @param desired_position Desired tip position
-     * @param current_position Current tip position
-     * @return Position delta in leg frame coordinates
-     */
-    Point3D calculatePositionDelta(const Point3D &desired_position, const Point3D &current_position) const;
-
   private:
     // ===== ROBOT MODEL REFERENCE =====
     const RobotModel &model_; //< Reference to robot model for all calculations
@@ -378,11 +374,6 @@ class Leg {
     // ===== DEFAULT CONFIGURATION =====
     JointAngles default_angles_;   //< Default joint angles
     Point3D default_tip_position_; //< Default tip position
-
-    /**
-     * @brief Calculate base position from robot parameters.
-     */
-    void calculateBasePosition();
 };
 
 #endif // LEG_H
