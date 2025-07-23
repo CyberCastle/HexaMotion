@@ -193,9 +193,10 @@ bool LocomotionSystem::setLegJointAngles(int leg, const JointAngles &q) {
     clamped_angles.femur = std::clamp(q.femur, params.femur_angle_limits[0], params.femur_angle_limits[1]);
     clamped_angles.tibia = std::clamp(q.tibia, params.tibia_angle_limits[0], params.tibia_angle_limits[1]);
 
+    // TODO: Disable leg posers temporarily to avoid conflicts
     // Update both joint angles and leg positions in a single atomic operation
-    legs[leg].setJointAngles(clamped_angles); // Update leg object
-    legs[leg].updateTipPosition();            // Update leg position based on new angles
+    // legs[leg].setJointAngles(clamped_angles); // Update leg object
+    // legs[leg].updateTipPosition();            // Update leg position based on new angles
 
     // Use velocity controller to get appropriate servo speeds
     double coxa_speed = velocity_controller ? velocity_controller->getServoSpeed(leg, 0) : params.default_servo_speed;
