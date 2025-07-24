@@ -14,6 +14,24 @@
 #include <string>
 #include <vector>
 
+/**
+ * @brief Calculate proper step frequency to prevent stride vector multiplication bug
+ *
+ * This function prevents the abrupt jump bug that occurs when step_cycle_.frequency_
+ * is too small, causing stride_vector *= (on_ground_ratio / frequency) to become
+ * extremely large (e.g., 50x instead of 0.5x).
+ *
+ * @param gait_config The gait configuration containing phase and control frequency
+ * @return Calculated step frequency in Hz
+ */
+static double calculateStepFrequency(const GaitConfiguration &gait_config) {
+    double time_delta = 1.0 / gait_config.control_frequency;
+    int base_period = gait_config.phase_config.stance_phase + gait_config.phase_config.swing_phase;
+
+    // Use OpenSHC-style calculation: step.frequency_ = 1.0 / (step.period_ * time_delta_)
+    return 1.0 / (base_period * time_delta);
+}
+
 WalkController::WalkController(RobotModel &m, Leg legs[NUM_LEGS], const BodyPoseConfiguration &pose_config)
     : model(m), terrain_adaptation_(m), body_pose_controller_(nullptr), velocity_limits_(m),
       step_clearance_(30.0), step_depth_(10.0),
@@ -101,8 +119,11 @@ bool WalkController::setGaitByName(const std::string &gait_name) {
 }
 
 void WalkController::applyGaitConfigToLegSteppers(const GaitConfiguration &gait_config) {
-    // Generate StepCycle for this gait once
-    StepCycle step_cycle = gait_config.generateStepCycle();
+    // Calculate proper step frequency to prevent stride vector multiplication bug
+    double calculated_step_frequency = calculateStepFrequency(gait_config);
+
+    // Generate StepCycle with calculated frequency instead of default 1.0 Hz
+    StepCycle step_cycle = gait_config.generateStepCycle(calculated_step_frequency);
 
     // Apply StepCycle and gait configuration to each LegStepper
     for (int i = 0; i < NUM_LEGS && i < leg_steppers_.size(); i++) {
@@ -402,7 +423,8 @@ void WalkController::updateWalk(const Point3D &linear_velocity_input, double ang
 
     // Increment global phase counter (OpenSHC equivalent)
     if (walk_state_ == WALK_MOVING || walk_state_ == WALK_STARTING) {
-        StepCycle step_cycle = current_gait_config_.generateStepCycle();
+        double calculated_step_frequency = calculateStepFrequency(current_gait_config_);
+        StepCycle step_cycle = current_gait_config_.generateStepCycle(calculated_step_frequency);
         global_phase_ = (global_phase_ + 1) % step_cycle.period_;
     }
 
@@ -418,7 +440,8 @@ void WalkController::updateWalk(const Point3D &linear_velocity_input, double ang
 
         // OpenSHC: Determinar estado de la pierna basado en offset de fase
         double offset = leg_stepper->getPhaseOffset(); // This is normalized [0,1]
-        StepCycle step_cycle = current_gait_config_.generateStepCycle();
+        double calculated_step_frequency = calculateStepFrequency(current_gait_config_);
+        StepCycle step_cycle = current_gait_config_.generateStepCycle(calculated_step_frequency);
         int leg_phase = (global_phase_ + static_cast<int>(offset * step_cycle.period_)) %
                         step_cycle.period_;
 
