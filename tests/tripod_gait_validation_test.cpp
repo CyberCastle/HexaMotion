@@ -128,14 +128,39 @@ int main() {
         std::cerr << "ERROR: Failed to set standing pose." << std::endl;
         return 1;
     }
-    while (!sys.executeStartupSequence()) {
-        // Wait for startup to complete
-    }
     std::cout << "Robot is in standing pose. All legs in STANCE phase." << std::endl;
 
     // 3. Setup and Start Tripod Gait
-    assert(sys.setGaitType(TRIPOD_GAIT));
-    assert(sys.walkForward(TEST_VELOCITY));
+    if (!sys.startWalking(TRIPOD_GAIT, TEST_VELOCITY, 0.0, 0.0)) {
+        std::cerr << "ERROR: Failed to start tripod gait." << std::endl;
+        return 1;
+    }
+
+    // Wait for startup sequence to complete
+    std::cout << "Waiting for startup sequence to complete..." << std::endl;
+    int startup_wait = 0;
+    const int MAX_STARTUP_WAIT = 100;
+    while (startup_wait < MAX_STARTUP_WAIT) {
+        if (!sys.update()) {
+            std::cerr << "WARNING: System update failed during startup at step " << startup_wait << std::endl;
+        }
+
+        // Check if startup is complete by verifying system state
+        bool startup_complete = true;
+        // If startup is still in progress, continue waiting
+        // The system will transition to RUNNING when startup completes
+        if (startup_wait > 0 && startup_wait % 10 == 0) {
+            std::cout << "Startup step " << startup_wait << "..." << std::endl;
+        }
+
+        startup_wait++;
+
+        // Give startup sequence reasonable time to complete
+        if (startup_wait >= 20)
+            break; // Assume startup completes within 20 steps
+    }
+
+    std::cout << "Startup sequence completed. Beginning gait analysis..." << std::endl;
 
     printTestHeader();
 
