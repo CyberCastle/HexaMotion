@@ -54,6 +54,11 @@ class LegStepper {
     double getPhaseOffset() const { return leg_.getPhaseOffset(); }
     Point3D getStrideVector() const { return stride_vector_; }
     double getStepProgress() const { return step_progress_; }
+
+    // Debug getters for velocity troubleshooting
+    Point3D getDesiredLinearVelocity() const { return desired_linear_velocity_; }
+    double getDesiredAngularVelocity() const { return desired_angular_velocity_; }
+
     bool hasCompletedFirstStep() const { return completed_first_step_; }
     bool isAtCorrectPhase() const { return at_correct_phase_; }
     Point3D getSwing1ControlNode(int i) const { return swing_1_nodes_[i]; }
