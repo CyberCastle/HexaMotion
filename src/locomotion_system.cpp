@@ -245,6 +245,19 @@ bool LocomotionSystem::setGaitType(GaitType gait) {
 bool LocomotionSystem::planGaitSequence(double velocity_x, double velocity_y, double angular_velocity) {
     commanded_linear_velocity_ = velocity_x;
     commanded_angular_velocity_ = angular_velocity;
+
+    // Configure velocity in ALL leg steppers, not just store the values
+    for (int i = 0; i < NUM_LEGS; i++) {
+        auto leg_stepper = walk_ctrl->getLegStepper(i);
+        if (leg_stepper) {
+            leg_stepper->setDesiredVelocity(Point3D(velocity_x, velocity_y, 0), angular_velocity);
+            leg_stepper->updateStride();
+        } else {
+            last_error = PARAMETER_ERROR;
+            return false;
+        }
+    }
+
     return true;
 }
 
@@ -509,15 +522,21 @@ bool LocomotionSystem::update() {
 
     // Handle startup sequence if in progress
     if (startup_in_progress) {
+        std::cout << "[DEBUG] Startup in progress..." << std::endl;
         bool startup_complete = body_pose_ctrl->executeStartupSequence(legs);
+        std::cout << "[DEBUG] Startup complete: " << (startup_complete ? "true" : "false") << std::endl;
         if (startup_complete) {
+            std::cout << "[DEBUG] Setting startup_in_progress = false" << std::endl;
             startup_in_progress = false;
             // Inicializar walk controller para estado RUNNING
             if (walk_ctrl) {
+                std::cout << "[DEBUG] Initializing walk controller..." << std::endl;
                 walk_ctrl->init(body_position, body_orientation);
                 walk_ctrl->generateWalkspace();
 
                 // Now activate gait sequence with stored velocities
+                std::cout << "[DEBUG] About to call planGaitSequence with velocities: ["
+                          << commanded_linear_velocity_ << ", 0.0, " << commanded_angular_velocity_ << "]" << std::endl;
                 planGaitSequence(commanded_linear_velocity_, 0.0, commanded_angular_velocity_);
 
                 // Initialize leg phases based on gait pattern
@@ -533,6 +552,8 @@ bool LocomotionSystem::update() {
                         }
                     }
                 }
+            } else {
+                std::cout << "[DEBUG] ERROR: walk_ctrl is null!" << std::endl;
             }
             system_state = SYSTEM_RUNNING;
         }
