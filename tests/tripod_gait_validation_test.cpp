@@ -130,6 +130,34 @@ int main() {
     }
     std::cout << "Robot is in standing pose. All legs in STANCE phase." << std::endl;
 
+    // Verify all legs are in proper standing pose before starting gait
+    std::cout << "\nSTANDING POSE VERIFICATION:" << std::endl;
+    std::cout << "Leg     Phase   Position (X, Y, Z)       Joint Angles (Coxa, Femur, Tibia) deg" << std::endl;
+    std::cout << "-----------------------------------------------------------------------------------------" << std::endl;
+    for (int i = 0; i < NUM_LEGS; ++i) {
+        const Leg &leg = sys.getLeg(i);
+        Point3D tip_pos = leg.getCurrentTipPositionGlobal();
+        JointAngles angles = leg.getJointAngles();
+        StepPhase phase = leg.getStepPhase();
+
+        std::stringstream pos_ss;
+        pos_ss << std::fixed << std::setprecision(2)
+               << "[" << tip_pos.x << ", " << tip_pos.y << ", " << tip_pos.z << "]";
+
+        std::stringstream ang_ss;
+        ang_ss << std::fixed << std::setprecision(2)
+               << "[ " << std::setw(6) << toDegrees(angles.coxa)
+               << ", " << std::setw(6) << toDegrees(angles.femur)
+               << ", " << std::setw(6) << toDegrees(angles.tibia) << "]";
+
+        std::cout << std::left << std::setw(8) << ("Leg " + std::to_string(i + 1))
+                  << std::setw(8) << (phase == STANCE_PHASE ? "S" : "W")
+                  << std::setw(25) << pos_ss.str()
+                  << std::setw(35) << ang_ss.str() << std::endl;
+    }
+    std::cout << "-----------------------------------------------------------------------------------------\n"
+              << std::endl;
+
     // 3. Setup and Start Tripod Gait
     if (!sys.startWalking(TRIPOD_GAIT, TEST_VELOCITY, 0.0, 0.0)) {
         std::cerr << "ERROR: Failed to start tripod gait." << std::endl;
