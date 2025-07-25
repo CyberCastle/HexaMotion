@@ -119,39 +119,58 @@ void analyzeAllLegsTrajectory(Leg test_legs[NUM_LEGS], LegStepper steppers[NUM_L
         steppers[leg_id].updateTipPositionIterative(1, time_delta, false, false);
     }
 
-    // Show trajectory points for key iterations
-    std::vector<int> key_iterations = {1, swing_iterations / 4, swing_iterations / 2, 3 * swing_iterations / 4, swing_iterations};
+    // Show detailed trajectory analysis every 5 steps for swing phase
+    std::cout << "\n=== ANÁLISIS DETALLADO DE TRAYECTORIA SWING (cada 5 pasos) ===" << std::endl;
 
-    for (int iter_idx = 0; iter_idx < key_iterations.size(); iter_idx++) {
-        int iteration = key_iterations[iter_idx];
-        std::cout << "\n--- Iteración " << iteration << " de " << swing_iterations << " (Swing) ---" << std::endl;
-        std::cout << "Pata | Posición (x, y, z) | Ángulos Articulares (deg) | Límites OK" << std::endl;
-        std::cout << "-----+--------------------+---------------------------+-----------" << std::endl;
+    for (int leg_id = 0; leg_id < NUM_LEGS; leg_id++) {
+        std::cout << "\n--- PATA " << leg_id << " - FASE SWING ---" << std::endl;
+        std::cout << "Paso | Iteración | Posición (x, y, z) | Ángulos (coxa, femur, tibia) | Velocidad Ang (rad/s) | Distancia Base | Límites" << std::endl;
+        std::cout << "-----+-----------+---------------------+------------------------------+-----------------------+----------------+---------" << std::endl;
 
-        for (int leg_id = 0; leg_id < NUM_LEGS; leg_id++) {
-            // Reset stepper to initial position
-            steppers[leg_id].setCurrentTipPose(initial_positions[leg_id]);
+        // Reset stepper to initial position for this leg
+        steppers[leg_id].setCurrentTipPose(initial_positions[leg_id]);
+        steppers[leg_id].setStepState(STEP_SWING);
+        steppers[leg_id].setPhase(gait_config.phase_config.swing_phase);
+        steppers[leg_id].setStepProgress(0.0);
 
-            // Execute trajectory up to current iteration
-            for (int i = 1; i <= iteration; i++) {
-                steppers[leg_id].updateTipPositionIterative(i, time_delta, false, false);
+        JointAngles previous_angles = test_legs[leg_id].getJointAngles();
+        Point3D base_pos = test_legs[leg_id].getBasePosition();
+
+        int step_counter = 0;
+        for (int i = 1; i <= swing_iterations; i++) {
+            steppers[leg_id].updateTipPositionIterative(i, time_delta, false, false);
+
+            // Show detailed info every 5 steps
+            if (i % 5 == 0 || i == 1 || i == swing_iterations) {
+                Point3D current_pos = steppers[leg_id].getCurrentTipPose();
+
+                // Apply advanced IK to get joint angles
+                JointAngles before_angles = test_legs[leg_id].getJointAngles();
+                Point3D before_pos = test_legs[leg_id].getCurrentTipPositionGlobal();
+                JointAngles new_angles = model.applyAdvancedIK(leg_id, before_pos, current_pos, before_angles, time_delta);
+                test_legs[leg_id].setJointAngles(new_angles);
+
+                // Calculate angular velocities
+                double coxa_vel = (new_angles.coxa - previous_angles.coxa) / time_delta;
+                double femur_vel = (new_angles.femur - previous_angles.femur) / time_delta;
+                double tibia_vel = (new_angles.tibia - previous_angles.tibia) / time_delta;
+
+                // Calculate distance from base
+                double distance_from_base = (current_pos - base_pos).norm();
+
+                // Check joint limits
+                bool valid_joints = model.checkJointLimits(leg_id, new_angles);
+
+                printf(" %3d | %6d/%2d | (%7.1f,%7.1f,%7.1f) | (%6.1f,%6.1f,%6.1f) | (%6.2f,%6.2f,%6.2f) | %12.1f | %s\n",
+                       ++step_counter, i, swing_iterations,
+                       current_pos.x, current_pos.y, current_pos.z,
+                       new_angles.coxa * 180.0 / M_PI, new_angles.femur * 180.0 / M_PI, new_angles.tibia * 180.0 / M_PI,
+                       coxa_vel, femur_vel, tibia_vel,
+                       distance_from_base,
+                       valid_joints ? "✓" : "❌");
+
+                previous_angles = new_angles;
             }
-
-            Point3D current_pos = steppers[leg_id].getCurrentTipPose();
-
-            // Apply advanced IK to get joint angles
-            JointAngles before_angles = test_legs[leg_id].getJointAngles();
-            Point3D before_pos = test_legs[leg_id].getCurrentTipPositionGlobal();
-            JointAngles new_angles = model.applyAdvancedIK(leg_id, before_pos, current_pos, before_angles, time_delta);
-            test_legs[leg_id].setJointAngles(new_angles);
-
-            // Check joint limits
-            bool valid_joints = model.checkJointLimits(leg_id, new_angles);
-
-            printf("  %d  | (%7.1f, %7.1f, %7.1f) | (%5.1f, %5.1f, %5.1f) | %s\n",
-                   leg_id, current_pos.x, current_pos.y, current_pos.z,
-                   new_angles.coxa * 180.0 / M_PI, new_angles.femur * 180.0 / M_PI, new_angles.tibia * 180.0 / M_PI,
-                   valid_joints ? "✓" : "❌");
         }
     }
 
@@ -187,9 +206,10 @@ void analyzeAllLegsTrajectory(Leg test_legs[NUM_LEGS], LegStepper steppers[NUM_L
                target.x, target.y, target.z, error, precision_status.c_str());
     }
 
-    // Test stance phase for all legs
-    std::cout << "\n=== ANÁLISIS DE FASE STANCE PARA TODAS LAS PATAS ===" << std::endl;
+    // Test stance phase for all legs with detailed analysis
+    std::cout << "\n=== ANÁLISIS DETALLADO DE FASE STANCE (cada 5 pasos) ===" << std::endl;
 
+    // Initialize all legs for stance phase
     for (int leg_id = 0; leg_id < NUM_LEGS; leg_id++) {
         steppers[leg_id].setCurrentTipPose(initial_positions[leg_id]);
         steppers[leg_id].setStepState(STEP_STANCE);
@@ -197,40 +217,183 @@ void analyzeAllLegsTrajectory(Leg test_legs[NUM_LEGS], LegStepper steppers[NUM_L
         steppers[leg_id].setStepProgress(0.0);
     }
 
-    std::cout << "Pata | Pos. Inicial (x, y, z) | Pos. Final (x, y, z) | Desp. XY (mm) | Cambio Coxa (deg)" << std::endl;
-    std::cout << "-----+------------------------+----------------------+---------------+------------------" << std::endl;
-
     for (int leg_id = 0; leg_id < NUM_LEGS; leg_id++) {
+        std::cout << "\n--- PATA " << leg_id << " - FASE STANCE ---" << std::endl;
+        std::cout << "Paso | Iteración | Posición (x, y, z) | Ángulos (coxa, femur, tibia) | Velocidad Ang (rad/s) | Dist. Acum XY | Fuerza Est" << std::endl;
+        std::cout << "-----+-----------+---------------------+------------------------------+-----------------------+---------------+-----------" << std::endl;
+
+        // Reset this leg's stepper
+        steppers[leg_id].setCurrentTipPose(initial_positions[leg_id]);
+        steppers[leg_id].setStepState(STEP_STANCE);
+        steppers[leg_id].setPhase(gait_config.phase_config.stance_phase);
+        steppers[leg_id].setStepProgress(0.0);
+
         // Store initial stance angles
         JointAngles initial_stance_angles = test_legs[leg_id].getJointAngles();
+        JointAngles previous_angles = initial_stance_angles;
+        Point3D accumulated_displacement(0, 0, 0);
 
-        // Execute stance phase
+        int step_counter = 0;
+        for (int i = swing_iterations + 1; i <= total_iterations; i++) {
+            Point3D prev_pos = steppers[leg_id].getCurrentTipPose();
+            steppers[leg_id].updateTipPositionIterative(i, time_delta, false, false);
+
+            // Show detailed info every 5 steps
+            if ((i - swing_iterations) % 5 == 0 || i == swing_iterations + 1 || i == total_iterations) {
+                Point3D current_pos = steppers[leg_id].getCurrentTipPose();
+
+                // Apply IK to get current angles
+                JointAngles before_angles = test_legs[leg_id].getJointAngles();
+                Point3D before_pos = test_legs[leg_id].getCurrentTipPositionGlobal();
+                JointAngles new_angles = model.applyAdvancedIK(leg_id, before_pos, current_pos, before_angles, time_delta);
+                test_legs[leg_id].setJointAngles(new_angles);
+
+                // Calculate angular velocities
+                double coxa_vel = (new_angles.coxa - previous_angles.coxa) / time_delta;
+                double femur_vel = (new_angles.femur - previous_angles.femur) / time_delta;
+                double tibia_vel = (new_angles.tibia - previous_angles.tibia) / time_delta;
+
+                // Calculate accumulated XY displacement
+                Point3D step_displacement = current_pos - prev_pos;
+                step_displacement.z = 0; // Only XY displacement for stance
+                accumulated_displacement = accumulated_displacement + step_displacement;
+                double accumulated_xy_distance = accumulated_displacement.norm();
+
+                // Estimate support force (simplified - based on angle changes and position stability)
+                double angle_change_magnitude = std::sqrt(coxa_vel * coxa_vel + femur_vel * femur_vel + tibia_vel * tibia_vel);
+                std::string force_estimate = (angle_change_magnitude < 0.1) ? "Alta" : (angle_change_magnitude < 0.5) ? "Media"
+                                                                                                                      : "Baja";
+
+                printf(" %3d | %6d/%2d | (%7.1f,%7.1f,%7.1f) | (%6.1f,%6.1f,%6.1f) | (%6.2f,%6.2f,%6.2f) | %11.3f | %s\n",
+                       ++step_counter, i, total_iterations,
+                       current_pos.x, current_pos.y, current_pos.z,
+                       new_angles.coxa * 180.0 / M_PI, new_angles.femur * 180.0 / M_PI, new_angles.tibia * 180.0 / M_PI,
+                       coxa_vel, femur_vel, tibia_vel,
+                       accumulated_xy_distance,
+                       force_estimate.c_str());
+
+                previous_angles = new_angles;
+            }
+        }
+
+        // Final stance analysis for this leg
+        Point3D final_stance_pos = steppers[leg_id].getCurrentTipPose();
+        Point3D total_xy_displacement = final_stance_pos - initial_positions[leg_id];
+        total_xy_displacement.z = 0;
+        double total_xy_magnitude = total_xy_displacement.norm();
+
+        JointAngles final_angles = test_legs[leg_id].getJointAngles();
+        double total_coxa_change = (final_angles.coxa - initial_stance_angles.coxa) * 180.0 / M_PI;
+
+        std::cout << "     Resumen: Desp. XY total = " << total_xy_magnitude << " mm, ";
+        std::cout << "Cambio coxa total = " << total_coxa_change << "°" << std::endl;
+    }
+
+    // Add summary table for both phases
+    std::cout << "\n=== RESUMEN COMPARATIVO DE AMBAS FASES ===" << std::endl;
+    std::cout << "Pata | Pos. Inicial (x, y, z) | Pos. Final Swing | Pos. Final Stance | Error Swing | Desp. Stance XY" << std::endl;
+    std::cout << "-----+------------------------+------------------+-------------------+-------------+----------------" << std::endl;
+
+    for (int leg_id = 0; leg_id < NUM_LEGS; leg_id++) {
+        // Calculate final swing position (already stored)
+        Point3D target = target_positions[leg_id];
+        double swing_error = (final_swing_positions[leg_id] - target).norm();
+
+        // Calculate final stance position
+        steppers[leg_id].setCurrentTipPose(initial_positions[leg_id]);
+        steppers[leg_id].setStepState(STEP_STANCE);
         for (int i = swing_iterations + 1; i <= total_iterations; i++) {
             steppers[leg_id].updateTipPositionIterative(i, time_delta, false, false);
         }
-
         Point3D final_stance_pos = steppers[leg_id].getCurrentTipPose();
 
-        // Apply IK to get final angles
-        JointAngles before_angles = test_legs[leg_id].getJointAngles();
-        Point3D before_pos = test_legs[leg_id].getCurrentTipPositionGlobal();
-        JointAngles final_angles = model.applyAdvancedIK(leg_id, before_pos, final_stance_pos, before_angles, time_delta);
-        test_legs[leg_id].setJointAngles(final_angles);
+        Point3D stance_displacement = final_stance_pos - initial_positions[leg_id];
+        stance_displacement.z = 0;
+        double stance_xy_magnitude = stance_displacement.norm();
 
-        // Calculate XY displacement and coxa change
-        Point3D xy_displacement = final_stance_pos - initial_positions[leg_id];
-        xy_displacement.z = 0;
-        double xy_magnitude = xy_displacement.norm();
-        double coxa_change = (final_angles.coxa - initial_stance_angles.coxa) * 180.0 / M_PI;
-
-        printf("  %d  | (%7.1f, %7.1f, %7.1f) | (%7.1f, %7.1f, %7.1f) | %11.3f | %14.1f\n",
-               leg_id, initial_positions[leg_id].x, initial_positions[leg_id].y, initial_positions[leg_id].z,
-               final_stance_pos.x, final_stance_pos.y, final_stance_pos.z, xy_magnitude, coxa_change);
+        printf("  %d  | (%7.1f, %7.1f, %7.1f) | (%7.1f,%7.1f,%7.1f) | (%7.1f,%7.1f,%7.1f) | %9.3f | %12.3f\n",
+               leg_id,
+               initial_positions[leg_id].x, initial_positions[leg_id].y, initial_positions[leg_id].z,
+               final_swing_positions[leg_id].x, final_swing_positions[leg_id].y, final_swing_positions[leg_id].z,
+               final_stance_pos.x, final_stance_pos.y, final_stance_pos.z,
+               swing_error, stance_xy_magnitude);
     }
 
     // Summary statistics
     double average_error = total_error / NUM_LEGS;
     double precision_rate = (double)legs_within_tolerance / NUM_LEGS * 100.0;
+
+    // Add kinematic transition analysis
+    std::cout << "\n=== ANÁLISIS DE TRANSICIONES CINEMÁTICAS ===" << std::endl;
+    std::cout << "Analisis de velocidades angulares y aceleraciones durante cambios de fase..." << std::endl;
+
+    for (int leg_id = 0; leg_id < NUM_LEGS; leg_id++) {
+        std::cout << "\n--- PATA " << leg_id << " - TRANSICIONES ---" << std::endl;
+
+        // Analyze swing to stance transition
+        steppers[leg_id].setCurrentTipPose(initial_positions[leg_id]);
+        steppers[leg_id].setStepState(STEP_SWING);
+        steppers[leg_id].setPhase(gait_config.phase_config.swing_phase);
+
+        // Execute swing phase until near end
+        for (int i = 1; i <= swing_iterations - 2; i++) {
+            steppers[leg_id].updateTipPositionIterative(i, time_delta, false, false);
+        }
+
+        // Capture pre-transition state
+        Point3D pre_transition_pos = steppers[leg_id].getCurrentTipPose();
+        JointAngles before_angles = test_legs[leg_id].getJointAngles();
+        Point3D before_pos = test_legs[leg_id].getCurrentTipPositionGlobal();
+        JointAngles pre_transition_angles = model.applyAdvancedIK(leg_id, before_pos, pre_transition_pos, before_angles, time_delta);
+        test_legs[leg_id].setJointAngles(pre_transition_angles);
+
+        // Complete swing and capture end state
+        for (int i = swing_iterations - 1; i <= swing_iterations; i++) {
+            steppers[leg_id].updateTipPositionIterative(i, time_delta, false, false);
+        }
+
+        Point3D end_swing_pos = steppers[leg_id].getCurrentTipPose();
+        before_angles = test_legs[leg_id].getJointAngles();
+        before_pos = test_legs[leg_id].getCurrentTipPositionGlobal();
+        JointAngles end_swing_angles = model.applyAdvancedIK(leg_id, before_pos, end_swing_pos, before_angles, time_delta);
+        test_legs[leg_id].setJointAngles(end_swing_angles);
+
+        // Transition to stance
+        steppers[leg_id].setStepState(STEP_STANCE);
+        steppers[leg_id].setPhase(gait_config.phase_config.stance_phase);
+        steppers[leg_id].updateTipPositionIterative(swing_iterations + 1, time_delta, false, false);
+
+        Point3D start_stance_pos = steppers[leg_id].getCurrentTipPose();
+        before_angles = test_legs[leg_id].getJointAngles();
+        before_pos = test_legs[leg_id].getCurrentTipPositionGlobal();
+        JointAngles start_stance_angles = model.applyAdvancedIK(leg_id, before_pos, start_stance_pos, before_angles, time_delta);
+        test_legs[leg_id].setJointAngles(start_stance_angles);
+
+        // Calculate angular velocity changes across transition
+        double transition_time = 2.0 * time_delta; // 2 steps for transition
+        double coxa_vel_change = (start_stance_angles.coxa - pre_transition_angles.coxa) / transition_time;
+        double femur_vel_change = (start_stance_angles.femur - pre_transition_angles.femur) / transition_time;
+        double tibia_vel_change = (start_stance_angles.tibia - pre_transition_angles.tibia) / transition_time;
+
+        // Calculate position smoothness
+        Point3D pos_change_1 = end_swing_pos - pre_transition_pos;
+        Point3D pos_change_2 = start_stance_pos - end_swing_pos;
+        double smoothness_metric = (pos_change_2 - pos_change_1).norm() / time_delta;
+
+        std::cout << "  Transición Swing → Stance:" << std::endl;
+        std::cout << "    Cambio vel. angular (rad/s): Coxa=" << coxa_vel_change << ", Femur=" << femur_vel_change << ", Tibia=" << tibia_vel_change << std::endl;
+        std::cout << "    Métrica suavidad posición: " << smoothness_metric << " mm/s" << std::endl;
+        std::cout << "    Estado: " << (smoothness_metric < 50.0 ? "✓ Suave" : "⚠ Brusco") << std::endl;
+
+        // Analyze joint limits during critical phases
+        bool swing_mid_valid = model.checkJointLimits(leg_id, pre_transition_angles);
+        bool swing_end_valid = model.checkJointLimits(leg_id, end_swing_angles);
+        bool stance_start_valid = model.checkJointLimits(leg_id, start_stance_angles);
+
+        std::cout << "    Límites articulares: Pre-transición=" << (swing_mid_valid ? "✓" : "❌");
+        std::cout << ", Fin swing=" << (swing_end_valid ? "✓" : "❌");
+        std::cout << ", Inicio stance=" << (stance_start_valid ? "✓" : "❌") << std::endl;
+    }
 
     std::cout << "\n=== RESUMEN ESTADÍSTICO ===" << std::endl;
     std::cout << "Error promedio en precisión: " << average_error << " mm" << std::endl;
