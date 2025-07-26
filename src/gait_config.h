@@ -3,6 +3,7 @@
 
 #include "hexamotion_constants.h"
 #include <array>
+#include <cmath>
 #include <map>
 #include <string>
 #include <vector>
@@ -95,19 +96,33 @@ struct GaitConfiguration {
     std::string description;             //< Human-readable description of the gait
     std::vector<std::string> step_order; //< Order of leg movements in the gait
 
-    // Methods to generate StepCycle for this gait
+    // Methods to generate StepCycle for this gait (OpenSHC-style normalization)
     StepCycle generateStepCycle(double step_frequency = 1.0) const {
         StepCycle step_cycle;
-        int total_phase = phase_config.stance_phase + phase_config.swing_phase;
+        int base_step_period = phase_config.stance_phase + phase_config.swing_phase;
+        double time_delta = 1.0 / control_frequency;
+        double swing_ratio = double(phase_config.swing_phase) / double(base_step_period);
 
-        step_cycle.frequency_ = step_frequency;
-        step_cycle.period_ = total_phase;
-        step_cycle.stance_period_ = phase_config.stance_phase;
-        step_cycle.swing_period_ = phase_config.swing_phase;
+        // OpenSHC normalization logic
+        double raw_step_period = ((1.0 / step_frequency) / time_delta) / swing_ratio;
+
+        // Round to even multiple of base_step_period
+        int normaliser = static_cast<int>(std::round(raw_step_period / base_step_period));
+        if (normaliser % 2 != 0)
+            normaliser++; // Ensure even for proper division
+        if (normaliser < 2)
+            normaliser = 2; // Minimum normaliser
+
+        step_cycle.period_ = normaliser * base_step_period;
+        step_cycle.frequency_ = 1.0 / (step_cycle.period_ * time_delta);
+
+        // Calculate normalized periods
+        step_cycle.stance_period_ = phase_config.stance_phase * normaliser;
+        step_cycle.swing_period_ = phase_config.swing_phase * normaliser;
         step_cycle.stance_start_ = 0;
-        step_cycle.stance_end_ = phase_config.stance_phase;
-        step_cycle.swing_start_ = phase_config.stance_phase;
-        step_cycle.swing_end_ = total_phase;
+        step_cycle.stance_end_ = step_cycle.stance_period_;
+        step_cycle.swing_start_ = step_cycle.stance_period_;
+        step_cycle.swing_end_ = step_cycle.period_;
 
         return step_cycle;
     }

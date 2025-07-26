@@ -374,6 +374,92 @@ bool LocomotionSystem::stopMovement() {
     return true;
 }
 
+bool LocomotionSystem::executeStartupSequence() {
+    if (!body_pose_ctrl) {
+        last_error = PARAMETER_ERROR;
+        return false;
+    }
+
+    // Execute the body pose controller startup sequence
+    bool startup_complete = body_pose_ctrl->executeStartupSequence(legs);
+
+    if (startup_complete) {
+        // Initialize walk controller for RUNNING state
+        walk_ctrl->init(body_position, body_orientation);
+        walk_ctrl->generateWalkspace();
+
+        // Activate gait sequence with stored velocities
+        planGaitSequence(commanded_linear_velocity_, 0.0, commanded_angular_velocity_);
+
+        // Initialize leg phases based on gait pattern
+        for (int i = 0; i < NUM_LEGS; i++) {
+            auto leg_stepper = walk_ctrl->getLegStepper(i);
+            if (leg_stepper) {
+                auto step_state = leg_stepper->getStepState();
+                if (step_state == STEP_STANCE || step_state == STEP_FORCE_STANCE) {
+                    legs[i].setStepPhase(STANCE_PHASE);
+                } else {
+                    legs[i].setStepPhase(SWING_PHASE);
+                }
+            }
+        }
+
+        system_state = SYSTEM_RUNNING;
+    }
+
+    return startup_complete;
+}
+
+bool LocomotionSystem::executeShutdownSequence() {
+    if (!body_pose_ctrl) {
+        last_error = PARAMETER_ERROR;
+        return false;
+    }
+
+    // OpenSHC: Force all legs to STANCE according to OpenSHC shutdown protocol
+    if (walk_ctrl) {
+        // 1. Force FORCE_STOP state and stance position in all leg steppers
+        for (int i = 0; i < NUM_LEGS; i++) {
+            auto leg_stepper = walk_ctrl->getLegStepper(i);
+            if (leg_stepper) {
+                leg_stepper->setStepState(STEP_FORCE_STOP);
+                leg_stepper->setPhase(0.0); // Force to stance position
+
+                // Immediately update tip position to identity (stance) position
+                leg_stepper->updateTipPositionIterative(0, 0.02, false, false);
+
+                // Get the forced stance position and apply to leg
+                Point3D stance_position = leg_stepper->getCurrentTipPose();
+                legs[i].setCurrentTipPositionGlobal(stance_position);
+
+                // Apply IK and servo commands immediately
+                if (legs[i].applyAdvancedIK(stance_position)) {
+                    JointAngles target_angles = legs[i].getJointAngles();
+                    setLegJointAngles(i, target_angles);
+                }
+            }
+        }
+
+        // 2. Force STANCE_PHASE in all legs - CRITICAL for test validation
+        for (int i = 0; i < NUM_LEGS; i++) {
+            legs[i].setStepPhase(STANCE_PHASE);
+        }
+
+        // 3. Update walk controller one final time with zero velocity
+        walk_ctrl->updateWalk(Point3D(0.0, 0.0, 0.0), 0.0,
+                              Eigen::Vector3d(0.0, 0.0, 0.0), Eigen::Vector3d(0.0, 0.0, 0.0));
+    }
+
+    // Execute the body pose controller shutdown sequence
+    bool shutdown_complete = body_pose_ctrl->executeShutdownSequence(legs);
+
+    if (shutdown_complete) {
+        system_state = SYSTEM_READY;
+    }
+
+    return shutdown_complete;
+}
+
 // Check stability margin
 bool LocomotionSystem::checkStabilityMargin() {
     // Create temporary arrays for compatibility with admittance controller
@@ -499,6 +585,36 @@ bool LocomotionSystem::setStandingPose() {
     }
 }
 
+bool LocomotionSystem::setBodyPose(const Eigen::Vector3d &position, const Eigen::Vector3d &orientation) {
+    if (!body_pose_ctrl) {
+        last_error = PARAMETER_ERROR;
+        return false;
+    }
+
+    // Use BodyPoseController to set the pose
+    bool success = body_pose_ctrl->setBodyPose(position, orientation, legs);
+
+    if (success) {
+        // Apply the calculated joint angles to servos
+        for (int i = 0; i < NUM_LEGS; i++) {
+            JointAngles angles = legs[i].getJointAngles();
+            if (!setLegJointAngles(i, angles)) {
+                last_error = KINEMATICS_ERROR;
+                return false;
+            }
+        }
+
+        // Update body position and orientation
+        body_position = position;
+        body_orientation = orientation;
+
+        return true;
+    } else {
+        last_error = KINEMATICS_ERROR;
+        return false;
+    }
+}
+
 bool LocomotionSystem::isSmoothMovementInProgress() const {
     return body_pose_ctrl->isTrajectoryInProgress();
 }
@@ -508,7 +624,26 @@ void LocomotionSystem::resetSmoothMovement() {
         body_pose_ctrl->resetTrajectory();
 }
 
-// Main system update
+// Main system update - Only calculates leg trajectories based on current phase
+/*
+ * USAGE PATTERN:
+ *
+ * while (system_running) {
+ *     // Handle startup/shutdown sequences separately
+ *     if (locomotion_system.isStartupInProgress()) {
+ *         if (locomotion_system.executeStartupSequence()) {
+ *             locomotion_system.startup_in_progress = false;
+ *         }
+ *     } else if (locomotion_system.isShutdownInProgress()) {
+ *         if (locomotion_system.executeShutdownSequence()) {
+ *             locomotion_system.shutdown_in_progress = false;
+ *         }
+ *     } else {
+ *         // Only update leg trajectories when system is in normal operation
+ *         locomotion_system.update();
+ *     }
+ * }
+ */
 bool LocomotionSystem::update() {
     unsigned long current_time = millis();
     dt = (current_time - last_update_time) / 1000.0f;
@@ -520,71 +655,19 @@ bool LocomotionSystem::update() {
         return false;
     }
 
-    // Handle startup sequence if in progress
-    if (startup_in_progress) {
-        std::cout << "[DEBUG] Startup in progress..." << std::endl;
-        bool startup_complete = body_pose_ctrl->executeStartupSequence(legs);
-        std::cout << "[DEBUG] Startup complete: " << (startup_complete ? "true" : "false") << std::endl;
-        if (startup_complete) {
-            std::cout << "[DEBUG] Setting startup_in_progress = false" << std::endl;
-            startup_in_progress = false;
-            // Inicializar walk controller para estado RUNNING
-            if (walk_ctrl) {
-                std::cout << "[DEBUG] Initializing walk controller..." << std::endl;
-                walk_ctrl->init(body_position, body_orientation);
-                walk_ctrl->generateWalkspace();
-
-                // Now activate gait sequence with stored velocities
-                std::cout << "[DEBUG] About to call planGaitSequence with velocities: ["
-                          << commanded_linear_velocity_ << ", 0.0, " << commanded_angular_velocity_ << "]" << std::endl;
-                planGaitSequence(commanded_linear_velocity_, 0.0, commanded_angular_velocity_);
-
-                // Initialize leg phases based on gait pattern
-                // For tripod gait: legs 1,3,5 start in one group, legs 2,4,6 in another
-                for (int i = 0; i < NUM_LEGS; i++) {
-                    auto leg_stepper = walk_ctrl->getLegStepper(i);
-                    if (leg_stepper) {
-                        auto step_state = leg_stepper->getStepState();
-                        if (step_state == STEP_STANCE || step_state == STEP_FORCE_STANCE) {
-                            legs[i].setStepPhase(STANCE_PHASE);
-                        } else {
-                            legs[i].setStepPhase(SWING_PHASE);
-                        }
-                    }
-                }
-            } else {
-                std::cout << "[DEBUG] ERROR: walk_ctrl is null!" << std::endl;
-            }
-            system_state = SYSTEM_RUNNING;
-        }
-        return true;
-    }
-
-    // Handle shutdown sequence if in progress
-    if (shutdown_in_progress) {
-        bool shutdown_complete = body_pose_ctrl->executeShutdownSequence(legs);
-        if (shutdown_complete) {
-            shutdown_in_progress = false;
-            system_state = SYSTEM_READY;
-        }
-        return true;
-    }
-
-    // Update walk controller with the last commanded velocity, body position, and orientation
+    // Only update leg trajectories if system is in RUNNING state
     if (walk_ctrl && system_state == SYSTEM_RUNNING) {
+        // Update walk controller with the last commanded velocity, body position, and orientation
         walk_ctrl->updateWalk(Point3D(commanded_linear_velocity_, 0.0, 0.0),
                               commanded_angular_velocity_,
                               body_position, body_orientation);
 
-        // Update leg states based on current gait with proper normalization
-        double stance_norm = walk_ctrl->getStanceDuration(); // Already normalized [0.0-1.0]
-
+        // Update leg states and trajectories based on current gait
         for (int i = 0; i < NUM_LEGS; i++) {
-
             auto leg_stepper = walk_ctrl->getLegStepper(i);
             if (leg_stepper) {
 
-                // Use LegStepper's step state to determine stance or swing without reapplying offset
+                // Use LegStepper's step state to determine stance or swing
                 auto step_state = leg_stepper->getStepState();
                 if (step_state == STEP_STANCE || step_state == STEP_FORCE_STANCE) {
                     legs[i].setStepPhase(STANCE_PHASE);
@@ -593,17 +676,13 @@ bool LocomotionSystem::update() {
                 }
 
                 // OpenSHC Model::updateModel() pattern:
-                // 1. leg->setDesiredTipPose() - Get position from trajectory generator
-                // 2. leg->applyIK() - Apply IK internally in the leg
-
-                // Step 1: Get new tip position from trajectory generator (LegStepper)
+                // 1. Get new tip position from trajectory generator (LegStepper)
                 Point3D new_tip_position = leg_stepper->getCurrentTipPose();
 
-                // Step 2: Set desired tip pose (equivalent to OpenSHC leg->setDesiredTipPose())
+                // 2. Set desired tip pose (equivalent to OpenSHC leg->setDesiredTipPose())
                 legs[i].setCurrentTipPositionGlobal(new_tip_position);
 
-                // Step 3: Apply IK (equivalent to OpenSHC leg->applyIK())
-                // Use applyAdvancedIK which handles delta calculation internally like OpenSHC
+                // 3. Apply IK (equivalent to OpenSHC leg->applyIK())
                 bool ik_success = legs[i].applyAdvancedIK(new_tip_position);
 
                 if (ik_success) {
@@ -618,6 +697,13 @@ bool LocomotionSystem::update() {
                     continue;
                 }
             }
+        }
+    } else if (system_state == SYSTEM_READY) {
+        // OpenSHC: When system is READY (after shutdown), maintain STANCE_PHASE for ALL legs
+        // This prevents sys.update() calls from overriding the shutdown-forced STANCE states
+        // Do NOT read leg_stepper states - preserve the shutdown state
+        for (int i = 0; i < NUM_LEGS; i++) {
+            legs[i].setStepPhase(STANCE_PHASE);
         }
     }
 
