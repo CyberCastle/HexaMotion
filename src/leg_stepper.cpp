@@ -265,6 +265,14 @@ double LegStepper::calculateStanceStrideScaler() {
 void LegStepper::updateTipPositionIterative(int iteration, double time_delta, bool rough_terrain_mode, bool force_normal_touchdown) {
     // OpenSHC-style iterative update - This is the MAIN method following OpenSHC philosophy
 
+    // OpenSHC: Handle FORCE_STOP state
+    if (step_state_ == STEP_FORCE_STOP) {
+        // Force stance position and stop iteration
+        step_progress_ = 0.0;
+        current_tip_pose_ = identity_tip_pose_;
+        return;
+    }
+
     // Calculate swing timing if not already done
     if (swing_delta_t_ <= 0.0) {
         calculateSwingTiming(time_delta);

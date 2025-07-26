@@ -159,9 +159,15 @@ class LocomotionSystem {
 
     /**
      * @brief Execute one iteration of the startup sequence.
-     * Wraps BodyPoseController::executeStartupSequence.
+     * Wraps BodyPoseController::executeStartupSequence and handles transition to RUNNING state.
      */
     bool executeStartupSequence();
+
+    /**
+     * @brief Execute one iteration of the shutdown sequence.
+     * Wraps BodyPoseController::executeShutdownSequence and handles transition to READY state.
+     */
+    bool executeShutdownSequence();
 
     // OpenSHC-style walking control
     /** Start walking with specified gait type (triggers startup sequence) */
@@ -184,6 +190,9 @@ class LocomotionSystem {
     // Body pose control
     /** Set robot to standing pose */
     bool setStandingPose();
+
+    /** Set body pose with position and orientation */
+    bool setBodyPose(const Eigen::Vector3d &position, const Eigen::Vector3d &orientation);
 
     /** Check if smooth movement is in progress */
     bool isSmoothMovementInProgress() const;

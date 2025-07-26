@@ -140,8 +140,9 @@ void WalkController::applyGaitConfigToLegSteppers(const GaitConfiguration &gait_
         leg_stepper->setStepClearanceHeight(gait_config.swing_height);
 
         // Calculate phase offset using StepCycle period
-        double phase_offset = static_cast<double>(gait_config.offsets.getForLegIndex(i) * gait_config.phase_config.phase_offset) /
-                              static_cast<double>(step_cycle.period_);
+        // OpenSHC: for tripod gait, second group should be offset by half the total period
+        int phase_offset_iterations = gait_config.offsets.getForLegIndex(i) * (step_cycle.period_ / 2);
+        double phase_offset = static_cast<double>(phase_offset_iterations) / static_cast<double>(step_cycle.period_);
         leg_stepper->setPhaseOffset(phase_offset);
 
         // OpenSHC: Configurar velocidad deseada para el cálculo de stride
@@ -415,10 +416,27 @@ void WalkController::updateWalk(const Point3D &linear_velocity_input, double ang
     // State transition: MOVING->STOPPING
     else if (walk_state_ == WALK_MOVING && !has_velocity_command) {
         walk_state_ = WALK_STOPPING;
+        // Force all legs to STANCE during shutdown
+        for (auto &leg_stepper : leg_steppers_) {
+            leg_stepper->setStepState(STEP_STANCE);
+        }
     }
     // State transition: STOPPING->STOPPED
     else if (walk_state_ == WALK_STOPPING && legs_at_correct_phase_ == leg_count && pose_state_ == 0) {
         walk_state_ = WALK_STOPPED;
+    }
+
+    // OpenSHC: Handle STOPPED state - force all legs to STANCE
+    if (walk_state_ == WALK_STOPPED) {
+        for (auto &leg_stepper : leg_steppers_) {
+            leg_stepper->setStepState(STEP_FORCE_STOP);
+            leg_stepper->setPhase(0.0);
+        }
+        // Also force all leg phases to STANCE
+        for (int i = 0; i < NUM_LEGS && i < leg_steppers_.size(); i++) {
+            legs_array_[i].setStepPhase(STANCE_PHASE);
+        }
+        return; // Exit early - no need for further processing
     }
 
     // Increment global phase counter (OpenSHC equivalent)
@@ -438,28 +456,36 @@ void WalkController::updateWalk(const Point3D &linear_velocity_input, double ang
         // OpenSHC: Calcular iteración actual basada en el global_phase_
         int current_iteration = global_phase_;
 
-        // OpenSHC: Determinar estado de la pierna basado en offset de fase
-        double offset = leg_stepper->getPhaseOffset(); // This is normalized [0,1]
+        // Get step cycle for phase calculations
         double calculated_step_frequency = calculateStepFrequency(current_gait_config_);
         StepCycle step_cycle = current_gait_config_.generateStepCycle(calculated_step_frequency);
-        int leg_phase = (global_phase_ + static_cast<int>(offset * step_cycle.period_)) %
-                        step_cycle.period_;
 
-        // OpenSHC: Determinar si está en swing o stance usando la configuración real
-        int stance_period = step_cycle.stance_period_;
-        bool in_swing = (leg_phase >= stance_period);
+        // OpenSHC: Determinar estado de la pierna basado en offset de fase
+        // Convert normalized offset back to iterations for proper phase calculation
+        int phase_offset_iterations = static_cast<int>(leg_stepper->getPhaseOffset() * step_cycle.period_);
+        int leg_phase = (global_phase_ + phase_offset_iterations) % step_cycle.period_;
 
-        // Actualizar el estado en LegStepper
-        if (in_swing && leg_stepper->getStepState() != STEP_SWING) {
-            leg_stepper->setStepState(STEP_SWING);
-            leg_stepper->initializeSwingPeriod(1);
-        } else if (!in_swing && leg_stepper->getStepState() != STEP_STANCE) {
-            leg_stepper->setStepState(STEP_STANCE);
+        // Only update phase states during active walking (not during STOPPING or STOPPED)
+        if (walk_state_ == WALK_MOVING || walk_state_ == WALK_STARTING) {
+            // OpenSHC: Determinar si está en swing o stance usando la configuración real
+            int stance_period = step_cycle.stance_period_;
+            bool in_swing = (leg_phase >= stance_period);
+
+            // Actualizar el estado en LegStepper
+            if (in_swing && leg_stepper->getStepState() != STEP_SWING) {
+                leg_stepper->setStepState(STEP_SWING);
+                leg_stepper->initializeSwingPeriod(1);
+            } else if (!in_swing && leg_stepper->getStepState() != STEP_STANCE) {
+                leg_stepper->setStepState(STEP_STANCE);
+            }
+
+            // Actualizar el estado en el sistema de legs (importante para detección de cambios de fase)
+            StepPhase leg_step_phase = in_swing ? SWING_PHASE : STANCE_PHASE;
+            legs_array_[i].setStepPhase(leg_step_phase);
+        } else {
+            // OpenSHC: During STOPPING or STOPPED, force STANCE phase
+            legs_array_[i].setStepPhase(STANCE_PHASE);
         }
-
-        // Actualizar el estado en el sistema de legs (importante para detección de cambios de fase)
-        StepPhase leg_step_phase = in_swing ? SWING_PHASE : STANCE_PHASE;
-        legs_array_[i].setStepPhase(leg_step_phase);
 
         // OpenSHC: Llamar al método iterativo principal
         leg_stepper->updateTipPositionIterative(current_iteration, time_delta_, false, false);
