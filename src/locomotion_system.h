@@ -157,6 +157,12 @@ class LocomotionSystem {
     /** Immediately stop all leg motion. */
     bool stopMovement();
 
+    /**
+     * @brief Execute one iteration of the startup sequence.
+     * Wraps BodyPoseController::executeStartupSequence.
+     */
+    bool executeStartupSequence();
+
     // OpenSHC-style walking control
     /** Start walking with specified gait type (triggers startup sequence) */
     bool startWalking(GaitType gait_type, double velocity_x, double velocity_y, double angular_velocity);

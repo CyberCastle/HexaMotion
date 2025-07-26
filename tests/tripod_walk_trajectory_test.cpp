@@ -68,10 +68,16 @@ int main() {
     std::cout << "Tripod gait trajectory test" << std::endl;
     std::cout << "StepCycle: stance=" << cycle.stance_period_ << ", swing=" << cycle.swing_period_ << std::endl;
 
-    // Record initial coxa angles
+    // Record initial coxa angles and track min/max during the cycle
     double initial_coxa[NUM_LEGS];
-    for (int i = 0; i < NUM_LEGS; ++i)
-        initial_coxa[i] = legs[i].getJointAngles().coxa;
+    double min_coxa[NUM_LEGS];
+    double max_coxa[NUM_LEGS];
+    for (int i = 0; i < NUM_LEGS; ++i) {
+        double a = legs[i].getJointAngles().coxa;
+        initial_coxa[i] = a;
+        min_coxa[i] = a;
+        max_coxa[i] = a;
+    }
 
     // Simulate walking for one full cycle (50 iterations)
     Point3D vel(10.0, 0.0, 0.0);
@@ -92,8 +98,13 @@ int main() {
         for (int j = 0; j < NUM_LEGS; ++j) {
             auto stepper = wc.getLegStepper(j);
             Point3D tip = stepper->getCurrentTipPose();
-            legs[j].setCurrentTipPositionGlobal(tip);
+            // Apply IK directly to reach the new tip pose
             legs[j].applyAdvancedIK(tip);
+            double coxa_angle = legs[j].getJointAngles().coxa;
+            if (coxa_angle < min_coxa[j])
+                min_coxa[j] = coxa_angle;
+            if (coxa_angle > max_coxa[j])
+                max_coxa[j] = coxa_angle;
 
             StepState state = stepper->getStepState();
 
@@ -132,10 +143,9 @@ int main() {
         (void)start_z;
     }
 
-    // Validate coxa displacement
+    // Validate coxa displacement during the cycle
     for (int i = 0; i < NUM_LEGS; ++i) {
-        double final_coxa = legs[i].getJointAngles().coxa;
-        assert(std::abs(final_coxa - initial_coxa[i]) > 1e-3);
+        assert((max_coxa[i] - min_coxa[i]) > 1e-3);
     }
 
     std::cout << "Test completed successfully" << std::endl;

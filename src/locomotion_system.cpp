@@ -374,6 +374,14 @@ bool LocomotionSystem::stopMovement() {
     return true;
 }
 
+bool LocomotionSystem::executeStartupSequence() {
+    if (!body_pose_ctrl) {
+        last_error = PARAMETER_ERROR;
+        return false;
+    }
+    return body_pose_ctrl->executeStartupSequence(legs);
+}
+
 // Check stability margin
 bool LocomotionSystem::checkStabilityMargin() {
     // Create temporary arrays for compatibility with admittance controller
