@@ -9,7 +9,7 @@ CXXFLAGS=-I../src -I. -I$(EIGEN_PATH) -std=c++17
 
 SOURCES = ../src/math_utils.cpp ../src/robot_model.cpp ../src/body_pose_controller.cpp ../src/walk_controller.cpp ../src/leg_stepper.cpp ../src/terrain_adaptation.cpp ../src/admittance_controller.cpp ../src/velocity_limits.cpp ../src/state_controller.cpp ../src/locomotion_system.cpp ../src/cartesian_velocity_controller.cpp ../src/workspace_validator.cpp ../src/body_pose_config_factory.cpp ../src/body_pose.cpp ../src/leg.cpp ../src/walkspace_analyzer.cpp ../src/leg_poser.cpp ../src/gait_config_factory.cpp
 
-all: math_utils_test pose_controller_test walk_controller_test quaternion_functions_test kinematics_validation_test simple_dh_test simple_ik_test simple_advanced_ik_test brute_force_workspace_test jacobian_validation_test dh_vs_analytic_test pose_gait_integration_test trajectory_tip_position_test trajectory_all_legs_test bezier_precision_analysis_test finetune_angles_test
+all: math_utils_test pose_controller_test walk_controller_test quaternion_functions_test kinematics_validation_test simple_dh_test simple_ik_test simple_advanced_ik_test brute_force_workspace_test jacobian_validation_test dh_vs_analytic_test pose_gait_integration_test trajectory_tip_position_test trajectory_all_legs_test bezier_precision_analysis_test tripod_walk_trajectory_test finetune_angles_test
 
 math_utils_test: math_utils_test.cpp ../src/math_utils.cpp
 	$(CXX) $(CXXFLAGS) $^ -o $@
@@ -36,7 +36,7 @@ simple_advanced_ik_test: simple_advanced_ik_test.cpp ../src/robot_model.cpp ../s
 	$(CXX) $(CXXFLAGS) $^ -o $@
 
 dh_vs_analytic_test: dh_vs_analytic_test.cpp ../src/robot_model.cpp ../src/math_utils.cpp ../src/analytic_robot_model.cpp
-	g++ -I../src -I. -I/usr/local/opt/eigen/include/eigen3 -std=c++17 dh_vs_analytic_test.cpp ../src/robot_model.cpp ../src/math_utils.cpp ../src/analytic_robot_model.cpp -o dh_vs_analytic_test
+	$(CXX) $(CXXFLAGS) dh_vs_analytic_test.cpp ../src/robot_model.cpp ../src/math_utils.cpp ../src/analytic_robot_model.cpp -o dh_vs_analytic_test
 
 brute_force_workspace_test: brute_force_workspace_test.cpp ../src/robot_model.cpp ../src/math_utils.cpp
 	$(CXX) $(CXXFLAGS) $^ -o $@
@@ -59,7 +59,10 @@ trajectory_all_legs_test: trajectory_all_legs_test.cpp ../src/walk_controller.cp
 bezier_precision_analysis_test: bezier_precision_analysis_test.cpp ../src/walk_controller.cpp ../src/leg_stepper.cpp ../src/terrain_adaptation.cpp ../src/robot_model.cpp ../src/velocity_limits.cpp ../src/math_utils.cpp ../src/workspace_validator.cpp ../src/leg.cpp ../src/walkspace_analyzer.cpp ../src/gait_config_factory.cpp ../src/body_pose_config_factory.cpp ../src/body_pose_controller.cpp ../src/leg_poser.cpp
 	$(CXX) $(CXXFLAGS) $^ -o $@
 
+tripod_walk_trajectory_test: tripod_walk_trajectory_test.cpp ../src/walk_controller.cpp ../src/leg_stepper.cpp ../src/terrain_adaptation.cpp ../src/robot_model.cpp ../src/velocity_limits.cpp ../src/math_utils.cpp ../src/workspace_validator.cpp ../src/leg.cpp ../src/walkspace_analyzer.cpp ../src/gait_config_factory.cpp ../src/body_pose_config_factory.cpp ../src/body_pose_controller.cpp ../src/leg_poser.cpp
+	$(CXX) $(CXXFLAGS) $^ -o $@
+
 clean:
-	rm -f math_utils_test pose_controller_test walk_controller_test quaternion_functions_test kinematics_validation_test simple_dh_test simple_ik_test simple_advanced_ik_test brute_force_workspace_test jacobian_validation_test dh_vs_analytic_test pose_gait_integration_test trajectory_tip_position_test trajectory_all_legs_test bezier_precision_analysis_test finetune_angles_test
+	rm -f math_utils_test pose_controller_test walk_controller_test quaternion_functions_test kinematics_validation_test simple_dh_test simple_ik_test simple_advanced_ik_test brute_force_workspace_test jacobian_validation_test dh_vs_analytic_test pose_gait_integration_test trajectory_tip_position_test trajectory_all_legs_test bezier_precision_analysis_test tripod_walk_trajectory_test finetune_angles_test
 
 
