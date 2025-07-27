@@ -638,17 +638,16 @@ bool LocomotionSystem::update() {
 
     // Only update leg trajectories if system is in RUNNING state
     if (walk_ctrl && system_state == SYSTEM_RUNNING) {
-        // Update walk controller with the last commanded velocity, body position, and orientation
+        // PASO 1: Update walk controller - calculates ALL Bézier trajectories (OpenSHC pattern)
         walk_ctrl->updateWalk(Point3D(commanded_linear_velocity_, 0.0, 0.0),
                               commanded_angular_velocity_,
                               body_position, body_orientation);
 
-        // Update leg states and trajectories based on current gait
+        // PASO 2: Collect desired positions from Bézier trajectories (= OpenSHC::setDesiredTipPose)
         for (int i = 0; i < NUM_LEGS; i++) {
             auto leg_stepper = walk_ctrl->getLegStepper(i);
             if (leg_stepper) {
-
-                // Use LegStepper's step state to determine stance or swing
+                // Update leg step phase
                 auto step_state = leg_stepper->getStepState();
                 if (step_state == STEP_STANCE || step_state == STEP_FORCE_STANCE) {
                     legs[i].setStepPhase(STANCE_PHASE);
@@ -656,28 +655,17 @@ bool LocomotionSystem::update() {
                     legs[i].setStepPhase(SWING_PHASE);
                 }
 
-                // OpenSHC Model::updateModel() pattern - EXACTLY like trajectory_tip_position_test:
-                // 1. Get current joint angles BEFORE update to calculate delta
-                JointAngles angles_before = legs[i].getJointAngles();
-                Point3D pos_before = legs[i].getCurrentTipPositionGlobal();
-
-                // 2. Get new tip position from trajectory generator (LegStepper)
-                Point3D new_tip_position = leg_stepper->getCurrentTipPose();
-
-                // 3. Apply the new position to the Leg object to maintain consistency
-                // legs[i].setCurrentTipPositionGlobal(new_tip_position);
-
-                // 4. Apply advanced delta-based IK method EXACTLY like trajectory_tip_position_test
-                JointAngles new_angles = model.applyAdvancedIK(i, pos_before, new_tip_position, angles_before, dt);
-                legs[i].setJointAngles(new_angles);
-
-                // 5. Apply the resulting joint angles to servos
-                if (!setLegJointAngles(i, new_angles)) {
-                    // Handle servo failure - maintain current state
-                    continue;
-                }
+                // Get PURE Bézier position (no IK applied yet)
+                Point3D desired_tip_position = leg_stepper->getCurrentTipPose();
+                legs[i].setDesiredTipPosition(desired_tip_position);
             }
         }
+
+        // PASO 3: Apply IK to ALL legs at once (= OpenSHC::Model::updateModel)
+        applyInverseKinematicsToAllLegs();
+
+        // PASO 4: Publish ALL joint angles to servos (= OpenSHC::publishDesiredJointState)
+        publishJointAnglesToServos();
     } else if (system_state == SYSTEM_READY) {
         // OpenSHC: When system is READY (after shutdown), maintain STANCE_PHASE for ALL legs
         // This prevents sys.update() calls from overriding the shutdown-forced STANCE states
@@ -1130,4 +1118,53 @@ bool LocomotionSystem::stopWalking() {
     system_state = SYSTEM_RUNNING; // Will transition to READY when sequence completes
 
     return true;
+}
+
+// ====================================================================
+// OPENSHC-STYLE IK BATCH PROCESSING
+// ====================================================================
+
+void LocomotionSystem::applyInverseKinematicsToAllLegs() {
+    // Following OpenSHC::Model::updateModel() pattern exactly
+    // Apply IK to ALL legs at once using applyAdvancedIK (equivalent to OpenSHC::solveIK)
+
+    for (int i = 0; i < NUM_LEGS; i++) {
+        // Get desired position from Bézier trajectory (pure, no IK applied yet)
+        Point3D desired_tip_position = legs[i].getDesiredTipPosition();
+
+        // Get current state for delta calculation
+        JointAngles current_angles = legs[i].getJointAngles();
+        Point3D current_tip_position = legs[i].getCurrentTipPositionGlobal();
+
+        // Apply applyAdvancedIK (= OpenSHC::solveIK with DLS + cost gradients)
+        JointAngles new_angles = model.applyAdvancedIK(
+            i,                    // leg index
+            current_tip_position, // current tip pose
+            desired_tip_position, // desired tip pose (from Bézier)
+            current_angles,       // current joint angles
+            dt                    // time delta
+        );
+
+        // Update joint angles in Leg object
+        legs[i].setJointAngles(new_angles);
+
+        // Update tip position using FK to maintain consistency
+        legs[i].updateTipPosition();
+    }
+}
+
+void LocomotionSystem::publishJointAnglesToServos() {
+    // Following OpenSHC::publishDesiredJointState() pattern exactly
+    // Send ALL computed joint angles to servos at once
+
+    for (int i = 0; i < NUM_LEGS; i++) {
+        JointAngles angles = legs[i].getJointAngles();
+
+        // Send all angles for this leg to servos
+        if (!setLegJointAngles(i, angles)) {
+            // Handle servo failure - log error but continue with other legs
+            last_error = SERVO_ERROR;
+            // Continue processing other legs instead of failing completely
+        }
+    }
 }

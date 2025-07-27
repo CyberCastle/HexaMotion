@@ -74,6 +74,10 @@ class LocomotionSystem {
 
     bool setLegJointAngles(int leg_index, const JointAngles &q);
 
+    // OpenSHC-style IK batch processing functions
+    void applyInverseKinematicsToAllLegs();
+    void publishJointAnglesToServos();
+
   public:
     /**
      * @brief Construct a locomotion system with the given parameters.
