@@ -97,22 +97,26 @@ void debugTipPositionGeneration(LegStepper &stepper, Leg &leg, const RobotModel 
 
     // Configure iteration count using OpenSHC-compatible calculation
     // OpenSHC formula: swing_iterations = int((swing_period/period) / (frequency * time_delta))
-    double time_delta = 0.02;                                     // OpenSHC standard: 50Hz control loop (0.02s per iteration)
-    double period = 1.0;                                          // Complete gait cycle period in seconds
-    double swing_period = period * gait_config.getSwingRatio();   // Time spent in swing phase
-    double stance_period = period * gait_config.getStanceRatio(); // Time spent in stance phase
+    double time_delta = 0.02; // OpenSHC standard: 50Hz control loop (0.02s per iteration)
 
-    // Calculate iterations using OpenSHC method
-    int swing_iterations = (int)((swing_period / period) / (gait_config.getStepFrequency() * time_delta));
-    int stance_iterations = (int)((stance_period / period) / (gait_config.getStepFrequency() * time_delta));
+    // Use the SAME StepCycle values that the LegStepper uses (not gait_config values)
+    double period = step_cycle.period_;               // Use normalized period from StepCycle
+    double swing_period = step_cycle.swing_period_;   // Use normalized swing_period from StepCycle
+    double stance_period = step_cycle.stance_period_; // Use normalized stance_period from StepCycle
+    double frequency = step_cycle.frequency_;         // Use normalized frequency from StepCycle
+
+    // Calculate iterations using the SAME method as LegStepper::calculateSwingTiming()
+    int swing_iterations = (int)((double(swing_period) / period) / (frequency * time_delta));
+    int stance_iterations = (int)((double(stance_period) / period) / (frequency * time_delta));
     int total_iterations = swing_iterations + stance_iterations;
 
     // Use OpenSHC-compatible iteration time
     double iteration_time = time_delta;
 
     std::cout << "OpenSHC-compatible gait timing:" << std::endl;
-    std::cout << "  time_delta=" << time_delta << "s, period=" << period << "s" << std::endl;
-    std::cout << "  swing_period=" << swing_period << "s, stance_period=" << stance_period << "s" << std::endl;
+    std::cout << "  time_delta=" << time_delta << "s, period=" << period << std::endl;
+    std::cout << "  swing_period=" << swing_period << ", stance_period=" << stance_period << std::endl;
+    std::cout << "  frequency=" << frequency << "Hz" << std::endl;
     std::cout << "  swing_iterations=" << swing_iterations << ", stance_iterations=" << stance_iterations << std::endl;
     std::cout << "  total_iterations=" << total_iterations << ", iteration_time=" << iteration_time << "s" << std::endl;
 

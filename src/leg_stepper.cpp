@@ -115,31 +115,25 @@ void LegStepper::updateStride() {
 }
 
 void LegStepper::calculateSwingTiming(double time_delta) {
-    // OpenSHC-compatible timing calculation using StepCycle values
-    // These values come from the StepCycle that was set via setStepCycle()
+    // OpenSHC EXACT timing calculation using StepCycle values
+    // Follow OpenSHC formula exactly: (double(step.swing_period_) / step.period_) / (step.frequency_ * time_delta)
 
-    // Use actual values from StepCycle (OpenSHC exact)
-    double step_frequency = step_cycle_.frequency_; // Real step frequency from StepCycle
-    double swing_ratio = double(step_cycle_.swing_period_) / double(step_cycle_.period_);
-    double stance_ratio = double(step_cycle_.stance_period_) / double(step_cycle_.period_);
+    // OpenSHC exact calculation
+    swing_iterations_ = int((double(step_cycle_.swing_period_) / step_cycle_.period_) / (step_cycle_.frequency_ * time_delta));
 
-    // OpenSHC formula: swing_iterations = int((swing_period/period) / (frequency * time_delta))
-    // where swing_period = swing_ratio * period, and period = 1.0 (normalized)
-    swing_iterations_ = int((swing_ratio / 1.0) / (step_frequency * time_delta));
+    // OpenSHC exact: Must be even (roundToEvenInt equivalent)
+    if (swing_iterations_ % 2 != 0)
+        swing_iterations_++;
 
     // Ensure minimum iterations for Bezier curve development
     if (swing_iterations_ < 10)
         swing_iterations_ = 10;
 
-    // Make even for proper primary/secondary curve split
-    if (swing_iterations_ % 2 != 0)
-        swing_iterations_++;
-
-    // Time delta for each bezier curve (split swing period in half for primary/secondary)
+    // OpenSHC exact: swing_delta_t_ = 1.0 / (swing_iterations / 2.0)
     swing_delta_t_ = 1.0 / (swing_iterations_ / 2.0);
 
-    // Calculate stance timing using same formula
-    stance_iterations_ = int((stance_ratio / 1.0) / (step_frequency * time_delta));
+    // Calculate stance timing using same OpenSHC formula
+    stance_iterations_ = int((double(step_cycle_.stance_period_) / step_cycle_.period_) / (step_cycle_.frequency_ * time_delta));
     if (stance_iterations_ < 2)
         stance_iterations_ = 2;
     stance_delta_t_ = 1.0 / stance_iterations_;
