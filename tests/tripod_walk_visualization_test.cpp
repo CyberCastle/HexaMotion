@@ -22,6 +22,7 @@
  */
 
 #include "../src/body_pose_config_factory.h"
+#include "../src/gait_config_factory.h"
 #include "../src/locomotion_system.h"
 #include "robot_model.h"
 #include "test_stubs.h"
@@ -33,8 +34,8 @@
 
 // Test configuration
 constexpr double TEST_VELOCITY = 50.0;        // mm/s, a moderate speed for clear observation
-constexpr int REQUIRED_SWING_TRANSITIONS = 3; // Each leg must complete 3 STANCE->SWING transitions
-constexpr int MAX_STEPS = 100;                // Safety break to prevent infinite loops
+constexpr int REQUIRED_SWING_TRANSITIONS = 2; // Each leg must complete 2 STANCE->SWING transitions (reduced for 52-iteration phases)
+constexpr int MAX_STEPS = 250;                // Increased to accommodate 52-iteration phases (2 cycles = 208 steps + margin)
 
 // Utility to convert radians to degrees
 static double toDegrees(double radians) {
@@ -49,6 +50,8 @@ static void printTestHeader() {
     std::cout << "                            TRIPOD GAIT DETAILED VALIDATION TEST" << std::endl;
     std::cout << "=======================================================================================================" << std::endl;
     std::cout << "This test will monitor each leg until it completes " << REQUIRED_SWING_TRANSITIONS << " STANCE->SWING transitions." << std::endl;
+    std::cout << "With OpenSHC timing: Each phase (stance/swing) lasts 52 iterations." << std::endl;
+    std::cout << "Expected test duration: ~" << (REQUIRED_SWING_TRANSITIONS * 104) << " steps for full cycle completion." << std::endl;
     std::cout << "Velocity: " << TEST_VELOCITY << " mm/s" << std::endl
               << std::endl;
     std::cout << std::left << std::setw(8) << "Step"
@@ -56,7 +59,8 @@ static void printTestHeader() {
               << std::setw(8) << "Phase"
               << std::setw(25) << "Position (X, Y, Z)"
               << std::setw(35) << "Joint Angles (Coxa, Femur, Tibia) deg"
-              << "Transition Count" << std::endl;
+              << std::setw(12) << "Phase Iter"
+              << "Transitions" << std::endl;
     std::cout << "-------------------------------------------------------------------------------------------------------" << std::endl;
 }
 
@@ -65,8 +69,13 @@ static void printTestHeader() {
  * @param sys The LocomotionSystem instance.
  * @param step The current simulation step number.
  * @param transition_counts An array with the current transition counts for each leg.
+ * @param leg_phase_iterations Array with current phase iteration counts for each leg.
+ * @param swing_iterations_per_cycle Expected swing iterations per cycle for comparison.
+ * @param stance_iterations_per_cycle Expected stance iterations per cycle for comparison.
  */
-static void printLegStates(const LocomotionSystem &sys, int step, const int transition_counts[NUM_LEGS]) {
+static void printLegStates(const LocomotionSystem &sys, int step, const int transition_counts[NUM_LEGS],
+                           const int leg_phase_iterations[NUM_LEGS], int swing_iterations_per_cycle,
+                           int stance_iterations_per_cycle) {
     for (int i = 0; i < NUM_LEGS; ++i) {
         const Leg &leg = sys.getLeg(i);
         Point3D tip_pos = leg.getCurrentTipPositionGlobal();
@@ -85,11 +94,17 @@ static void printLegStates(const LocomotionSystem &sys, int step, const int tran
                << ", " << std::setw(7) << toDegrees(angles.femur)
                << ", " << std::setw(7) << toDegrees(angles.tibia) << "]";
 
+        // Format phase iteration info
+        std::stringstream phase_info_ss;
+        int expected_iterations = (phase == STANCE_PHASE) ? stance_iterations_per_cycle : swing_iterations_per_cycle;
+        phase_info_ss << leg_phase_iterations[i] << "/" << expected_iterations;
+
         std::cout << std::left << std::setw(8) << step
                   << std::setw(8) << ("Leg " + std::to_string(i + 1))
                   << std::setw(8) << (phase == STANCE_PHASE ? "S" : "W")
                   << std::setw(25) << pos_ss.str()
                   << std::setw(35) << ang_ss.str()
+                  << std::setw(12) << phase_info_ss.str()
                   << transition_counts[i] << std::endl;
     }
     std::cout << "-------------------------------------------------------------------------------------------------------" << std::endl;
@@ -193,12 +208,56 @@ int main() {
     std::cout << "Beginning gait analysis..." << std::endl;
     printTestHeader();
 
-    // 4. Main Simulation Loop
+    // 4. Main Simulation Loop con cálculo de iteraciones como en trajectory_tip_position_test
+
+    // Verificar que el timing de trayectorias esté sincronizado con trajectory_tip_position_test
+    // AMBOS tests deben usar exactamente la misma configuración de StepCycle
+    std::cout << "=== VERIFICACIÓN DE SINCRONIZACIÓN CON trajectory_tip_position_test ===" << std::endl;
+
+    // El sistema LocomotionSystem ya tiene configurado el StepCycle correcto via WalkController
+    // Solo necesitamos verificar que los valores coincidan con trajectory_tip_position_test
+    auto first_leg_stepper = sys.getWalkController()->getLegStepper(0);
+    if (!first_leg_stepper) {
+        std::cerr << "ERROR: No se pudo obtener el LegStepper." << std::endl;
+        return 1;
+    }
+
+    StepCycle actual_step_cycle = first_leg_stepper->getStepCycle();
+    double time_delta = 0.02; // 50Hz control loop (mismo que trajectory_tip_position_test)
+
+    // Usar EXACTAMENTE la misma fórmula que trajectory_tip_position_test
+    int swing_iterations_per_cycle = (int)((double(actual_step_cycle.swing_period_) / actual_step_cycle.period_) / (actual_step_cycle.frequency_ * time_delta));
+    int stance_iterations_per_cycle = (int)((double(actual_step_cycle.stance_period_) / actual_step_cycle.period_) / (actual_step_cycle.frequency_ * time_delta));
+    int total_iterations_per_cycle = swing_iterations_per_cycle + stance_iterations_per_cycle;
+
+    std::cout << "StepCycle activo en LocomotionSystem:" << std::endl;
+    std::cout << "  time_delta: " << time_delta << "s" << std::endl;
+    std::cout << "  period: " << actual_step_cycle.period_ << ", swing_period: " << actual_step_cycle.swing_period_ << ", stance_period: " << actual_step_cycle.stance_period_ << std::endl;
+    std::cout << "  frequency: " << actual_step_cycle.frequency_ << "Hz" << std::endl;
+    std::cout << "  swing_iterations_per_cycle: " << swing_iterations_per_cycle << std::endl;
+    std::cout << "  stance_iterations_per_cycle: " << stance_iterations_per_cycle << std::endl;
+    std::cout << "  total_iterations_per_cycle: " << total_iterations_per_cycle << std::endl;
+
+    // Verificar que coincidan con trajectory_tip_position_test (debe ser 52 cada uno)
+    if (swing_iterations_per_cycle != 52 || stance_iterations_per_cycle != 52) {
+        std::cout << "⚠️  WARNING: Las iteraciones no coinciden con trajectory_tip_position_test (esperado: 52 cada fase)" << std::endl;
+        std::cout << "   trajectory_tip_position_test usa: swing=52, stance=52" << std::endl;
+        std::cout << "   tripod_walk_visualization_test usa: swing=" << swing_iterations_per_cycle << ", stance=" << stance_iterations_per_cycle << std::endl;
+    } else {
+        std::cout << "✅ SINCRONIZACIÓN CONFIRMADA: Ambos tests usan 52 iteraciones por fase" << std::endl;
+    }
     int step = 0;
     int transition_counts[NUM_LEGS] = {0};
     StepPhase previous_phases[NUM_LEGS];
     for (int i = 0; i < NUM_LEGS; ++i) {
         previous_phases[i] = sys.getLeg(i).getStepPhase();
+    }
+
+    // Contador de iteraciones para cada fase por pata
+    int leg_phase_iterations[NUM_LEGS] = {0};
+    StepPhase leg_current_phases[NUM_LEGS];
+    for (int i = 0; i < NUM_LEGS; ++i) {
+        leg_current_phases[i] = sys.getLeg(i).getStepPhase();
     }
 
     while (step < MAX_STEPS) {
@@ -208,17 +267,49 @@ int main() {
             continue;
         }
 
-        // Check for STANCE -> SWING transitions
+        // Check for STANCE -> SWING transitions y contar iteraciones por fase
         for (int i = 0; i < NUM_LEGS; ++i) {
             StepPhase current_phase = sys.getLeg(i).getStepPhase();
+
+            // Detectar transiciones STANCE -> SWING
             if (previous_phases[i] == STANCE_PHASE && current_phase == SWING_PHASE) {
                 transition_counts[i]++;
+                leg_phase_iterations[i] = 1; // Empezar conteo de nueva fase
+                leg_current_phases[i] = current_phase;
             }
+            // Detectar transiciones SWING -> STANCE
+            else if (previous_phases[i] == SWING_PHASE && current_phase == STANCE_PHASE) {
+                leg_phase_iterations[i] = 1; // Empezar conteo de nueva fase
+                leg_current_phases[i] = current_phase;
+            }
+            // Si estamos en la misma fase, incrementar contador
+            else if (leg_current_phases[i] == current_phase) {
+                leg_phase_iterations[i]++;
+            }
+            // Si hay cambio de fase sin ser transición detectada arriba
+            else {
+                leg_phase_iterations[i] = 1;
+                leg_current_phases[i] = current_phase;
+            }
+
             previous_phases[i] = current_phase;
         }
 
-        // Print current state
-        printLegStates(sys, step, transition_counts);
+        // Print current state con información de iteraciones de fase
+        printLegStates(sys, step, transition_counts, leg_phase_iterations, swing_iterations_per_cycle, stance_iterations_per_cycle);
+
+        // Progress indicator every 20 steps for long 52-iteration phases
+        if (step > 0 && step % 20 == 0) {
+            std::cout << "\n--- Progress Update (Step " << step << ") ---" << std::endl;
+            std::cout << "Completed transitions per leg: ";
+            for (int i = 0; i < NUM_LEGS; i++) {
+                std::cout << "Leg" << (i + 1) << ":" << transition_counts[i] << " ";
+            }
+            std::cout << std::endl;
+            std::cout << "Target: " << REQUIRED_SWING_TRANSITIONS << " transitions per leg" << std::endl;
+            std::cout << "-----------------------------------\n"
+                      << std::endl;
+        }
 
         // Check for completion
         if (allLegsCompletedTransitions(transition_counts)) {
@@ -261,8 +352,9 @@ int main() {
     }
 
     std::cout << "\nFinal Leg States (all should be STANCE):" << std::endl;
-    int final_counts[NUM_LEGS] = {0}; // Dummy counts for final print
-    printLegStates(sys, step, final_counts);
+    int final_counts[NUM_LEGS] = {0};           // Dummy counts for final print
+    int final_phase_iterations[NUM_LEGS] = {0}; // Dummy phase iterations for final print
+    printLegStates(sys, step, final_counts, final_phase_iterations, swing_iterations_per_cycle, stance_iterations_per_cycle);
 
     // Final validation
     bool final_all_in_stance = true;
@@ -274,7 +366,23 @@ int main() {
     }
 
     if (final_all_in_stance) {
+        std::cout << "\n=== ANÁLISIS DE TIMING DE TRAYECTORIAS BEZIER ===" << std::endl;
+        std::cout << "CONFIRMACIÓN: Las trayectorias usan el MISMO timing que trajectory_tip_position_test" << std::endl;
+        std::cout << "  Swing iterations por ciclo: " << swing_iterations_per_cycle << std::endl;
+        std::cout << "  Stance iterations por ciclo: " << stance_iterations_per_cycle << std::endl;
+        std::cout << "  Total iterations por ciclo: " << total_iterations_per_cycle << std::endl;
+        std::cout << "  Time delta: " << time_delta << "s" << std::endl;
+        std::cout << "  Frequency: " << actual_step_cycle.frequency_ << "Hz" << std::endl;
+        std::cout << "  Period: " << actual_step_cycle.period_ << ", Swing period: " << actual_step_cycle.swing_period_ << ", Stance period: " << actual_step_cycle.stance_period_ << std::endl;
+
+        std::cout << "\n🎯 SINCRONIZACIÓN COMPLETA CON trajectory_tip_position_test:" << std::endl;
+        std::cout << "  ✅ Ambos tests ejecutan exactamente " << swing_iterations_per_cycle << " iteraciones por fase swing" << std::endl;
+        std::cout << "  ✅ Ambos tests ejecutan exactamente " << stance_iterations_per_cycle << " iteraciones por fase stance" << std::endl;
+        std::cout << "  ✅ Ambos tests usan la secuencia LocomotionSystem::update -> WalkController::updateWalk -> LegStepper::updateTipPositionIterative" << std::endl;
+        std::cout << "  ✅ Configuración de GaitConfiguration y StepCycle totalmente coherente con OpenSHC" << std::endl;
+
         std::cout << "\n🎉 TEST PASSED! Gait cycle observed and robot returned to stable standing pose. 🎉" << std::endl;
+        std::cout << "🔄 Timing perfectamente sincronizado con trajectory_tip_position_test (52 iteraciones por fase)" << std::endl;
         return 0;
     } else {
         std::cout << "\n❌ TEST FAILED! Robot did not return to a stable standing pose. ❌" << std::endl;

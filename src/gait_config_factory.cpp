@@ -17,7 +17,7 @@
  * - wave_gait: AR,CL,BL,AL,CR,BR (most stable, slowest)
  * - tripod_gait: AR/BL/CR,AL/BR/CL (balanced speed/stability)
  * - ripple_gait: AR,CL,BR,AL,CR,BL (faster, less stable)
- * - amble_gait: AR/CL,BR/BL,AL/CR (fastest, least stable)
+ * - metachronal_gait: AR,CL,BL,AL,CR,BR (adaptive, HexaMotion specific)
  */
 
 /**

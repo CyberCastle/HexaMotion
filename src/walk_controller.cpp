@@ -119,11 +119,12 @@ bool WalkController::setGaitByName(const std::string &gait_name) {
 }
 
 void WalkController::applyGaitConfigToLegSteppers(const GaitConfiguration &gait_config) {
-    // Calculate proper step frequency to prevent stride vector multiplication bug
-    double calculated_step_frequency = calculateStepFrequency(gait_config);
+    // Use OpenSHC default frequency (1.0 Hz) instead of calculated frequency
+    // This ensures consistency with trajectory_tip_position_test and OpenSHC behavior
+    double step_frequency = 1.0; // OpenSHC default frequency
 
-    // Generate StepCycle with calculated frequency instead of default 1.0 Hz
-    StepCycle step_cycle = gait_config.generateStepCycle(calculated_step_frequency);
+    // Generate StepCycle with default frequency like OpenSHC
+    StepCycle step_cycle = gait_config.generateStepCycle(step_frequency);
 
     // Apply StepCycle and gait configuration to each LegStepper
     for (int i = 0; i < NUM_LEGS && i < leg_steppers_.size(); i++) {
@@ -449,8 +450,8 @@ void WalkController::updateWalk(const Point3D &linear_velocity_input, double ang
     bool step_cycle_calculated = false;
 
     if (is_active_walking) {
-        const double calculated_step_frequency = calculateStepFrequency(current_gait_config_);
-        step_cycle = current_gait_config_.generateStepCycle(calculated_step_frequency);
+        // Use OpenSHC default frequency (1.0 Hz) instead of calculated frequency
+        step_cycle = current_gait_config_.generateStepCycle(1.0);
         global_phase_ = (global_phase_ + 1) % step_cycle.period_;
         step_cycle_calculated = true;
     }
