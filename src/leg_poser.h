@@ -57,7 +57,7 @@ class LegPoser {
 
     // Modifiers
     inline void setCurrentTipPose(const RobotModel &model, const Pose &current) {
-        leg_.setCurrentTipPositionGlobal(model, current.position);
+        leg_.setCurrentTipPositionGlobal(current.position);
         current_tip_pose_ = current;
     }
     inline void setTargetTipPose(const Pose &target) { target_tip_pose_ = target; }
@@ -128,23 +128,6 @@ class LegPoser {
     }
 
   private:
-    /**
-     * @brief Generate control nodes for primary swing bezier curve
-     * @param origin_pos Origin position
-     * @param target_pos Target position
-     * @param lift_height Lift height for the trajectory
-     */
-    void generatePrimarySwingControlNodes(const Point3D &origin_pos, const Point3D &target_pos, double lift_height);
-
-    /**
-     * @brief Generate control nodes for secondary swing bezier curve
-     * @param origin_pos Origin position
-     * @param target_pos Target position
-     * @param lift_height Lift height for the trajectory
-     */
-    void generateSecondarySwingControlNodes(const Point3D &origin_pos, const Point3D &target_pos, double lift_height);
-
-  private:
     int leg_index_;           //< Index of the leg this poser controls
     Leg &leg_;                //< Reference to the Leg object this poser controls
     RobotModel &robot_model_; //< Reference to the robot model for parameter access
@@ -159,10 +142,6 @@ class LegPoser {
     ExternalTarget external_target_; //< Externally set target tip pose object
 
     bool leg_completed_step_ = false; //< Flag denoting if leg has completed its required step in a sequence
-
-    // Bezier control nodes (5 nodes for quartic curves)
-    Point3D control_nodes_primary_[5];   //< Control nodes for primary swing bezier curve
-    Point3D control_nodes_secondary_[5]; //< Control nodes for secondary swing bezier curve
 
     // Constants
     static constexpr double JOINT_TOLERANCE = 0.01; // rad

@@ -232,7 +232,7 @@ struct ProgressiveServo : IServoInterface {
 
             // Use speed to adjust movement rate (simulate servo speed control)
             double diff = target_angles[leg][joint] - current_angles[leg][joint];
-            double movement_rate = 0.2 * speed;                             // Base rate scaled by speed parameter
+            double movement_rate = 0.2 * speed;                           // Base rate scaled by speed parameter
             movement_rate = std::max(0.05, std::min(1.0, movement_rate)); // Clamp to reasonable range
 
             // Move toward target with speed-adjusted rate, plus some noise
@@ -286,6 +286,7 @@ inline Parameters createDefaultParameters() {
     params.femur_length = 101.0f;
     params.tibia_length = 208.0f;
     params.robot_height = 208.0f;
+    params.standing_height = 150; // Initial standing height
     params.robot_weight = 2.0f;
     params.center_of_mass = Eigen::Vector3d(0, 0, 0);
     params.coxa_angle_limits[0] = -65.0f;

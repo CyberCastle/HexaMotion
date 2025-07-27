@@ -117,7 +117,12 @@ JointAngles RobotModel::solveIK(int leg, const Point3D &local_target, JointAngle
         current_angles.femur = normalizeAngle(current_angles.femur);
         current_angles.tibia = normalizeAngle(current_angles.tibia);
 
-        // Clamp to joint limits if enabled
+        // NOTE: OpenSHC approach - DO NOT clamp during iterations, let IK converge naturally
+        // Clamping will be applied at the end if needed
+    }
+
+    // Apply final clamping only after convergence (OpenSHC style)
+    if (params.ik.clamp_joints) {
         clampJointAngles(current_angles);
     }
 
@@ -391,6 +396,12 @@ Pose RobotModel::getPoseLegFrame(int leg_index, const JointAngles &joint_angles,
     return robot_frame_pose.transform(transform.inverse());
 }
 
+double RobotModel::getLegReach() const {
+    // Maximum reach is femur + tibia lengths (coxa only provides lateral offset)
+    // The coxa rotates around Z-axis and doesn't extend the radial reach
+    return params.femur_length + params.tibia_length;
+}
+
 JointAngles RobotModel::calculateTargetFromCurrentPosition(int leg, const JointAngles &current_angles,
                                                            const Pose &current_pose, const Point3D &target_in_current_frame) const {
     // OpenSHC logic: transform target from current pose frame to robot frame
@@ -436,49 +447,6 @@ Point3D RobotModel::transformLocalToGlobalCoordinates(int leg, const Point3D &lo
     Pose global_pose = getPoseRobotFrame(leg, current_angles, local_pose);
 
     return global_pose.position;
-}
-
-double RobotModel::setDesiredTipPoseAndApplyIK(int leg, const Point3D &global_desired_pose,
-                                               const JointAngles &current_angles) const {
-    // Get current tip pose in global coordinates
-    Point3D global_current_pose = forwardKinematicsGlobalCoordinates(leg, current_angles);
-
-    // Calculate position delta in local coordinates using existing method
-    Point3D local_position_delta = calculatePositionDeltaLocalCoordinates(leg, global_desired_pose,
-                                                                          global_current_pose, current_angles);
-
-    // Check if delta is reasonable (OpenSHC validation)
-    if (local_position_delta.norm() > 100.0) { // 100mm sanity check - reasonable max step size
-        return 0.0;                            // Failure
-    }
-
-    // Transform desired pose to local coordinates for IK solving
-    Point3D local_desired_pose = transformGlobalToLocalCoordinates(leg, global_desired_pose, current_angles);
-
-    // Solve IK in local coordinates
-    JointAngles new_angles = solveIK(leg, local_desired_pose, current_angles);
-
-    // Validate solution and check accuracy
-    if (!checkJointLimits(leg, new_angles)) {
-        return 0.0; // Failure
-    }
-
-    // Calculate final tip position to check accuracy
-    Point3D final_global_pose = forwardKinematicsGlobalCoordinates(leg, new_angles);
-    double position_error = math_utils::distance(final_global_pose, global_desired_pose);
-
-    return (position_error <= IK_TOLERANCE) ? 1.0 : 0.0; // Success if error within tolerance
-}
-
-Point3D RobotModel::calculatePositionDeltaLocalCoordinates(int leg, const Point3D &global_desired_pose,
-                                                           const Point3D &global_current_pose,
-                                                           const JointAngles &current_angles) const {
-    // Transform both poses to local coordinates (OpenSHC approach)
-    Point3D local_desired_pose = transformGlobalToLocalCoordinates(leg, global_desired_pose, current_angles);
-    Point3D local_current_pose = transformGlobalToLocalCoordinates(leg, global_current_pose, current_angles);
-
-    // Calculate delta in local coordinates
-    return local_desired_pose - local_current_pose;
 }
 
 JointAngles RobotModel::estimateInitialAngles(int leg, const Point3D &target_position) const {
@@ -528,4 +496,170 @@ JointAngles RobotModel::estimateInitialAngles(int leg, const Point3D &target_pos
     // Method 3: Return the conservative estimate as it's more likely to be stable
     // This approach prioritizes stability over precision, which is better for hexapods
     return conservative_estimate;
+}
+
+Point3D RobotModel::makeReachable(int leg_index, const Point3D &reference_tip_position) const {
+    // OpenSHC-style makeReachable: constrain position to leg workspace
+    Point3D leg_base = getLegBasePosition(leg_index);
+
+    // Calculate vector from leg base to target
+    Point3D target_vector = reference_tip_position - leg_base;
+    double distance_to_target = target_vector.norm();
+
+    // Get maximum reachable distance (conservative estimate)
+    double max_reach = params.femur_length + params.tibia_length;
+    double safety_margin = 0.95; // 95% of max reach for stability
+    double safe_max_reach = max_reach * safety_margin;
+
+    // If target is beyond safe reach, scale it to be within reach
+    if (distance_to_target > safe_max_reach) {
+        // Scale the vector to safe reach distance
+        Point3D safe_direction = target_vector / distance_to_target;
+        Point3D safe_position = leg_base + safe_direction * safe_max_reach;
+
+        // Maintain original Z coordinate if reasonable
+        if (std::abs(reference_tip_position.z - leg_base.z) < max_reach * 0.8) {
+            safe_position.z = reference_tip_position.z;
+        }
+
+        return safe_position;
+    }
+
+    // Target is already reachable
+    return reference_tip_position;
+}
+
+// ====================================================================
+// ADVANCED IK IMPLEMENTATION
+// ====================================================================
+// ====================================================================
+
+JointAngles RobotModel::applyAdvancedIK(int leg, const Point3D &current_tip_pose, const Point3D &desired_tip_pose,
+                                        const JointAngles &current_angles, double time_delta) const {
+    // Following OpenSHC pattern exactly
+    // Calculate position delta in global coordinates
+    Eigen::Vector3d position_delta;
+    position_delta << (desired_tip_pose.x - current_tip_pose.x),
+        (desired_tip_pose.y - current_tip_pose.y),
+        (desired_tip_pose.z - current_tip_pose.z);
+
+    // Create 6D delta vector (position only)
+    Eigen::MatrixXd delta = Eigen::Matrix<double, 6, 1>::Zero();
+    delta(0) = position_delta[0];
+    delta(1) = position_delta[1];
+    delta(2) = position_delta[2];
+
+    // Get basic joint delta from DLS method (like OpenSHC's jacobian_inverse * delta)
+    Eigen::Vector3d joint_delta = solveDeltaIK(leg, delta, current_angles);
+
+    // Calculate joint velocities for cost gradient (estimate from time_delta)
+    Eigen::Vector3d joint_velocities = Eigen::Vector3d::Zero();
+    if (time_delta > 0.0) {
+        joint_velocities = joint_delta / time_delta;
+    }
+
+    // Apply OpenSHC joint limit cost gradient
+    // This matches: return jacobian_inverse * delta + (identity - jacobian_inverse * j) * combined_cost_gradient;
+    Eigen::Vector3d cost_gradient = calculateJointLimitCostGradient(current_angles, joint_velocities, leg);
+
+    // Calculate Jacobian for nullspace projection (OpenSHC approach)
+    Eigen::Matrix3d jacobian_pos = calculateJacobian(leg, current_angles, Point3D(0, 0, 0));
+    const double dls_coeff = IK_DLS_COEFFICIENT;
+    Eigen::Matrix3d identity = Eigen::Matrix3d::Identity();
+    Eigen::Matrix3d JJT = jacobian_pos * jacobian_pos.transpose();
+    Eigen::Matrix3d jacobian_inverse = jacobian_pos.transpose() *
+                                       (JJT + dls_coeff * dls_coeff * identity).inverse();
+
+    // Apply nullspace projection: (I - J^+ * J) * cost_gradient
+    Eigen::Matrix3d nullspace_projector = identity - jacobian_inverse * jacobian_pos;
+    Eigen::Vector3d nullspace_motion = nullspace_projector * cost_gradient;
+
+    // Combine primary motion with nullspace motion (OpenSHC approach)
+    joint_delta += nullspace_motion;
+
+    // Apply joint angle changes to current configuration
+    JointAngles new_angles = current_angles;
+    new_angles.coxa += joint_delta(0);
+    new_angles.femur += joint_delta(1);
+    new_angles.tibia += joint_delta(2);
+
+    // Normalize angles to [-PI, PI]
+    new_angles.coxa = normalizeAngle(new_angles.coxa);
+    new_angles.femur = normalizeAngle(new_angles.femur);
+    new_angles.tibia = normalizeAngle(new_angles.tibia);
+
+    // Apply joint limits
+    if (params.ik.clamp_joints) {
+        clampJointAngles(new_angles);
+    }
+
+    return new_angles;
+}
+
+Eigen::Vector3d RobotModel::solveDeltaIK(int leg, const Eigen::MatrixXd &delta, const JointAngles &current_angles) const {
+    // Core IK method - exact replication for 3DOF case
+    // Calculate Jacobian
+    Eigen::Matrix3d jacobian_pos = calculateJacobian(leg, current_angles, Point3D(0, 0, 0));
+
+    // DLS Method
+    const double dls_coeff = IK_DLS_COEFFICIENT;
+    Eigen::Matrix3d identity = Eigen::Matrix3d::Identity();
+    Eigen::Matrix3d JJT = jacobian_pos * jacobian_pos.transpose();
+    Eigen::Matrix3d jacobian_inverse = jacobian_pos.transpose() *
+                                       (JJT + dls_coeff * dls_coeff * identity).inverse();
+
+    // Extract position part of delta (first 3 elements)
+    Eigen::Vector3d position_delta = delta.block<3, 1>(0, 0);
+
+    return jacobian_inverse * position_delta;
+}
+Eigen::Vector3d RobotModel::calculateJointLimitCostGradient(const JointAngles &current_angles,
+                                                            const Eigen::Vector3d &joint_velocities, int leg) const {
+    // OpenSHC exact joint limit cost function implementation
+    const double cost_weight = IK_JOINT_LIMIT_COST_WEIGHT;
+
+    Eigen::Vector3d position_cost_gradient = Eigen::Vector3d::Zero();
+    Eigen::Vector3d velocity_cost_gradient = Eigen::Vector3d::Zero();
+
+    double position_limit_cost = 0.0;
+    double velocity_limit_cost = 0.0;
+
+    // Joint angles array for easier iteration
+    double joint_positions[3] = {current_angles.coxa, current_angles.femur, current_angles.tibia};
+    double joint_limits_min[3] = {coxa_angle_limits_rad[0], femur_angle_limits_rad[0], tibia_angle_limits_rad[0]};
+    double joint_limits_max[3] = {coxa_angle_limits_rad[1], femur_angle_limits_rad[1], tibia_angle_limits_rad[1]};
+    double max_velocities[3] = {3.0, 3.0, 3.0}; // Typical max angular speeds (rad/s)    // Calculate cost function for each joint (exact implementation)
+    for (int i = 0; i < 3; ++i) {
+        // POSITION LIMITS
+        double joint_position_range = joint_limits_max[i] - joint_limits_min[i];
+        double position_range_centre = joint_limits_min[i] + joint_position_range / 2.0;
+
+        if (joint_position_range != 0.0) {
+            double pos_term = cost_weight * (joint_positions[i] - position_range_centre) / joint_position_range;
+            position_limit_cost += pos_term * pos_term;
+            position_cost_gradient[i] = -cost_weight * cost_weight *
+                                        (joint_positions[i] - position_range_centre) /
+                                        (joint_position_range * joint_position_range);
+        }
+
+        // VELOCITY LIMITS
+        double joint_velocity_range = 2 * max_velocities[i];
+        double velocity_range_centre = 0.0;
+        double vel_term = cost_weight * (joint_velocities[i] - velocity_range_centre) / joint_velocity_range;
+        velocity_limit_cost += vel_term * vel_term;
+        velocity_cost_gradient[i] = -cost_weight * cost_weight *
+                                    (joint_velocities[i] - velocity_range_centre) /
+                                    (joint_velocity_range * joint_velocity_range);
+    }
+
+    // Normalization
+    if (position_limit_cost > 0.0) {
+        position_cost_gradient *= 1.0 / sqrt(position_limit_cost);
+    }
+    if (velocity_limit_cost > 0.0) {
+        velocity_cost_gradient *= 1.0 / sqrt(velocity_limit_cost);
+    }
+
+    // Interpolation between position and velocity gradients (75% position, 25% velocity)
+    return 0.75 * position_cost_gradient + 0.25 * velocity_cost_gradient;
 }

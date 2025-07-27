@@ -1,18 +1,3 @@
-/**
- * @file locomotion_system.cpp
- * @brief Implementation of the Locomotion Control System
- * @author BlightHunter Team
- * @version 1.0
- * @date 2024
- *
- * Implements control based on:
- * - Inverse kinematics using Denavit-Hartenberg parameters
- * - Jacobians for velocity control
- * - Gait planner with multiple gaits
- * - Orientation and stability control
- * - Principles of OpenSHC (Open Source Humanoid Control)
- */
-
 #include "locomotion_system.h"
 #include "body_pose_config_factory.h"
 #include "hexamotion_constants.h"
@@ -29,7 +14,7 @@
 // Constructor
 LocomotionSystem::LocomotionSystem(const Parameters &params)
     : params(params), imu_interface(nullptr), fsr_interface(nullptr), servo_interface(nullptr),
-      body_position(0.0f, 0.0f, params.robot_height), body_orientation(0.0f, 0.0f, 0.0f),
+      body_position(0.0f, 0.0f, params.standing_height), body_orientation(0.0f, 0.0f, 0.0f),
       system_enabled(false), last_update_time(0), dt(0.02f),
       velocity_controller(nullptr), last_error(NO_ERROR),
       model(params), body_pose_ctrl(nullptr), walk_ctrl(nullptr), admittance_ctrl(nullptr),
@@ -78,7 +63,7 @@ bool LocomotionSystem::initialize(IIMUInterface *imu, IFSRInterface *fsr, IServo
 
     // Initialize controllers with proper architecture
     body_pose_ctrl = new BodyPoseController(model, pose_config);
-    walk_ctrl = new WalkController(model, legs);
+    walk_ctrl = new WalkController(model, legs, pose_config);
     admittance_ctrl = new AdmittanceController(model, imu_interface, fsr_interface);
     velocity_controller = new CartesianVelocityController(model);
 
@@ -93,9 +78,9 @@ bool LocomotionSystem::initialize(IIMUInterface *imu, IFSRInterface *fsr, IServo
 
     // Initialize legs with default stance position
     // This happens after DH parameters are initialized in the constructor
-    Pose default_stance(Point3D(0, 0, -params.robot_height), Eigen::Vector3d(0, 0, 0));
+    Pose default_stance(Point3D(0, 0, -params.standing_height), Eigen::Vector3d(0, 0, 0));
     for (int i = 0; i < NUM_LEGS; i++) {
-        legs[i].initialize(model, default_stance);
+        legs[i].initialize(default_stance);
     }
 
     system_enabled = true;
@@ -111,9 +96,6 @@ bool LocomotionSystem::isSystemEnabled() const {
 
 // System calibration
 bool LocomotionSystem::calibrateSystem() {
-    if (!system_enabled)
-        return false;
-
     // Calibrate IMU
     if (!imu_interface->calibrate()) {
         last_error = IMU_ERROR;
@@ -140,24 +122,6 @@ JointAngles LocomotionSystem::calculateInverseKinematics(int leg,
     // Use current joint angles as starting point for IK
     JointAngles current_angles = legs[leg].getJointAngles();
     return model.inverseKinematicsCurrentGlobalCoordinates(leg, current_angles, p_target);
-}
-
-// Forward kinematics using DH transforms
-Point3D LocomotionSystem::calculateForwardKinematics(int leg_index, const JointAngles &angles) {
-    return model.forwardKinematicsGlobalCoordinates(leg_index, angles);
-}
-
-// DH transformation calculation
-Eigen::Matrix4d LocomotionSystem::calculateDHTransform(double a, double alpha, double d, double theta) {
-    double alpha_rad = math_utils::degreesToRadians(alpha);
-    double theta_rad = math_utils::degreesToRadians(theta);
-    return math_utils::dhTransform(a, alpha_rad, d, theta_rad);
-}
-
-// Complete leg transform
-Eigen::Matrix4d LocomotionSystem::calculateLegTransform(int leg_index,
-                                                        const JointAngles &q) {
-    return model.legTransform(leg_index, q);
 }
 
 bool LocomotionSystem::isTargetReachable(int leg_index, const Point3D &target) {
@@ -205,20 +169,6 @@ double LocomotionSystem::getJointLimitProximity(int leg_index, const JointAngles
     return min_proximity;
 }
 
-/* Transform world point to body frame = Rᵀ·(p - p0) */
-Point3D LocomotionSystem::transformWorldToBody(const Point3D &p_world) const {
-    // Vector relative to the body center
-    Point3D rel(p_world.x - body_position[0],
-                p_world.y - body_position[1],
-                p_world.z - body_position[2]);
-
-    // Rotate with negative angles (inverse)
-    Eigen::Vector3d neg_rpy(math_utils::degreesToRadians(-body_orientation[0]),
-                            math_utils::degreesToRadians(-body_orientation[1]),
-                            math_utils::degreesToRadians(-body_orientation[2]));
-    return math_utils::rotatePoint(rel, neg_rpy);
-}
-
 /* Store angles both in RAM and servos */
 bool LocomotionSystem::setLegJointAngles(int leg, const JointAngles &q) {
     if (!servo_interface)
@@ -240,24 +190,10 @@ bool LocomotionSystem::setLegJointAngles(int leg, const JointAngles &q) {
     clamped_angles.femur = std::clamp(q.femur, params.femur_angle_limits[0], params.femur_angle_limits[1]);
     clamped_angles.tibia = std::clamp(q.tibia, params.tibia_angle_limits[0], params.tibia_angle_limits[1]);
 
-    // Check if clamping was needed
-    bool was_clamped = (clamped_angles.coxa != q.coxa) ||
-                       (clamped_angles.femur != q.femur) ||
-                       (clamped_angles.tibia != q.tibia);
-
-    if (was_clamped) {
-        // Debug output for joint limit clamping
-        std::cout << "[setLegJointAngles] Leg " << leg << " angles clamped:" << std::endl;
-        std::cout << "  Original: coxa=" << q.coxa << " femur=" << q.femur << " tibia=" << q.tibia << std::endl;
-        std::cout << "  Clamped:  coxa=" << clamped_angles.coxa << " femur=" << clamped_angles.femur << " tibia=" << clamped_angles.tibia << std::endl;
-        std::cout << "  Limits: coxa=[" << params.coxa_angle_limits[0] << "," << params.coxa_angle_limits[1] << "]";
-        std::cout << " femur=[" << params.femur_angle_limits[0] << "," << params.femur_angle_limits[1] << "]";
-        std::cout << " tibia=[" << params.tibia_angle_limits[0] << "," << params.tibia_angle_limits[1] << "]" << std::endl;
-    }
-
+    // TODO: Disable leg posers temporarily to avoid conflicts
     // Update both joint angles and leg positions in a single atomic operation
-    legs[leg].setJointAngles(clamped_angles); // Update leg object
-    legs[leg].updateTipPosition(model);       // Update leg position based on new angles
+    // legs[leg].setJointAngles(clamped_angles); // Update leg object
+    // legs[leg].updateTipPosition();            // Update leg position based on new angles
 
     // Use velocity controller to get appropriate servo speeds
     double coxa_speed = velocity_controller ? velocity_controller->getServoSpeed(leg, 0) : params.default_servo_speed;
@@ -276,8 +212,6 @@ bool LocomotionSystem::setLegJointAngles(int leg, const JointAngles &q) {
 
 // Gait planner
 bool LocomotionSystem::setGaitType(GaitType gait) {
-    if (!walk_ctrl)
-        return false;
     const Parameters &params = model.getParams();
 
     bool result = false;
@@ -307,17 +241,28 @@ bool LocomotionSystem::setGaitType(GaitType gait) {
     return result;
 }
 
-// Gait sequence planning - ARCHITECTURE: Use WalkController with LegStepper
+// Gait sequence planning - Use WalkController with LegStepper
 bool LocomotionSystem::planGaitSequence(double velocity_x, double velocity_y, double angular_velocity) {
     commanded_linear_velocity_ = velocity_x;
     commanded_angular_velocity_ = angular_velocity;
+
+    // Configure velocity in ALL leg steppers, not just store the values
+    for (int i = 0; i < NUM_LEGS; i++) {
+        auto leg_stepper = walk_ctrl->getLegStepper(i);
+        if (leg_stepper) {
+            leg_stepper->setDesiredVelocity(Point3D(velocity_x, velocity_y, 0), angular_velocity);
+            leg_stepper->updateStride();
+        } else {
+            last_error = PARAMETER_ERROR;
+            return false;
+        }
+    }
+
     return true;
 }
 
 // Foot trajectory calculation
 Point3D LocomotionSystem::calculateFootTrajectory(int leg_index, double phase) {
-    if (!walk_ctrl)
-        return Point3D(0, 0, 0);
     auto leg_stepper = walk_ctrl->getLegStepper(leg_index);
     if (!leg_stepper)
         return Point3D(0, 0, 0);
@@ -330,42 +275,27 @@ Point3D LocomotionSystem::calculateFootTrajectory(int leg_index, double phase) {
 
 // Forward locomotion control
 bool LocomotionSystem::walkForward(double velocity) {
-    if (!system_enabled)
-        return false;
-
     return planGaitSequence(velocity, 0.0f, 0.0f);
 }
 
 // Backward locomotion control
 bool LocomotionSystem::walkBackward(double velocity) {
-    if (!system_enabled)
-        return false;
-
     return planGaitSequence(-velocity, 0.0f, 0.0f);
 }
 
 // In-place turning control
 bool LocomotionSystem::turnInPlace(double angular_velocity) {
-    if (!system_enabled)
-        return false;
-
     return planGaitSequence(0.0f, 0.0f, angular_velocity);
 }
 
 // Sideways locomotion control
 bool LocomotionSystem::walkSideways(double velocity, bool right_direction) {
-    if (!system_enabled)
-        return false;
-
     double lateral_velocity = right_direction ? velocity : -velocity;
     return planGaitSequence(0.0f, lateral_velocity, 0.0f);
 }
 
 // Advance for "duration"seconds
 bool LocomotionSystem::walkForward(double velocity, double duration) {
-    if (!system_enabled)
-        return false;
-
     // Plan gait to move forward along X (velocity m/s)
     planGaitSequence(velocity, 0.0f, 0.0f);
 
@@ -385,9 +315,6 @@ bool LocomotionSystem::walkForward(double velocity, double duration) {
 
 // Move backward for "duration"seconds
 bool LocomotionSystem::walkBackward(double velocity, double duration) {
-    if (!system_enabled)
-        return false;
-
     // Plan gait to move in -X (backwards)
     planGaitSequence(-velocity, 0.0f, 0.0f);
 
@@ -406,9 +333,6 @@ bool LocomotionSystem::walkBackward(double velocity, double duration) {
 
 // Turn in place for "duration"seconds
 bool LocomotionSystem::turnInPlace(double angular_velocity, double duration) {
-    if (!system_enabled)
-        return false;
-
     // Plan gait with only angular component
     planGaitSequence(0.0f, 0.0f, angular_velocity);
 
@@ -427,9 +351,6 @@ bool LocomotionSystem::turnInPlace(double angular_velocity, double duration) {
 
 // Walk sideways (right/left) for "duration"seconds
 bool LocomotionSystem::walkSideways(double velocity, double duration, bool right_direction) {
-    if (!system_enabled)
-        return false;
-
     double lateral_velocity = right_direction ? velocity : -velocity;
     planGaitSequence(0.0f, lateral_velocity, 0.0f);
 
@@ -448,65 +369,84 @@ bool LocomotionSystem::walkSideways(double velocity, double duration, bool right
 
 // Stop movement while keeping current pose
 bool LocomotionSystem::stopMovement() {
-    if (!walk_ctrl)
-        return false;
-
-    // Delegate to WalkController for movement control
+    // TODO: Delegate to WalkController for movement control
     // WalkController handles stopping internally
     return true;
 }
 
-// Orientation control
-bool LocomotionSystem::maintainOrientation(const Eigen::Vector3d &target_rpy) {
-    if (!system_enabled || !admittance_ctrl)
-        return false;
-    Point3D target(target_rpy.x(), target_rpy.y(), target_rpy.z());
-    Point3D current(body_orientation.x(), body_orientation.y(), body_orientation.z());
-    bool result = admittance_ctrl->maintainOrientation(target, current, dt);
-    body_orientation = Eigen::Vector3d(current.x, current.y, current.z);
+bool LocomotionSystem::executeStartupSequence() {
 
-    // Reproject standing feet to maintain contact during orientation changes
-    reprojectStandingFeet();
+    // Execute the body pose controller startup sequence
+    bool startup_complete = body_pose_ctrl->executeStartupSequence(legs);
 
-    return result;
-}
+    if (startup_complete) {
+        // Initialize walk controller for RUNNING state
+        walk_ctrl->init(body_position, body_orientation);
+        walk_ctrl->generateWalkspace();
 
-void LocomotionSystem::reprojectStandingFeet() {
-    for (int leg = 0; leg < NUM_LEGS; ++leg) {
-        if (legs[leg].getStepPhase() != STANCE_PHASE)
-            continue;
+        // Activate gait sequence with stored velocities
+        planGaitSequence(commanded_linear_velocity_, 0.0, commanded_angular_velocity_);
 
-        // Current foot position world -> body
-        Point3D tip_body = transformWorldToBody(legs[leg].getCurrentTipPositionGlobal());
+        // Initialize leg phases based on gait pattern
+        for (int i = 0; i < NUM_LEGS; i++) {
+            auto leg_stepper = walk_ctrl->getLegStepper(i);
+            if (leg_stepper) {
+                auto step_state = leg_stepper->getStepState();
+                if (step_state == STEP_STANCE || step_state == STEP_FORCE_STANCE) {
+                    legs[i].setStepPhase(STANCE_PHASE);
+                } else {
+                    legs[i].setStepPhase(SWING_PHASE);
+                }
+            }
+        }
 
-        // IK for the new body orientation
-        JointAngles q_new = calculateInverseKinematics(leg, tip_body);
-
-        // Apply angles to servos and RAM - this will update both joint_angles and leg_positions internally
-        setLegJointAngles(leg, q_new);
+        system_state = SYSTEM_RUNNING;
     }
+
+    return startup_complete;
 }
 
-// Automatic tilt correction
-bool LocomotionSystem::correctBodyTilt() {
-    Eigen::Vector3d target_orientation(0.0f, 0.0f, body_orientation[2]);
-    return maintainOrientation(target_orientation);
-}
+bool LocomotionSystem::executeShutdownSequence() {
 
-// Calculate orientation error
-Eigen::Vector3d LocomotionSystem::calculateOrientationError() {
-    if (!admittance_ctrl)
-        return Eigen::Vector3d::Zero();
-    Point3D current(body_orientation.x(), body_orientation.y(), body_orientation.z());
-    Point3D error = admittance_ctrl->orientationError(current);
-    return Eigen::Vector3d(error.x, error.y, error.z);
+    // Update walk controller one final time with zero velocity
+    walk_ctrl->updateWalk(Point3D(0.0, 0.0, 0.0), 0.0,
+                          Eigen::Vector3d(0.0, 0.0, 0.0), Eigen::Vector3d(0.0, 0.0, 0.0));
+
+    // OpenSHC: Force all legs to STANCE according to OpenSHC shutdown protocol
+    for (int i = 0; i < NUM_LEGS; i++) {
+        auto leg_stepper = walk_ctrl->getLegStepper(i);
+        if (leg_stepper) {
+            leg_stepper->setStepState(STEP_FORCE_STOP);
+            leg_stepper->setPhase(0.0); // Force to stance position
+
+            // Immediately update tip position to identity (stance) position
+            leg_stepper->updateTipPositionIterative(0, 0.02, false, false);
+
+            // Get the forced stance position and apply to leg
+            legs[i].setStepPhase(STANCE_PHASE);
+            Point3D stance_position = leg_stepper->getCurrentTipPose();
+            legs[i].setCurrentTipPositionGlobal(stance_position);
+
+            // Apply IK and servo commands immediately
+            if (legs[i].applyAdvancedIK(stance_position)) {
+                JointAngles target_angles = legs[i].getJointAngles();
+                setLegJointAngles(i, target_angles);
+            }
+        }
+    }
+
+    // Execute the body pose controller shutdown sequence
+    bool shutdown_complete = body_pose_ctrl->executeShutdownSequence(legs);
+
+    if (shutdown_complete) {
+        system_state = SYSTEM_READY;
+    }
+
+    return shutdown_complete;
 }
 
 // Check stability margin
 bool LocomotionSystem::checkStabilityMargin() {
-    if (!system_enabled || !admittance_ctrl)
-        return false;
-
     // Create temporary arrays for compatibility with admittance controller
     Point3D temp_leg_positions[NUM_LEGS];
     StepPhase temp_leg_states[NUM_LEGS];
@@ -594,36 +534,17 @@ bool LocomotionSystem::isStaticallyStable() {
 }
 
 // Body pose control
-bool LocomotionSystem::setBodyPose(const Eigen::Vector3d &position, const Eigen::Vector3d &orientation) {
-    if (!system_enabled || !body_pose_ctrl)
-        return false;
-
-    // Calculate new pose using pose controller
-    if (!body_pose_ctrl->setBodyPose(position, orientation, legs)) {
-        last_error = KINEMATICS_ERROR;
-        return false;
-    }
-
-    body_position = position;
-    body_orientation = orientation;
-
-    // Reproject standing feet to maintain contact during pose changes
-    reprojectStandingFeet();
-
-    return true;
-}
-
 // Set standing pose using BodyPoseController with LegPoser
 bool LocomotionSystem::setStandingPose() {
-    if (!body_pose_ctrl) {
-        last_error = PARAMETER_ERROR;
-        return false;
-    }
-
-    // ARCHITECTURE: Use BodyPoseController with LegPoser for pose control
+    // Use BodyPoseController with LegPoser for pose control
     bool success = body_pose_ctrl->setStandingPose(legs);
 
     if (success) {
+        // Ensure all legs are in STANCE_PHASE for standing pose
+        for (int i = 0; i < NUM_LEGS; i++) {
+            legs[i].setStepPhase(STANCE_PHASE);
+        }
+
         // Apply the calculated joint angles to servos
         for (int i = 0; i < NUM_LEGS; i++) {
             JointAngles angles = legs[i].getJointAngles();
@@ -632,6 +553,10 @@ bool LocomotionSystem::setStandingPose() {
                 return false;
             }
         }
+
+        // Update body position based on actual leg positions through BodyPoseController
+        // The BodyPoseController handles the calculation of body position
+        body_position = body_pose_ctrl->calculateBodyPosition(legs);
 
         // Set system state to READY (OpenSHC equivalent)
         system_state = SYSTEM_READY;
@@ -645,58 +570,33 @@ bool LocomotionSystem::setStandingPose() {
     }
 }
 
-// Smooth trajectory configuration methods (OpenSHC-style movement)
-bool LocomotionSystem::configureSmoothMovement(bool enable, double interpolation_speed, uint8_t max_steps) {
-    if (!body_pose_ctrl)
-        return false;
+bool LocomotionSystem::setBodyPose(const Eigen::Vector3d &position, const Eigen::Vector3d &orientation) {
 
-    // Configure the pose controller's smooth trajectory settings
-    body_pose_ctrl->configureSmoothTrajectory(enable, interpolation_speed, max_steps);
-    return true;
-}
+    // Use BodyPoseController to set the pose
+    bool success = body_pose_ctrl->setBodyPose(position, orientation, legs);
 
-// Smooth movement methods for OpenSHC-style pose control
-bool LocomotionSystem::setBodyPoseSmooth(const Eigen::Vector3d &position, const Eigen::Vector3d &orientation) {
-    if (!system_enabled || !body_pose_ctrl)
-        return false;
+    if (success) {
+        // Apply the calculated joint angles to servos
+        for (int i = 0; i < NUM_LEGS; i++) {
+            JointAngles angles = legs[i].getJointAngles();
+            if (!setLegJointAngles(i, angles)) {
+                last_error = KINEMATICS_ERROR;
+                return false;
+            }
+        }
 
-    // Use the smooth trajectory method explicitly
-    if (!body_pose_ctrl->setBodyPoseSmooth(position, orientation, legs, servo_interface)) {
+        // Update body position and orientation
+        body_position = position;
+        body_orientation = orientation;
+
+        return true;
+    } else {
         last_error = KINEMATICS_ERROR;
         return false;
     }
-
-    body_position = position;
-    body_orientation = orientation;
-
-    // Reproject standing feet to maintain contact during pose changes
-    reprojectStandingFeet();
-
-    return true;
-}
-
-bool LocomotionSystem::setBodyPoseImmediate(const Eigen::Vector3d &position, const Eigen::Vector3d &orientation) {
-    if (!system_enabled || !body_pose_ctrl)
-        return false;
-
-    // Use the immediate (non-smooth) method for compatibility
-    if (!body_pose_ctrl->setBodyPoseImmediate(position, orientation, legs)) {
-        last_error = KINEMATICS_ERROR;
-        return false;
-    }
-
-    body_position = position;
-    body_orientation = orientation;
-
-    // Reproject standing feet to maintain contact during pose changes
-    reprojectStandingFeet();
-
-    return true;
 }
 
 bool LocomotionSystem::isSmoothMovementInProgress() const {
-    if (!body_pose_ctrl)
-        return false;
     return body_pose_ctrl->isTrajectoryInProgress();
 }
 
@@ -705,11 +605,27 @@ void LocomotionSystem::resetSmoothMovement() {
         body_pose_ctrl->resetTrajectory();
 }
 
-// Main system update
+// Main system update - Only calculates leg trajectories based on current phase
+/*
+ * USAGE PATTERN:
+ *
+ * while (system_running) {
+ *     // Handle startup/shutdown sequences separately
+ *     if (locomotion_system.isStartupInProgress()) {
+ *         if (locomotion_system.executeStartupSequence()) {
+ *             locomotion_system.startup_in_progress = false;
+ *         }
+ *     } else if (locomotion_system.isShutdownInProgress()) {
+ *         if (locomotion_system.executeShutdownSequence()) {
+ *             locomotion_system.shutdown_in_progress = false;
+ *         }
+ *     } else {
+ *         // Only update leg trajectories when system is in normal operation
+ *         locomotion_system.update();
+ *     }
+ * }
+ */
 bool LocomotionSystem::update() {
-    if (!system_enabled)
-        return false;
-
     unsigned long current_time = millis();
     dt = (current_time - last_update_time) / 1000.0f;
     last_update_time = current_time;
@@ -720,44 +636,56 @@ bool LocomotionSystem::update() {
         return false;
     }
 
-    // Handle startup sequence if in progress
-    if (startup_in_progress) {
-        executeStartupSequence();
-        return true;
-    }
-
-    // Handle shutdown sequence if in progress
-    if (shutdown_in_progress) {
-        executeShutdownSequence();
-        return true;
-    }
-
-    // Update walk controller with the last commanded velocity
-    if (walk_ctrl) {
+    // Only update leg trajectories if system is in RUNNING state
+    if (walk_ctrl && system_state == SYSTEM_RUNNING) {
+        // Update walk controller with the last commanded velocity, body position, and orientation
         walk_ctrl->updateWalk(Point3D(commanded_linear_velocity_, 0.0, 0.0),
-                              commanded_angular_velocity_);
-    }
+                              commanded_angular_velocity_,
+                              body_position, body_orientation);
 
-    // Update leg states based on current gait
-    if (walk_ctrl) {
-        double stance_duration = walk_ctrl->getStanceDuration();
+        // Update leg states and trajectories based on current gait
         for (int i = 0; i < NUM_LEGS; i++) {
-            // Use leg stepper to determine phase
             auto leg_stepper = walk_ctrl->getLegStepper(i);
             if (leg_stepper) {
-                double phase = static_cast<double>(leg_stepper->getPhase()) /
-                               static_cast<double>(walk_ctrl->getStepCycle().period_);
-                if (legs[i].shouldBeInStance(phase, stance_duration)) {
+
+                // Use LegStepper's step state to determine stance or swing
+                auto step_state = leg_stepper->getStepState();
+                if (step_state == STEP_STANCE || step_state == STEP_FORCE_STANCE) {
                     legs[i].setStepPhase(STANCE_PHASE);
                 } else {
                     legs[i].setStepPhase(SWING_PHASE);
                 }
+
+                // OpenSHC Model::updateModel() pattern - EXACTLY like trajectory_tip_position_test:
+                // 1. Get current joint angles BEFORE update to calculate delta
+                JointAngles angles_before = legs[i].getJointAngles();
+                Point3D pos_before = legs[i].getCurrentTipPositionGlobal();
+
+                // 2. Get new tip position from trajectory generator (LegStepper)
+                Point3D new_tip_position = leg_stepper->getCurrentTipPose();
+
+                // 3. Apply the new position to the Leg object to maintain consistency
+                // legs[i].setCurrentTipPositionGlobal(new_tip_position);
+
+                // 4. Apply advanced delta-based IK method EXACTLY like trajectory_tip_position_test
+                JointAngles new_angles = model.applyAdvancedIK(i, pos_before, new_tip_position, angles_before, dt);
+                legs[i].setJointAngles(new_angles);
+
+                // 5. Apply the resulting joint angles to servos
+                if (!setLegJointAngles(i, new_angles)) {
+                    // Handle servo failure - maintain current state
+                    continue;
+                }
             }
         }
+    } else if (system_state == SYSTEM_READY) {
+        // OpenSHC: When system is READY (after shutdown), maintain STANCE_PHASE for ALL legs
+        // This prevents sys.update() calls from overriding the shutdown-forced STANCE states
+        // Do NOT read leg_stepper states - preserve the shutdown state
+        for (int i = 0; i < NUM_LEGS; i++) {
+            legs[i].setStepPhase(STANCE_PHASE);
+        }
     }
-
-    // Actualizar el modelo para sincronizar datos (arquitectura OpenSHC)
-    updateModel();
 
     return true;
 }
@@ -834,77 +762,6 @@ bool LocomotionSystem::handleError(ErrorCode error) {
     }
 
     return false;
-}
-
-// System self test
-bool LocomotionSystem::performSelfTest() {
-#if defined(ENABLE_LOG) && defined(ARDUINO)
-    Serial.println("=== Starting self test ===");
-
-    // IMU test
-    if (!imu_interface || !imu_interface->isConnected()) {
-        Serial.println("X Error: IMU not connected");
-        return false;
-    }
-
-    IMUData imu_test = imu_interface->readIMU();
-    if (!imu_test.is_valid) {
-        Serial.println("X Error: invalid IMU data");
-        return false;
-    }
-    Serial.println("OK IMU working correctly");
-
-    // FSR test
-    for (int i = 0; i < NUM_LEGS; i++) {
-        FSRData fsr_test = fsr_interface->readFSR(i);
-        if (fsr_test.pressure < 0) {
-            Serial.print("X Error: FSR leg ");
-            Serial.print(i);
-            Serial.println(" malfunction");
-            return false;
-        }
-    }
-    Serial.println("OK All FSRs working");
-
-    // Servo test
-    for (int i = 0; i < NUM_LEGS; i++) {
-        for (int j = 0; j < DOF_PER_LEG; j++) {
-            double current_angle = servo_interface->getJointAngle(i, j);
-            if (current_angle < -180 || current_angle > 180) {
-                Serial.print("X Error: Servo leg ");
-                Serial.print(i);
-                Serial.print(" joint ");
-                Serial.println(j);
-                return false;
-            }
-        }
-    }
-    Serial.println("OK All servos working");
-
-    // Kinematics test
-    for (int i = 0; i < NUM_LEGS; i++) {
-        Point3D test_point(100, 0, -100);
-        JointAngles angles = calculateInverseKinematics(i, test_point);
-        Point3D calculated_point = calculateForwardKinematics(i, angles);
-
-        double error = math_utils::distance3D(test_point, calculated_point);
-        if (error > 5.0f) { // Error greater than 5mm
-            Serial.print("X Error: leg kinematics ");
-            Serial.print(i);
-            Serial.print(" error=");
-            Serial.print(error);
-            Serial.println("mm");
-            return false;
-        }
-    }
-    Serial.println("OK Kinematics working correctly");
-
-    Serial.println("=== Self test completed successfully ===");
-    return true;
-#else
-    // Self test not available without Arduino environment
-    return false;
-#endif
 }
 
 void LocomotionSystem::updateLegStates() {
@@ -988,26 +845,6 @@ void LocomotionSystem::adaptGaitToTerrain() {
     }
 }
 
-bool LocomotionSystem::setLegPosition(int leg_index, const Point3D &position) {
-    if (!system_enabled || leg_index < 0 || leg_index >= NUM_LEGS || !body_pose_ctrl)
-        return false;
-
-    if (!body_pose_ctrl->setLegPosition(leg_index, position, legs)) {
-        last_error = KINEMATICS_ERROR;
-        return false;
-    }
-
-    return true;
-}
-
-bool LocomotionSystem::setStepParameters(double height, double length) {
-    // Use modern API to set step parameters
-    if (walk_ctrl) {
-        return walk_ctrl->setGaitByName(walk_ctrl->getCurrentGaitConfig().gait_name);
-    }
-    return false;
-}
-
 bool LocomotionSystem::setParameters(const Parameters &new_params) {
     // Validate new parameters
     if (new_params.hexagon_radius <= 0 || new_params.coxa_length <= 0 ||
@@ -1018,20 +855,6 @@ bool LocomotionSystem::setParameters(const Parameters &new_params) {
 
     params = new_params;
     return validateParameters();
-}
-
-bool LocomotionSystem::setControlFrequency(double frequency) {
-    if (frequency < 10.0f || frequency > 200.0f) {
-        last_error = PARAMETER_ERROR;
-        return false;
-    }
-
-    params.control_frequency = frequency;
-    return true;
-}
-
-double LocomotionSystem::calculateLegReach() const {
-    return params.coxa_length + params.femur_length + params.tibia_length;
 }
 
 void LocomotionSystem::compensateForSlope() {
@@ -1093,9 +916,6 @@ void LocomotionSystem::compensateForSlope() {
     // Clamp compensation
     body_orientation[0] = constrainAngle(body_orientation[0], -15.0f, 15.0f);
     body_orientation[1] = constrainAngle(body_orientation[1], -15.0f, 15.0f);
-
-    // Reproject standing feet after slope compensation changes body orientation
-    reprojectStandingFeet();
 }
 
 double LocomotionSystem::calculateDynamicStabilityIndex() {
@@ -1175,9 +995,6 @@ double LocomotionSystem::calculateDynamicStabilityIndex() {
 
 // Parallel sensor update implementation
 bool LocomotionSystem::updateSensorsParallel() {
-    if (!system_enabled)
-        return false;
-
     bool fsr_updated = false;
     bool imu_updated = false;
 #ifdef ARDUINO
@@ -1269,63 +1086,6 @@ double LocomotionSystem::getCurrentServoSpeed(int leg_index, int joint_index) co
 }
 
 // Execute startup sequence (READY -> RUNNING transition)
-bool LocomotionSystem::executeStartupSequence() {
-    if (!system_enabled || !body_pose_ctrl) {
-        return false;
-    }
-
-    // Start sequence if not already in progress
-    if (!startup_in_progress) {
-        startup_in_progress = true;
-        system_state = SYSTEM_READY;
-    }
-
-    // Execute startup sequence using BodyPoseController
-    bool startup_complete = body_pose_ctrl->executeStartupSequence(legs);
-
-    // Check if sequence is complete
-    if (startup_complete) {
-        startup_in_progress = false;
-
-        // Inicializar walk controller para estado RUNNING
-        if (walk_ctrl) {
-            walk_ctrl->init();
-            walk_ctrl->generateWalkspace();
-        }
-        // Sincronizar modelo (IK y pose)
-        updateModel();
-
-        system_state = SYSTEM_RUNNING;
-        return true;
-    }
-
-    return false;
-}
-
-// Execute shutdown sequence (RUNNING -> READY transition)
-bool LocomotionSystem::executeShutdownSequence() {
-    if (!system_enabled || !body_pose_ctrl) {
-        return false;
-    }
-
-    // Start sequence if not already in progress
-    if (!shutdown_in_progress) {
-        shutdown_in_progress = true;
-    }
-
-    // Execute shutdown sequence using BodyPoseController
-    bool shutdown_complete = body_pose_ctrl->executeShutdownSequence(legs);
-
-    // Check if sequence is complete
-    if (shutdown_complete) {
-        shutdown_in_progress = false;
-        system_state = SYSTEM_READY;
-        return true;
-    }
-
-    return false;
-}
-
 // Start walking with specified gait type
 bool LocomotionSystem::startWalking(GaitType gait_type, double velocity_x, double velocity_y, double angular_velocity) {
     if (!system_enabled || !walk_ctrl) {
@@ -1345,11 +1105,10 @@ bool LocomotionSystem::startWalking(GaitType gait_type, double velocity_x, doubl
         return false;
     }
 
-    // Plan gait sequence
-    if (!planGaitSequence(velocity_x, velocity_y, angular_velocity)) {
-        last_error = KINEMATICS_ERROR;
-        return false;
-    }
+    // Store velocities but don't start gait sequence yet
+    // It will be activated when startup sequence completes
+    commanded_linear_velocity_ = velocity_x;
+    commanded_angular_velocity_ = angular_velocity;
 
     // Execute startup sequence to transition from READY to RUNNING
     startup_in_progress = true;
@@ -1360,11 +1119,6 @@ bool LocomotionSystem::startWalking(GaitType gait_type, double velocity_x, doubl
 
 // Stop walking and return to standing pose
 bool LocomotionSystem::stopWalking() {
-    if (!system_enabled) {
-        last_error = PARAMETER_ERROR;
-        return false;
-    }
-
     // Check if system is in RUNNING state
     if (system_state != SYSTEM_RUNNING) {
         last_error = STATE_ERROR;
@@ -1376,21 +1130,4 @@ bool LocomotionSystem::stopWalking() {
     system_state = SYSTEM_RUNNING; // Will transition to READY when sequence completes
 
     return true;
-}
-
-// Update model (OpenSHC architecture)
-void LocomotionSystem::updateModel() {
-    // Set desired tip poses from leg steppers y aplica IK para cada pierna
-    for (int i = 0; i < NUM_LEGS; ++i) {
-        // Obtener el LegStepper desde el WalkController
-        auto leg_stepper = walk_ctrl ? walk_ctrl->getLegStepper(i) : nullptr;
-        if (!leg_stepper)
-            continue;
-        // Obtener la pose objetivo actual del tip
-        Point3D desired_tip_pose = leg_stepper->getCurrentTipPose();
-        // Establecer la pose objetivo en la pierna
-        legs[i].setDesiredTipPositionGlobal(desired_tip_pose);
-        // Aplicar IK para sincronizar ángulos articulares y posición del tip
-        legs[i].applyIK(model);
-    }
 }

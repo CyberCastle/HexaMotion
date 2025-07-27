@@ -218,11 +218,6 @@ void WalkspaceAnalyzer::generateWalkspaceForLeg(int leg_index) {
         const double MAX_POSITION_DELTA = 0.005f; // 5mm increments (optimized for speed)
         const double MAX_WORKSPACE_RADIUS = 0.3f; // 300mm max radius
 
-        if (leg_index == 0) {
-            std::cout << "    Generating " << WORKSPACE_LAYERS
-                      << " workplanes with " << (360 / BEARING_STEP) << " bearings each" << std::endl;
-        }
-
         // Clear existing workspace for this leg
         leg_workspaces_[leg_index].clear();
 
@@ -277,10 +272,6 @@ void WalkspaceAnalyzer::generateWalkspaceForLeg(int leg_index) {
             leg_workspaces_[leg_index][search_height] = workplane;
         }
 
-        if (leg_index == 0) {
-            std::cout << "    Generated " << WORKSPACE_LAYERS << " workplanes with "
-                      << total_checks << " kinematic checks" << std::endl;
-        }
     } else {
         // Fast workspace generation using simplified bounds
         WorkspaceBounds bounds;

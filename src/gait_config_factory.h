@@ -15,12 +15,12 @@
  */
 
 // Gait configuration creation functions
-GaitConfiguration createWaveGaitConfig(const Parameters& params);
-GaitConfiguration createTripodGaitConfig(const Parameters& params);
-GaitConfiguration createRippleGaitConfig(const Parameters& params);
-GaitConfiguration createMetachronalGaitConfig(const Parameters& params);
+GaitConfiguration createWaveGaitConfig(const Parameters &params);
+GaitConfiguration createTripodGaitConfig(const Parameters &params);
+GaitConfiguration createRippleGaitConfig(const Parameters &params);
+GaitConfiguration createMetachronalGaitConfig(const Parameters &params);
 
 // Gait selection configuration
-GaitSelectionConfig createGaitSelectionConfig(const Parameters& params);
+GaitSelectionConfig createGaitSelectionConfig(const Parameters &params);
 
 #endif // GAIT_CONFIG_FACTORY_H

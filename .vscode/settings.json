@@ -66,6 +66,16 @@
         "type_traits": "cpp",
         "utility": "cpp",
         "format": "cpp",
-        "cinttypes": "cpp"
+        "cinttypes": "cpp",
+        "condition_variable": "cpp",
+        "forward_list": "cpp",
+        "iomanip": "cpp",
+        "span": "cpp",
+        "chrono": "cpp",
+        "thread": "cpp",
+        "queue": "cpp",
+        "stack": "cpp",
+        "core": "cpp",
+        "map": "cpp"
     }
 }
