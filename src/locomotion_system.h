@@ -109,14 +109,6 @@ class LocomotionSystem {
      */
     bool isSystemEnabled() const;
 
-    // Pose control
-    /** Set the full body pose. */
-    bool setBodyPose(const Eigen::Vector3d &position, const Eigen::Vector3d &orientation);
-    /** Move one leg to a position in world coordinates. */
-    bool setLegPosition(int leg_index, const Point3D &position);
-    /** Command the default standing pose. */
-    bool setStandingPose();
-
     // Inverse kinematics
     /** Compute joint angles for a desired leg tip position. */
     JointAngles calculateInverseKinematics(int leg_index, const Point3D &target_position);
@@ -138,10 +130,6 @@ class LocomotionSystem {
     Point3D calculateFootTrajectory(int leg_index, double phase);
 
     // State management (OpenSHC equivalent)
-    /** Execute startup sequence to transition from READY to RUNNING state */
-    bool executeStartupSequence();
-    /** Execute shutdown sequence to transition from RUNNING to READY state */
-    bool executeShutdownSequence();
     /** Check if startup sequence is in progress */
     bool isStartupInProgress() const { return startup_in_progress; }
     /** Check if shutdown sequence is in progress */
@@ -169,6 +157,24 @@ class LocomotionSystem {
     /** Immediately stop all leg motion. */
     bool stopMovement();
 
+    /**
+     * @brief Execute one iteration of the startup sequence.
+     * Wraps BodyPoseController::executeStartupSequence and handles transition to RUNNING state.
+     */
+    bool executeStartupSequence();
+
+    /**
+     * @brief Execute one iteration of the shutdown sequence.
+     * Wraps BodyPoseController::executeShutdownSequence and handles transition to READY state.
+     */
+    bool executeShutdownSequence();
+
+    // OpenSHC-style walking control
+    /** Start walking with specified gait type (triggers startup sequence) */
+    bool startWalking(GaitType gait_type, double velocity_x, double velocity_y, double angular_velocity);
+    /** Stop walking and return to standing pose (triggers shutdown sequence) */
+    bool stopWalking();
+
     // Stability analysis
     /** Verify that current pose maintains stability margin. */
     bool checkStabilityMargin();
@@ -180,6 +186,19 @@ class LocomotionSystem {
     double calculateDynamicStabilityIndex();
     /** Check if the robot is statically stable. */
     bool isStaticallyStable();
+
+    // Body pose control
+    /** Set robot to standing pose */
+    bool setStandingPose();
+
+    /** Set body pose with position and orientation */
+    bool setBodyPose(const Eigen::Vector3d &position, const Eigen::Vector3d &orientation);
+
+    /** Check if smooth movement is in progress */
+    bool isSmoothMovementInProgress() const;
+
+    /** Reset smooth movement trajectory */
+    void resetSmoothMovement();
 
     ErrorCode getLastError() const { return last_error; }
     String getErrorMessage(ErrorCode error);
@@ -217,22 +236,6 @@ class LocomotionSystem {
     /** Replace the current parameter set. */
     bool setParameters(const Parameters &new_params);
 
-    // Smooth trajectory configuration (OpenSHC-style movement)
-    /** Configure smooth trajectory interpolation from current servo positions. */
-    bool configureSmoothMovement(bool enable = true, double interpolation_speed = 0.1f, uint8_t max_steps = 20);
-
-    /** Set body pose using smooth trajectory interpolation. */
-    bool setBodyPoseSmooth(const Eigen::Vector3d &position, const Eigen::Vector3d &orientation);
-
-    /** Set body pose immediately without trajectory interpolation. */
-    bool setBodyPoseImmediate(const Eigen::Vector3d &position, const Eigen::Vector3d &orientation);
-
-    /** Check if a smooth movement trajectory is currently in progress. */
-    bool isSmoothMovementInProgress() const;
-
-    /** Reset any active smooth movement trajectory. */
-    void resetSmoothMovement();
-
     // Cartesian velocity control
     /** Get the velocity controller instance for configuration. */
     CartesianVelocityController *getVelocityController() { return velocity_controller; }
@@ -251,12 +254,6 @@ class LocomotionSystem {
 
     // Getter for WalkController
     WalkController *getWalkController() { return walk_ctrl; }
-
-    // Gait control
-    /** Start walking with specified gait type and velocities. */
-    bool startWalking(GaitType gait_type, double velocity_x, double velocity_y, double angular_velocity);
-    /** Stop walking and return to standing pose. */
-    bool stopWalking();
 
   private:
     // Helper methods

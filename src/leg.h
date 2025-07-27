@@ -283,33 +283,6 @@ class Leg {
      */
     bool shouldBeInSwing(double global_gait_phase, double stance_duration) const;
 
-    // ===== WORKSPACE AND LIMITS =====
-
-    /**
-     * @brief Check if target position is reachable.
-     * @param target Target position to check
-     * @return True if target is within workspace
-     */
-    bool isTargetReachable(const Point3D &target) const;
-
-    /**
-     * @brief Constrain target to workspace boundary.
-     * @param target Target position to constrain
-     * @return Constrained position within workspace
-     */
-    Point3D constrainToWorkspace(const Point3D &target) const;
-
-    /**
-     * @brief Get joint limit proximity (1.0 = far from limits, 0.0 = at limits).
-     * @return Proximity value (0.0 to 1.0)
-     */
-    double getJointLimitProximity() const;
-
-    /**
-     * @brief Constrain joint angles to limits.
-     */
-    void constrainJointLimits();
-
     // ===== INITIALIZATION =====
 
     /**

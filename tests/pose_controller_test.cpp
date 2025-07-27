@@ -233,7 +233,7 @@ int main() {
     for (int i = 0; i < NUM_LEGS; i++) {
         legs[i].setStepPhase(STANCE_PHASE);
         Point3D tilted_pos(i * 50.0, i * 30.0, -150.0 + i * 10.0); // Increasing height
-        legs[i].setCurrentTipPositionGlobal(model, tilted_pos);
+        legs[i].setCurrentTipPositionGlobal(tilted_pos);
     }
 
     pc.updateWalkPlanePose(legs);
@@ -249,7 +249,7 @@ int main() {
     for (int i = 0; i < NUM_LEGS; i++) {
         legs[i].setStepPhase(i < 2 ? STANCE_PHASE : SWING_PHASE);
         Point3D test_pos(i * 50.0, i * 30.0, -150.0 + i * 10.0);
-        legs[i].setCurrentTipPositionGlobal(model, test_pos);
+        legs[i].setCurrentTipPositionGlobal(test_pos);
     }
 
     Pose before_insufficient = pc.getWalkPlanePose();
@@ -272,7 +272,7 @@ int main() {
     for (int i = 0; i < NUM_LEGS; i++) {
         legs[i].setStepPhase(STANCE_PHASE);
         Point3D test_pos(i * 50.0, i * 30.0, leg_heights[i]);
-        legs[i].setCurrentTipPositionGlobal(model, test_pos);
+        legs[i].setCurrentTipPositionGlobal(test_pos);
         expected_average += leg_heights[i];
     }
     expected_average /= NUM_LEGS;
@@ -414,7 +414,7 @@ int main() {
 
     for (int i = 0; i < NUM_LEGS; i++) {
         Point3D known_pos(i * 20.0, i * 15.0, known_z_values[i]);
-        legs[i].setCurrentTipPositionGlobal(model, known_pos);
+        legs[i].setCurrentTipPositionGlobal(known_pos);
         legs[i].setStepPhase(STANCE_PHASE);
         expected_average_z += known_z_values[i];
     }

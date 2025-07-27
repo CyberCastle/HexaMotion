@@ -97,6 +97,41 @@
 #define DEFAULT_CONTROL_FREQUENCY 50.0 // Default control frequency (Hz)
 #define DEFAULT_STEP_FREQUENCY 1.0     // Default step frequency (Hz)
 
+// ========================================================================
+// GAIT CONFIGURATION CONSTANTS (OpenSHC equivalent)
+// ========================================================================
+
+// Step length factors as percentage of leg reach (OpenSHC equivalent)
+#define GAIT_TRIPOD_LENGTH_FACTOR 0.35      // 35% for speed (OpenSHC: balanced speed/stability)
+#define GAIT_WAVE_LENGTH_FACTOR 0.25        // 25% for stability (OpenSHC: most stable)
+#define GAIT_RIPPLE_LENGTH_FACTOR 0.30      // 30% for balance (OpenSHC: faster movement)
+#define GAIT_METACHRONAL_LENGTH_FACTOR 0.28 // 28% for smooth motion (HexaMotion specific)
+#define GAIT_ADAPTIVE_LENGTH_FACTOR 0.30    // 30% base for adaptation (HexaMotion specific)
+
+// Step height factors as percentage of robot height (OpenSHC equivalent)
+#define GAIT_TRIPOD_HEIGHT_FACTOR 0.30      // 30% for obstacle clearance
+#define GAIT_WAVE_HEIGHT_FACTOR 0.20        // 20% for stability
+#define GAIT_RIPPLE_HEIGHT_FACTOR 0.25      // 25% for balance
+#define GAIT_METACHRONAL_HEIGHT_FACTOR 0.25 // 25% for smooth motion
+#define GAIT_ADAPTIVE_HEIGHT_FACTOR 0.25    // 25% base for adaptation
+
+// Safety limits as percentage of leg reach/height (OpenSHC equivalent)
+#define GAIT_MIN_LENGTH_FACTOR 0.12 // 12% minimum step length
+#define GAIT_MAX_LENGTH_FACTOR 0.50 // 50% maximum step length
+#define GAIT_MIN_HEIGHT_FACTOR 0.12 // 12% minimum step height
+#define GAIT_MAX_HEIGHT_FACTOR 0.40 // 40% maximum step height
+
+// ========================================================================
+// BODY POSE CONFIGURATION CONSTANTS (OpenSHC equivalent)
+// ========================================================================
+
+// Default swing height factor for body pose configuration (OpenSHC default.yaml: swing_height default 0.020)
+// This is gait-independent, unlike gait-specific step heights
+#define BODY_POSE_DEFAULT_SWING_HEIGHT_FACTOR 0.10 // 10% of standing height (OpenSHC: 0.020m for typical robot)
+
+// Body clearance factor (OpenSHC default.yaml: body_clearance 0.100)
+#define BODY_POSE_DEFAULT_CLEARANCE_FACTOR 1.0 // 100% of standing height (OpenSHC equivalent)
+
 // Velocity scaling and coupling factors
 #define DEFAULT_ANGULAR_SCALING 1.0        // Default angular velocity scaling
 #define ANGULAR_LINEAR_COUPLING 0.3        // Coupling factor between angular and linear velocity

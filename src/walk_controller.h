@@ -95,7 +95,13 @@ class WalkController {
     Point3D estimateGravity() const;
 
     // Accessors
-    StepCycle getStepCycle() const { return current_gait_config_.generateStepCycle(); }
+    StepCycle getStepCycle() const {
+        // Calculate proper step frequency to prevent stride vector bug
+        double time_delta = 1.0 / current_gait_config_.control_frequency;
+        int base_period = current_gait_config_.phase_config.stance_phase + current_gait_config_.phase_config.swing_phase;
+        double calculated_step_frequency = 1.0 / (base_period * time_delta);
+        return current_gait_config_.generateStepCycle(calculated_step_frequency);
+    }
     double getTimeDelta() const { return time_delta_; }
     double getStepClearance() const { return step_clearance_; }
     double getStepDepth() const { return step_depth_; }
