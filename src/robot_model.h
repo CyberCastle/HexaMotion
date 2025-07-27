@@ -94,32 +94,6 @@ struct Parameters {
         double max_tilt_deg = 12.0f;
     } body_comp;
 
-    // Gait step calculation factors
-    /**
-     * @brief Factors for calculating gait step length and height.
-     */
-    struct GaitFactors {
-        // Step length as percentage of leg reach
-        double tripod_length_factor = 0.35f;      // 35% for speed
-        double wave_length_factor = 0.25f;        // 25% for stability
-        double ripple_length_factor = 0.30f;      // 30% for balance
-        double metachronal_length_factor = 0.28f; // 28% for smooth motion
-        double adaptive_length_factor = 0.30f;    // 30% base for adaptation
-
-        // Step height as percentage of robot height
-        double tripod_height_factor = 0.30f;      // 30% for obstacle clearance
-        double wave_height_factor = 0.20f;        // 20% for stability
-        double ripple_height_factor = 0.25f;      // 25% for balance
-        double metachronal_height_factor = 0.25f; // 25% for smooth motion
-        double adaptive_height_factor = 0.25f;    // 25% base for adaptation
-
-        // Safety limits as percentage of leg reach/height
-        double min_length_factor = 0.12f; // 12% minimum step length
-        double max_length_factor = 0.50f; // 50% maximum step length
-        double min_height_factor = 0.12f; // 12% minimum step height
-        double max_height_factor = 0.40f; // 40% maximum step height
-    } gait_factors;
-
     /**
      * @brief Dynamic gait timing configuration (OpenSHC equivalent)
      * Controls the calculation of swing and stance iterations based on frequency and time_delta

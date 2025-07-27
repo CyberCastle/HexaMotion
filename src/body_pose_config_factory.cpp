@@ -196,6 +196,13 @@ std::array<StandingPoseJoints, NUM_LEGS> getDefaultStandingPoseJoints(const Para
  * @param params Robot parameters from HexaModel
  * @param config_type Type of configuration ("default", "conservative", "high_speed")
  * @return Complete pose configuration following OpenSHC structure
+ *
+ * Note: This creates the gait-independent body pose configuration.
+ * Gait-specific parameters (like step length/height) are handled separately in GaitConfiguration.
+ * This follows OpenSHC's separation between:
+ * - Walker parameters (default.yaml): gait-independent settings like body_clearance, swing_height
+ * - Gait parameters (gait.yaml): gait-specific stance/swing phases and offsets
+ * - Auto-pose parameters (auto_pose.yaml): gait-specific compensation amplitudes
  */
 BodyPoseConfiguration createPoseConfiguration(const Parameters &params, const std::string &config_type) {
     BodyPoseConfiguration config(params);
@@ -209,8 +216,8 @@ BodyPoseConfiguration createPoseConfiguration(const Parameters &params, const st
 
     // OpenSHC equivalent body clearance and swing parameters
     config.body_clearance = params.standing_height; // Body clearance in millimeters - use standing_height for consistency
-    // Use swing height factor from gait factors for consistent swing amplitude
-    config.swing_height = static_cast<float>(params.standing_height * params.gait_factors.tripod_height_factor);
+    // Use swing height factor from OpenSHC equivalent constants for body pose (gait-independent)
+    config.swing_height = static_cast<float>(params.standing_height * BODY_POSE_DEFAULT_SWING_HEIGHT_FACTOR);
 
     // OpenSHC equivalent pose limits (from default.yaml)
     config.max_translation = {25.0f, 25.0f, 25.0f}; // 25mm translation limits

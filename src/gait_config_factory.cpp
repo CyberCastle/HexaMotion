@@ -33,9 +33,11 @@ GaitConfiguration createWaveGaitConfig(const Parameters &params) {
     config.phase_config.phase_offset = 2;
     config.offsets.multipliers = {
         {"AR", 2}, {"BR", 3}, {"CR", 4}, {"CL", 1}, {"BL", 0}, {"AL", 5}};
+
+    // Calculated parameters using OpenSHC equivalent constants
     double leg_reach = params.coxa_length + params.femur_length + params.tibia_length;
-    config.step_length = leg_reach * params.gait_factors.wave_length_factor;
-    config.swing_height = params.standing_height * params.gait_factors.wave_height_factor;
+    config.step_length = leg_reach * GAIT_WAVE_LENGTH_FACTOR;
+    config.swing_height = params.standing_height * GAIT_WAVE_HEIGHT_FACTOR;
     config.body_clearance = params.standing_height;
 
     // OpenSHC trajectory parameters
@@ -66,9 +68,11 @@ GaitConfiguration createTripodGaitConfig(const Parameters &params) {
     config.phase_config.phase_offset = 2;
     config.offsets.multipliers = {
         {"AR", 0}, {"BR", 1}, {"CR", 0}, {"CL", 1}, {"BL", 0}, {"AL", 1}};
+
+    // Calculated parameters using OpenSHC equivalent constants
     double leg_reach = params.coxa_length + params.femur_length + params.tibia_length;
-    config.step_length = leg_reach * params.gait_factors.tripod_length_factor;
-    config.swing_height = params.standing_height * params.gait_factors.tripod_height_factor;
+    config.step_length = leg_reach * GAIT_TRIPOD_LENGTH_FACTOR;
+    config.swing_height = params.standing_height * GAIT_TRIPOD_HEIGHT_FACTOR;
     config.body_clearance = params.standing_height;
 
     // OpenSHC trajectory parameters
@@ -104,10 +108,10 @@ GaitConfiguration createRippleGaitConfig(const Parameters &params) {
     config.offsets.multipliers = {
         {"AR", 2}, {"BR", 0}, {"CR", 4}, {"CL", 1}, {"BL", 3}, {"AL", 5}};
 
-    // Calculated parameters
+    // Calculated parameters using OpenSHC equivalent constants
     double leg_reach = params.coxa_length + params.femur_length + params.tibia_length;
-    config.step_length = leg_reach * params.gait_factors.ripple_length_factor;
-    config.swing_height = params.standing_height * params.gait_factors.ripple_height_factor;
+    config.step_length = leg_reach * GAIT_RIPPLE_LENGTH_FACTOR;
+    config.swing_height = params.standing_height * GAIT_RIPPLE_HEIGHT_FACTOR;
     config.body_clearance = params.standing_height;
 
     // OpenSHC trajectory parameters
@@ -145,10 +149,10 @@ GaitConfiguration createMetachronalGaitConfig(const Parameters &params) {
     config.offsets.multipliers = {
         {"AR", 2}, {"BR", 3}, {"CR", 4}, {"CL", 1}, {"BL", 0}, {"AL", 5}};
 
-    // Calculated parameters
+    // Calculated parameters using OpenSHC equivalent constants
     double leg_reach = params.coxa_length + params.femur_length + params.tibia_length;
-    config.step_length = leg_reach * params.gait_factors.metachronal_length_factor;
-    config.swing_height = params.standing_height * params.gait_factors.metachronal_height_factor;
+    config.step_length = leg_reach * GAIT_METACHRONAL_LENGTH_FACTOR;
+    config.swing_height = params.standing_height * GAIT_METACHRONAL_HEIGHT_FACTOR;
     config.body_clearance = params.standing_height;
 
     // OpenSHC trajectory parameters

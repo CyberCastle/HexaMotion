@@ -572,9 +572,9 @@ int main() {
     p.tibia_angle_limits[0] = -45;
     p.tibia_angle_limits[1] = 45;
 
-    // Configure gait factors for tripod gait (add these to parameters)
-    p.gait_factors.tripod_length_factor = 0.4;  // 40% of leg reach for step length
-    p.gait_factors.tripod_height_factor = 0.15; // 15% of standing height for swing
+    // Configure gait factors for tripod gait (use OpenSHC equivalent constants)
+    // p.gait_factors.tripod_length_factor = GAIT_TRIPOD_LENGTH_FACTOR;  // Removed - using constants directly
+    // p.gait_factors.tripod_height_factor = GAIT_TRIPOD_HEIGHT_FACTOR;  // Removed - using constants directly
 
     // Create tripod gait configuration
     GaitConfiguration tripod_config = createTripodGaitConfig(p);
