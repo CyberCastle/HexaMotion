@@ -656,25 +656,24 @@ bool LocomotionSystem::update() {
                     legs[i].setStepPhase(SWING_PHASE);
                 }
 
-                // OpenSHC Model::updateModel() pattern:
-                // 1. Get new tip position from trajectory generator (LegStepper)
+                // OpenSHC Model::updateModel() pattern - EXACTLY like trajectory_tip_position_test:
+                // 1. Get current joint angles BEFORE update to calculate delta
+                JointAngles angles_before = legs[i].getJointAngles();
+                Point3D pos_before = legs[i].getCurrentTipPositionGlobal();
+
+                // 2. Get new tip position from trajectory generator (LegStepper)
                 Point3D new_tip_position = leg_stepper->getCurrentTipPose();
 
-                // 2. Set desired tip pose (equivalent to OpenSHC leg->setDesiredTipPose())
-                legs[i].setCurrentTipPositionGlobal(new_tip_position);
+                // 3. Apply the new position to the Leg object to maintain consistency
+                // legs[i].setCurrentTipPositionGlobal(new_tip_position);
 
-                // 3. Apply IK (equivalent to OpenSHC leg->applyIK())
-                bool ik_success = legs[i].applyAdvancedIK(new_tip_position);
+                // 4. Apply advanced delta-based IK method EXACTLY like trajectory_tip_position_test
+                JointAngles new_angles = model.applyAdvancedIK(i, pos_before, new_tip_position, angles_before, dt);
+                legs[i].setJointAngles(new_angles);
 
-                if (ik_success) {
-                    // Apply the resulting joint angles to servos
-                    JointAngles target_angles = legs[i].getJointAngles();
-                    if (!setLegJointAngles(i, target_angles)) {
-                        // Handle servo failure - maintain current state
-                        continue;
-                    }
-                } else {
-                    // IK failed - maintain current position and angles
+                // 5. Apply the resulting joint angles to servos
+                if (!setLegJointAngles(i, new_angles)) {
+                    // Handle servo failure - maintain current state
                     continue;
                 }
             }

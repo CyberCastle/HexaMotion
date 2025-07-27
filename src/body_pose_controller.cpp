@@ -457,17 +457,17 @@ bool BodyPoseController::stepToNewStance(Leg legs[NUM_LEGS], double step_height,
 
     // Initialize sequence if not already done
     if (!step_to_new_stance_sequence_generated) {
-        // Set target positions for all legs to standing pose
+        // Set target positions using LegStepper's default tip poses (OpenSHC approach)
+        // This ensures continuity with gait execution instead of jumping to static standing poses
         for (int i = 0; i < NUM_LEGS; i++) {
             if (leg_posers_[i]) {
-                const auto &standing_joints = body_pose_config.standing_pose_joints[i];
-                JointAngles target_angles;
-                target_angles.coxa = standing_joints.coxa;
-                target_angles.femur = standing_joints.femur;
-                target_angles.tibia = standing_joints.tibia;
+                // Get default tip pose from leg's stepper (OpenSHC equivalent)
+                // This maintains continuity with the planned gait trajectory
+                Point3D current_position = legs[i].getCurrentTipPositionGlobal();
 
-                Point3D target_position = model.forwardKinematicsGlobalCoordinates(i, target_angles);
-                leg_posers_[i]->get()->setTargetPosition(target_position);
+                // Use current position as target to maintain stance (OpenSHC behavior)
+                // The actual step target will be set by gait execution, not startup sequence
+                leg_posers_[i]->get()->setTargetPosition(current_position);
             }
         }
         step_to_new_stance_current_group = 0;
@@ -542,30 +542,18 @@ bool BodyPoseController::stepToNewStance(Leg legs[NUM_LEGS], double step_height,
 
 // Execute startup sequence (READY -> RUNNING transition)
 bool BodyPoseController::executeStartupSequence(Leg legs[NUM_LEGS]) {
-    // OpenSHC Architecture: Use executeSequence with START_UP direction
-    // This is the main entry point that delegates to either stepToNewStance or directStartup
-    // based on the current gait type and startup sequence parameters
+    // OpenSHC uses directStartup for ALL gaits during startup sequence
+    // stepToNewStance is only used for stance transitions during gait execution, NOT startup
+    // This fixes the discontinuity issue where legs jump from current pose to standing pose
 
     // Initialize LegPosers if not already done
     if (!getLegPoser(0)) {
         initializeLegPosers(legs);
     }
 
-    // Check if we're using tripod gait - stepToNewStance is only for tripod gait
-    bool use_tripod_coordination = (current_gait_type_ == TRIPOD_GAIT);
-
-    // OpenSHC uses different startup methods based on gait type:
-    // - stepToNewStance() for tripod gait with coordinated groups
-    // - directStartup() for all other gaits with simultaneous movement
-    if (use_tripod_coordination) {
-        // Tripod gait startup: two-phase coordinated sequence
-        double step_height = body_pose_config.swing_height;
-        double step_time = 1.0 / DEFAULT_STEP_FREQUENCY;
-        return stepToNewStance(legs, step_height, step_time);
-    } else {
-        // Other gaits: direct simultaneous startup (OpenSHC equivalent)
-        return executeDirectStartup(legs);
-    }
+    // OpenSHC Architecture: All gaits use directStartup() for READY->RUNNING transition
+    // The tripod coordination happens during gait execution, not during startup
+    return executeDirectStartup(legs);
 }
 
 // Execute direct startup sequence (simultaneous leg coordination - OpenSHC equivalent)
@@ -580,18 +568,13 @@ bool BodyPoseController::executeDirectStartup(Leg legs[NUM_LEGS]) {
     if (!direct_startup_sequence_initialized) {
         for (int i = 0; i < NUM_LEGS; i++) {
             if (leg_posers_[i]) {
-                // Get standing pose joint angles as target configuration
-                const auto &standing_joints = body_pose_config.standing_pose_joints[i];
-                JointAngles target_angles;
-                target_angles.coxa = standing_joints.coxa;
-                target_angles.femur = standing_joints.femur;
-                target_angles.tibia = standing_joints.tibia;
+                // Use current leg positions as targets (OpenSHC approach)
+                // This maintains continuity instead of forcing a jump to static standing poses
+                // The gait controller will handle setting proper targets during execution
+                Point3D current_position = legs[i].getCurrentTipPositionGlobal();
 
-                // Calculate target position from joint angles (default tip position)
-                Point3D target_position = model.forwardKinematicsGlobalCoordinates(i, target_angles);
-
-                // Set target position for this leg's poser
-                leg_posers_[i]->get()->setTargetPosition(target_position);
+                // Set current position as target to maintain stance during startup
+                leg_posers_[i]->get()->setTargetPosition(current_position);
                 leg_posers_[i]->get()->resetStepToPosition();
             }
         }
