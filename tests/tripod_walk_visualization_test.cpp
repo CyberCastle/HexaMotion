@@ -177,17 +177,6 @@ int main() {
             break;
         }
 
-        // Allow LegPosers to progress between sequence attempts
-        int update_cycles = 0;
-        const int MAX_UPDATE_CYCLES_PER_ATTEMPT = 10;
-
-        while (update_cycles < MAX_UPDATE_CYCLES_PER_ATTEMPT) {
-            if (!sys.update()) {
-                std::cerr << "WARNING: System update failed during startup sequence." << std::endl;
-            }
-            update_cycles++;
-        }
-
         startup_sequence_attempts++;
 
         if (startup_sequence_attempts % 10 == 0) {
@@ -269,14 +258,6 @@ int main() {
 
     if (shutdown_sequence_attempts >= MAX_SHUTDOWN_SEQUENCE_ATTEMPTS) {
         std::cerr << "WARNING: Shutdown sequence failed to complete after " << shutdown_sequence_attempts << " attempts." << std::endl;
-    }
-
-    // Wait additional time for legs to stabilize
-    int wait_steps = 0;
-    const int MAX_WAIT_STEPS = 20;
-    while (wait_steps < MAX_WAIT_STEPS) {
-        sys.update();
-        wait_steps++;
     }
 
     std::cout << "\nFinal Leg States (all should be STANCE):" << std::endl;
