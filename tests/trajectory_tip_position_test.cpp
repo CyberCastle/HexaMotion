@@ -642,17 +642,13 @@ int main() {
 
     // *** CONFIGURAR USANDO PARÁMETROS DEL TRIPOD GAIT ***
     // Configure StepCycle from tripod gait configuration (OpenSHC style)
-    // Adjusted frequency to get approximately 25 iterations per phase instead of 52
-    double target_iterations_per_phase = 25.0;
-    double time_delta = 0.02; // 50Hz control loop
-    double phase_duration = 2.0; // stance_phase + swing_phase from gait config
-    double adjusted_frequency = 1.0 / (target_iterations_per_phase * time_delta); // ≈ 2.0 Hz
-    
-    StepCycle step_cycle = tripod_config.generateStepCycle(adjusted_frequency);
+    // Use OpenSHC default frequency (1.0 Hz) to ensure consistency with tripod_walk_visualization_test
+    double openshc_default_frequency = 1.0; // OpenSHC uses 1.0 Hz as default frequency
+
+    StepCycle step_cycle = tripod_config.generateStepCycle(openshc_default_frequency);
     stepper.setStepCycle(step_cycle);
-    std::cout << "StepCycle configurado para " << target_iterations_per_phase << " iteraciones por fase:" << std::endl;
-    std::cout << "  Frequency=" << step_cycle.frequency_ << "Hz, period=" << step_cycle.period_ << std::endl;
-    std::cout << "  Adjusted frequency: " << adjusted_frequency << "Hz (target: " << target_iterations_per_phase << " iterations/phase)" << std::endl;
+    std::cout << "StepCycle configurado desde tripod gait: frequency=" << step_cycle.frequency_ << "Hz, period=" << step_cycle.period_ << std::endl;
+    std::cout << "Using OpenSHC default frequency: " << openshc_default_frequency << "Hz (same as tripod_walk_visualization_test)" << std::endl;
 
     // Note: All other gait parameters are now configured through the StepCycle structure
     // The stepper will use the StepCycle values directly via generateStepCycle()
