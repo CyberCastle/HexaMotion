@@ -408,6 +408,10 @@ bool LocomotionSystem::executeStartupSequence() {
 
 bool LocomotionSystem::executeShutdownSequence() {
 
+    // Update walk controller one final time with zero velocity
+    walk_ctrl->updateWalk(Point3D(0.0, 0.0, 0.0), 0.0,
+                          Eigen::Vector3d(0.0, 0.0, 0.0), Eigen::Vector3d(0.0, 0.0, 0.0));
+
     // OpenSHC: Force all legs to STANCE according to OpenSHC shutdown protocol
     for (int i = 0; i < NUM_LEGS; i++) {
         auto leg_stepper = walk_ctrl->getLegStepper(i);
@@ -430,10 +434,6 @@ bool LocomotionSystem::executeShutdownSequence() {
             }
         }
     }
-
-    // Update walk controller one final time with zero velocity
-    walk_ctrl->updateWalk(Point3D(0.0, 0.0, 0.0), 0.0,
-                          Eigen::Vector3d(0.0, 0.0, 0.0), Eigen::Vector3d(0.0, 0.0, 0.0));
 
     // Execute the body pose controller shutdown sequence
     bool shutdown_complete = body_pose_ctrl->executeShutdownSequence(legs);

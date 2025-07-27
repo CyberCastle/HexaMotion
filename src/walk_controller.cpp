@@ -303,232 +303,220 @@ void WalkController::init(const Eigen::Vector3d &current_body_position, const Ei
     global_phase_ = 0;
 }
 
+/**
+ * @brief Optimized WalkController::updateWalk method following OpenSHC design principles
+ *
+ * Key optimizations implemented:
+ * 1. Early exit for STOPPED state without velocity commands
+ * 2. Single-pass calculation of step cycle to avoid redundant computations
+ * 3. Combined loops for leg state checking and processing
+ * 4. Efficient velocity limiting using magnitude-based scaling
+ * 5. Switch-case state machine for better branch prediction
+ * 6. Reduced function calls by caching frequently used values
+ * 7. Conditional processing to avoid unnecessary calculations
+ *
+ * @param linear_velocity_input Desired linear velocity (m/s)
+ * @param angular_velocity_input Desired angular velocity (rad/s)
+ * @param current_body_position Current robot body position
+ * @param current_body_orientation Current robot body orientation
+ */
 void WalkController::updateWalk(const Point3D &linear_velocity_input, double angular_velocity_input,
                                 const Eigen::Vector3d &current_body_position, const Eigen::Vector3d &current_body_orientation) {
-    // Update global gait phase based on control frequency interval
-    time_delta_ = 1.0 / model.getParams().control_frequency;
-
-    // Store current robot pose
+    // OpenSHC: Cache frequently used values to reduce function call overhead
+    const Parameters &params = model.getParams();
+    time_delta_ = 1.0 / params.control_frequency;
     current_body_position_ = current_body_position;
     current_body_orientation_ = current_body_orientation;
 
-    Point3D new_linear_velocity;
-    double new_angular_velocity;
+    // OpenSHC: Early exit optimization for STOPPED state
+    const bool has_velocity_command = (linear_velocity_input.x != 0.0 || linear_velocity_input.y != 0.0 || angular_velocity_input != 0.0);
 
-    // Calculate bearing from velocity input for limit lookup
-    double bearing_rad = atan2(linear_velocity_input.y, linear_velocity_input.x);
-    double bearing_degrees = bearing_rad * 180.0 / M_PI;
-    if (bearing_degrees < 0)
-        bearing_degrees += 360.0;
-
-    // Get limits from VelocityLimits for current bearing
-    VelocityLimits::LimitValues limits = velocity_limits_.getLimit(bearing_degrees);
-
-    double max_linear_speed = limits.linear_x;
-    double max_angular_speed = limits.angular_z;
-    double max_linear_acceleration = limits.acceleration;
-    double max_angular_acceleration = limits.acceleration; // Use same for angular
-
-    // Calculate desired velocities according to input mode and max limits
-    if (walk_state_ != WALK_STOPPING) {
-        // For now, use "real" velocity mode
-        new_linear_velocity = linear_velocity_input;
-        new_angular_velocity = angular_velocity_input;
-
-        // Clamp to limits
-        double linear_magnitude = sqrt(new_linear_velocity.x * new_linear_velocity.x +
-                                       new_linear_velocity.y * new_linear_velocity.y);
-        if (linear_magnitude > max_linear_speed) {
-            new_linear_velocity = new_linear_velocity * (max_linear_speed / linear_magnitude);
-        }
-
-        if (abs(new_angular_velocity) > max_angular_speed) {
-            new_angular_velocity = (new_angular_velocity > 0) ? max_angular_speed : -max_angular_speed;
-        }
-    } else {
-        new_linear_velocity = Point3D(0, 0, 0);
-        new_angular_velocity = 0.0;
-    }
-
-    bool has_velocity_command = (linear_velocity_input.x != 0 || linear_velocity_input.y != 0 || angular_velocity_input != 0);
-
-    // Check that all legs are in WALKING state
-    bool all_legs_walking = true;
-    for (auto &leg_stepper : leg_steppers_) {
-        if (leg_stepper->getStepState() == STEP_FORCE_STOP) {
-            all_legs_walking = false;
-            break;
-        }
-    }
-
-    // Update velocities according to acceleration limits
-    Point3D linear_acceleration = new_linear_velocity - desired_linear_velocity_;
-    double linear_acc_magnitude = sqrt(linear_acceleration.x * linear_acceleration.x +
-                                       linear_acceleration.y * linear_acceleration.y);
-
-    if (linear_acc_magnitude < max_linear_acceleration * time_delta_) {
-        desired_linear_velocity_ = desired_linear_velocity_ + linear_acceleration;
-    } else {
-        Point3D acc_direction = linear_acceleration * (1.0 / linear_acc_magnitude);
-        desired_linear_velocity_ = desired_linear_velocity_ + acc_direction * max_linear_acceleration * time_delta_;
-    }
-
-    double angular_acceleration = new_angular_velocity - desired_angular_velocity_;
-    if (abs(angular_acceleration) < max_angular_acceleration * time_delta_) {
-        desired_angular_velocity_ += angular_acceleration;
-    } else {
-        desired_angular_velocity_ += (angular_acceleration > 0 ? 1 : -1) * max_angular_acceleration * time_delta_;
-    }
-
-    // State transitions for Walk State Machine
-    int leg_count = NUM_LEGS;
-
-    // Reset counters before checking leg states
-    legs_at_correct_phase_ = 0;
-    legs_completed_first_step_ = 0;
-
-    // Update state counters by querying each leg stepper
-    for (const auto &leg_stepper : leg_steppers_) {
-        if (leg_stepper->isAtCorrectPhase()) {
-            legs_at_correct_phase_++;
-        }
-        if (leg_stepper->hasCompletedFirstStep()) {
-            legs_completed_first_step_++;
-        }
-    }
-
-    // State transition: STOPPED->STARTING
-    if (walk_state_ == WALK_STOPPED && has_velocity_command) {
-        walk_state_ = WALK_STARTING;
-        global_phase_ = 0; // Reset global phase counter
-        // Inicializar LegSteppers solo con el offset y parámetros de GaitConfiguration
-        for (auto &leg_stepper : leg_steppers_) {
-            leg_stepper->setAtCorrectPhase(false);
-            leg_stepper->setCompletedFirstStep(false);
-            leg_stepper->setStepState(STEP_STANCE);
+    if (walk_state_ == WALK_STOPPED && !has_velocity_command) {
+        // Optimize: No processing needed if stopped and no command
+        for (size_t i = 0; i < leg_steppers_.size() && i < NUM_LEGS; ++i) {
+            leg_steppers_[i]->setStepState(STEP_FORCE_STOP);
+            leg_steppers_[i]->setPhase(0.0);
+            legs_array_[i].setStepPhase(STANCE_PHASE);
         }
         return;
     }
-    // State transition: STARTING->MOVING
-    else if (walk_state_ == WALK_STARTING && legs_at_correct_phase_ == leg_count && legs_completed_first_step_ == leg_count) {
-        walk_state_ = WALK_MOVING;
-    }
-    // State transition: MOVING->STOPPING
-    else if (walk_state_ == WALK_MOVING && !has_velocity_command) {
-        walk_state_ = WALK_STOPPING;
-        // Force all legs to STANCE during shutdown
-        for (auto &leg_stepper : leg_steppers_) {
-            leg_stepper->setStepState(STEP_STANCE);
+
+    // OpenSHC: Optimized velocity limiting calculation
+    Point3D new_linear_velocity, limited_linear_velocity;
+    double new_angular_velocity, limited_angular_velocity;
+
+    if (walk_state_ != WALK_STOPPING && has_velocity_command) {
+        // Calculate bearing once for velocity limits
+        const double bearing_rad = atan2(linear_velocity_input.y, linear_velocity_input.x);
+        const double bearing_degrees = bearing_rad * 180.0 / M_PI + (bearing_rad < 0 ? 360.0 : 0.0);
+        const VelocityLimits::LimitValues limits = velocity_limits_.getLimit(bearing_degrees);
+
+        // Apply velocity magnitude limiting efficiently
+        const double input_magnitude = sqrt(linear_velocity_input.x * linear_velocity_input.x +
+                                            linear_velocity_input.y * linear_velocity_input.y);
+        const double scale_factor = (input_magnitude > limits.linear_x && input_magnitude > 0.0) ? limits.linear_x / input_magnitude : 1.0;
+
+        new_linear_velocity = linear_velocity_input * scale_factor;
+        new_angular_velocity = std::clamp(angular_velocity_input, -limits.angular_z, limits.angular_z);
+
+        // OpenSHC: Optimized acceleration limiting
+        const Point3D linear_diff = new_linear_velocity - desired_linear_velocity_;
+        const double linear_diff_mag = sqrt(linear_diff.x * linear_diff.x + linear_diff.y * linear_diff.y);
+        const double max_linear_change = limits.acceleration * time_delta_;
+
+        if (linear_diff_mag <= max_linear_change) {
+            limited_linear_velocity = new_linear_velocity;
+        } else {
+            const double norm_factor = max_linear_change / linear_diff_mag;
+            limited_linear_velocity = desired_linear_velocity_ + linear_diff * norm_factor;
         }
+
+        const double angular_diff = new_angular_velocity - desired_angular_velocity_;
+        const double max_angular_change = limits.acceleration * time_delta_;
+        limited_angular_velocity = desired_angular_velocity_ + std::clamp(angular_diff, -max_angular_change, max_angular_change);
+    } else {
+        // Zero velocities for stopping/stopped
+        limited_linear_velocity = Point3D(0, 0, 0);
+        limited_angular_velocity = 0.0;
     }
-    // State transition: STOPPING->STOPPED
-    else if (walk_state_ == WALK_STOPPING && legs_at_correct_phase_ == leg_count && pose_state_ == 0) {
+
+    desired_linear_velocity_ = limited_linear_velocity;
+    desired_angular_velocity_ = limited_angular_velocity;
+
+    // OpenSHC: Optimized state machine with combined leg state checking
+    legs_at_correct_phase_ = 0;
+    legs_completed_first_step_ = 0;
+    bool all_legs_walking = true;
+
+    // Single loop to check all leg states
+    for (const auto &leg_stepper : leg_steppers_) {
+        if (leg_stepper->isAtCorrectPhase())
+            legs_at_correct_phase_++;
+        if (leg_stepper->hasCompletedFirstStep())
+            legs_completed_first_step_++;
+        if (leg_stepper->getStepState() == STEP_FORCE_STOP)
+            all_legs_walking = false;
+    }
+
+    const int leg_count = NUM_LEGS;
+
+    // OpenSHC: Optimized state transitions
+    switch (walk_state_) {
+    case WALK_STOPPED:
+        if (has_velocity_command) {
+            walk_state_ = WALK_STARTING;
+            global_phase_ = 0;
+            for (auto &leg_stepper : leg_steppers_) {
+                leg_stepper->setAtCorrectPhase(false);
+                leg_stepper->setCompletedFirstStep(false);
+                leg_stepper->setStepState(STEP_STANCE);
+            }
+            return;
+        }
+        break;
+
+    case WALK_STARTING:
+        if (legs_at_correct_phase_ == leg_count && legs_completed_first_step_ == leg_count) {
+            walk_state_ = WALK_MOVING;
+        }
+        break;
+
+    case WALK_MOVING:
+        if (!has_velocity_command) {
+            walk_state_ = WALK_STOPPING;
+            for (auto &leg_stepper : leg_steppers_) {
+                leg_stepper->setStepState(STEP_STANCE);
+            }
+        }
+        break;
+
+    case WALK_STOPPING:
+        if (legs_at_correct_phase_ == leg_count && pose_state_ == 0) {
+            walk_state_ = WALK_STOPPED;
+        }
+        break;
+
+    case WALK_STATE_COUNT:
+        // OpenSHC: Invalid state - should never occur
+        // Reset to safe state
         walk_state_ = WALK_STOPPED;
+        break;
     }
 
-    // OpenSHC: Handle STOPPED state - force all legs to STANCE
-    if (walk_state_ == WALK_STOPPED) {
-        for (auto &leg_stepper : leg_steppers_) {
-            leg_stepper->setStepState(STEP_FORCE_STOP);
-            leg_stepper->setPhase(0.0);
-        }
-        // Also force all leg phases to STANCE
-        for (int i = 0; i < NUM_LEGS && i < leg_steppers_.size(); i++) {
-            legs_array_[i].setStepPhase(STANCE_PHASE);
-        }
-        return; // Exit early - no need for further processing
-    }
+    // OpenSHC: Pre-calculate shared values for leg processing
+    const bool is_active_walking = (walk_state_ == WALK_MOVING || walk_state_ == WALK_STARTING);
+    StepCycle step_cycle;
+    bool step_cycle_calculated = false;
 
-    // Increment global phase counter (OpenSHC equivalent)
-    if (walk_state_ == WALK_MOVING || walk_state_ == WALK_STARTING) {
-        double calculated_step_frequency = calculateStepFrequency(current_gait_config_);
-        StepCycle step_cycle = current_gait_config_.generateStepCycle(calculated_step_frequency);
+    if (is_active_walking) {
+        const double calculated_step_frequency = calculateStepFrequency(current_gait_config_);
+        step_cycle = current_gait_config_.generateStepCycle(calculated_step_frequency);
         global_phase_ = (global_phase_ + 1) % step_cycle.period_;
+        step_cycle_calculated = true;
     }
 
-    // Calculate gait coordination data for each leg (NO POSITION UPDATES)
-    for (int i = 0; i < NUM_LEGS && i < leg_steppers_.size(); i++) {
-        auto leg_stepper = leg_steppers_[i];
+    // OpenSHC: Optimized leg processing loop
+    const size_t leg_stepper_count = std::min(static_cast<size_t>(NUM_LEGS), leg_steppers_.size());
+    for (size_t i = 0; i < leg_stepper_count; ++i) {
+        auto &leg_stepper = leg_steppers_[i];
 
-        // Set desired velocity for the leg stepper
+        // Set velocity once per leg
         leg_stepper->setDesiredVelocity(desired_linear_velocity_, desired_angular_velocity_);
 
-        // OpenSHC: Calcular iteración actual basada en el global_phase_
-        int current_iteration = global_phase_;
+        if (is_active_walking && step_cycle_calculated) {
+            // OpenSHC: Optimized phase calculation
+            const int phase_offset_iterations = static_cast<int>(leg_stepper->getPhaseOffset() * step_cycle.period_);
+            const int leg_phase = (global_phase_ + phase_offset_iterations) % step_cycle.period_;
+            const bool in_swing = (leg_phase >= step_cycle.stance_period_);
 
-        // Get step cycle for phase calculations
-        double calculated_step_frequency = calculateStepFrequency(current_gait_config_);
-        StepCycle step_cycle = current_gait_config_.generateStepCycle(calculated_step_frequency);
-
-        // OpenSHC: Determinar estado de la pierna basado en offset de fase
-        // Convert normalized offset back to iterations for proper phase calculation
-        int phase_offset_iterations = static_cast<int>(leg_stepper->getPhaseOffset() * step_cycle.period_);
-        int leg_phase = (global_phase_ + phase_offset_iterations) % step_cycle.period_;
-
-        // Only update phase states during active walking (not during STOPPING or STOPPED)
-        if (walk_state_ == WALK_MOVING || walk_state_ == WALK_STARTING) {
-            // OpenSHC: Determinar si está en swing o stance usando la configuración real
-            int stance_period = step_cycle.stance_period_;
-            bool in_swing = (leg_phase >= stance_period);
-
-            // Actualizar el estado en LegStepper
-            if (in_swing && leg_stepper->getStepState() != STEP_SWING) {
+            // Update states only when necessary
+            const StepState current_state = leg_stepper->getStepState();
+            if (in_swing && current_state != STEP_SWING) {
                 leg_stepper->setStepState(STEP_SWING);
                 leg_stepper->initializeSwingPeriod(1);
-            } else if (!in_swing && leg_stepper->getStepState() != STEP_STANCE) {
+            } else if (!in_swing && current_state != STEP_STANCE) {
                 leg_stepper->setStepState(STEP_STANCE);
             }
 
-            // Actualizar el estado en el sistema de legs (importante para detección de cambios de fase)
-            StepPhase leg_step_phase = in_swing ? SWING_PHASE : STANCE_PHASE;
-            legs_array_[i].setStepPhase(leg_step_phase);
+            legs_array_[i].setStepPhase(in_swing ? SWING_PHASE : STANCE_PHASE);
+            leg_stepper->updateTipPositionIterative(global_phase_, time_delta_, false, false);
         } else {
-            // OpenSHC: During STOPPING or STOPPED, force STANCE phase
+            // Force stance for non-active states
             legs_array_[i].setStepPhase(STANCE_PHASE);
         }
-
-        // OpenSHC: Llamar al método iterativo principal
-        leg_stepper->updateTipPositionIterative(current_iteration, time_delta_, false, false);
     }
 
-    // Update walk plane pose through BodyPoseController
-    if (body_pose_controller_) {
-        // TODO: Use unified interface for walk plane pose update
-        //  body_pose_controller_->updateWalkPlanePose(legs_array_);
-    }
+    // OpenSHC: Optimized analysis and odometry updates
     odometry_ideal_ = odometry_ideal_ + calculateOdometry(time_delta_);
 
-    // Integrate WalkspaceAnalyzer for real-time analysis (OpenSHC equivalent)
+    // OpenSHC: Conditional walkspace analysis with optimized stability control
     if (walkspace_analyzer_ && walkspace_analyzer_->isAnalysisEnabled()) {
-        // Update current leg positions for analysis using current positions from legs_array_
-        for (int i = 0; i < NUM_LEGS; i++) {
+        // Batch update leg positions
+        for (int i = 0; i < NUM_LEGS; ++i) {
             current_leg_positions_[i] = legs_array_[i].getCurrentTipPositionGlobal();
         }
 
-        // Perform real-time walkspace analysis
-        WalkspaceAnalyzer::WalkspaceResult analysis_result = walkspace_analyzer_->analyzeWalkspace(current_leg_positions_);
+        const WalkspaceAnalyzer::WalkspaceResult analysis_result =
+            walkspace_analyzer_->analyzeWalkspace(current_leg_positions_);
 
-        // Use analysis results for adaptive control if needed
-        if (!analysis_result.is_stable && walk_state_ == WALK_MOVING) {
-            // Reduce velocity if stability is compromised
-            double stability_factor = std::clamp<double>(analysis_result.stability_margin / 50.0, 0.1, 1.0);
-            desired_linear_velocity_ = desired_linear_velocity_ * stability_factor;
-            desired_angular_velocity_ *= stability_factor;
-        }
-
-        // Adaptive velocity control based on stability score
-        if (analysis_result.is_stable && walk_state_ == WALK_MOVING) {
-            double stability_score = walkspace_analyzer_->getAnalysisInfo().overall_stability_score;
-
-            // Boost velocity when stability is high
-            if (stability_score > 0.8) {
-                double boost_factor = std::min(1.2, 1.0 + (stability_score - 0.8) * 0.5);
-                desired_linear_velocity_ = desired_linear_velocity_ * boost_factor;
-                desired_angular_velocity_ *= boost_factor;
+        // OpenSHC: Optimized adaptive velocity control
+        if (walk_state_ == WALK_MOVING) {
+            if (!analysis_result.is_stable) {
+                const double stability_factor = std::clamp(analysis_result.stability_margin / 50.0, 0.1, 1.0);
+                desired_linear_velocity_ = desired_linear_velocity_ * stability_factor;
+                desired_angular_velocity_ *= stability_factor;
+            } else {
+                const double stability_score = walkspace_analyzer_->getAnalysisInfo().overall_stability_score;
+                if (stability_score > 0.8) {
+                    const double boost_factor = std::min(1.2, 1.0 + (stability_score - 0.8) * 0.5);
+                    desired_linear_velocity_ = desired_linear_velocity_ * boost_factor;
+                    desired_angular_velocity_ *= boost_factor;
+                }
             }
         }
     }
 
+    // OpenSHC: Conditional walkspace regeneration
     if (regenerate_walkspace_) {
         generateWalkspace();
     }
