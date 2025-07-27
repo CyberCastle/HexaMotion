@@ -8,6 +8,7 @@
 #include "robot_model.h"
 #include <Eigen/Dense>
 #include <memory>
+#include <vector>
 
 // Forward declarations
 class IServoInterface;
@@ -151,6 +152,41 @@ class BodyPoseController {
     bool executeShutdownSequence(Leg legs[NUM_LEGS]);
 
     /**
+     * @brief Execute pack sequence (OpenSHC equivalent)
+     * Moves legs to packed configuration for storage/transport
+     * @param legs Array of Leg objects to update
+     * @param time_to_pack Time to complete packing sequence
+     * @return Progress percentage (0-100), 100 indicates completion
+     */
+    int packLegs(Leg legs[NUM_LEGS], double time_to_pack);
+
+    /**
+     * @brief Execute unpack sequence (OpenSHC equivalent)
+     * Moves legs from packed to ready configuration
+     * @param legs Array of Leg objects to update
+     * @param time_to_unpack Time to complete unpacking sequence
+     * @return Progress percentage (0-100), 100 indicates completion
+     */
+    int unpackLegs(Leg legs[NUM_LEGS], double time_to_unpack);
+
+    /**
+     * @brief Pose for leg manipulation (OpenSHC equivalent)
+     * Generates poses for manual leg manipulation while maintaining stability
+     * @param legs Array of Leg objects to update
+     * @return Progress percentage (0-100), 100 indicates completion
+     */
+    int poseForLegManipulation(Leg legs[NUM_LEGS]);
+
+    /**
+     * @brief Execute sequence with OpenSHC-style alternating transitions
+     * This is the main sequence execution method that handles complex startup/shutdown
+     * @param sequence_type Type of sequence (startup or shutdown)
+     * @param legs Array of Leg objects to update
+     * @return Progress percentage (0-100), 100 indicates completion
+     */
+    int executeSequence(const std::string &sequence_type, Leg legs[NUM_LEGS]);
+
+    /**
      * @brief Update auto-pose during gait execution (OpenSHC equivalent)
      * @param gait_phase Current gait phase (0.0 to 1.0)
      * @param legs Array of Leg objects to update
@@ -262,6 +298,20 @@ class BodyPoseController {
     // executeShutdownSequence state variables (moved from static to class level)
     bool shutdown_sequence_initialized;
 
+    // OpenSHC sequence execution state variables
+    bool executing_transition_;           //< Flag denoting if pose controller is executing a transition
+    int transition_step_;                 //< Current transition step in sequence being executed
+    int transition_step_count_;           //< Total number of transition steps in sequence
+    bool set_target_;                     //< Flag if new tip target is to be calculated and set
+    bool proximity_alert_;                //< Flag if joint has moved beyond limit proximity buffer
+    bool horizontal_transition_complete_; //< Flag if horizontal transition completed without error
+    bool vertical_transition_complete_;   //< Flag if vertical transition completed without error
+    bool first_sequence_execution_;       //< Flag if controller has executed its first sequence
+    bool reset_transition_sequence_;      //< Flag if saved transition sequence needs regeneration
+    int legs_completed_step_;             //< Number of legs having completed required step in sequence
+    int current_group_;                   //< Current leg group executing stepping maneuver
+    int pack_step_;                       //< Current step in pack/unpack sequence
+
     // OpenSHC walk plane pose system with Bézier curves
     Pose walk_plane_pose_;              //< Current walk plane pose for body clearance maintenance
     bool walk_plane_pose_enabled;       //< Enable/disable walk plane pose system
@@ -283,9 +333,6 @@ class BodyPoseController {
     // Group A: AR (0), CR (2), BL (4) - Anterior Right, Center Right, Back Left
     // Group B: BR (1), CL (3), AL (5) - Back Right, Center Left, Anterior Left
     static constexpr int tripod_leg_groups[2][3] = {{0, 2, 4}, {1, 3, 5}};
-
-    // Constants
-    static constexpr double ANGULAR_SCALING = 1.0;
 };
 
 #endif // BODY_POSE_CONTROLLER_H

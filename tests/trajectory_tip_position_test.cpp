@@ -97,22 +97,26 @@ void debugTipPositionGeneration(LegStepper &stepper, Leg &leg, const RobotModel 
 
     // Configure iteration count using OpenSHC-compatible calculation
     // OpenSHC formula: swing_iterations = int((swing_period/period) / (frequency * time_delta))
-    double time_delta = 0.02;                                     // OpenSHC standard: 50Hz control loop (0.02s per iteration)
-    double period = 1.0;                                          // Complete gait cycle period in seconds
-    double swing_period = period * gait_config.getSwingRatio();   // Time spent in swing phase
-    double stance_period = period * gait_config.getStanceRatio(); // Time spent in stance phase
+    double time_delta = 0.02; // OpenSHC standard: 50Hz control loop (0.02s per iteration)
 
-    // Calculate iterations using OpenSHC method
-    int swing_iterations = (int)((swing_period / period) / (gait_config.getStepFrequency() * time_delta));
-    int stance_iterations = (int)((stance_period / period) / (gait_config.getStepFrequency() * time_delta));
+    // Use the SAME StepCycle values that the LegStepper uses (not gait_config values)
+    double period = step_cycle.period_;               // Use normalized period from StepCycle
+    double swing_period = step_cycle.swing_period_;   // Use normalized swing_period from StepCycle
+    double stance_period = step_cycle.stance_period_; // Use normalized stance_period from StepCycle
+    double frequency = step_cycle.frequency_;         // Use normalized frequency from StepCycle
+
+    // Calculate iterations using the SAME method as LegStepper::calculateSwingTiming()
+    int swing_iterations = (int)((double(swing_period) / period) / (frequency * time_delta));
+    int stance_iterations = (int)((double(stance_period) / period) / (frequency * time_delta));
     int total_iterations = swing_iterations + stance_iterations;
 
     // Use OpenSHC-compatible iteration time
     double iteration_time = time_delta;
 
     std::cout << "OpenSHC-compatible gait timing:" << std::endl;
-    std::cout << "  time_delta=" << time_delta << "s, period=" << period << "s" << std::endl;
-    std::cout << "  swing_period=" << swing_period << "s, stance_period=" << stance_period << "s" << std::endl;
+    std::cout << "  time_delta=" << time_delta << "s, period=" << period << std::endl;
+    std::cout << "  swing_period=" << swing_period << ", stance_period=" << stance_period << std::endl;
+    std::cout << "  frequency=" << frequency << "Hz" << std::endl;
     std::cout << "  swing_iterations=" << swing_iterations << ", stance_iterations=" << stance_iterations << std::endl;
     std::cout << "  total_iterations=" << total_iterations << ", iteration_time=" << iteration_time << "s" << std::endl;
 
@@ -145,9 +149,9 @@ void debugTipPositionGeneration(LegStepper &stepper, Leg &leg, const RobotModel 
 
     // Generate complete swing trajectory using gait configuration
     // IMPORTANT: Only generate swing_iterations, not total_iterations
-    std::cout << "\n=== COMPLETE SWING TRAJECTORY WITH JOINT ANGLES (Gait: " << gait_config.gait_name << ") ===" << std::endl;
-    std::cout << "Step | Iteration | Position (x, y, z) | Joint Angles (deg)" << std::endl;
-    std::cout << "-----+-----------+--------------------+------------------" << std::endl;
+    std::cout << "\n=== SWING TRAJECTORY WITH JOINT ANGLES (Gait: " << gait_config.gait_name << ") ===" << std::endl;
+    std::cout << "Step | Position (x, y, z) | Coxa (deg) | Femur (deg) | Tibia (deg) | Radio | Delta R" << std::endl;
+    std::cout << "-----+--------------------+------------+-------------+-------------+-------+--------" << std::endl;
 
     // Reset to initial position for trajectory generation
     stepper.setCurrentTipPose(initial_position);
@@ -156,6 +160,9 @@ void debugTipPositionGeneration(LegStepper &stepper, Leg &leg, const RobotModel 
     // Calculate initial joint angles for reference in trajectory
     leg.applyIK(initial_position);
     JointAngles trajectory_initial_angles = leg.getJointAngles();
+
+    // Calculate initial radio for comparison
+    double initial_radio = std::sqrt(initial_position.x * initial_position.x + initial_position.y * initial_position.y);
 
     // GENERATE ONLY SWING TRAJECTORY (not stance)
     for (int iteration = 1; iteration <= swing_iterations; iteration++) {
@@ -182,13 +189,17 @@ void debugTipPositionGeneration(LegStepper &stepper, Leg &leg, const RobotModel 
         double femur_deg = angles_after.femur * 180.0 / M_PI;
         double tibia_deg = angles_after.tibia * 180.0 / M_PI;
 
+        // Calculate radio (distance from origin in XY plane)
+        double radio = std::sqrt(pos_bezier.x * pos_bezier.x + pos_bezier.y * pos_bezier.y);
+        double delta_radio = radio - initial_radio;
+
         // Check if joint limits are being violated
         bool valid_joints = model.checkJointLimits(0, angles_after);
         std::string joint_status = valid_joints ? "✓" : "❌";
 
-        printf("%4d | %9d | (%8.3f, %8.3f, %8.3f) | (%6.1f, %6.1f, %6.1f)\n",
-               iteration, iteration, pos_bezier.x, pos_bezier.y, pos_bezier.z,
-               coxa_deg, femur_deg, tibia_deg);
+        printf("%4d | (%8.3f, %8.3f, %8.3f) | %6.1f | %6.1f | %6.1f | %5.1f | %6.2f\n",
+               iteration, pos_bezier.x, pos_bezier.y, pos_bezier.z,
+               coxa_deg, femur_deg, tibia_deg, radio, delta_radio);
 
         previous_pos = pos_bezier;
     }
@@ -407,8 +418,7 @@ void debugTipPositionGeneration(LegStepper &stepper, Leg &leg, const RobotModel 
     JointAngles initial_stance_angles = leg.getJointAngles();
     Point3D previous_stance_pos = initial_position;
 
-    // Calculate initial radio for comparison
-    double initial_radio = std::sqrt(initial_position.x * initial_position.x + initial_position.y * initial_position.y);
+    // Use the initial_radio calculated in swing section
 
     // MANUAL STANCE SIMULATION: Since LegStepper stance may not be implemented,
     // we'll simulate the expected stance behavior manually
@@ -562,9 +572,9 @@ int main() {
     p.tibia_angle_limits[0] = -45;
     p.tibia_angle_limits[1] = 45;
 
-    // Configure gait factors for tripod gait (add these to parameters)
-    p.gait_factors.tripod_length_factor = 0.4;  // 40% of leg reach for step length
-    p.gait_factors.tripod_height_factor = 0.15; // 15% of standing height for swing
+    // Configure gait factors for tripod gait (use OpenSHC equivalent constants)
+    // p.gait_factors.tripod_length_factor = GAIT_TRIPOD_LENGTH_FACTOR;  // Removed - using constants directly
+    // p.gait_factors.tripod_height_factor = GAIT_TRIPOD_HEIGHT_FACTOR;  // Removed - using constants directly
 
     // Create tripod gait configuration
     GaitConfiguration tripod_config = createTripodGaitConfig(p);
@@ -632,9 +642,13 @@ int main() {
 
     // *** CONFIGURAR USANDO PARÁMETROS DEL TRIPOD GAIT ***
     // Configure StepCycle from tripod gait configuration (OpenSHC style)
-    StepCycle step_cycle = tripod_config.generateStepCycle();
+    // Use OpenSHC default frequency (1.0 Hz) to ensure consistency with tripod_walk_visualization_test
+    double openshc_default_frequency = 1.0; // OpenSHC uses 1.0 Hz as default frequency
+
+    StepCycle step_cycle = tripod_config.generateStepCycle(openshc_default_frequency);
     stepper.setStepCycle(step_cycle);
     std::cout << "StepCycle configurado desde tripod gait: frequency=" << step_cycle.frequency_ << "Hz, period=" << step_cycle.period_ << std::endl;
+    std::cout << "Using OpenSHC default frequency: " << openshc_default_frequency << "Hz (same as tripod_walk_visualization_test)" << std::endl;
 
     // Note: All other gait parameters are now configured through the StepCycle structure
     // The stepper will use the StepCycle values directly via generateStepCycle()
