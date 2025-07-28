@@ -2,7 +2,7 @@
 #define BODY_POSE_H
 
 #include "robot_model.h"
-#include <Eigen/Dense>
+#include <ArduinoEigen.h>
 
 /**
  * @brief Body pose structure containing only robot body pose information
@@ -12,18 +12,18 @@
  * orientation, and various body-specific pose parameters.
  */
 class BodyPose {
-public:
+  public:
     /**
      * @brief Body pose state containing position and orientation
      */
     struct BodyPoseState {
-        Point3D position;                    //< Body position in world frame (meters)
-        Eigen::Vector3d euler_angles;        //< Body orientation as Euler angles (roll, pitch, yaw in radians)
-        Eigen::Vector4d quaternion;          //< Body orientation as quaternion [w, x, y, z]
-        double height;                       //< Body height above ground (meters)
-        bool use_quaternion;                 //< Whether to use quaternion or Euler angles
-        double blend_factor;                 //< Blending factor for pose transitions
-        bool pose_active;                    //< Whether pose is actively applied
+        Point3D position;             //< Body position in world frame (meters)
+        Eigen::Vector3d euler_angles; //< Body orientation as Euler angles (roll, pitch, yaw in radians)
+        Eigen::Vector4d quaternion;   //< Body orientation as quaternion [w, x, y, z]
+        double height;                //< Body height above ground (meters)
+        bool use_quaternion;          //< Whether to use quaternion or Euler angles
+        double blend_factor;          //< Blending factor for pose transitions
+        bool pose_active;             //< Whether pose is actively applied
 
         BodyPoseState()
             : position(0, 0, 0), euler_angles(0, 0, 0), quaternion(1, 0, 0, 0),
@@ -34,11 +34,11 @@ public:
      * @brief Body pose limits for safety constraints
      */
     struct BodyPoseLimits {
-        Point3D translation_limits;          //< Maximum translation limits (±X, ±Y, ±Z in meters)
-        Eigen::Vector3d rotation_limits;     //< Maximum rotation limits (±Roll, ±Pitch, ±Yaw in radians)
-        double height_min, height_max;       //< Height limits (meters)
-        double max_translation_velocity;     //< Maximum translation velocity (m/s)
-        double max_rotation_velocity;        //< Maximum rotation velocity (rad/s)
+        Point3D translation_limits;      //< Maximum translation limits (±X, ±Y, ±Z in meters)
+        Eigen::Vector3d rotation_limits; //< Maximum rotation limits (±Roll, ±Pitch, ±Yaw in radians)
+        double height_min, height_max;   //< Height limits (meters)
+        double max_translation_velocity; //< Maximum translation velocity (m/s)
+        double max_rotation_velocity;    //< Maximum rotation velocity (rad/s)
 
         BodyPoseLimits()
             : translation_limits(0.1, 0.1, 0.05), rotation_limits(0.3, 0.3, 0.5),
@@ -49,13 +49,13 @@ public:
      * @brief Body pose configuration parameters
      */
     struct BodyPoseConfig {
-        double body_clearance;               //< Requested height of robot body above ground (m)
-        double swing_height;                 //< Vertical displacement of swing trajectory above default (m)
-        bool gravity_aligned_tips;           //< Flag denoting if tip should align with gravity direction
-        bool force_symmetric_pose;           //< Force hexagonal symmetry if true
-        std::string auto_pose_type;          //< String denoting the default auto posing cycle type
-        bool start_up_sequence;              //< Flag allowing execution of start up and shutdown sequences
-        double time_to_start;                //< The time to complete a direct start up
+        double body_clearance;      //< Requested height of robot body above ground (m)
+        double swing_height;        //< Vertical displacement of swing trajectory above default (m)
+        bool gravity_aligned_tips;  //< Flag denoting if tip should align with gravity direction
+        bool force_symmetric_pose;  //< Force hexagonal symmetry if true
+        std::string auto_pose_type; //< String denoting the default auto posing cycle type
+        bool start_up_sequence;     //< Flag allowing execution of start up and shutdown sequences
+        double time_to_start;       //< The time to complete a direct start up
 
         BodyPoseConfig()
             : body_clearance(208.0), swing_height(0.02), gravity_aligned_tips(false),
@@ -66,35 +66,35 @@ public:
      * @brief Available body pose control modes
      */
     enum BodyPoseMode {
-        BODY_POSE_TRANSLATION,    //< Move body in X,Y,Z
-        BODY_POSE_ROTATION,       //< Rotate body around X,Y,Z axes
-        BODY_POSE_HEIGHT,         //< Adjust overall height
-        BODY_POSE_COMBINED,       //< Combined translation and rotation
-        BODY_POSE_MANUAL,         //< Manual body pose mode
-        BODY_POSE_AUTO,           //< Automatic body pose mode
-        BODY_POSE_CUSTOM          //< Custom pose sequences
+        BODY_POSE_TRANSLATION, //< Move body in X,Y,Z
+        BODY_POSE_ROTATION,    //< Rotate body around X,Y,Z axes
+        BODY_POSE_HEIGHT,      //< Adjust overall height
+        BODY_POSE_COMBINED,    //< Combined translation and rotation
+        BODY_POSE_MANUAL,      //< Manual body pose mode
+        BODY_POSE_AUTO,        //< Automatic body pose mode
+        BODY_POSE_CUSTOM       //< Custom pose sequences
     };
 
     /**
      * @brief Body pose reset modes
      */
     enum BodyPoseResetMode {
-        BODY_POSE_RESET_NONE,     //< Don't reset any pose components
+        BODY_POSE_RESET_NONE,        //< Don't reset any pose components
         BODY_POSE_RESET_TRANSLATION, //< Reset only translation components
         BODY_POSE_RESET_ROTATION,    //< Reset only rotation components
-        BODY_POSE_RESET_ALL       //< Reset all pose components
+        BODY_POSE_RESET_ALL          //< Reset all pose components
     };
 
     /**
      * @brief Body pose state for auto posing
      */
     enum BodyPosingState {
-        BODY_POSING_COMPLETE,     //< Auto posing is complete
-        BODY_POSING_IN_PROGRESS,  //< Auto posing is in progress
-        BODY_POSING_PAUSED        //< Auto posing is paused
+        BODY_POSING_COMPLETE,    //< Auto posing is complete
+        BODY_POSING_IN_PROGRESS, //< Auto posing is in progress
+        BODY_POSING_PAUSED       //< Auto posing is paused
     };
 
-private:
+  private:
     BodyPoseState current_pose_;
     BodyPoseState target_pose_;
     BodyPoseLimits pose_limits_;
@@ -125,7 +125,7 @@ private:
     Eigen::Vector3d translation_velocity_input_;
     Eigen::Vector3d rotation_velocity_input_;
 
-public:
+  public:
     /**
      * @brief Default constructor
      */
@@ -135,7 +135,7 @@ public:
      * @brief Constructor with configuration
      * @param config Body pose configuration
      */
-    explicit BodyPose(const BodyPoseConfig& config);
+    explicit BodyPose(const BodyPoseConfig &config);
 
     /**
      * @brief Initialize body pose with default settings
@@ -146,39 +146,39 @@ public:
      * @brief Set current body pose state
      * @param pose New body pose state
      */
-    void setCurrentPose(const BodyPoseState& pose);
+    void setCurrentPose(const BodyPoseState &pose);
 
     /**
      * @brief Get current body pose state
      * @return Current body pose state
      */
-    const BodyPoseState& getCurrentPose() const { return current_pose_; }
+    const BodyPoseState &getCurrentPose() const { return current_pose_; }
 
     /**
      * @brief Set target body pose state
      * @param pose Target body pose state
      */
-    void setTargetPose(const BodyPoseState& pose);
+    void setTargetPose(const BodyPoseState &pose);
 
     /**
      * @brief Get target body pose state
      * @return Target body pose state
      */
-    const BodyPoseState& getTargetPose() const { return target_pose_; }
+    const BodyPoseState &getTargetPose() const { return target_pose_; }
 
     /**
      * @brief Set body pose using position and Euler angles
      * @param position Body position
      * @param euler_angles Body orientation as Euler angles (roll, pitch, yaw in radians)
      */
-    void setPose(const Point3D& position, const Eigen::Vector3d& euler_angles);
+    void setPose(const Point3D &position, const Eigen::Vector3d &euler_angles);
 
     /**
      * @brief Set body pose using position and quaternion
      * @param position Body position
      * @param quaternion Body orientation as quaternion [w, x, y, z]
      */
-    void setPoseQuaternion(const Point3D& position, const Eigen::Vector4d& quaternion);
+    void setPoseQuaternion(const Point3D &position, const Eigen::Vector4d &quaternion);
 
     /**
      * @brief Set body pose mode
@@ -209,14 +209,14 @@ public:
      * @param translation Translation velocity input
      * @param rotation Rotation velocity input
      */
-    void setManualPoseInput(const Eigen::Vector3d& translation, const Eigen::Vector3d& rotation);
+    void setManualPoseInput(const Eigen::Vector3d &translation, const Eigen::Vector3d &rotation);
 
     /**
      * @brief Get manual pose velocity input
      * @param translation Output translation velocity input
      * @param rotation Output rotation velocity input
      */
-    void getManualPoseInput(Eigen::Vector3d& translation, Eigen::Vector3d& rotation) const;
+    void getManualPoseInput(Eigen::Vector3d &translation, Eigen::Vector3d &rotation) const;
 
     /**
      * @brief Reset all pose components to identity
@@ -251,25 +251,25 @@ public:
      * @brief Get body pose configuration
      * @return Body pose configuration
      */
-    const BodyPoseConfig& getPoseConfig() const { return pose_config_; }
+    const BodyPoseConfig &getPoseConfig() const { return pose_config_; }
 
     /**
      * @brief Set body pose configuration
      * @param config New body pose configuration
      */
-    void setPoseConfig(const BodyPoseConfig& config);
+    void setPoseConfig(const BodyPoseConfig &config);
 
     /**
      * @brief Get body pose limits
      * @return Body pose limits
      */
-    const BodyPoseLimits& getPoseLimits() const { return pose_limits_; }
+    const BodyPoseLimits &getPoseLimits() const { return pose_limits_; }
 
     /**
      * @brief Set body pose limits
      * @param limits New body pose limits
      */
-    void setPoseLimits(const BodyPoseLimits& limits);
+    void setPoseLimits(const BodyPoseLimits &limits);
 
     /**
      * @brief Convert current pose to OpenSHC-style Pose structure
@@ -282,20 +282,20 @@ public:
      * @param pose OpenSHC-style Pose structure
      * @return BodyPose object
      */
-    static BodyPose fromPose(const Pose& pose);
+    static BodyPose fromPose(const Pose &pose);
 
     /**
      * @brief Check if pose is within configured limits
      * @param pose Pose to check
      * @return True if pose is within limits
      */
-    bool checkPoseLimits(const BodyPoseState& pose) const;
+    bool checkPoseLimits(const BodyPoseState &pose) const;
 
     /**
      * @brief Constrain pose to limits
      * @param pose Pose to constrain (modified in place)
      */
-    void constrainPose(BodyPoseState& pose) const;
+    void constrainPose(BodyPoseState &pose) const;
 
     /**
      * @brief Get auto posing state
@@ -361,39 +361,39 @@ public:
      * @brief Get rotation absement error (for IMU posing PID)
      * @return Rotation absement error
      */
-    const Eigen::Vector3d& getRotationAbsementError() const { return rotation_absement_error_; }
+    const Eigen::Vector3d &getRotationAbsementError() const { return rotation_absement_error_; }
 
     /**
      * @brief Set rotation absement error
      * @param error New rotation absement error
      */
-    void setRotationAbsementError(const Eigen::Vector3d& error);
+    void setRotationAbsementError(const Eigen::Vector3d &error);
 
     /**
      * @brief Get rotation position error (for IMU posing PID)
      * @return Rotation position error
      */
-    const Eigen::Vector3d& getRotationPositionError() const { return rotation_position_error_; }
+    const Eigen::Vector3d &getRotationPositionError() const { return rotation_position_error_; }
 
     /**
      * @brief Set rotation position error
      * @param error New rotation position error
      */
-    void setRotationPositionError(const Eigen::Vector3d& error);
+    void setRotationPositionError(const Eigen::Vector3d &error);
 
     /**
      * @brief Get rotation velocity error (for IMU posing PID)
      * @return Rotation velocity error
      */
-    const Eigen::Vector3d& getRotationVelocityError() const { return rotation_velocity_error_; }
+    const Eigen::Vector3d &getRotationVelocityError() const { return rotation_velocity_error_; }
 
     /**
      * @brief Set rotation velocity error
      * @param error New rotation velocity error
      */
-    void setRotationVelocityError(const Eigen::Vector3d& error);
+    void setRotationVelocityError(const Eigen::Vector3d &error);
 
-private:
+  private:
     /**
      * @brief Initialize pose limits with default values
      */
@@ -404,7 +404,7 @@ private:
      * @param pose Pose to validate
      * @return True if pose is valid
      */
-    bool validatePoseState(const BodyPoseState& pose) const;
+    bool validatePoseState(const BodyPoseState &pose) const;
 };
 
 #endif // BODY_POSE_H
