@@ -2,10 +2,10 @@
 #define ANALYTIC_ROBOT_MODEL_H
 
 #include "hexamotion_constants.h"
-#include "robot_model.h"
 #include "math_utils.h"
+#include "robot_model.h"
+#include <ArduinoEigen.h>
 #include <vector>
-#include <Eigen/Dense>
 
 extern const double BASE_THETA_OFFSETS[NUM_LEGS];
 
@@ -18,7 +18,7 @@ extern const double BASE_THETA_OFFSETS[NUM_LEGS];
  * general hexapod robots, but only for the described mechanical structure.
  */
 class AnalyticRobotModel {
-public:
+  public:
     /**
      * @brief Construct an AnalyticRobotModel with the given parameters.
      * @param params Robot kinematic parameters
@@ -65,7 +65,7 @@ public:
      */
     std::vector<Eigen::Matrix4d> buildDHTransformsAnalytic(int leg, const JointAngles &q) const;
 
-private:
+  private:
     Parameters params;
 };
 

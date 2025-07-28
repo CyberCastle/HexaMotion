@@ -6,7 +6,7 @@
 #include "leg.h"
 #include "leg_poser.h"
 #include "robot_model.h"
-#include <Eigen/Dense>
+#include <ArduinoEigen.h>
 #include <memory>
 #include <vector>
 
