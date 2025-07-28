@@ -269,31 +269,36 @@ void WalkController::init(const Eigen::Vector3d &current_body_position, const Ei
     current_body_position_ = current_body_position;
     current_body_orientation_ = current_body_orientation;
 
-    // Set default stance tip positions from parameters
+    // OpenSHC approach: Preserve LegStepper configuration instead of recalculating
+    // The LegSteppers were initialized with proper default_tip_pose_ from BodyPoseConfiguration
+    // OpenSHC pattern: Don't override configured stance positions during init
     for (auto &leg_stepper : leg_steppers_) {
-        // Get stance positions from robot model parameters
-        const Parameters &params = model.getParams();
         int leg_index = leg_stepper->getLegIndex();
 
-        // Calculate stance position based on leg geometry
-        Point3D base_pos = model.getLegBasePosition(leg_index);
-        double base_x = base_pos.x;
-        double base_y = base_pos.y;
-        double base_angle = model.getLegBaseAngleOffset(leg_index);
+        // OpenSHC exact pattern: Use configured stance positions from leg stepper
+        // These were properly set during constructor using BodyPoseConfiguration
+        Point3D configured_stance_pose = leg_stepper->getDefaultTipPose();
 
-        // Use 65% of leg reach for safe stance position
-        double leg_reach = params.coxa_length + params.femur_length + params.tibia_length;
-        double safe_reach = leg_reach * 0.65f;
+        // OpenSHC validation: Only set if not properly configured (norm check for uninitialized poses)
+        if (configured_stance_pose.norm() < 1.0) {
+            // Fallback: Use robot model to get properly configured stance positions
+            // This follows OpenSHC's approach of using leg-specific configuration
+            Point3D base_pos = model.getLegBasePosition(leg_index);
+            double base_angle = model.getLegBaseAngleOffset(leg_index);
 
-        // Use current robot body height
-        double current_body_height = current_body_position.z();
+            // OpenSHC style: Use conservative stance radius based on leg geometry
+            double leg_reach = model.getLegReach();                          // Use RobotModel method instead of manual calculation
+            double stance_radius = leg_reach * DEFAULT_STANCE_RADIUS_FACTOR; // Use defined constant
 
-        Point3D stance_tip_pose(
-            base_x + safe_reach * cos(base_angle),
-            base_y + safe_reach * sin(base_angle),
-            current_body_height);
+            Point3D stance_position(
+                base_pos.x + stance_radius * cos(base_angle),
+                base_pos.y + stance_radius * sin(base_angle),
+                current_body_position.z());
 
-        leg_stepper->setDefaultTipPose(stance_tip_pose);
+            leg_stepper->setDefaultTipPose(stance_position);
+        } // OpenSHC pattern: Initialize current tip pose to default stance position
+        // This ensures LegStepper starts with proper stance coordinates
+        leg_stepper->setCurrentTipPose(leg_stepper->getDefaultTipPose());
     }
 
     // Init velocity input variables
@@ -549,9 +554,8 @@ void WalkController::generateWalkspace() {
     walkspace_.clear();
 
     // Get robot parameters for workspace calculation
-    const Parameters &params = model.getParams();
-    double leg_reach = params.coxa_length + params.femur_length + params.tibia_length;
-    double safe_reach = leg_reach * 0.65f; // 65% safety margin
+    double leg_reach = model.getLegReach();                       // Use RobotModel method
+    double safe_reach = leg_reach * DEFAULT_STANCE_RADIUS_FACTOR; // Use defined constant
 
     // Calculate workspace for each bearing angle
     for (int bearing = 0; bearing <= 360; bearing += 10) {
@@ -723,11 +727,6 @@ bool WalkController::checkTerrainConditions() const {
 
     // For now, return false (no challenging terrain)
     return false;
-}
-
-double WalkController::calculateLegReach() const {
-    const auto &params = model.getParams();
-    return params.coxa_length + params.femur_length + params.tibia_length;
 }
 
 WalkController::LegTrajectoryInfo WalkController::getLegTrajectoryInfo(int leg_index) const {

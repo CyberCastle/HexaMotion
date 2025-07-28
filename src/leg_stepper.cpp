@@ -369,7 +369,10 @@ void LegStepper::updateTipPositionIterative(int iteration, double time_delta, bo
 
         // Initialize stance origin if needed (OpenSHC: saves initial tip position at beginning of stance)
         if (stance_iteration == 1) {
-            stance_origin_tip_position_ = current_tip_pose_;
+            // OpenSHC exact implementation: Reset to default position at stance start
+            // This prevents drift accumulation from Bézier swing trajectories
+            stance_origin_tip_position_ = default_tip_pose_;
+            current_tip_pose_ = default_tip_pose_;
         }
 
         // Generate stance control nodes with calculated stride scaler (OpenSHC approach)
