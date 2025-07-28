@@ -1,7 +1,7 @@
 #include "state_controller.h"
-#include "locomotion_system.h"
-#include "hexamotion_constants.h"
 #include "body_pose_config_factory.h"
+#include "hexamotion_constants.h"
+#include "locomotion_system.h"
 
 /**
  * @file state_controller.cpp
@@ -134,7 +134,6 @@ String toArduinoString(const std::string &str) {
 }
 } // namespace
 
-
 StateController::StateController(LocomotionSystem &locomotion, const StateMachineConfig &config)
     : locomotion_system_(locomotion), config_(config), current_system_state_(SystemState::SYSTEM_PACKED), current_robot_state_(RobotState::ROBOT_UNKNOWN), current_walk_state_(WalkState::WALK_STOPPED), current_posing_mode_(PosingMode::POSING_NONE), current_cruise_control_mode_(CruiseControlMode::CRUISE_CONTROL_OFF), current_pose_reset_mode_(PoseResetMode::POSE_RESET_NONE), desired_system_state_(SystemState::SYSTEM_PACKED), desired_robot_state_(RobotState::ROBOT_UNKNOWN), manual_leg_count_(0), is_transitioning_(false), desired_linear_velocity_(Eigen::Vector2d::Zero()), desired_angular_velocity_(0.0f), desired_body_position_(Eigen::Vector3d::Zero()), desired_body_orientation_(Eigen::Vector3d::Zero()), cruise_velocity_(Eigen::Vector3d::Zero()), cruise_start_time_(0), cruise_end_time_(0), last_update_time_(0), dt_(0.02f), has_error_(false), is_initialized_(false), startup_step_(0), startup_transition_initialized_(false), startup_transition_step_count_(4), shutdown_step_(0), shutdown_transition_initialized_(false), shutdown_transition_step_count_(3), pack_step_(0), unpack_step_(0) {
 
@@ -205,8 +204,8 @@ bool StateController::initialize(const BodyPoseConfiguration &pose_config) {
 
     // Initialize pose controller (equivalent to OpenSHC poser_)
     try {
-                body_pose_controller_ = std::make_unique<BodyPoseController>(locomotion_system_.getRobotModel(),
-                                                                                                                       pose_config);
+        body_pose_controller_ = std::make_unique<BodyPoseController>(locomotion_system_.getRobotModel(),
+                                                                     pose_config);
         logDebug("PoseController initialized successfully");
     } catch (const std::exception &e) {
         body_pose_controller_.reset();
@@ -465,8 +464,6 @@ bool StateController::changeGait(GaitType gait) {
 
     return locomotion_system_.setGaitType(gait);
 }
-
-
 
 // Remove getTransitionProgress() method
 // TransitionProgress StateController::getTransitionProgress() const {

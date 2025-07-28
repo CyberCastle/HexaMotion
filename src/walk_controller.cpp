@@ -68,7 +68,7 @@ WalkController::WalkController(RobotModel &m, Leg legs[NUM_LEGS], const BodyPose
             leg_stance_position.y,
             leg_stance_position.z); // Use standing height for HexaMotion compatibility
 
-            // Update terrain adaptation parameters
+        // Update terrain adaptation parameters
         auto stepper = std::make_shared<LegStepper>(i, identity_tip_pose, legs[i], model,
                                                     walkspace_analyzer_.get(), workspace_validator_.get());
         leg_steppers_.push_back(stepper);
