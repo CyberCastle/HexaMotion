@@ -83,10 +83,10 @@ AutoPoseConfiguration createConservativeAutoPoseConfiguration(const Parameters &
 AutoPoseConfiguration createHighSpeedAutoPoseConfiguration(const Parameters &params);
 
 /**
- * @brief Calcula los ángulos de servo para una altura dada usando IK analítico (OpenSHC)
- * @param target_height_mm Altura objetivo en milímetros
- * @param params Parámetros del robot
- * @return Ángulos de servo calculados (estructura CalculatedServoAngles)
+ * @brief Calculate servo angles for a given height using analytical IK (OpenSHC)
+ * @param target_height_mm Target height in millimeters
+ * @param params Robot parameters
+ * @return Calculated servo angles (CalculatedServoAngles structure)
  */
 CalculatedServoAngles calculateServoAnglesForHeight(double target_height_mm, const Parameters &params);
 

@@ -20,7 +20,7 @@ bool isPositionReachable(const RobotModel &model, int leg_id, const Point3D &pos
 }
 
 void analyzeAllLegsTrajectory(Leg test_legs[NUM_LEGS], LegStepper steppers[NUM_LEGS], const RobotModel &model, const GaitConfiguration &gait_config) {
-    std::cout << "\n=== ANÁLISIS DE TRAYECTORIA PARA LAS 6 PATAS (Marcha: " << gait_config.gait_name << ") ===" << std::endl;
+    std::cout << "\n=== TRAJECTORY ANALYSIS FOR ALL 6 LEGS (Gait: " << gait_config.gait_name << ") ===" << std::endl;
 
     // Calculate timing parameters using OpenSHC-compatible calculation
     double time_delta = 0.02; // Standard 50Hz control loop
@@ -32,15 +32,15 @@ void analyzeAllLegsTrajectory(Leg test_legs[NUM_LEGS], LegStepper steppers[NUM_L
     int stance_iterations = (int)((stance_period / period) / (gait_config.getStepFrequency() * time_delta));
     int total_iterations = swing_iterations + stance_iterations;
 
-    std::cout << "Parámetros de temporización:" << std::endl;
-    std::cout << "  Iteraciones swing: " << swing_iterations << std::endl;
-    std::cout << "  Iteraciones stance: " << stance_iterations << std::endl;
-    std::cout << "  Total iteraciones: " << total_iterations << std::endl;
-    std::cout << "  Tiempo por iteración: " << time_delta << "s" << std::endl;
+    std::cout << "Timing parameters:" << std::endl;
+    std::cout << "  Swing iterations: " << swing_iterations << std::endl;
+    std::cout << "  Stance iterations: " << stance_iterations << std::endl;
+    std::cout << "  Total iterations: " << total_iterations << std::endl;
+    std::cout << "  Time per iteration: " << time_delta << "s" << std::endl;
 
     // Analyze initial positions for all legs
-    std::cout << "\n=== POSICIONES INICIALES DE TODAS LAS PATAS ===" << std::endl;
-    std::cout << "Pata | Posición Inicial (x, y, z) | Base (x, y, z) | Distancia | Alcanzable" << std::endl;
+    std::cout << "\n=== INITIAL POSITIONS OF ALL LEGS ===" << std::endl;
+    std::cout << "Leg  | Initial Position (x, y, z) | Base (x, y, z) | Distance | Reachable" << std::endl;
     std::cout << "-----+---------------------------+----------------+-----------+-----------" << std::endl;
 
     Point3D initial_positions[NUM_LEGS];
@@ -57,7 +57,7 @@ void analyzeAllLegsTrajectory(Leg test_legs[NUM_LEGS], LegStepper steppers[NUM_L
 
     // Analyze target positions and stride vectors
     std::cout << "\n=== VECTORES DE PASO Y OBJETIVOS DE TODAS LAS PATAS ===" << std::endl;
-    std::cout << "Pata | Vector Paso (x, y, z) | Posición Objetivo (x, y, z) | Magnitud | Alcanzable" << std::endl;
+    std::cout << "Pata | Vector Step (x, y, z) | Position Objetivo (x, y, z) | Magnitud | Alcanzable" << std::endl;
     std::cout << "-----+-----------------------+-----------------------------+----------+-----------" << std::endl;
 
     Point3D target_positions[NUM_LEGS];
@@ -120,11 +120,11 @@ void analyzeAllLegsTrajectory(Leg test_legs[NUM_LEGS], LegStepper steppers[NUM_L
     }
 
     // Show detailed trajectory analysis every 5 steps for swing phase
-    std::cout << "\n=== ANÁLISIS DETALLADO DE TRAYECTORIA SWING (cada 5 pasos) ===" << std::endl;
+    std::cout << "\n=== DETAILED SWING TRAJECTORY ANALYSIS (every 5 steps) ===" << std::endl;
 
     for (int leg_id = 0; leg_id < NUM_LEGS; leg_id++) {
-        std::cout << "\n--- PATA " << leg_id << " - FASE SWING ---" << std::endl;
-        std::cout << "Paso | Iteración | Posición (x, y, z) | Ángulos (coxa, femur, tibia) | Velocidad Ang (rad/s) | Distancia Base | Límites" << std::endl;
+        std::cout << "\n--- LEG " << leg_id << " - SWING PHASE ---" << std::endl;
+        std::cout << "Step | Iteration | Position (x, y, z) | Angles (coxa, femur, tibia) | Velocidad Ang (rad/s) | Base Distance | Limits" << std::endl;
         std::cout << "-----+-----------+---------------------+------------------------------+-----------------------+----------------+---------" << std::endl;
 
         // Reset stepper to initial position for this leg
@@ -175,7 +175,7 @@ void analyzeAllLegsTrajectory(Leg test_legs[NUM_LEGS], LegStepper steppers[NUM_L
     }
 
     // Analyze final swing positions and precision
-    std::cout << "\n=== ANÁLISIS DE PRECISIÓN AL FINAL DEL SWING ===" << std::endl;
+    std::cout << "\n=== ANALYSIS DE PRECISIÓN AL FINAL DEL SWING ===" << std::endl;
     std::cout << "Pata | Pos. Final (x, y, z) | Objetivo (x, y, z) | Error (mm) | Precisión" << std::endl;
     std::cout << "-----+----------------------+--------------------+------------+-----------" << std::endl;
 
@@ -207,7 +207,7 @@ void analyzeAllLegsTrajectory(Leg test_legs[NUM_LEGS], LegStepper steppers[NUM_L
     }
 
     // Test stance phase for all legs with detailed analysis
-    std::cout << "\n=== ANÁLISIS DETALLADO DE FASE STANCE (cada 5 pasos) ===" << std::endl;
+    std::cout << "\n=== ANALYSIS DETALLADO DE FASE STANCE (cada 5 pasos) ===" << std::endl;
 
     // Initialize all legs for stance phase
     for (int leg_id = 0; leg_id < NUM_LEGS; leg_id++) {
@@ -218,8 +218,8 @@ void analyzeAllLegsTrajectory(Leg test_legs[NUM_LEGS], LegStepper steppers[NUM_L
     }
 
     for (int leg_id = 0; leg_id < NUM_LEGS; leg_id++) {
-        std::cout << "\n--- PATA " << leg_id << " - FASE STANCE ---" << std::endl;
-        std::cout << "Paso | Iteración | Posición (x, y, z) | Ángulos (coxa, femur, tibia) | Velocidad Ang (rad/s) | Dist. Acum XY | Fuerza Est" << std::endl;
+        std::cout << "\n--- LEG " << leg_id << " - FASE STANCE ---" << std::endl;
+        std::cout << "Step | Iteration | Position (x, y, z) | Angles (coxa, femur, tibia) | Velocidad Ang (rad/s) | Dist. Acum XY | Fuerza Est" << std::endl;
         std::cout << "-----+-----------+---------------------+------------------------------+-----------------------+---------------+-----------" << std::endl;
 
         // Reset this leg's stepper
@@ -324,11 +324,11 @@ void analyzeAllLegsTrajectory(Leg test_legs[NUM_LEGS], LegStepper steppers[NUM_L
     double precision_rate = (double)legs_within_tolerance / NUM_LEGS * 100.0;
 
     // Add kinematic transition analysis
-    std::cout << "\n=== ANÁLISIS DE TRANSICIONES CINEMÁTICAS ===" << std::endl;
+    std::cout << "\n=== ANALYSIS DE TRANSICIONES CINEMÁTICAS ===" << std::endl;
     std::cout << "Analisis de velocidades angulares y aceleraciones durante cambios de fase..." << std::endl;
 
     for (int leg_id = 0; leg_id < NUM_LEGS; leg_id++) {
-        std::cout << "\n--- PATA " << leg_id << " - TRANSICIONES ---" << std::endl;
+        std::cout << "\n--- LEG " << leg_id << " - TRANSICIONES ---" << std::endl;
 
         // Analyze swing to stance transition
         steppers[leg_id].setCurrentTipPose(initial_positions[leg_id]);
@@ -390,7 +390,7 @@ void analyzeAllLegsTrajectory(Leg test_legs[NUM_LEGS], LegStepper steppers[NUM_L
         bool swing_end_valid = model.checkJointLimits(leg_id, end_swing_angles);
         bool stance_start_valid = model.checkJointLimits(leg_id, start_stance_angles);
 
-        std::cout << "    Límites articulares: Pre-transición=" << (swing_mid_valid ? "✓" : "❌");
+        std::cout << "    Limits articulares: Pre-transición=" << (swing_mid_valid ? "✓" : "❌");
         std::cout << ", Fin swing=" << (swing_end_valid ? "✓" : "❌");
         std::cout << ", Inicio stance=" << (stance_start_valid ? "✓" : "❌") << std::endl;
     }
@@ -408,7 +408,7 @@ void analyzeAllLegsTrajectory(Leg test_legs[NUM_LEGS], LegStepper steppers[NUM_L
     }
 
     // Analyze workspace utilization
-    std::cout << "\n=== ANÁLISIS DE UTILIZACIÓN DEL ESPACIO DE TRABAJO ===" << std::endl;
+    std::cout << "\n=== ANALYSIS DE UTILIZACIÓN DEL ESPACIO DE TRABAJO ===" << std::endl;
     double max_reach = model.getLegReach();
     double total_reach_utilization = 0.0;
 
@@ -499,8 +499,8 @@ int main() {
     for (int i = 0; i < NUM_LEGS; i++) {
         Point3D pos = test_legs[i].getCurrentTipPositionGlobal();
         JointAngles angles = test_legs[i].getJointAngles();
-        std::cout << "Pata " << i << " - Posición: (" << pos.x << ", " << pos.y << ", " << pos.z << ")";
-        std::cout << " - Ángulos: (" << (angles.coxa * 180.0 / M_PI) << "°, "
+        std::cout << "Pata " << i << " - Position: (" << pos.x << ", " << pos.y << ", " << pos.z << ")";
+        std::cout << " - Angles: (" << (angles.coxa * 180.0 / M_PI) << "°, "
                   << (angles.femur * 180.0 / M_PI) << "°, "
                   << (angles.tibia * 180.0 / M_PI) << "°)" << std::endl;
     }
@@ -562,7 +562,7 @@ int main() {
     analyzeAllLegsTrajectory(test_legs, steppers, model, tripod_config);
 
     // Additional analysis: Check if the problem is in the Bezier calculation
-    std::cout << "\n=== ANÁLISIS DETALLADO DEL ALGORITMO DE BEZIER ===" << std::endl;
+    std::cout << "\n=== ANALYSIS DETALLADO DEL ALGORITMO DE BEZIER ===" << std::endl;
     std::cout << "Investigando la causa del error sistemático de 12mm..." << std::endl;
 
     // Test with leg 0 to understand the Bezier algorithm issue
@@ -599,8 +599,8 @@ int main() {
     Point3D stride = steppers[test_leg].getStrideVector();
 
     std::cout << "\nParametros de la trayectoria:" << std::endl;
-    std::cout << "  Posición inicial: (" << initial_pos.x << ", " << initial_pos.y << ", " << initial_pos.z << ")" << std::endl;
-    std::cout << "  Posición objetivo: (" << target_pos.x << ", " << target_pos.y << ", " << target_pos.z << ")" << std::endl;
+    std::cout << "  Position inicial: (" << initial_pos.x << ", " << initial_pos.y << ", " << initial_pos.z << ")" << std::endl;
+    std::cout << "  Position objetivo: (" << target_pos.x << ", " << target_pos.y << ", " << target_pos.z << ")" << std::endl;
     std::cout << "  Vector stride: (" << stride.x << ", " << stride.y << ", " << stride.z << ")" << std::endl;
     std::cout << "  Distancia esperada: " << stride.norm() << " mm" << std::endl;
     std::cout << "  Swing iterations: " << swing_iterations << std::endl;
@@ -616,7 +616,7 @@ int main() {
     }
     final_pos_delta_method = steppers[test_leg].getCurrentTipPose();
 
-    std::cout << "Método Delta (actual): Posición final (" << final_pos_delta_method.x << ", " << final_pos_delta_method.y << ", " << final_pos_delta_method.z << ")" << std::endl;
+    std::cout << "Método Delta (actual): Position final (" << final_pos_delta_method.x << ", " << final_pos_delta_method.y << ", " << final_pos_delta_method.z << ")" << std::endl;
     double delta_error = (final_pos_delta_method - target_pos).norm();
     std::cout << "  Error: " << delta_error << " mm" << std::endl;
 
@@ -632,7 +632,7 @@ int main() {
     }
     final_pos_incorrect_method = steppers[test_leg].getCurrentTipPose();
 
-    std::cout << "  Posición final: (" << final_pos_incorrect_method.x << ", " << final_pos_incorrect_method.y << ", " << final_pos_incorrect_method.z << ")" << std::endl;
+    std::cout << "  Position final: (" << final_pos_incorrect_method.x << ", " << final_pos_incorrect_method.y << ", " << final_pos_incorrect_method.z << ")" << std::endl;
     double incorrect_error = (final_pos_incorrect_method - target_pos).norm();
     std::cout << "  Error: " << incorrect_error << " mm" << std::endl;
 
@@ -650,7 +650,7 @@ int main() {
     }
 
     Point3D final_pos_correct_method = steppers[test_leg].getCurrentTipPose();
-    std::cout << "  Posición final: (" << final_pos_correct_method.x << ", " << final_pos_correct_method.y << ", " << final_pos_correct_method.z << ")" << std::endl;
+    std::cout << "  Position final: (" << final_pos_correct_method.x << ", " << final_pos_correct_method.y << ", " << final_pos_correct_method.z << ")" << std::endl;
     double correct_error = (final_pos_correct_method - target_pos).norm();
     std::cout << "  Error: " << correct_error << " mm" << std::endl;
 
@@ -665,7 +665,7 @@ int main() {
     }
 
     // Additional analysis: Check trajectory independence
-    std::cout << "\n=== ANÁLISIS DE INDEPENDENCIA DE TRAYECTORIAS ===" << std::endl;
+    std::cout << "\n=== ANALYSIS DE INDEPENDENCIA DE TRAYECTORIAS ===" << std::endl;
     std::cout << "Verificando si las trayectorias se calculan independientemente..." << std::endl;
 
     // Test 1: Modify one leg's velocity and check if others are affected

@@ -377,11 +377,11 @@ bool WorkspaceValidator::checkJointLimits(int leg_index, const Point3D &target_p
 
     // Calcular la cinemática inversa y comprobar si los ángulos articulares están dentro de los límites
     try {
-        // Para validación, usar ángulos cero como punto de partida
+        // For validation, use zero angles as starting point
         JointAngles zero_angles(0, 0, 0);
         JointAngles angles = model_.inverseKinematicsCurrentGlobalCoordinates(leg_index, zero_angles, target_position);
 
-        // Usar los límites de los parámetros de configuración
+        // Use the limits from configuration parameters
         const Parameters &params = model_.getParams();
         const double COXA_MIN = params.coxa_angle_limits[0];
         const double COXA_MAX = params.coxa_angle_limits[1];

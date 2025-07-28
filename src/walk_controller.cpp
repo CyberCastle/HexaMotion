@@ -68,7 +68,7 @@ WalkController::WalkController(RobotModel &m, Leg legs[NUM_LEGS], const BodyPose
             leg_stance_position.y,
             leg_stance_position.z); // Use standing height for HexaMotion compatibility
 
-        // Crear LegStepper con referencias a los validadores
+            // Update terrain adaptation parameters
         auto stepper = std::make_shared<LegStepper>(i, identity_tip_pose, legs[i], model,
                                                     walkspace_analyzer_.get(), workspace_validator_.get());
         leg_steppers_.push_back(stepper);
@@ -99,7 +99,7 @@ bool WalkController::setGaitConfiguration(const GaitConfiguration &gait_config) 
 }
 
 bool WalkController::setGaitByName(const std::string &gait_name) {
-    // Get gait configuration from factory usando los parámetros del robot
+    // Get gait configuration from factory using the robot parameters
     const Parameters &params = model.getParams();
     GaitConfiguration gait_config;
     if (gait_name == "tripod_gait") {
@@ -146,11 +146,11 @@ void WalkController::applyGaitConfigToLegSteppers(const GaitConfiguration &gait_
         double phase_offset = static_cast<double>(phase_offset_iterations) / static_cast<double>(step_cycle.period_);
         leg_stepper->setPhaseOffset(phase_offset);
 
-        // OpenSHC: Configurar velocidad deseada para el cálculo de stride
+        // OpenSHC: Configure desired velocity for stride calculation
         leg_stepper->setDesiredVelocity(desired_linear_velocity_, desired_angular_velocity_);
     }
 
-    // Actualizar parámetros de adaptación al terreno
+    // Update terrain adaptation parameters
     terrain_adaptation_.setRoughTerrainMode(gait_config.supports_rough_terrain);
 }
 
