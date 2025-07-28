@@ -218,16 +218,16 @@ bool LocomotionSystem::setGaitType(GaitType gait) {
 
     switch (gait) {
     case TRIPOD_GAIT:
-        result = walk_ctrl->setGaitByName("tripod_gait");
+        result = walk_ctrl->setGait(TRIPOD_GAIT);
         break;
     case WAVE_GAIT:
-        result = walk_ctrl->setGaitByName("wave_gait");
+        result = walk_ctrl->setGait(WAVE_GAIT);
         break;
     case RIPPLE_GAIT:
-        result = walk_ctrl->setGaitByName("ripple_gait");
+        result = walk_ctrl->setGait(RIPPLE_GAIT);
         break;
     case METACHRONAL_GAIT:
-        result = walk_ctrl->setGaitByName("metachronal_gait");
+        result = walk_ctrl->setGait(METACHRONAL_GAIT);
         break;
     default:
         return false;
