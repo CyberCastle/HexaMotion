@@ -9,7 +9,7 @@
 #include <math.h>
 #include <vector>
 
-// Eliminar la definición de BASE_THETA_OFFSETS aquí, y moverla a hexamotion_constants.h
+// Remove BASE_THETA_OFFSETS definition from here and move it to hexamotion_constants.h
 
 RobotModel::RobotModel(const Parameters &p) : params(p) {
     // Convert configuration angles from degrees to radians for internal use

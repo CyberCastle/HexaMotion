@@ -174,13 +174,13 @@ GaitConfiguration createMetachronalGaitConfig(const Parameters &params) {
 
 /**
  * @brief Create gait selection configuration with all available gaits
- * @param params Parámetros del robot a usar para la configuración de los gaits
+ * @param params Robot parameters to use for gait configuration
  * @return Complete gait selection configuration
  */
 GaitSelectionConfig createGaitSelectionConfig(const Parameters &params) {
     GaitSelectionConfig config;
 
-    // Usar los parámetros recibidos
+    // Use the received parameters
     // Add all available gaits
     config.available_gaits["wave_gait"] = createWaveGaitConfig(params);
     config.available_gaits["tripod_gait"] = createTripodGaitConfig(params);

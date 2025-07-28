@@ -193,11 +193,11 @@ class WalkController {
     const GaitConfiguration &getCurrentGaitConfig() const { return current_gait_config_; }
 
     /**
-     * @brief Set gait by name using gait factory
-     * @param gait_name Name of the gait to set
+     * @brief Set gait using gait factory
+     * @param gait_type The gait type enum to set
      * @return true if successful, false otherwise
      */
-    bool setGaitByName(const std::string &gait_name);
+    bool setGait(GaitType gait_type);
 
     /**
      * @brief Get current gait name
@@ -334,6 +334,7 @@ class WalkController {
     // Helper methods
     double calculateStabilityIndex() const;
     bool checkTerrainConditions() const;
+    GaitType stringToGaitType(const std::string &gait_name) const;
 };
 
 #endif // WALK_CONTROLLER_H

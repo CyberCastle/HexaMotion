@@ -218,16 +218,16 @@ bool LocomotionSystem::setGaitType(GaitType gait) {
 
     switch (gait) {
     case TRIPOD_GAIT:
-        result = walk_ctrl->setGaitByName("tripod_gait");
+        result = walk_ctrl->setGait(TRIPOD_GAIT);
         break;
     case WAVE_GAIT:
-        result = walk_ctrl->setGaitByName("wave_gait");
+        result = walk_ctrl->setGait(WAVE_GAIT);
         break;
     case RIPPLE_GAIT:
-        result = walk_ctrl->setGaitByName("ripple_gait");
+        result = walk_ctrl->setGait(RIPPLE_GAIT);
         break;
     case METACHRONAL_GAIT:
-        result = walk_ctrl->setGaitByName("metachronal_gait");
+        result = walk_ctrl->setGait(METACHRONAL_GAIT);
         break;
     default:
         return false;
@@ -268,7 +268,7 @@ Point3D LocomotionSystem::calculateFootTrajectory(int leg_index, double phase) {
         return Point3D(0, 0, 0);
     double step_length = walk_ctrl->getStepLength();
     double step_height = walk_ctrl->getStepHeight();
-    // Calcular la posición de la punta usando la configuración moderna
+    // Calculate tip position using modern configuration
     // Aquí puedes llamar a leg_stepper->getCurrentTipPose() o lógica equivalente
     return leg_stepper->getCurrentTipPose();
 }

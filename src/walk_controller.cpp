@@ -45,8 +45,9 @@ WalkController::WalkController(RobotModel &m, Leg legs[NUM_LEGS], const BodyPose
 
     // Initialize gait configuration system (OpenSHC equivalent)
     gait_selection_config_ = createGaitSelectionConfig(model.getParams());
-    std::string default_gait = model.getParams().gait_type.empty() ? "tripod_gait" : model.getParams().gait_type;
-    setGaitByName(default_gait);
+    std::string default_gait_name = model.getParams().gait_type.empty() ? "tripod_gait" : model.getParams().gait_type;
+    GaitType default_gait_type = stringToGaitType(default_gait_name);
+    setGait(default_gait_type);
 
     // Initialize workspace validator
     workspace_validator_ = std::make_unique<WorkspaceValidator>(model);
@@ -68,7 +69,7 @@ WalkController::WalkController(RobotModel &m, Leg legs[NUM_LEGS], const BodyPose
             leg_stance_position.y,
             leg_stance_position.z); // Use standing height for HexaMotion compatibility
 
-        // Crear LegStepper con referencias a los validadores
+        // Update terrain adaptation parameters
         auto stepper = std::make_shared<LegStepper>(i, identity_tip_pose, legs[i], model,
                                                     walkspace_analyzer_.get(), workspace_validator_.get());
         leg_steppers_.push_back(stepper);
@@ -98,20 +99,26 @@ bool WalkController::setGaitConfiguration(const GaitConfiguration &gait_config) 
     return true;
 }
 
-bool WalkController::setGaitByName(const std::string &gait_name) {
-    // Get gait configuration from factory usando los parámetros del robot
+bool WalkController::setGait(GaitType gait_type) {
+    // Get gait configuration from factory using the robot parameters
     const Parameters &params = model.getParams();
     GaitConfiguration gait_config;
-    if (gait_name == "tripod_gait") {
+
+    switch (gait_type) {
+    case TRIPOD_GAIT:
         gait_config = createTripodGaitConfig(params);
-    } else if (gait_name == "wave_gait") {
+        break;
+    case WAVE_GAIT:
         gait_config = createWaveGaitConfig(params);
-    } else if (gait_name == "ripple_gait") {
+        break;
+    case RIPPLE_GAIT:
         gait_config = createRippleGaitConfig(params);
-    } else if (gait_name == "metachronal_gait") {
+        break;
+    case METACHRONAL_GAIT:
         gait_config = createMetachronalGaitConfig(params);
-    } else {
-        // Gait not found, return false
+        break;
+    default:
+        // Unsupported gait type, return false
         return false;
     }
 
@@ -146,11 +153,11 @@ void WalkController::applyGaitConfigToLegSteppers(const GaitConfiguration &gait_
         double phase_offset = static_cast<double>(phase_offset_iterations) / static_cast<double>(step_cycle.period_);
         leg_stepper->setPhaseOffset(phase_offset);
 
-        // OpenSHC: Configurar velocidad deseada para el cálculo de stride
+        // OpenSHC: Configure desired velocity for stride calculation
         leg_stepper->setDesiredVelocity(desired_linear_velocity_, desired_angular_velocity_);
     }
 
-    // Actualizar parámetros de adaptación al terreno
+    // Update terrain adaptation parameters
     terrain_adaptation_.setRoughTerrainMode(gait_config.supports_rough_terrain);
 }
 
@@ -769,4 +776,19 @@ WalkController::LegTrajectoryInfo WalkController::getLegTrajectoryInfo(int leg_i
     info.velocity = leg_stepper->getCurrentTipVelocity();
 
     return info;
+}
+
+// Helper method implementations
+GaitType WalkController::stringToGaitType(const std::string &gait_name) const {
+    if (gait_name == "tripod_gait") {
+        return TRIPOD_GAIT;
+    } else if (gait_name == "wave_gait") {
+        return WAVE_GAIT;
+    } else if (gait_name == "ripple_gait") {
+        return RIPPLE_GAIT;
+    } else if (gait_name == "metachronal_gait") {
+        return METACHRONAL_GAIT;
+    } else {
+        return NO_GAIT; // Default for unknown gait types
+    }
 }
