@@ -332,10 +332,8 @@ class WalkController {
     int global_phase_;
 
     // Helper methods
-    // Helper methods
     double calculateStabilityIndex() const;
     bool checkTerrainConditions() const;
-    double calculateLegReach() const;
 };
 
 #endif // WALK_CONTROLLER_H

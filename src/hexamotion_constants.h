@@ -239,6 +239,14 @@ enum SystemState {
 #define LEG_STEPPER_TOUCHDOWN_NODE_MULTIPLIER 4.0
 #define LEG_STEPPER_TOUCHDOWN_INTERPOLATION 0.5
 
+// ========================================================================
+// STANCE CONFIGURATION CONSTANTS (OpenSHC equivalent)
+// ========================================================================
+
+// Default stance radius factor (OpenSHC equivalent)
+// OpenSHC uses 65% of total leg reach for conservative stance positioning
+#define DEFAULT_STANCE_RADIUS_FACTOR 0.65f // 65% of leg reach for safe stance position
+
 // Per-leg base orientation offsets in radians - symmetric for opposite leg pairs
 // Pairs: (0,3)=(-30°,30°), (1,4)=(-90°,90°), (2,5)=(-150°,150°)
 // This matches the DH parameter orientation
