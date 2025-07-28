@@ -277,23 +277,31 @@ void WalkController::init(const Eigen::Vector3d &current_body_position, const Ei
 
         // Calculate stance position based on leg geometry
         Point3D base_pos = model.getLegBasePosition(leg_index);
-        double base_x = base_pos.x;
-        double base_y = base_pos.y;
-        double base_angle = model.getLegBaseAngleOffset(leg_index);
+        // Use current leg position as default stance pose to preserve startup configuration
+        // This prevents overriding the carefully configured standing positions
+        Point3D current_stance_pose = leg_stepper->getDefaultTipPose();
 
-        // Use 65% of leg reach for safe stance position
-        double leg_reach = params.coxa_length + params.femur_length + params.tibia_length;
-        double safe_reach = leg_reach * 0.65f;
+        // Only recalculate if the default pose is not properly initialized
+        if (current_stance_pose.norm() < 1.0) {
+            double base_x = base_pos.x;
+            double base_y = base_pos.y;
+            double base_angle = model.getLegBaseAngleOffset(leg_index);
 
-        // Use current robot body height
-        double current_body_height = current_body_position.z();
+            // Use 65% of leg reach for safe stance position
+            double leg_reach = params.coxa_length + params.femur_length + params.tibia_length;
+            double safe_reach = leg_reach * 0.65f;
 
-        Point3D stance_tip_pose(
-            base_x + safe_reach * cos(base_angle),
-            base_y + safe_reach * sin(base_angle),
-            current_body_height);
+            // Use current robot body height
+            double current_body_height = current_body_position.z();
 
-        leg_stepper->setDefaultTipPose(stance_tip_pose);
+            Point3D stance_tip_pose(
+                base_x + safe_reach * cos(base_angle),
+                base_y + safe_reach * sin(base_angle),
+                current_body_height);
+
+            leg_stepper->setDefaultTipPose(stance_tip_pose);
+        }
+        // Otherwise preserve the existing well-configured stance position
     }
 
     // Init velocity input variables
