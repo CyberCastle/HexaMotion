@@ -1162,10 +1162,10 @@ int main() {
         }
     }
 
-    // ========== REPORTE FINAL DE ANÁLISIS DE PATAS ==========
+    // ========== FINAL LEG ANALYSIS REPORT ==========
     std::cout << "\n"
               << std::string(60, '=') << std::endl;
-    std::cout << "          REPORTE FINAL DE ANÁLISIS DE PATAS" << std::endl;
+    std::cout << "          FINAL LEG ANALYSIS REPORT" << std::endl;
     std::cout << std::string(60, '=') << std::endl;
 
     // Contadores de éxito
@@ -1173,7 +1173,7 @@ int main() {
     int total_tests_passed = 0;
     int total_tests = NUM_LEGS * 9; // 9 tests por pata
 
-    // Análisis estadístico
+    // Statistical analysis
     double avg_stride_magnitude = 0.0;
     double avg_swing_height = 0.0;
     double min_stride = std::numeric_limits<double>::max();
@@ -1259,15 +1259,15 @@ int main() {
         std::cout << std::endl;
     }
 
-    std::cout << "\n3. ANÁLISIS DE MOVIMIENTO:\n"
+    std::cout << "\n3. MOVEMENT ANALYSIS:\n"
               << std::endl;
-    std::cout << "   • Magnitud promedio de stride: " << std::fixed << std::setprecision(2)
+    std::cout << "   • Average stride magnitude: " << std::fixed << std::setprecision(2)
               << avg_stride_magnitude << " mm" << std::endl;
-    std::cout << "   • Rango de stride: " << min_stride << " - " << max_stride << " mm" << std::endl;
-    std::cout << "   • Altura promedio de swing: " << avg_swing_height << " mm" << std::endl;
-    std::cout << "   • Rango de swing: " << min_swing << " - " << max_swing << " mm" << std::endl;
+    std::cout << "   • Stride range: " << min_stride << " - " << max_stride << " mm" << std::endl;
+    std::cout << "   • Average swing height: " << avg_swing_height << " mm" << std::endl;
+    std::cout << "   • Swing range: " << min_swing << " - " << max_swing << " mm" << std::endl;
 
-    std::cout << "\n4. ANÁLISIS DE CALIDAD:\n"
+    std::cout << "\n4. QUALITY ANALYSIS:\n"
               << std::endl;
 
     // Evaluar consistencia entre patas

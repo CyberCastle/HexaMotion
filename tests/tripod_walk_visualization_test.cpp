@@ -208,10 +208,10 @@ int main() {
     std::cout << "Beginning gait analysis..." << std::endl;
     printTestHeader();
 
-    // 4. Main Simulation Loop con cálculo de iteraciones como en trajectory_tip_position_test
+    // 4. Main Simulation Loop with iteration calculation as in trajectory_tip_position_test
 
     // Verificar que el timing de trayectorias esté sincronizado con trajectory_tip_position_test
-    // AMBOS tests deben usar exactamente la misma configuración de StepCycle
+    // BOTH tests must use exactly the same StepCycle configuration
     std::cout << "=== VERIFICACIÓN DE SINCRONIZACIÓN CON trajectory_tip_position_test ===" << std::endl;
 
     // El sistema LocomotionSystem ya tiene configurado el StepCycle correcto via WalkController
@@ -366,7 +366,7 @@ int main() {
     }
 
     if (final_all_in_stance) {
-        std::cout << "\n=== ANÁLISIS DE TIMING DE TRAYECTORIAS BEZIER ===" << std::endl;
+        std::cout << "\n=== BEZIER TRAJECTORY TIMING ANALYSIS ===" << std::endl;
         std::cout << "CONFIRMACIÓN: Las trayectorias usan el MISMO timing que trajectory_tip_position_test" << std::endl;
         std::cout << "  Swing iterations por ciclo: " << swing_iterations_per_cycle << std::endl;
         std::cout << "  Stance iterations por ciclo: " << stance_iterations_per_cycle << std::endl;
@@ -379,7 +379,7 @@ int main() {
         std::cout << "  ✅ Ambos tests ejecutan exactamente " << swing_iterations_per_cycle << " iteraciones por fase swing" << std::endl;
         std::cout << "  ✅ Ambos tests ejecutan exactamente " << stance_iterations_per_cycle << " iteraciones por fase stance" << std::endl;
         std::cout << "  ✅ Ambos tests usan la secuencia LocomotionSystem::update -> WalkController::updateWalk -> LegStepper::updateTipPositionIterative" << std::endl;
-        std::cout << "  ✅ Configuración de GaitConfiguration y StepCycle totalmente coherente con OpenSHC" << std::endl;
+        std::cout << "  ✅ GaitConfiguration and StepCycle configuration totally coherent with OpenSHC" << std::endl;
 
         std::cout << "\n🎉 TEST PASSED! Gait cycle observed and robot returned to stable standing pose. 🎉" << std::endl;
         std::cout << "🔄 Timing perfectamente sincronizado con trajectory_tip_position_test (52 iteraciones por fase)" << std::endl;

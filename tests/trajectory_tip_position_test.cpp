@@ -640,7 +640,7 @@ int main() {
     LegStepper stepper(0, identity_tip_pose, test_legs[0], model, &walkspace_analyzer, &workspace_validator);
     stepper.setDefaultTipPose(identity_tip_pose);
 
-    // *** CONFIGURAR USANDO PARÁMETROS DEL TRIPOD GAIT ***
+    // *** CONFIGURE USING TRIPOD GAIT PARAMETERS ***
     // Configure StepCycle from tripod gait configuration (OpenSHC style)
     // Use OpenSHC default frequency (1.0 Hz) to ensure consistency with tripod_walk_visualization_test
     double openshc_default_frequency = 1.0; // OpenSHC uses 1.0 Hz as default frequency
@@ -723,7 +723,7 @@ int main() {
     std::cout << "Timing configurado - Total: " << total_iterations << ", Swing: " << swing_iterations << ", Stance: " << stance_iterations << std::endl;
 
     // Show gait configuration being used
-    std::cout << "\nUsando configuración " << tripod_config.gait_name << ":" << std::endl;
+    std::cout << "\nUsing configuration " << tripod_config.gait_name << ":" << std::endl;
     std::cout << "  Stance phase: " << tripod_config.phase_config.stance_phase << std::endl;
     std::cout << "  Swing phase: " << tripod_config.phase_config.swing_phase << std::endl;
     std::cout << "  Phase offset: " << tripod_config.phase_config.phase_offset << std::endl;

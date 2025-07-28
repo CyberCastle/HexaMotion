@@ -288,7 +288,7 @@ BodyPoseConfiguration getHighSpeedPoseConfig(const Parameters &params) {
     return createPoseConfiguration(params, "high_speed");
 }
 
-// Implementación para el linker
+// Implementation for the linker
 BodyPoseConfiguration getDefaultBodyPoseConfig(const Parameters &params) {
     return createPoseConfiguration(params, "default");
 }

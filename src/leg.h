@@ -205,6 +205,20 @@ class Leg {
      */
     void setContactForce(double force) { contact_force_ = force; }
 
+    // ===== OPENSHC-STYLE DESIRED POSITION MANAGEMENT =====
+
+    /**
+     * @brief Set desired tip position for OpenSHC-style batch IK processing
+     * @param position Desired tip position from Bézier trajectory (pure, no IK applied yet)
+     */
+    void setDesiredTipPosition(const Point3D &position) { desired_tip_position_ = position; }
+
+    /**
+     * @brief Get desired tip position for OpenSHC-style batch IK processing
+     * @return Desired tip position from Bézier trajectory
+     */
+    Point3D getDesiredTipPosition() const { return desired_tip_position_; }
+
     // ===== FSR CONTACT HISTORY =====
 
     /**
@@ -343,6 +357,9 @@ class Leg {
 
     // ===== GAIT PHASE OFFSET =====
     double leg_phase_offset_; //< Phase offset for this leg in gait cycle (0.0 to 1.0)
+
+    // ===== OPENSHC-STYLE DESIRED POSITION =====
+    Point3D desired_tip_position_; //< Desired tip position from Bézier trajectory (OpenSHC-style)
 
     // ===== DEFAULT CONFIGURATION =====
     JointAngles default_angles_;   //< Default joint angles
