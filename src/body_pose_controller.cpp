@@ -28,8 +28,8 @@ class BodyPoseController::LegPoserImpl {
 };
 
 BodyPoseController::BodyPoseController(RobotModel &m, const BodyPoseConfiguration &config)
-    : model(m), body_pose_config(config), auto_pose_enabled(false), trajectory_in_progress(false),
-      trajectory_progress(0.0), trajectory_step_count(0), current_gait_type_(TRIPOD_GAIT),
+    : model(m), body_pose_config(config), auto_pose_enabled(false), current_gait_type_(TRIPOD_GAIT),
+      trajectory_in_progress(false), trajectory_progress(0.0), trajectory_step_count(0),
       step_to_new_stance_current_group(0), step_to_new_stance_sequence_generated(false),
       direct_startup_sequence_initialized(false), shutdown_sequence_initialized(false),
       // OpenSHC state variables initialization
