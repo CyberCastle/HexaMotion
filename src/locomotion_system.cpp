@@ -161,7 +161,7 @@ double LocomotionSystem::getJointLimitProximity(int leg_index, const JointAngles
             double half_range = range * 0.5;
             double center = (limits[j][1] + limits[j][0]) * 0.5;
             double distance_from_center = std::abs(joints[j] - center);
-            double proximity = std::clamp<double>((half_range - distance_from_center) / half_range, 0.0, 1.0);
+            double proximity = math_utils::clamp<double>((half_range - distance_from_center) / half_range, 0.0, 1.0);
             min_proximity = std::min(min_proximity, proximity);
         }
     }
@@ -186,9 +186,9 @@ bool LocomotionSystem::setLegJointAngles(int leg, const JointAngles &q) {
     // Clamp angles to joint limits instead of rejecting them
     // This is the OpenSHC approach for handling workspace edge cases
     JointAngles clamped_angles = q;
-    clamped_angles.coxa = std::clamp(q.coxa, params.coxa_angle_limits[0], params.coxa_angle_limits[1]);
-    clamped_angles.femur = std::clamp(q.femur, params.femur_angle_limits[0], params.femur_angle_limits[1]);
-    clamped_angles.tibia = std::clamp(q.tibia, params.tibia_angle_limits[0], params.tibia_angle_limits[1]);
+    clamped_angles.coxa = math_utils::clamp(q.coxa, params.coxa_angle_limits[0], params.coxa_angle_limits[1]);
+    clamped_angles.femur = math_utils::clamp(q.femur, params.femur_angle_limits[0], params.femur_angle_limits[1]);
+    clamped_angles.tibia = math_utils::clamp(q.tibia, params.tibia_angle_limits[0], params.tibia_angle_limits[1]);
 
     // TODO: Disable leg posers temporarily to avoid conflicts
     // Update both joint angles and leg positions in a single atomic operation
@@ -525,7 +525,7 @@ double LocomotionSystem::calculateStabilityIndex() {
     double required_margin = params.stability_margin;
     stability_index = min_edge_distance / (required_margin * 2.0f); // Factor of 2 for good margin
 
-    return std::clamp<double>(stability_index, 0.0, 1.0);
+    return math_utils::clamp<double>(stability_index, 0.0, 1.0);
 }
 
 // Check static stability
@@ -897,7 +897,7 @@ void LocomotionSystem::compensateForSlope() {
 
             // Reduce compensation during high lateral acceleration
             if (lateral_accel > 1.5f) {
-                double dynamic_factor = std::clamp<double>(1.0 - (lateral_accel - 1.5) / 3.0, 0.4, 1.0);
+                double dynamic_factor = math_utils::clamp<double>(1.0 - (lateral_accel - 1.5) / 3.0, 0.4, 1.0);
                 roll_compensation *= dynamic_factor;
                 pitch_compensation *= dynamic_factor;
             }
@@ -938,7 +938,7 @@ double LocomotionSystem::calculateDynamicStabilityIndex() {
 
         if (total_tilt > 5.0f) {
             orientation_stability =
-                std::clamp<double>(1.0 - (total_tilt - 5.0) / 30.0, 0.2, 1.0);
+                math_utils::clamp<double>(1.0 - (total_tilt - 5.0) / 30.0, 0.2, 1.0);
         }
 
         // Dynamic motion stability from linear acceleration
@@ -952,7 +952,7 @@ double LocomotionSystem::calculateDynamicStabilityIndex() {
             // High acceleration reduces stability
             if (acceleration_magnitude > 1.0f) {
                 motion_stability =
-                    std::clamp<double>(1.0 - (acceleration_magnitude - 1.0) / 4.0, 0.3, 1.0);
+                    math_utils::clamp<double>(1.0 - (acceleration_magnitude - 1.0) / 4.0, 0.3, 1.0);
             }
         }
 
@@ -967,7 +967,7 @@ double LocomotionSystem::calculateDynamicStabilityIndex() {
             double rotational_deviation = sqrt(qx * qx + qy * qy + qz * qz);
             if (rotational_deviation > 0.2f) {
                 rotational_stability =
-                    std::clamp<double>(1.0 - (rotational_deviation - 0.2) / 0.6, 0.4, 1.0);
+                    math_utils::clamp<double>(1.0 - (rotational_deviation - 0.2) / 0.6, 0.4, 1.0);
             }
         }
 
@@ -989,7 +989,7 @@ double LocomotionSystem::calculateDynamicStabilityIndex() {
         stability_index = 0.7f * stability_index + 0.3f * fsr_stability; // Blend IMU and FSR
     }
 
-    return std::clamp<double>(stability_index, 0.0, 1.0);
+    return math_utils::clamp<double>(stability_index, 0.0, 1.0);
 }
 
 // Parallel sensor update implementation

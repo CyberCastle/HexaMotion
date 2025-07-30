@@ -90,7 +90,7 @@ double WorkspaceValidator::checkCollisionRisk(int leg_index, const Point3D &targ
         max_risk = std::max(max_risk, risk);
     }
 
-    return std::clamp<double>(max_risk, 0.0, 1.0);
+    return math_utils::clamp<double>(max_risk, 0.0, 1.0);
 }
 
 Point3D WorkspaceValidator::constrainToValidWorkspace(int leg_index, const Point3D &target_position,
@@ -180,7 +180,7 @@ WorkspaceValidator::calculateVelocityConstraints(int leg_index, double bearing_d
 
     // Efficiency decreases as we move away from leg's natural direction
     double directional_efficiency = std::cos(math_utils::degreesToRadians(bearing_offset));
-    directional_efficiency = std::clamp<double>(directional_efficiency, 0.3, 1.0); // Minimum 30% efficiency
+    directional_efficiency = math_utils::clamp<double>(directional_efficiency, 0.3, 1.0); // Minimum 30% efficiency
 
     constraints.workspace_radius = bounds.max_radius * directional_efficiency;
     constraints.stance_radius = bounds.max_radius * 0.8f; // For angular calculations
@@ -206,11 +206,11 @@ WorkspaceValidator::calculateVelocityConstraints(int leg_index, double bearing_d
 
     // Apply reasonable safety limits
     constraints.max_linear_velocity =
-        std::clamp<double>(constraints.max_linear_velocity, 0.0, 5.0);
+        math_utils::clamp<double>(constraints.max_linear_velocity, 0.0, 5.0);
     constraints.max_angular_velocity =
-        std::clamp<double>(constraints.max_angular_velocity, 0.0, 10.0);
+        math_utils::clamp<double>(constraints.max_angular_velocity, 0.0, 10.0);
     constraints.max_acceleration =
-        std::clamp<double>(constraints.max_acceleration, 0.0, 10.0);
+        math_utils::clamp<double>(constraints.max_acceleration, 0.0, 10.0);
 
     return constraints;
 }
@@ -247,7 +247,7 @@ ScalingFactors WorkspaceValidator::getScalingFactors() const {
 
 void WorkspaceValidator::updateSafetyMargin(double margin) {
     config_.safety_margin_factor =
-        std::clamp<double>(margin, 0.1, 1.0);
+        math_utils::clamp<double>(margin, 0.1, 1.0);
 }
 
 void WorkspaceValidator::updateAngularScaling(double scaling) {
@@ -353,7 +353,7 @@ bool WorkspaceValidator::adjustForCollisionAvoidance(int leg_index, Point3D &tar
         }
 
         // If we couldn't find a good scale, use minimum safe distance
-        double safe_scale = std::clamp<double>((leg_reach * 0.7) / distance, 0.5, std::numeric_limits<double>::infinity());
+        double safe_scale = math_utils::clamp<double>((leg_reach * 0.7) / distance, 0.5, std::numeric_limits<double>::infinity());
         target_position.x = base_x + dx * safe_scale;
         target_position.y = base_y + dy * safe_scale;
         return true;

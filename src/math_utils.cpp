@@ -1,6 +1,7 @@
 #include "math_utils.h"
-#include "robot_model.h"
 #include "hexamotion_constants.h"
+#include "robot_model.h"
+#include <algorithm>
 #include <cmath>
 
 // Utility function implementations
@@ -271,8 +272,8 @@ double pointToLineDistance(const Point3D &point, const Point3D &line_start, cons
 
     // Calculate the closest point on the line segment
     Point3D closest_point = Point3D(line_start.x + t * line_vec.x,
-                                   line_start.y + t * line_vec.y,
-                                   line_start.z + t * line_vec.z);
+                                    line_start.y + t * line_vec.y,
+                                    line_start.z + t * line_vec.z);
 
     // Return the distance from the point to the closest point on the line segment
     return distance(point, closest_point);
@@ -298,7 +299,7 @@ Point3D projectVector(const Point3D &vector, const Point3D &onto) {
     return Point3D(onto.x * scale, onto.y * scale, onto.z * scale);
 }
 
-bool solveLeastSquaresPlane(const double* raw_A, const double* raw_B, int num_points, double& a, double& b, double& c) {
+bool solveLeastSquaresPlane(const double *raw_A, const double *raw_B, int num_points, double &a, double &b, double &c) {
 
     // Build normal equations: A^T * A * x = A^T * b
     double ATA[3][3] = {{0}};
@@ -335,21 +336,37 @@ bool solveLeastSquaresPlane(const double* raw_A, const double* raw_B, int num_po
 
     if (abs(det) > 1e-6) { // Check for singular matrix
         a = (ATb[0] * (ATA[1][1] * ATA[2][2] - ATA[1][2] * ATA[2][1]) -
-                ATA[0][1] * (ATb[1] * ATA[2][2] - ATA[1][2] * ATb[2]) +
-                ATA[0][2] * (ATb[1] * ATA[2][1] - ATA[1][1] * ATb[2])) /
-               det;
+             ATA[0][1] * (ATb[1] * ATA[2][2] - ATA[1][2] * ATb[2]) +
+             ATA[0][2] * (ATb[1] * ATA[2][1] - ATA[1][1] * ATb[2])) /
+            det;
         b = (ATA[0][0] * (ATb[1] * ATA[2][2] - ATA[1][2] * ATb[2]) -
-                ATb[0] * (ATA[1][0] * ATA[2][2] - ATA[1][2] * ATA[2][0]) +
-                ATA[0][2] * (ATA[1][0] * ATb[2] - ATb[1] * ATA[2][0])) /
-               det;
+             ATb[0] * (ATA[1][0] * ATA[2][2] - ATA[1][2] * ATA[2][0]) +
+             ATA[0][2] * (ATA[1][0] * ATb[2] - ATb[1] * ATA[2][0])) /
+            det;
         c = (ATA[0][0] * (ATA[1][1] * ATb[2] - ATA[1][2] * ATb[1]) -
-                ATA[0][1] * (ATA[1][0] * ATb[2] - ATA[1][2] * ATb[0]) +
-                ATb[0] * (ATA[1][0] * ATA[2][1] - ATA[1][1] * ATA[2][0])) /
-               det;
+             ATA[0][1] * (ATA[1][0] * ATb[2] - ATA[1][2] * ATb[0]) +
+             ATb[0] * (ATA[1][0] * ATA[2][1] - ATA[1][1] * ATA[2][0])) /
+            det;
         return true;
     }
 
     return false; // Matrix is singular
 }
+
+/**
+ * @brief Compatibility clamp function for pre-C++17 compilers
+ * @param value The value to clamp
+ * @param min_val The minimum allowed value
+ * @param max_val The maximum allowed value
+ * @return The clamped value
+ */
+template <typename T>
+inline constexpr T math_utils::clamp(const T &value, const T &min_val, const T &max_val) {
+    return std::max(min_val, std::min(value, max_val));
+}
+
+// Explicit template instantiation for common types
+template float clamp<float>(const float &value, const float &min_val, const float &max_val);
+template double clamp<double>(const double &value, const double &min_val, const double &max_val);
 
 } // namespace math_utils

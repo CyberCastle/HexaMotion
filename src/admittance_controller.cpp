@@ -188,7 +188,7 @@ Point3D AdmittanceController::calculateAcceleration(const AdmittanceParams &para
 }
 
 double AdmittanceController::calculateStiffnessScale(int leg_index, StepPhase leg_state,
-                                                    const Point3D &leg_position) {
+                                                     const Point3D &leg_position) {
     if (leg_state != SWING_PHASE)
         return 1.0f;
 
@@ -208,7 +208,7 @@ double AdmittanceController::calculateStiffnessScale(int leg_index, StepPhase le
     double normalized_clearance = std::max(step_clearance_, workspace_height_range * 0.1f); // Min 10% of workspace
 
     double step_reference = z_diff / normalized_clearance;
-    step_reference = std::clamp<double>(step_reference, 0.0, 1.0);
+    step_reference = math_utils::clamp<double>(step_reference, 0.0, 1.0);
 
     return step_reference;
 }

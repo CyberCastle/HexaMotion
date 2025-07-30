@@ -370,7 +370,7 @@ void WalkController::updateWalk(const Point3D &linear_velocity_input, double ang
         const double scale_factor = (input_magnitude > limits.linear_x && input_magnitude > 0.0) ? limits.linear_x / input_magnitude : 1.0;
 
         new_linear_velocity = linear_velocity_input * scale_factor;
-        new_angular_velocity = std::clamp(angular_velocity_input, -limits.angular_z, limits.angular_z);
+        new_angular_velocity = math_utils::clamp(angular_velocity_input, -limits.angular_z, limits.angular_z);
 
         // OpenSHC: Optimized acceleration limiting
         const Point3D linear_diff = new_linear_velocity - desired_linear_velocity_;
@@ -386,7 +386,7 @@ void WalkController::updateWalk(const Point3D &linear_velocity_input, double ang
 
         const double angular_diff = new_angular_velocity - desired_angular_velocity_;
         const double max_angular_change = limits.acceleration * time_delta_;
-        limited_angular_velocity = desired_angular_velocity_ + std::clamp(angular_diff, -max_angular_change, max_angular_change);
+        limited_angular_velocity = desired_angular_velocity_ + math_utils::clamp(angular_diff, -max_angular_change, max_angular_change);
     } else {
         // Zero velocities for stopping/stopped
         limited_linear_velocity = Point3D(0, 0, 0);
@@ -515,7 +515,7 @@ void WalkController::updateWalk(const Point3D &linear_velocity_input, double ang
         // OpenSHC: Optimized adaptive velocity control
         if (walk_state_ == WALK_MOVING) {
             if (!analysis_result.is_stable) {
-                const double stability_factor = std::clamp(analysis_result.stability_margin / 50.0, 0.1, 1.0);
+                const double stability_factor = math_utils::clamp(analysis_result.stability_margin / 50.0, 0.1, 1.0);
                 desired_linear_velocity_ = desired_linear_velocity_ * stability_factor;
                 desired_angular_velocity_ *= stability_factor;
             } else {

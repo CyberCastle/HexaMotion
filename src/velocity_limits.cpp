@@ -439,7 +439,7 @@ void VelocityLimits::setSafetyMargin(double margin) {
 }
 
 void VelocityLimits::setAngularVelocityScaling(double scaling) {
-    pimpl_->angular_velocity_scaling_ = std::clamp<double>(scaling, 0.1, 2.0);
+    pimpl_->angular_velocity_scaling_ = math_utils::clamp<double>(scaling, 0.1, 2.0);
 }
 
 Point3D VelocityLimits::calculateStrideVector(double linear_velocity_x, double linear_velocity_y,

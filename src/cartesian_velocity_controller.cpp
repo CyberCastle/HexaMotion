@@ -131,13 +131,13 @@ void CartesianVelocityController::setVelocityScaling(const VelocityScaling &scal
 
     // Validate and clamp scaling parameters
     velocity_scaling_.linear_velocity_scale =
-        std::clamp<double>(velocity_scaling_.linear_velocity_scale, VELOCITY_SCALE_MIN, VELOCITY_SCALE_MAX);
+        math_utils::clamp<double>(velocity_scaling_.linear_velocity_scale, VELOCITY_SCALE_MIN, VELOCITY_SCALE_MAX);
     velocity_scaling_.angular_velocity_scale =
-        std::clamp<double>(velocity_scaling_.angular_velocity_scale, VELOCITY_SCALE_MIN, VELOCITY_SCALE_MAX);
+        math_utils::clamp<double>(velocity_scaling_.angular_velocity_scale, VELOCITY_SCALE_MIN, VELOCITY_SCALE_MAX);
     velocity_scaling_.minimum_speed_ratio =
-        std::clamp<double>(velocity_scaling_.minimum_speed_ratio, SPEED_RATIO_MIN, SPEED_RATIO_MAX_VALIDATION);
+        math_utils::clamp<double>(velocity_scaling_.minimum_speed_ratio, SPEED_RATIO_MIN, SPEED_RATIO_MAX_VALIDATION);
     velocity_scaling_.maximum_speed_ratio =
-        std::clamp<double>(velocity_scaling_.maximum_speed_ratio, SPEED_RATIO_MIN_VALIDATION, SPEED_RATIO_MAX);
+        math_utils::clamp<double>(velocity_scaling_.maximum_speed_ratio, SPEED_RATIO_MIN_VALIDATION, SPEED_RATIO_MAX);
 }
 
 void CartesianVelocityController::setGaitSpeedModifiers(const GaitSpeedModifiers &modifiers) {
@@ -145,15 +145,15 @@ void CartesianVelocityController::setGaitSpeedModifiers(const GaitSpeedModifiers
 
     // Validate and clamp gait modifiers
     gait_modifiers_.tripod_speed_factor =
-        std::clamp<double>(gait_modifiers_.tripod_speed_factor, GAIT_MODIFIER_MIN, GAIT_MODIFIER_MAX);
+        math_utils::clamp<double>(gait_modifiers_.tripod_speed_factor, GAIT_MODIFIER_MIN, GAIT_MODIFIER_MAX);
     gait_modifiers_.wave_speed_factor =
-        std::clamp<double>(gait_modifiers_.wave_speed_factor, GAIT_MODIFIER_MIN, GAIT_MODIFIER_MAX);
+        math_utils::clamp<double>(gait_modifiers_.wave_speed_factor, GAIT_MODIFIER_MIN, GAIT_MODIFIER_MAX);
     gait_modifiers_.ripple_speed_factor =
-        std::clamp<double>(gait_modifiers_.ripple_speed_factor, GAIT_MODIFIER_MIN, GAIT_MODIFIER_MAX);
+        math_utils::clamp<double>(gait_modifiers_.ripple_speed_factor, GAIT_MODIFIER_MIN, GAIT_MODIFIER_MAX);
     gait_modifiers_.metachronal_speed_factor =
-        std::clamp<double>(gait_modifiers_.metachronal_speed_factor, GAIT_MODIFIER_MIN, GAIT_MODIFIER_MAX);
+        math_utils::clamp<double>(gait_modifiers_.metachronal_speed_factor, GAIT_MODIFIER_MIN, GAIT_MODIFIER_MAX);
     gait_modifiers_.adaptive_speed_factor =
-        std::clamp<double>(gait_modifiers_.adaptive_speed_factor, GAIT_MODIFIER_MIN, GAIT_MODIFIER_MAX);
+        math_utils::clamp<double>(gait_modifiers_.adaptive_speed_factor, GAIT_MODIFIER_MIN, GAIT_MODIFIER_MAX);
 }
 
 void CartesianVelocityController::setVelocityControlEnabled(bool enable) {
@@ -209,13 +209,13 @@ double CartesianVelocityController::calculateLinearVelocityScale(double velocity
 
     // Calculate linear scaling: higher velocity = higher servo speed
     double velocity_ratio = velocity_magnitude / max_velocity_mmps;
-    velocity_ratio = std::clamp<double>(velocity_ratio, 0.0, SERVO_SPEED_DEFAULT);
+    velocity_ratio = math_utils::clamp<double>(velocity_ratio, 0.0, SERVO_SPEED_DEFAULT);
 
     // Apply scaling with configured parameters
     double scale = velocity_scaling_.minimum_speed_ratio +
                    (velocity_scaling_.maximum_speed_ratio - velocity_scaling_.minimum_speed_ratio) * velocity_ratio;
 
-    return std::clamp<double>(scale, velocity_scaling_.minimum_speed_ratio,
+    return math_utils::clamp<double>(scale, velocity_scaling_.minimum_speed_ratio,
                               velocity_scaling_.maximum_speed_ratio);
 }
 
@@ -234,12 +234,12 @@ double CartesianVelocityController::calculateAngularVelocityScale(double angular
 
     // Calculate angular scaling: higher angular velocity = higher servo speed for outer legs
     double angular_ratio = angular_velocity / max_angular_velocity_rads;
-    angular_ratio = std::clamp<double>(angular_ratio, 0.0, SERVO_SPEED_DEFAULT);
+    angular_ratio = math_utils::clamp<double>(angular_ratio, 0.0, SERVO_SPEED_DEFAULT);
 
     // Angular motion typically requires faster servo speeds
     double scale = SERVO_SPEED_DEFAULT + angular_ratio * velocity_scaling_.angular_velocity_scale;
 
-    return std::clamp<double>(scale, velocity_scaling_.minimum_speed_ratio,
+    return math_utils::clamp<double>(scale, velocity_scaling_.minimum_speed_ratio,
                               velocity_scaling_.maximum_speed_ratio);
 }
 
@@ -287,13 +287,13 @@ double CartesianVelocityController::calculateLegSpeedCompensation(int leg_index,
     // Higher demand = higher servo speed
     double max_expected_velocity = 500.0f; // mm/s - typical maximum leg velocity
     double velocity_ratio =
-        std::clamp<double>(total_leg_velocity / max_expected_velocity, 0.0,
+        math_utils::clamp<double>(total_leg_velocity / max_expected_velocity, 0.0,
                            SERVO_SPEED_DEFAULT);
 
     // Apply compensation: faster legs need higher servo speeds
     double compensation = SERVO_SPEED_DEFAULT + velocity_ratio * 0.5f; // Up to 50% speed increase
 
-    return std::clamp<double>(compensation, LEG_COMPENSATION_MIN, LEG_COMPENSATION_MAX);
+    return math_utils::clamp<double>(compensation, LEG_COMPENSATION_MIN, LEG_COMPENSATION_MAX);
 }
 
 double CartesianVelocityController::applyWorkspaceConstraints(int leg_index, int joint_index, double base_speed) const {
@@ -333,8 +333,8 @@ double CartesianVelocityController::applyWorkspaceConstraints(int leg_index, int
     min_speed *= scaling_factors.safety_margin;
     max_speed *= scaling_factors.safety_margin;
 
-    constrained_speed = std::clamp<double>(constrained_speed, min_speed, max_speed);
+    constrained_speed = math_utils::clamp<double>(constrained_speed, min_speed, max_speed);
 
     // Final servo speed limits (typical servo constraints)
-    return std::clamp<double>(constrained_speed, SERVO_SPEED_MIN, SERVO_SPEED_MAX);
+    return math_utils::clamp<double>(constrained_speed, SERVO_SPEED_MIN, SERVO_SPEED_MAX);
 }

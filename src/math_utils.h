@@ -164,7 +164,7 @@ inline double smoothStep(double control_input) {
  * @return The interpolated value
  */
 template <class T>
-inline T interpolate(const T& origin, const T& target, double control_input) {
+inline T interpolate(const T &origin, const T &target, double control_input) {
     return (1.0 - control_input) * origin + control_input * target;
 }
 
@@ -229,7 +229,7 @@ using DerivativeFunction = StateVector<T> (*)(const StateVector<T> &state, doubl
  * @param c Output constant term
  * @return true if solution found, false if matrix is singular
  */
-bool solveLeastSquaresPlane(const double* raw_A, const double* raw_B, int num_points, double& a, double& b, double& c);
+bool solveLeastSquaresPlane(const double *raw_A, const double *raw_B, int num_points, double &a, double &b, double &c);
 
 /**
  * @brief Runge-Kutta 4th order integration for differential equations
@@ -308,6 +308,16 @@ StateVector<T> forwardEuler(DerivativeFunction<T> derivative_func,
     StateVector<T> derivatives = derivative_func(initial_state, t0, params);
     return initial_state + derivatives * dt;
 }
+
+/**
+ * @brief Compatibility clamp function for pre-C++17 compilers
+ * @param value The value to clamp
+ * @param min_val The minimum allowed value
+ * @param max_val The maximum allowed value
+ * @return The clamped value
+ */
+template <typename T>
+inline constexpr T clamp(const T &value, const T &min_val, const T &max_val);
 
 } // namespace math_utils
 

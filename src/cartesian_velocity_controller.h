@@ -1,10 +1,10 @@
 #ifndef CARTESIAN_VELOCITY_CONTROLLER_H
 #define CARTESIAN_VELOCITY_CONTROLLER_H
 
-#include "robot_model.h"
 #include "hexamotion_constants.h"
-#include <algorithm>
+#include "robot_model.h"
 #include "velocity_limits.h"
+#include <algorithm>
 #include <array>
 #include <memory>
 
@@ -40,7 +40,7 @@ class CartesianVelocityController {
          */
         double getEffectiveSpeed() const {
             double speed = base_speed * velocity_scaling * angular_compensation * gait_adjustment;
-            return std::clamp<double>(speed, SERVO_SPEED_MIN, SERVO_SPEED_MAX);
+            return std::max(SERVO_SPEED_MIN, std::min(speed, SERVO_SPEED_MAX));
         }
     };
 
@@ -61,7 +61,7 @@ class CartesianVelocityController {
         double angular_velocity_scale = DEFAULT_ANGULAR_VELOCITY_SCALE; // Angular velocity to speed scaling factor
         double minimum_speed_ratio = DEFAULT_MIN_SPEED_RATIO;           // Minimum speed as ratio of max (20%)
         double maximum_speed_ratio = DEFAULT_MAX_SPEED_RATIO;           // Maximum speed as ratio of max (180%)
-        bool enable_adaptive_scaling = true;                           // Enable adaptive scaling based on leg workspace
+        bool enable_adaptive_scaling = true;                            // Enable adaptive scaling based on leg workspace
     };
 
     /**
@@ -188,7 +188,7 @@ class CartesianVelocityController {
      * @return Speed compensation factor for this leg
      */
     double calculateLegSpeedCompensation(int leg_index, double linear_vx,
-                                        double linear_vy, double angular_vel) const;
+                                         double linear_vy, double angular_vel) const;
 
     /**
      * @brief Apply workspace constraints to servo speed.

@@ -731,14 +731,14 @@ double WalkspaceAnalyzer::calculateLegReachability(int leg_index, const Point3D 
     }
 
     double normalized_distance = (distance - bounds.min_radius) / reach_range;
-    return std::clamp<double>(normalized_distance, 0.0, 1.0);
+    return math_utils::clamp<double>(normalized_distance, 0.0, 1.0);
 }
 
 double WalkspaceAnalyzer::calculateOverallStabilityScore(const WalkspaceResult &result) const {
     // Calculate overall stability score based on multiple factors
 
     // Factor 1: Stability margin (0-1)
-    double margin_score = std::clamp<double>(result.stability_margin / 50.0, 0.0, 1.0);
+    double margin_score = math_utils::clamp<double>(result.stability_margin / 50.0, 0.0, 1.0);
 
     // Factor 2: Support polygon area (0-1)
     double polygon_area = 0.0;
@@ -753,13 +753,13 @@ double WalkspaceAnalyzer::calculateOverallStabilityScore(const WalkspaceResult &
     }
 
     // Normalize polygon area (assume maximum reasonable area of 10000 mm²)
-    double polygon_score = std::clamp<double>(polygon_area / 10000.0, 0.0, 1.0);
+    double polygon_score = math_utils::clamp<double>(polygon_area / 10000.0, 0.0, 1.0);
 
     // Factor 3: Reachable area (0-1)
-    double area_score = std::clamp<double>(result.reachable_area / 50000.0, 0.0, 1.0);
+    double area_score = math_utils::clamp<double>(result.reachable_area / 50000.0, 0.0, 1.0);
 
     // Combine factors with weights
     double overall_score = (margin_score * 0.5) + (polygon_score * 0.3) + (area_score * 0.2);
 
-    return std::clamp<double>(overall_score, 0.0, 1.0);
+    return math_utils::clamp<double>(overall_score, 0.0, 1.0);
 }
