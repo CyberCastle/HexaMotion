@@ -24,7 +24,7 @@
  * @param gait_config The gait configuration containing phase and control frequency
  * @return Calculated step frequency in Hz
  */
-static double calculateStepFrequency(const GaitConfiguration &gait_config) {
+__attribute__((unused)) static double calculateStepFrequency(const GaitConfiguration &gait_config) {
     double time_delta = 1.0 / gait_config.control_frequency;
     int base_period = gait_config.phase_config.stance_phase + gait_config.phase_config.swing_phase;
 
@@ -399,7 +399,6 @@ void WalkController::updateWalk(const Point3D &linear_velocity_input, double ang
     // OpenSHC: Optimized state machine with combined leg state checking
     legs_at_correct_phase_ = 0;
     legs_completed_first_step_ = 0;
-    bool all_legs_walking = true;
 
     // Single loop to check all leg states
     for (const auto &leg_stepper : leg_steppers_) {
@@ -407,8 +406,6 @@ void WalkController::updateWalk(const Point3D &linear_velocity_input, double ang
             legs_at_correct_phase_++;
         if (leg_stepper->hasCompletedFirstStep())
             legs_completed_first_step_++;
-        if (leg_stepper->getStepState() == STEP_FORCE_STOP)
-            all_legs_walking = false;
     }
 
     const int leg_count = NUM_LEGS;
@@ -576,7 +573,6 @@ void WalkController::generateWalkspace() {
             Point3D base_pos = model.getLegBasePosition(leg);
             double base_x = base_pos.x;
             double base_y = base_pos.y;
-            double base_angle = model.getLegBaseAngleOffset(leg);
 
             // Calculate reach in bearing direction
             double target_x = base_x + safe_reach * cos(bearing_rad);

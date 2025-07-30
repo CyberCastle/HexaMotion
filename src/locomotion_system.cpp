@@ -212,8 +212,6 @@ bool LocomotionSystem::setLegJointAngles(int leg, const JointAngles &q) {
 
 // Gait planner
 bool LocomotionSystem::setGaitType(GaitType gait) {
-    const Parameters &params = model.getParams();
-
     bool result = false;
 
     switch (gait) {
@@ -266,8 +264,6 @@ Point3D LocomotionSystem::calculateFootTrajectory(int leg_index, double phase) {
     auto leg_stepper = walk_ctrl->getLegStepper(leg_index);
     if (!leg_stepper)
         return Point3D(0, 0, 0);
-    double step_length = walk_ctrl->getStepLength();
-    double step_height = walk_ctrl->getStepHeight();
     // Calculate tip position using modern configuration
     // Aquí puedes llamar a leg_stepper->getCurrentTipPose() o lógica equivalente
     return leg_stepper->getCurrentTipPose();

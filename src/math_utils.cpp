@@ -353,20 +353,4 @@ bool solveLeastSquaresPlane(const double *raw_A, const double *raw_B, int num_po
     return false; // Matrix is singular
 }
 
-/**
- * @brief Compatibility clamp function for pre-C++17 compilers
- * @param value The value to clamp
- * @param min_val The minimum allowed value
- * @param max_val The maximum allowed value
- * @return The clamped value
- */
-template <typename T>
-inline constexpr T math_utils::clamp(const T &value, const T &min_val, const T &max_val) {
-    return std::max(min_val, std::min(value, max_val));
-}
-
-// Explicit template instantiation for common types
-template float clamp<float>(const float &value, const float &min_val, const float &max_val);
-template double clamp<double>(const double &value, const double &min_val, const double &max_val);
-
 } // namespace math_utils

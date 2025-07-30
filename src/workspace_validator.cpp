@@ -171,7 +171,6 @@ WorkspaceValidator::calculateVelocityConstraints(int leg_index, double bearing_d
     WorkspaceBounds bounds = getWorkspaceBounds(leg_index);
 
     // Calculate effective workspace radius based on bearing
-    Point3D leg_base = getLegBase(leg_index);
     double leg_angle = model_.getLegBaseAngleOffset(leg_index) * RADIANS_TO_DEGREES_FACTOR;
     double bearing_offset = std::abs(bearing_degrees - leg_angle);
     if (bearing_offset > 180.0f) {
@@ -269,7 +268,7 @@ double WorkspaceValidator::calculateSafeHexagonRadius(double leg_reach, double s
     // Where c = minimum separation, a = b = hexagon_radius + leg_reach, C = 60°
 
     double min_separation = 2.0f * leg_reach + safety_margin;
-    double cos_60 = 0.5f; // cos(60°) = 0.5
+    // double cos_60 = 0.5f; // cos(60°) = 0.5 - Currently unused
 
     // Solving: min_separation² = 2 * (hexagon_radius + leg_reach)² * (1 - cos_60)
     // min_separation² = 2 * (hexagon_radius + leg_reach)² * 0.5

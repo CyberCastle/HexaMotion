@@ -239,7 +239,6 @@ double LegStepper::calculateStanceStrideScaler() {
 
     // Calculate modified stance period (for STARTING state handling)
     bool standard_stance_period = (step_state_ == STEP_SWING || completed_first_step_);
-    int modified_stance_start = standard_stance_period ? stance_iterations_ : current_iteration_;
     int modified_stance_period = stance_iterations_; // Default to full stance period
 
     if (!standard_stance_period) {

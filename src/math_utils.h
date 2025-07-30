@@ -317,7 +317,10 @@ StateVector<T> forwardEuler(DerivativeFunction<T> derivative_func,
  * @return The clamped value
  */
 template <typename T>
-inline constexpr T clamp(const T &value, const T &min_val, const T &max_val);
+inline constexpr T clamp(const T &value, const T &min_val, const T &max_val) {
+    return (value < min_val) ? min_val : (value > max_val) ? max_val
+                                                           : value;
+}
 
 } // namespace math_utils
 

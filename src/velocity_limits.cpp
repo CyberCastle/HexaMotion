@@ -59,9 +59,7 @@ void VelocityLimits::generateLimits(const GaitConfig &gait_config) {
     // Para cada dirección (bearing), calcular límites de velocidad y aceleración
     for (int bearing = 0; bearing < 360; ++bearing) {
         double walkspace_radius = pimpl_->workspace_config_.walkspace_radius;
-        double on_ground_ratio = gait_config.stance_ratio;
         double step_frequency = gait_config.frequency;
-        double stance_duration = on_ground_ratio / step_frequency;
 
         // Maximum linear speed based on step length and frequency
         double max_step_length = walkspace_radius * 2.0;                    // Maximum step length
@@ -74,7 +72,6 @@ void VelocityLimits::generateLimits(const GaitConfig &gait_config) {
         // Acceleration limits based on step timing
         double time_to_max_stride = gait_config.time_to_max_stride;
         double max_linear_acceleration = max_linear_speed / time_to_max_stride;
-        double max_angular_acceleration = max_angular_speed / time_to_max_stride;
 
         // Crear y asignar los límites
         LimitValues limits;
@@ -237,7 +234,6 @@ void VelocityLimits::calculateOvershoot(const GaitConfig &gait_config) {
     // Get velocity constraints from validator for forward direction (0 degrees)
     auto constraints = pimpl_->workspace_validator_->calculateVelocityConstraints(0, 0.0);
 
-    double max_speed = constraints.max_linear_velocity;
     double max_acceleration = constraints.max_acceleration;
 
     // Overshoot distance during acceleration phase

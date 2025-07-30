@@ -146,7 +146,6 @@ void LegPoser::updateAutoPose(int phase) {
     // Get robot parameters for compensation calculations
     const auto &params = robot_model_.getParams();
     double body_clearance = params.standing_height;
-    double hexagon_radius = params.hexagon_radius;
 
     // Calculate auto pose compensation based on phase
     // This simulates the body pose adjustments during gait execution
@@ -169,7 +168,6 @@ void LegPoser::updateAutoPose(int phase) {
     double y_compensation = 0.0;
 
     // Calculate leg position relative to body center
-    Point3D leg_base_pos = robot_model_.getLegBasePosition(leg_index_);
     double leg_angle = robot_model_.getLegBaseAngleOffset(leg_index_);
 
     // Roll compensation based on leg position (Y-axis variation)
