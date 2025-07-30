@@ -56,11 +56,11 @@
 #define DEFAULT_WAVE_SPEED_FACTOR 0.8        // Default wave gait speed factor
 #define DEFAULT_RIPPLE_SPEED_FACTOR 0.9      // Default ripple gait speed factor
 #define DEFAULT_METACHRONAL_SPEED_FACTOR 1.0 // Default metachronal gait speed factor
-#define DEFAULT_ADAPTIVE_SPEED_FACTOR 1.1f   // Default adaptive gait speed factor
+#define DEFAULT_ADAPTIVE_SPEED_FACTOR 1.1    // Default adaptive gait speed factor
 
 // Velocity multipliers for different joints
-#define FEMUR_VELOCITY_MULTIPLIER 1.1f // Femur velocity scaling multiplier
-#define TIBIA_VELOCITY_MULTIPLIER 1.2  // Tibia velocity scaling multiplier
+#define FEMUR_VELOCITY_MULTIPLIER 1.1 // Femur velocity scaling multiplier
+#define TIBIA_VELOCITY_MULTIPLIER 1.2 // Tibia velocity scaling multiplier
 
 // ========================================================================
 // ANGULAR POSITION CONSTANTS
@@ -75,23 +75,23 @@
 #define TIBIA_ANGLE_MAX 45.0  // Maximum tibia angle (degrees)
 
 // Robot geometry angles
-#define FULL_ROTATION 360.0f // Full rotation in degrees
+#define FULL_ROTATION 360.0 // Full rotation in degrees
 
 // Inverse kinematics starting poses (degrees)
-#define IK_PRIMARY_FEMUR_ANGLE -45.0   // Primary IK guess femur angle
-#define IK_PRIMARY_TIBIA_ANGLE 60.0f   // Primary IK guess tibia angle
-#define IK_HIGH_FEMUR_ANGLE 30.0f      // High pose femur angle
-#define IK_HIGH_TIBIA_ANGLE -60.0f     // High pose tibia angle
-#define IK_EXTENDED_FEMUR_ANGLE -60.0f // Extended pose femur angle
-#define IK_EXTENDED_TIBIA_ANGLE 80.0f  // Extended pose tibia angle
+#define IK_PRIMARY_FEMUR_ANGLE -45.0  // Primary IK guess femur angle
+#define IK_PRIMARY_TIBIA_ANGLE 60.0   // Primary IK guess tibia angle
+#define IK_HIGH_FEMUR_ANGLE 30.0      // High pose femur angle
+#define IK_HIGH_TIBIA_ANGLE -60.0     // High pose tibia angle
+#define IK_EXTENDED_FEMUR_ANGLE -60.0 // Extended pose femur angle
+#define IK_EXTENDED_TIBIA_ANGLE 80.0  // Extended pose tibia angle
 
 // ========================================================================
 // ROBOT PARAMETER DEFAULTS
 // ========================================================================
 
 // Default velocity limits
-#define DEFAULT_MAX_LINEAR_VELOCITY 200.0f // Default maximum linear velocity (mm/s)
-#define DEFAULT_MAX_ANGULAR_VELOCITY 90.0f // Default maximum angular velocity (degrees/s)
+#define DEFAULT_MAX_LINEAR_VELOCITY 200.0 // Default maximum linear velocity (mm/s)
+#define DEFAULT_MAX_ANGULAR_VELOCITY 90.0 // Default maximum angular velocity (degrees/s)
 
 // Control system defaults
 #define DEFAULT_CONTROL_FREQUENCY 50.0 // Default control frequency (Hz)
@@ -139,9 +139,9 @@
 #define WORKSPACE_SCALING_FACTOR 0.5       // Workspace scaling factor
 #define WALKSPACE_SCALING_FACTOR 0.7       // Walkspace scaling factor
 #define MIN_SERVO_VELOCITY 0.1             // Minimum servo velocity (10% of max)
-#define FULL_ROTATION_DEGREES 360.0f       // Full rotation in degrees
-#define HALF_ROTATION_DEGREES 180.0f       // Half rotation in degrees
-#define BEARING_STEP_DEGREES 30.0f         // Bearing sampling step in degrees
+#define FULL_ROTATION_DEGREES 360.0        // Full rotation in degrees
+#define HALF_ROTATION_DEGREES 180.0        // Half rotation in degrees
+#define BEARING_STEP_DEGREES 30.0          // Bearing sampling step in degrees
 
 // ========================================================================
 // MATHEMATICAL CONSTANTS
@@ -155,14 +155,14 @@
                                      // Reference: https://en.wikipedia.org/wiki/Standard_gravity
 
 // Sampling and analysis constants
-#define RADIUS_STEP_DEFAULT 20.0f // Default radius step for sampling (mm)
+#define RADIUS_STEP_DEFAULT 20.0 // Default radius step for sampling (mm)
 
 // ========================================================================
 // INVERSE KINEMATICS CONSTANTS
 // ========================================================================
 
 // DLS (Damped Least Squares) IK parameters (OpenSHC-style)
-#define IK_DLS_COEFFICIENT 0.02f       // Damping factor for numerical stability in DLS method
+#define IK_DLS_COEFFICIENT 0.02        // Damping factor for numerical stability in DLS method
 #define IK_JOINT_LIMIT_COST_WEIGHT 0.1 // Gain used in determining cost weight for joints approaching limits (OpenSHC)
 #define IK_TOLERANCE 1.0               // Position tolerance for IK convergence (1mm)
 #define IK_DEFAULT_MAX_ITERATIONS 30   // Default maximum iterations for IK solver
@@ -180,14 +180,14 @@
 #define DEFAULT_FSR_LIFTOFF_THRESHOLD 5.0    // Default FSR liftoff threshold (N or ADC units)
 
 // Terrain analysis parameters
-#define STEP_DEPTH_DEFAULT 20.0f  // Default step depth for terrain analysis (mm)
+#define STEP_DEPTH_DEFAULT 20.0   // Default step depth for terrain analysis (mm)
 #define STEP_PLANE_CONFIDENCE 0.8 // Default confidence level for step plane validation
 
 // ========================================================================
 // TOLERANCE AND PRECISION CONSTANTS
 // ========================================================================
 
-#define FLOAT_TOLERANCE 1e-6f  // Standard floating point tolerance
+#define FLOAT_TOLERANCE 1e-6   // Standard floating point tolerance
 #define ANGLE_TOLERANCE 0.1    // Angular tolerance (degrees)
 #define POSITION_TOLERANCE 1.0 // Position tolerance (mm)
 #define VELOCITY_THRESHOLD 1.0 // Minimum velocity to consider as moving (mm/s)
@@ -197,14 +197,14 @@
 // ========================================================================
 
 // Auto-pose phase conversion constants
-#define AUTO_POSE_PHASE_CONVERSION_FACTOR 100.0f  // Conversion factor from gait phase (0.0-1.0) to phase (0-100)
+#define AUTO_POSE_PHASE_CONVERSION_FACTOR 100.0   // Conversion factor from gait phase (0.0-1.0) to phase (0-100)
 #define AUTO_POSE_GAIT_PHASE_THRESHOLD 0.5        // Threshold for determining tripod gait group phases
 #define AUTO_POSE_BODY_COMPENSATION_REDUCTION 0.5 // Reduction factor for body-level compensation amplitudes
 
 // Auto-pose default amplitudes (OpenSHC auto_pose.yaml equivalent)
-#define AUTO_POSE_DEFAULT_ROLL_AMPLITUDE 0.015f  // Default roll compensation amplitude (radians)
-#define AUTO_POSE_DEFAULT_PITCH_AMPLITUDE 0.020f // Default pitch compensation amplitude (radians)
-#define AUTO_POSE_DEFAULT_Z_AMPLITUDE 0.020f     // Default Z compensation amplitude (millimeters)
+#define AUTO_POSE_DEFAULT_ROLL_AMPLITUDE 0.015  // Default roll compensation amplitude (radians)
+#define AUTO_POSE_DEFAULT_PITCH_AMPLITUDE 0.020 // Default pitch compensation amplitude (radians)
+#define AUTO_POSE_DEFAULT_Z_AMPLITUDE 0.020     // Default Z compensation amplitude (millimeters)
 
 // ========================================================================
 // SYSTEM STATE CONSTANTS
@@ -219,17 +219,17 @@ enum SystemState {
 };
 
 // Startup sequence constants
-#define STARTUP_SEQUENCE_TIME 6.0f     // Time for startup sequence (seconds)
-#define SHUTDOWN_SEQUENCE_TIME 4.0f    // Time for shutdown sequence (seconds)
-#define STANCE_TRANSITION_HEIGHT 30.0f // Height for stance transition (mm)
-#define STANCE_TRANSITION_TIME 0.5     // Time for stance transition (seconds)
+#define STARTUP_SEQUENCE_TIME 6.0     // Time for startup sequence (seconds)
+#define SHUTDOWN_SEQUENCE_TIME 4.0    // Time for shutdown sequence (seconds)
+#define STANCE_TRANSITION_HEIGHT 30.0 // Height for stance transition (mm)
+#define STANCE_TRANSITION_TIME 0.5    // Time for stance transition (seconds)
 
 // Progress constants
 #define PROGRESS_COMPLETE 100  // Sequence completed
 #define PROGRESS_GENERATING -1 // Sequence is being generated
 
 #define LEG_STEPPER_DUTY_FACTOR 0.5
-#define LEG_STEPPER_FLOAT_TOLERANCE 1e-6f
+#define LEG_STEPPER_FLOAT_TOLERANCE 1e-6
 #define LEG_STEPPER_MAX_SWING_VELOCITY 100.0
 #define LEG_STEPPER_DEFAULT_NODE_SEPARATION 0.05
 #define LEG_STEPPER_DEFAULT_TOUCHDOWN_VELOCITY -0.2
@@ -245,7 +245,7 @@ enum SystemState {
 
 // Default stance radius factor (OpenSHC equivalent)
 // OpenSHC uses 65% of total leg reach for conservative stance positioning
-#define DEFAULT_STANCE_RADIUS_FACTOR 0.65f // 65% of leg reach for safe stance position
+#define DEFAULT_STANCE_RADIUS_FACTOR 0.65 // 65% of leg reach for safe stance position
 
 // Per-leg base orientation offsets in radians - symmetric for opposite leg pairs
 // Pairs: (0,3)=(-30°,30°), (1,4)=(-90°,90°), (2,5)=(-150°,150°)
