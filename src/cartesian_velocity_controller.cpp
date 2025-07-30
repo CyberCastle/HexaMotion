@@ -87,7 +87,7 @@ bool CartesianVelocityController::updateServoSpeeds(double linear_velocity_x, do
                 double workspace_constrained_speed = applyWorkspaceConstraints(leg, joint,
                                                                                joint_config->getEffectiveSpeed());
                 // Update the velocity scaling to match workspace constraints
-                if (joint_config->base_speed > 0.0f) {
+                if (joint_config->base_speed > 0.0) {
                     joint_config->velocity_scaling = workspace_constrained_speed / joint_config->base_speed;
                 }
             }
@@ -174,7 +174,7 @@ double CartesianVelocityController::getCurrentVelocityMagnitude() const {
     const Parameters &params = model_.getParams();
     double angular_linear_equiv = angular_magnitude * params.hexagon_radius; // Keep in mm
 
-    return linear_magnitude + angular_linear_equiv * 0.5f; // Angular contributes 50% to total
+    return linear_magnitude + angular_linear_equiv * 0.5; // Angular contributes 50% to total
 }
 
 void CartesianVelocityController::resetToDefaults() {
@@ -189,9 +189,9 @@ void CartesianVelocityController::resetToDefaults() {
     }
 
     // Reset velocity state
-    current_linear_vx_ = 0.0f;
-    current_linear_vy_ = 0.0f;
-    current_angular_velocity_ = 0.0f;
+    current_linear_vx_ = 0.0;
+    current_linear_vy_ = 0.0;
+    current_angular_velocity_ = 0.0;
 }
 
 double CartesianVelocityController::calculateLinearVelocityScale(double velocity_magnitude) const {
@@ -285,13 +285,13 @@ double CartesianVelocityController::calculateLegSpeedCompensation(int leg_index,
 
     // Scale servo speed based on leg velocity demand
     // Higher demand = higher servo speed
-    double max_expected_velocity = 500.0f; // mm/s - typical maximum leg velocity
+    double max_expected_velocity = 500.0; // mm/s - typical maximum leg velocity
     double velocity_ratio =
         math_utils::clamp<double>(total_leg_velocity / max_expected_velocity, 0.0,
                            SERVO_SPEED_DEFAULT);
 
     // Apply compensation: faster legs need higher servo speeds
-    double compensation = SERVO_SPEED_DEFAULT + velocity_ratio * 0.5f; // Up to 50% speed increase
+    double compensation = SERVO_SPEED_DEFAULT + velocity_ratio * 0.5; // Up to 50% speed increase
 
     return math_utils::clamp<double>(compensation, LEG_COMPENSATION_MIN, LEG_COMPENSATION_MAX);
 }
@@ -320,7 +320,7 @@ double CartesianVelocityController::applyWorkspaceConstraints(int leg_index, int
         break;
     case 2: // Tibia joint
         // Tibia provides fine positioning - use full scaling
-        constrained_speed *= scaling_factors.velocity_scale * 1.1f; // 10% boost for precision
+        constrained_speed *= scaling_factors.velocity_scale * 1.1; // 10% boost for precision
         break;
     }
 

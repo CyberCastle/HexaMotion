@@ -2,6 +2,7 @@
 #define CARTESIAN_VELOCITY_CONTROLLER_H
 
 #include "hexamotion_constants.h"
+#include "math_utils.h"
 #include "robot_model.h"
 #include "velocity_limits.h"
 #include <algorithm>
@@ -40,7 +41,7 @@ class CartesianVelocityController {
          */
         double getEffectiveSpeed() const {
             double speed = base_speed * velocity_scaling * angular_compensation * gait_adjustment;
-            return std::max(SERVO_SPEED_MIN, std::min(speed, SERVO_SPEED_MAX));
+            return math_utils::clamp(speed, SERVO_SPEED_MIN, SERVO_SPEED_MAX);
         }
     };
 

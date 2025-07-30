@@ -16,69 +16,69 @@
 #endif
 
 #define NUM_LEGS 6
-#define DEGREES_TO_RADIANS_FACTOR (M_PI / 180.0f)
+#define DEGREES_TO_RADIANS_FACTOR (M_PI / 180.0)
 
 // ========================================================================
 // VELOCITY CONTROL CONSTANTS
 // ========================================================================
 
 // Servo speed limits and defaults
-#define SERVO_SPEED_MIN 0.1f     // Minimum servo speed multiplier
-#define SERVO_SPEED_MAX 3.0f     // Maximum servo speed multiplier
-#define SERVO_SPEED_DEFAULT 1.0f // Default servo speed multiplier
+#define SERVO_SPEED_MIN 0.1     // Minimum servo speed multiplier
+#define SERVO_SPEED_MAX 3.0     // Maximum servo speed multiplier
+#define SERVO_SPEED_DEFAULT 1.0 // Default servo speed multiplier
 
 // Velocity scaling limits
-#define VELOCITY_SCALE_MIN 0.1f // Minimum velocity scaling factor
-#define VELOCITY_SCALE_MAX 5.0f // Maximum velocity scaling factor
+#define VELOCITY_SCALE_MIN 0.1 // Minimum velocity scaling factor
+#define VELOCITY_SCALE_MAX 5.0 // Maximum velocity scaling factor
 
 // Speed ratio limits
-#define SPEED_RATIO_MIN 0.05f            // Minimum speed ratio (5%)
-#define SPEED_RATIO_MAX_VALIDATION 0.95f // Maximum for minimum_speed_ratio validation
-#define SPEED_RATIO_MIN_VALIDATION 1.05f // Minimum for maximum_speed_ratio validation
-#define SPEED_RATIO_MAX 3.0f             // Maximum speed ratio (300%)
+#define SPEED_RATIO_MIN 0.05            // Minimum speed ratio (5%)
+#define SPEED_RATIO_MAX_VALIDATION 0.95 // Maximum for minimum_speed_ratio validation
+#define SPEED_RATIO_MIN_VALIDATION 1.05 // Minimum for maximum_speed_ratio validation
+#define SPEED_RATIO_MAX 3.0             // Maximum speed ratio (300%)
 
 // Gait modifier limits
-#define GAIT_MODIFIER_MIN 0.1f // Minimum gait speed modifier
-#define GAIT_MODIFIER_MAX 2.0f // Maximum gait speed modifier
+#define GAIT_MODIFIER_MIN 0.1 // Minimum gait speed modifier
+#define GAIT_MODIFIER_MAX 2.0 // Maximum gait speed modifier
 
 // Leg compensation limits
-#define LEG_COMPENSATION_MIN 0.5f // Minimum leg speed compensation
-#define LEG_COMPENSATION_MAX 2.0f // Maximum leg speed compensation
+#define LEG_COMPENSATION_MIN 0.5 // Minimum leg speed compensation
+#define LEG_COMPENSATION_MAX 2.0 // Maximum leg speed compensation
 
 // Default velocity scaling factors
-#define DEFAULT_LINEAR_VELOCITY_SCALE 2.0f  // Default linear velocity scaling factor
-#define DEFAULT_ANGULAR_VELOCITY_SCALE 1.5f // Default angular velocity scaling factor
-#define DEFAULT_MIN_SPEED_RATIO 0.2f        // Default minimum speed ratio (20%)
-#define DEFAULT_MAX_SPEED_RATIO 1.8f        // Default maximum speed ratio (180%)
+#define DEFAULT_LINEAR_VELOCITY_SCALE 2.0  // Default linear velocity scaling factor
+#define DEFAULT_ANGULAR_VELOCITY_SCALE 1.5 // Default angular velocity scaling factor
+#define DEFAULT_MIN_SPEED_RATIO 0.2        // Default minimum speed ratio (20%)
+#define DEFAULT_MAX_SPEED_RATIO 1.8        // Default maximum speed ratio (180%)
 
 // Default gait speed factors
-#define DEFAULT_TRIPOD_SPEED_FACTOR 1.2f      // Default tripod gait speed factor
-#define DEFAULT_WAVE_SPEED_FACTOR 0.8f        // Default wave gait speed factor
-#define DEFAULT_RIPPLE_SPEED_FACTOR 0.9f      // Default ripple gait speed factor
-#define DEFAULT_METACHRONAL_SPEED_FACTOR 1.0f // Default metachronal gait speed factor
-#define DEFAULT_ADAPTIVE_SPEED_FACTOR 1.1f    // Default adaptive gait speed factor
+#define DEFAULT_TRIPOD_SPEED_FACTOR 1.2      // Default tripod gait speed factor
+#define DEFAULT_WAVE_SPEED_FACTOR 0.8        // Default wave gait speed factor
+#define DEFAULT_RIPPLE_SPEED_FACTOR 0.9      // Default ripple gait speed factor
+#define DEFAULT_METACHRONAL_SPEED_FACTOR 1.0 // Default metachronal gait speed factor
+#define DEFAULT_ADAPTIVE_SPEED_FACTOR 1.1f   // Default adaptive gait speed factor
 
 // Velocity multipliers for different joints
 #define FEMUR_VELOCITY_MULTIPLIER 1.1f // Femur velocity scaling multiplier
-#define TIBIA_VELOCITY_MULTIPLIER 1.2f // Tibia velocity scaling multiplier
+#define TIBIA_VELOCITY_MULTIPLIER 1.2  // Tibia velocity scaling multiplier
 
 // ========================================================================
 // ANGULAR POSITION CONSTANTS
 // ========================================================================
 
 // Joint angle limits (degrees)
-#define COXA_ANGLE_MIN -65.0f  // Minimum coxa angle (degrees)
-#define COXA_ANGLE_MAX 65.0f   // Maximum coxa angle (degrees)
-#define FEMUR_ANGLE_MIN -75.0f // Minimum femur angle (degrees)
-#define FEMUR_ANGLE_MAX 75.0f  // Maximum femur angle (degrees)
-#define TIBIA_ANGLE_MIN -45.0f // Minimum tibia angle (degrees)
-#define TIBIA_ANGLE_MAX 45.0f  // Maximum tibia angle (degrees)
+#define COXA_ANGLE_MIN -65.0  // Minimum coxa angle (degrees)
+#define COXA_ANGLE_MAX 65.0   // Maximum coxa angle (degrees)
+#define FEMUR_ANGLE_MIN -75.0 // Minimum femur angle (degrees)
+#define FEMUR_ANGLE_MAX 75.0  // Maximum femur angle (degrees)
+#define TIBIA_ANGLE_MIN -45.0 // Minimum tibia angle (degrees)
+#define TIBIA_ANGLE_MAX 45.0  // Maximum tibia angle (degrees)
 
 // Robot geometry angles
 #define FULL_ROTATION 360.0f // Full rotation in degrees
 
 // Inverse kinematics starting poses (degrees)
-#define IK_PRIMARY_FEMUR_ANGLE -45.0f  // Primary IK guess femur angle
+#define IK_PRIMARY_FEMUR_ANGLE -45.0   // Primary IK guess femur angle
 #define IK_PRIMARY_TIBIA_ANGLE 60.0f   // Primary IK guess tibia angle
 #define IK_HIGH_FEMUR_ANGLE 30.0f      // High pose femur angle
 #define IK_HIGH_TIBIA_ANGLE -60.0f     // High pose tibia angle
@@ -147,12 +147,12 @@
 // MATHEMATICAL CONSTANTS
 // ========================================================================
 
-#define DEGREES_TO_RADIANS_FACTOR (M_PI / 180.0f) // Conversion factor degrees to radians
-#define RADIANS_TO_DEGREES_FACTOR (180.0f / M_PI) // Conversion factor radians to degrees
+#define DEGREES_TO_RADIANS_FACTOR (M_PI / 180.0) // Conversion factor degrees to radians
+#define RADIANS_TO_DEGREES_FACTOR (180.0 / M_PI) // Conversion factor radians to degrees
 
 // Physics constants
-#define GRAVITY_ACCELERATION 9806.65f // Standard gravity acceleration (mm/s²) - BIPM definition
-                                      // Reference: https://en.wikipedia.org/wiki/Standard_gravity
+#define GRAVITY_ACCELERATION 9806.65 // Standard gravity acceleration (mm/s²) - BIPM definition
+                                     // Reference: https://en.wikipedia.org/wiki/Standard_gravity
 
 // Sampling and analysis constants
 #define RADIUS_STEP_DEFAULT 20.0f // Default radius step for sampling (mm)
@@ -162,11 +162,11 @@
 // ========================================================================
 
 // DLS (Damped Least Squares) IK parameters (OpenSHC-style)
-#define IK_DLS_COEFFICIENT 0.02f        // Damping factor for numerical stability in DLS method
-#define IK_JOINT_LIMIT_COST_WEIGHT 0.1f // Gain used in determining cost weight for joints approaching limits (OpenSHC)
-#define IK_TOLERANCE 1.0f               // Position tolerance for IK convergence (1mm)
-#define IK_DEFAULT_MAX_ITERATIONS 30    // Default maximum iterations for IK solver
-#define IK_MAX_ANGLE_STEP 5.0f          // Maximum angle change per IK iteration (degrees)
+#define IK_DLS_COEFFICIENT 0.02f       // Damping factor for numerical stability in DLS method
+#define IK_JOINT_LIMIT_COST_WEIGHT 0.1 // Gain used in determining cost weight for joints approaching limits (OpenSHC)
+#define IK_TOLERANCE 1.0               // Position tolerance for IK convergence (1mm)
+#define IK_DEFAULT_MAX_ITERATIONS 30   // Default maximum iterations for IK solver
+#define IK_MAX_ANGLE_STEP 5.0          // Maximum angle change per IK iteration (degrees)
 
 // Workspace analysis parameters
 #define WORKSPACE_RESOLUTION 10 // Discretization resolution for workspace analysis
@@ -176,30 +176,30 @@
 // ========================================================================
 
 // Default FSR threshold values for terrain contact detection
-#define DEFAULT_FSR_TOUCHDOWN_THRESHOLD 10.0f // Default FSR touchdown threshold (N or ADC units)
-#define DEFAULT_FSR_LIFTOFF_THRESHOLD 5.0f    // Default FSR liftoff threshold (N or ADC units)
+#define DEFAULT_FSR_TOUCHDOWN_THRESHOLD 10.0 // Default FSR touchdown threshold (N or ADC units)
+#define DEFAULT_FSR_LIFTOFF_THRESHOLD 5.0    // Default FSR liftoff threshold (N or ADC units)
 
 // Terrain analysis parameters
-#define STEP_DEPTH_DEFAULT 20.0f   // Default step depth for terrain analysis (mm)
-#define STEP_PLANE_CONFIDENCE 0.8f // Default confidence level for step plane validation
+#define STEP_DEPTH_DEFAULT 20.0f  // Default step depth for terrain analysis (mm)
+#define STEP_PLANE_CONFIDENCE 0.8 // Default confidence level for step plane validation
 
 // ========================================================================
 // TOLERANCE AND PRECISION CONSTANTS
 // ========================================================================
 
-#define FLOAT_TOLERANCE 1e-6f   // Standard floating point tolerance
-#define ANGLE_TOLERANCE 0.1f    // Angular tolerance (degrees)
-#define POSITION_TOLERANCE 1.0f // Position tolerance (mm)
-#define VELOCITY_THRESHOLD 1.0f // Minimum velocity to consider as moving (mm/s)
+#define FLOAT_TOLERANCE 1e-6f  // Standard floating point tolerance
+#define ANGLE_TOLERANCE 0.1    // Angular tolerance (degrees)
+#define POSITION_TOLERANCE 1.0 // Position tolerance (mm)
+#define VELOCITY_THRESHOLD 1.0 // Minimum velocity to consider as moving (mm/s)
 
 // ========================================================================
 // AUTO-POSE CONSTANTS (OpenSHC equivalent)
 // ========================================================================
 
 // Auto-pose phase conversion constants
-#define AUTO_POSE_PHASE_CONVERSION_FACTOR 100.0f   // Conversion factor from gait phase (0.0-1.0) to phase (0-100)
-#define AUTO_POSE_GAIT_PHASE_THRESHOLD 0.5f        // Threshold for determining tripod gait group phases
-#define AUTO_POSE_BODY_COMPENSATION_REDUCTION 0.5f // Reduction factor for body-level compensation amplitudes
+#define AUTO_POSE_PHASE_CONVERSION_FACTOR 100.0f  // Conversion factor from gait phase (0.0-1.0) to phase (0-100)
+#define AUTO_POSE_GAIT_PHASE_THRESHOLD 0.5        // Threshold for determining tripod gait group phases
+#define AUTO_POSE_BODY_COMPENSATION_REDUCTION 0.5 // Reduction factor for body-level compensation amplitudes
 
 // Auto-pose default amplitudes (OpenSHC auto_pose.yaml equivalent)
 #define AUTO_POSE_DEFAULT_ROLL_AMPLITUDE 0.015f  // Default roll compensation amplitude (radians)
@@ -222,7 +222,7 @@ enum SystemState {
 #define STARTUP_SEQUENCE_TIME 6.0f     // Time for startup sequence (seconds)
 #define SHUTDOWN_SEQUENCE_TIME 4.0f    // Time for shutdown sequence (seconds)
 #define STANCE_TRANSITION_HEIGHT 30.0f // Height for stance transition (mm)
-#define STANCE_TRANSITION_TIME 0.5f    // Time for stance transition (seconds)
+#define STANCE_TRANSITION_TIME 0.5     // Time for stance transition (seconds)
 
 // Progress constants
 #define PROGRESS_COMPLETE 100  // Sequence completed
