@@ -33,12 +33,12 @@ __attribute__((unused)) static double calculateStepFrequency(const GaitConfigura
 }
 
 WalkController::WalkController(RobotModel &m, Leg legs[NUM_LEGS], const BodyPoseConfiguration &pose_config)
-    : model(m), terrain_adaptation_(m), body_pose_controller_(nullptr), velocity_limits_(m),
+    : model(m), terrain_adaptation_(m), body_pose_controller_(nullptr),
       step_clearance_(30.0), step_depth_(10.0),
       desired_linear_velocity_(0, 0, 0), desired_angular_velocity_(0.0),
       walk_state_(WALK_STOPPED), pose_state_(0),
       regenerate_walkspace_(false), legs_at_correct_phase_(0), legs_completed_first_step_(0),
-      return_to_default_attempted_(false), legs_array_(legs) {
+      return_to_default_attempted_(false), velocity_limits_(m), legs_array_(legs) {
 
     // Initialize leg_steppers_ with references to actual legs from LocomotionSystem
     leg_steppers_.clear();
@@ -134,7 +134,7 @@ void WalkController::applyGaitConfigToLegSteppers(const GaitConfiguration &gait_
     StepCycle step_cycle = gait_config.generateStepCycle(step_frequency);
 
     // Apply StepCycle and gait configuration to each LegStepper
-    for (int i = 0; i < NUM_LEGS && i < leg_steppers_.size(); i++) {
+    for (int i = 0; i < NUM_LEGS && i < static_cast<int>(leg_steppers_.size()); i++) {
         auto leg_stepper = leg_steppers_[i];
         if (!leg_stepper)
             continue;
