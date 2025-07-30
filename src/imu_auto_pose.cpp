@@ -241,13 +241,13 @@ void IMUAutoPose::applyAutoPose() {
         return;
 
     // Create pose state for manual pose controller
-    ManualPoseController::PoseState auto_pose_state;
+    ManualBodyPoseController::BodyPoseState auto_pose_state;
     auto_pose_state.body_rotation = current_state_.correction_pose;
     auto_pose_state.pose_active = true;
     auto_pose_state.pose_blend_factor = current_state_.confidence;
 
     // Apply pose through manual pose controller
-            body_pose_controller_.setTargetBodyPose(auto_pose_state);
+    body_pose_controller_.setTargetBodyPose(auto_pose_state);
 }
 
 void IMUAutoPose::updateLevelMode() {
@@ -396,8 +396,8 @@ double IMUAutoPose::calculateConfidence(const Point3D &orientation_error) const 
 void IMUAutoPose::updateAdaptiveGains() {
     // Enhanced terrain roughness estimation from IMU variance
     double orientation_variance = abs(current_state_.orientation_error.x) +
-                                 abs(current_state_.orientation_error.y) +
-                                 abs(current_state_.orientation_error.z);
+                                  abs(current_state_.orientation_error.y) +
+                                  abs(current_state_.orientation_error.z);
 
     // Update terrain roughness estimate with exponential smoothing
     double alpha = 0.1f; // Smoothing factor
@@ -408,8 +408,8 @@ void IMUAutoPose::updateAdaptiveGains() {
 
     // Calculate acceleration variance for additional terrain assessment
     double accel_variance = abs(current_imu_data.accel_x - previous_acceleration_.x) +
-                           abs(current_imu_data.accel_y - previous_acceleration_.y) +
-                           abs(current_imu_data.accel_z - previous_acceleration_.z);
+                            abs(current_imu_data.accel_y - previous_acceleration_.y) +
+                            abs(current_imu_data.accel_z - previous_acceleration_.z);
 
     // Store current acceleration for next iteration
     previous_acceleration_.x = current_imu_data.accel_x;
