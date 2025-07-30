@@ -79,7 +79,7 @@ void ManualBodyPoseController::processInputExtended(double x, double y, double z
     }
 }
 
-void ManualPoseController::setTargetPose(const PoseState &target) {
+void ManualBodyPoseController::setTargetBodyPose(const BodyPoseState &target) {
     target_pose_ = target;
 
     // Constrain target pose
@@ -92,7 +92,7 @@ void ManualPoseController::setTargetPose(const PoseState &target) {
     }
 }
 
-void ManualPoseController::updatePoseInterpolation(double dt) {
+void ManualBodyPoseController::updateBodyPoseInterpolation(double dt) {
     if (!smooth_transitions_) {
         current_pose_ = target_pose_;
         return;
@@ -123,42 +123,42 @@ void ManualPoseController::updatePoseInterpolation(double dt) {
                                                        target_pose_.pose_blend_factor, alpha);
 }
 
-void ManualPoseController::resetPose() {
-    current_pose_ = PoseState();
-    target_pose_ = PoseState();
+void ManualBodyPoseController::resetBodyPose() {
+    current_pose_ = BodyPoseState();
+    target_pose_ = BodyPoseState();
 
     // Calculate default leg positions
     calculateDefaultLegPositions();
 }
 
-void ManualPoseController::setSmoothTransitions(bool enable, double speed) {
+void ManualBodyPoseController::setSmoothBodyPoseTransitions(bool enable, double speed) {
     smooth_transitions_ = enable;
     interpolation_speed_ = std::max(0.01, std::min(DEFAULT_ANGULAR_SCALING, speed));
 }
 
-void ManualPoseController::savePosePreset(const std::string &name) {
-    pose_presets_[name] = current_pose_;
+void ManualBodyPoseController::saveBodyPosePreset(const std::string &name) {
+    body_pose_presets_[name] = current_pose_;
 }
 
-bool ManualPoseController::loadPosePreset(const std::string &name) {
-    auto it = pose_presets_.find(name);
-    if (it != pose_presets_.end()) {
-        setTargetPose(it->second);
+bool ManualBodyPoseController::loadBodyPosePreset(const std::string &name) {
+    auto it = body_pose_presets_.find(name);
+    if (it != body_pose_presets_.end()) {
+        setTargetBodyPose(it->second);
         return true;
     }
     return false;
 }
 
-std::vector<std::string> ManualPoseController::getPosePresetNames() const {
+std::vector<std::string> ManualBodyPoseController::getBodyPosePresetNames() const {
     std::vector<std::string> names;
-    for (const auto &preset : pose_presets_) {
+    for (const auto &preset : body_pose_presets_) {
         names.push_back(preset.first);
     }
     return names;
 }
 
-bool ManualPoseController::applyPose(const PoseState &pose, Point3D leg_positions[NUM_LEGS],
-                                     JointAngles joint_angles[NUM_LEGS]) {
+bool ManualBodyPoseController::applyBodyPose(const BodyPoseState &pose, Point3D leg_positions[NUM_LEGS],
+                                             JointAngles joint_angles[NUM_LEGS]) {
     bool success = true;
 
     // Calculate leg positions with body pose applied
@@ -194,9 +194,8 @@ bool ManualPoseController::applyPose(const PoseState &pose, Point3D leg_position
         // Apply individual leg adjustments
         leg_positions[i] = rotated_pos + pose.leg_positions[i];
 
-        // Calculate joint angles
-        JointAngles current_angles = model_.getLegs()[i].getJointAngles();
-        joint_angles[i] = model_.inverseKinematicsCurrentGlobalCoordinates(i, current_angles, leg_positions[i]);
+        // Calculate joint angles using basic inverse kinematics
+        joint_angles[i] = model_.inverseKinematicsGlobalCoordinates(i, leg_positions[i]);
 
         // Check if solution is valid
         if (!model_.checkJointLimits(i, joint_angles[i])) {
@@ -207,50 +206,50 @@ bool ManualPoseController::applyPose(const PoseState &pose, Point3D leg_position
     return success;
 }
 
-void ManualPoseController::initializePoseLimits() {
+void ManualBodyPoseController::initializeBodyPoseLimits() {
     const Parameters &params = model_.getParams();
 
     // Set reasonable pose limits based on robot geometry
-    pose_limits_.translation_limits = Point3D(50.0f, 50.0f, 30.0f); // ±50mm X,Y, ±30mm Z
-    pose_limits_.rotation_limits = Point3D(0.524f, 0.524f, M_PI);   // ±30° roll/pitch, ±180° yaw
-    pose_limits_.height_min = 50.0f;
-    pose_limits_.height_max = 150.0f;
-    pose_limits_.leg_reach_limit = params.femur_length + params.tibia_length;
+    body_pose_limits_.translation_limits = Point3D(50.0f, 50.0f, 30.0f); // ±50mm X,Y, ±30mm Z
+    body_pose_limits_.rotation_limits = Point3D(0.524f, 0.524f, M_PI);   // ±30° roll/pitch, ±180° yaw
+    body_pose_limits_.height_min = 50.0f;
+    body_pose_limits_.height_max = 150.0f;
+    body_pose_limits_.leg_reach_limit = params.femur_length + params.tibia_length;
 }
 
-void ManualPoseController::initializeDefaultPresets() {
+void ManualBodyPoseController::initializeDefaultBodyPosePresets() {
     // Create default pose presets
-    PoseState neutral_pose;
+    BodyPoseState neutral_pose;
     neutral_pose.body_height = DEFAULT_MAX_ANGULAR_VELOCITY;
-    pose_presets_["neutral"] = neutral_pose;
+    body_pose_presets_["neutral"] = neutral_pose;
 
-    PoseState high_pose;
+    BodyPoseState high_pose;
     high_pose.body_height = 208.0f;
-    pose_presets_["high"] = high_pose;
+    body_pose_presets_["high"] = high_pose;
 
-    PoseState low_pose;
+    BodyPoseState low_pose;
     low_pose.body_height = 0.0;
-    pose_presets_["low"] = low_pose;
+    body_pose_presets_["low"] = low_pose;
 
-    PoseState forward_lean;
+    BodyPoseState forward_lean;
     forward_lean.body_rotation.y = 0.174f; // 10 degrees
     forward_lean.body_height = DEFAULT_MAX_ANGULAR_VELOCITY;
-    pose_presets_["forward_lean"] = forward_lean;
+    body_pose_presets_["forward_lean"] = forward_lean;
 }
 
-void ManualPoseController::handleTranslationInput(double x, double y, double z) {
+void ManualBodyPoseController::handleTranslationInput(double x, double y, double z) {
     current_pose_.body_position.x += x * input_scaling_.translation_scale;
     current_pose_.body_position.y += y * input_scaling_.translation_scale;
     current_pose_.body_position.z += z * input_scaling_.translation_scale;
 }
 
-void ManualPoseController::handleRotationInput(double roll, double pitch, double yaw) {
+void ManualBodyPoseController::handleRotationInput(double roll, double pitch, double yaw) {
     current_pose_.body_rotation.x += roll * input_scaling_.rotation_scale;
     current_pose_.body_rotation.y += pitch * input_scaling_.rotation_scale;
     current_pose_.body_rotation.z += yaw * input_scaling_.rotation_scale;
 }
 
-void ManualPoseController::handleIndividualLegInput(int leg_index, double x, double y, double z) {
+void ManualBodyPoseController::handleIndividualLegInput(int leg_index, double x, double y, double z) {
     if (leg_index >= 0 && leg_index < NUM_LEGS) {
         current_pose_.leg_positions[leg_index].x += x * input_scaling_.leg_scale;
         current_pose_.leg_positions[leg_index].y += y * input_scaling_.leg_scale;
@@ -260,39 +259,39 @@ void ManualPoseController::handleIndividualLegInput(int leg_index, double x, dou
     }
 }
 
-void ManualPoseController::handleHeightInput(double delta_height) {
+void ManualBodyPoseController::handleHeightInput(double delta_height) {
     current_pose_.body_height += delta_height * input_scaling_.height_scale;
 }
 
-void ManualPoseController::handleCombinedInput(double x, double y, double z) {
+void ManualBodyPoseController::handleCombinedInput(double x, double y, double z) {
     // Split input between translation and rotation
     handleTranslationInput(x * 0.6f, y * 0.6f, 0);
     handleRotationInput(x * 0.4f, y * 0.4f, z);
 }
 
-void ManualPoseController::constrainTranslation(Point3D &translation) const {
-    translation.x = std::max(-pose_limits_.translation_limits.x,
-                             std::min(pose_limits_.translation_limits.x, translation.x));
-    translation.y = std::max(-pose_limits_.translation_limits.y,
-                             std::min(pose_limits_.translation_limits.y, translation.y));
-    translation.z = std::max(-pose_limits_.translation_limits.z,
-                             std::min(pose_limits_.translation_limits.z, translation.z));
+void ManualBodyPoseController::constrainTranslation(Point3D &translation) const {
+    translation.x = std::max(-body_pose_limits_.translation_limits.x,
+                             std::min(body_pose_limits_.translation_limits.x, translation.x));
+    translation.y = std::max(-body_pose_limits_.translation_limits.y,
+                             std::min(body_pose_limits_.translation_limits.y, translation.y));
+    translation.z = std::max(-body_pose_limits_.translation_limits.z,
+                             std::min(body_pose_limits_.translation_limits.z, translation.z));
 }
 
-void ManualPoseController::constrainRotation(Point3D &rotation) const {
-    rotation.x = std::max(-pose_limits_.rotation_limits.x,
-                          std::min(pose_limits_.rotation_limits.x, rotation.x));
-    rotation.y = std::max(-pose_limits_.rotation_limits.y,
-                          std::min(pose_limits_.rotation_limits.y, rotation.y));
-    rotation.z = std::max(-pose_limits_.rotation_limits.z,
-                          std::min(pose_limits_.rotation_limits.z, rotation.z));
+void ManualBodyPoseController::constrainRotation(Point3D &rotation) const {
+    rotation.x = std::max(-body_pose_limits_.rotation_limits.x,
+                          std::min(body_pose_limits_.rotation_limits.x, rotation.x));
+    rotation.y = std::max(-body_pose_limits_.rotation_limits.y,
+                          std::min(body_pose_limits_.rotation_limits.y, rotation.y));
+    rotation.z = std::max(-body_pose_limits_.rotation_limits.z,
+                          std::min(body_pose_limits_.rotation_limits.z, rotation.z));
 }
 
-void ManualPoseController::constrainHeight(double &height) const {
-    height = std::max(pose_limits_.height_min, std::min(pose_limits_.height_max, height));
+void ManualBodyPoseController::constrainHeight(double &height) const {
+    height = std::max(body_pose_limits_.height_min, std::min(body_pose_limits_.height_max, height));
 }
 
-void ManualPoseController::constrainLegPosition(int leg_index, Point3D &position) {
+void ManualBodyPoseController::constrainLegPosition(int leg_index, Point3D &position) {
     // Get leg origin using frame transformation with zero joint angles
     JointAngles zero_angles(0, 0, 0);
     Pose leg_origin_pose = model_.getPoseRobotFrame(leg_index, zero_angles, Pose::Identity());
@@ -301,8 +300,8 @@ void ManualPoseController::constrainLegPosition(int leg_index, Point3D &position
     Point3D relative_pos = position - leg_origin;
     double distance = math_utils::magnitude(relative_pos);
 
-    if (distance > pose_limits_.leg_reach_limit) {
-        double scale = pose_limits_.leg_reach_limit / distance;
+    if (distance > body_pose_limits_.leg_reach_limit) {
+        double scale = body_pose_limits_.leg_reach_limit / distance;
         relative_pos.x *= scale;
         relative_pos.y *= scale;
         relative_pos.z *= scale;
@@ -310,25 +309,25 @@ void ManualPoseController::constrainLegPosition(int leg_index, Point3D &position
     }
 }
 
-Point3D ManualPoseController::interpolatePoint3D(const Point3D &from, const Point3D &to, double t) {
+Point3D ManualBodyPoseController::interpolatePoint3D(const Point3D &from, const Point3D &to, double t) {
     return Point3D(
         from.x + (to.x - from.x) * t,
         from.y + (to.y - from.y) * t,
         from.z + (to.z - from.z) * t);
 }
 
-double ManualPoseController::interpolateFloat(double from, double to, double t) {
+double ManualBodyPoseController::interpolateFloat(double from, double to, double t) {
     return from + (to - from) * t;
 }
 
-void ManualPoseController::calculateDefaultLegPositions() {
+void ManualBodyPoseController::calculateDefaultLegPositions() {
     for (int i = 0; i < NUM_LEGS; i++) {
         current_pose_.leg_positions[i] = calculateDefaultLegPosition(i, current_pose_.body_height);
         target_pose_.leg_positions[i] = current_pose_.leg_positions[i];
     }
 }
 
-Point3D ManualPoseController::calculateDefaultLegPosition(int leg_index, double height) {
+Point3D ManualBodyPoseController::calculateDefaultLegPosition(int leg_index, double height) {
     const Parameters &params = model_.getParams();
 
     // Calculate default stance position for this leg
@@ -341,7 +340,7 @@ Point3D ManualPoseController::calculateDefaultLegPosition(int leg_index, double 
         -height);
 }
 
-void ManualPoseController::setPoseQuaternion(const Point3D &position, const Eigen::Vector4d &quaternion, double blend_factor) {
+void ManualBodyPoseController::setBodyPoseQuaternion(const Point3D &position, const Eigen::Vector4d &quaternion, double blend_factor) {
     target_pose_.body_position = position;
     target_pose_.body_quaternion = quaternion;
     target_pose_.pose_blend_factor = blend_factor;
@@ -360,9 +359,9 @@ void ManualPoseController::setPoseQuaternion(const Point3D &position, const Eige
     current_pose_.body_rotation = math_utils::quaternionToEulerPoint3D(quaternion);
 }
 
-void ManualPoseController::interpolateToQuaternionPose(const Point3D &target_pos, const Eigen::Vector4d &target_quat, double speed) {
+void ManualBodyPoseController::interpolateToQuaternionBodyPose(const Point3D &target_pos, const Eigen::Vector4d &target_quat, double speed) {
     if (!smooth_transitions_ || speed >= DEFAULT_ANGULAR_SCALING) {
-        setPoseQuaternion(target_pos, target_quat, DEFAULT_ANGULAR_SCALING);
+        setBodyPoseQuaternion(target_pos, target_quat, 1.0f);
         current_pose_ = target_pose_;
         return;
     }
@@ -420,7 +419,7 @@ void ManualPoseController::interpolateToQuaternionPose(const Point3D &target_pos
     current_pose_.body_rotation = math_utils::quaternionToEulerPoint3D(current_pose_.body_quaternion);
 }
 
-Eigen::Vector4d ManualPoseController::getCurrentQuaternion() const {
+Eigen::Vector4d ManualBodyPoseController::getCurrentQuaternion() const {
     if (current_pose_.use_quaternion) {
         return current_pose_.body_quaternion;
     } else {
@@ -429,7 +428,7 @@ Eigen::Vector4d ManualPoseController::getCurrentQuaternion() const {
     }
 }
 
-void ManualPoseController::setUseQuaternion(bool use_quat) {
+void ManualBodyPoseController::setUseQuaternion(bool use_quat) {
     if (use_quat && !current_pose_.use_quaternion) {
         // Convert current Euler to quaternion
         current_pose_.body_quaternion = math_utils::eulerPoint3DToQuaternion(current_pose_.body_rotation);
