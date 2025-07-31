@@ -651,19 +651,11 @@ bool LocomotionSystem::update() {
                     legs[i].setStepPhase(SWING_PHASE);
                 }
 
-                // OpenSHC pattern: Use different tip position source based on phase
-                Point3D desired_tip_position;
-                if (legs[i].getStepPhase() == STANCE_PHASE) {
-                    // OpenSHC pattern: Use default tip pose for stance to prevent drift
-                    Point3D default_pose = leg_stepper->getDefaultTipPose();
-                    desired_tip_position = default_pose;
-
-                    // Force sync on stance start to ensure internal consistency
-                    leg_stepper->setCurrentTipPose(default_pose);
-                } else {
-                    // Use Bézier-calculated position for swing phase
-                    desired_tip_position = leg_stepper->getCurrentTipPose();
-                }
+                // OpenSHC pattern: Use Bézier-calculated position for BOTH swing AND stance phases
+                // The LegStepper.updateTipPositionIterative() correctly handles both phases:
+                // - SWING: Uses swing Bézier curves for air movement
+                // - STANCE: Uses stance Bézier curves for ground movement (coxa movement)
+                Point3D desired_tip_position = leg_stepper->getCurrentTipPose();
                 legs[i].setDesiredTipPosition(desired_tip_position);
             }
         }
