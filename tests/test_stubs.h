@@ -7,7 +7,7 @@
 #include <random>
 
 struct DummyIMU : IIMUInterface {
-    double test_roll = 0.0f, test_pitch = 0.0f, test_yaw = 0.0f;
+    double test_roll = 0.0, test_pitch = 0.0, test_yaw = 0.0;
     IMUMode current_mode_ = IMU_MODE_RAW_DATA;
     bool has_absolute_ = false;
 
@@ -17,12 +17,12 @@ struct DummyIMU : IIMUInterface {
         data.roll = test_roll;
         data.pitch = test_pitch;
         data.yaw = test_yaw;
-        data.accel_x = 0.0f;
-        data.accel_y = 0.0f;
-        data.accel_z = 9.81f;
-        data.gyro_x = 0.0f;
-        data.gyro_y = 0.0f;
-        data.gyro_z = 0.0f;
+        data.accel_x = 0.0;
+        data.accel_y = 0.0;
+        data.accel_z = 9.81;
+        data.gyro_x = 0.0;
+        data.gyro_y = 0.0;
+        data.gyro_z = 0.0;
         data.is_valid = true;
         data.mode = current_mode_;
         data.has_absolute_capability = has_absolute_;
@@ -32,19 +32,19 @@ struct DummyIMU : IIMUInterface {
             data.absolute_data.absolute_roll = test_roll;
             data.absolute_data.absolute_pitch = test_pitch;
             data.absolute_data.absolute_yaw = test_yaw;
-            data.absolute_data.linear_accel_x = 0.0f;
-            data.absolute_data.linear_accel_y = 0.0f;
-            data.absolute_data.linear_accel_z = 0.0f;
-            data.absolute_data.quaternion_w = 1.0f;
-            data.absolute_data.quaternion_x = 0.0f;
-            data.absolute_data.quaternion_y = 0.0f;
-            data.absolute_data.quaternion_z = 0.0f;
+            data.absolute_data.linear_accel_x = 0.0;
+            data.absolute_data.linear_accel_y = 0.0;
+            data.absolute_data.linear_accel_z = 0.0;
+            data.absolute_data.quaternion_w = 1.0;
+            data.absolute_data.quaternion_x = 0.0;
+            data.absolute_data.quaternion_y = 0.0;
+            data.absolute_data.quaternion_z = 0.0;
             data.absolute_data.absolute_orientation_valid = true;
             data.absolute_data.linear_acceleration_valid = true;
             data.absolute_data.quaternion_valid = true;
             data.absolute_data.calibration_status = 3;
             data.absolute_data.system_status = 5;
-            data.absolute_data.self_test_result = 0x0F;
+            data.absolute_data.self_test_result = 0x0;
         }
 
         return data;
@@ -126,7 +126,7 @@ struct DummyFSR : IFSRInterface {
         for (int i = 0; i < NUM_LEGS; i++) {
             // Pre-set contact data for testing
             // Real FSR starts with no contact and requires calibration
-            test_data[i] = FSRData{5.0f, true, 0.0f};
+            test_data[i] = FSRData{5.0, true, 0.0};
         }
     }
 
@@ -136,7 +136,7 @@ struct DummyFSR : IFSRInterface {
             return test_data[leg];
         }
         // Real implementation needs error handling for invalid leg indices
-        return FSRData{0.0f, false, 0.0f};
+        return FSRData{0.0, false, 0.0};
     }
     bool calibrateFSR(int) override { return true; }
     double getRawReading(int leg) override {
@@ -145,7 +145,7 @@ struct DummyFSR : IFSRInterface {
             // Real implementation returns raw ADC reading requiring conversion
             return test_data[leg].pressure;
         }
-        return 0.0f;
+        return 0.0;
     }
 
     bool update() override {
@@ -183,7 +183,7 @@ struct DummyServo : IServoInterface {
         return false;
     }
     bool setJointAngleAndSpeed(int, int, double, double) override { return true; }
-    double getJointAngle(int, int) override { return 0.0f; }
+    double getJointAngle(int, int) override { return 0.0; }
     bool isJointMoving(int, int) override { return false; }
     bool enableTorque(int, int, bool) override { return true; }
 };
@@ -199,14 +199,14 @@ struct ProgressiveServo : IServoInterface {
     int update_count = 0;
 
     ProgressiveServo() : rng(std::random_device{}()),
-                         noise_dist(-0.2f, 0.2f),
-                         init_dist(-15.0f, 15.0f) {
+                         noise_dist(-0.2, 0.2),
+                         init_dist(-15.0, 15.0) {
         // Initialize with random but realistic starting positions
         for (int leg = 0; leg < NUM_LEGS; leg++) {
             // Start with varied angles that aren't the default standing pose
-            current_angles[leg][0] = init_dist(rng);          // Coxa: -15 to +15°
-            current_angles[leg][1] = 25.0f + init_dist(rng);  // Femur: 10 to 40°
-            current_angles[leg][2] = -55.0f + init_dist(rng); // Tibia: -70 to -40°
+            current_angles[leg][0] = init_dist(rng);         // Coxa: -15 to +15°
+            current_angles[leg][1] = 25.0 + init_dist(rng);  // Femur: 10 to 40°
+            current_angles[leg][2] = -55.0 + init_dist(rng); // Tibia: -70 to -40°
 
             // Targets start the same as current
             target_angles[leg][0] = current_angles[leg][0];
@@ -246,9 +246,9 @@ struct ProgressiveServo : IServoInterface {
     double getJointAngle(int leg, int joint) override {
         if (leg >= 0 && leg < NUM_LEGS && joint >= 0 && joint < 3) {
             // Add small noise to simulate real servo feedback
-            return current_angles[leg][joint] + noise_dist(rng) * 0.05f;
+            return current_angles[leg][joint] + noise_dist(rng) * 0.05;
         }
-        return 0.0f;
+        return 0.0;
     }
 
     // Simulate servo progression each update cycle
@@ -258,8 +258,8 @@ struct ProgressiveServo : IServoInterface {
             for (int joint = 0; joint < 3; joint++) {
                 // Continue moving toward targets
                 double diff = target_angles[leg][joint] - current_angles[leg][joint];
-                if (std::abs(diff) > 0.1f) {
-                    current_angles[leg][joint] += diff * 0.15f + noise_dist(rng) * 0.1f;
+                if (std::abs(diff) > 0.1) {
+                    current_angles[leg][joint] += diff * 0.15 + noise_dist(rng) * 0.1;
                 }
             }
         }
@@ -281,27 +281,27 @@ typedef DummyFSR MockFSRInterface;
 
 inline Parameters createDefaultParameters() {
     Parameters params;
-    params.hexagon_radius = 200.0f;
-    params.coxa_length = 50.0f;
-    params.femur_length = 101.0f;
-    params.tibia_length = 208.0f;
-    params.robot_height = 208.0f;
+    params.hexagon_radius = 200.0;
+    params.coxa_length = 50.0;
+    params.femur_length = 101.0;
+    params.tibia_length = 208.0;
+    params.robot_height = 208.0;
     params.standing_height = 150; // Initial standing height
-    params.robot_weight = 2.0f;
+    params.robot_weight = 2.0;
     params.center_of_mass = Eigen::Vector3d(0, 0, 0);
-    params.coxa_angle_limits[0] = -65.0f;
-    params.coxa_angle_limits[1] = 65.0f;
-    params.femur_angle_limits[0] = -75.0f;
-    params.femur_angle_limits[1] = 75.0f;
-    params.tibia_angle_limits[0] = -45.0f;
-    params.tibia_angle_limits[1] = 45.0f;
-    params.max_velocity = 100.0f;
-    params.max_angular_velocity = 45.0f;
-    params.stability_margin = 0.02f;
-    params.control_frequency = 50.0f;
-    params.fsr_touchdown_threshold = 0.1f;
-    params.fsr_liftoff_threshold = 0.05f;
-    params.fsr_max_pressure = 10.0f;
+    params.coxa_angle_limits[0] = -65.0;
+    params.coxa_angle_limits[1] = 65.0;
+    params.femur_angle_limits[0] = -75.0;
+    params.femur_angle_limits[1] = 75.0;
+    params.tibia_angle_limits[0] = -45.0;
+    params.tibia_angle_limits[1] = 45.0;
+    params.max_velocity = 100.0;
+    params.max_angular_velocity = 45.0;
+    params.stability_margin = 0.02;
+    params.control_frequency = 50.0;
+    params.fsr_touchdown_threshold = 0.1;
+    params.fsr_liftoff_threshold = 0.05;
+    params.fsr_max_pressure = 10.0;
     // Disable smooth trajectory features for unit tests
     params.smooth_trajectory.use_current_servo_positions = false;
     params.smooth_trajectory.enable_pose_interpolation = false;
