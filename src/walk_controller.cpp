@@ -126,12 +126,12 @@ bool WalkController::setGait(GaitType gait_type) {
 }
 
 void WalkController::applyGaitConfigToLegSteppers(const GaitConfiguration &gait_config) {
-    // Use OpenSHC default frequency (1.0 Hz) instead of calculated frequency
+    // Use configured step frequency from gait configuration (OpenSHC pattern)
     // This ensures consistency with trajectory_tip_position_test and OpenSHC behavior
-    double step_frequency = 1.0; // OpenSHC default frequency
+    double step_frequency = gait_config.getStepFrequency(); // OpenSHC configured frequency
 
-    // Generate StepCycle with default frequency like OpenSHC
-    StepCycle step_cycle = gait_config.generateStepCycle(step_frequency);
+    // Generate StepCycle with configured frequency like OpenSHC
+    StepCycle step_cycle = gait_config.generateStepCycle();
 
     // Apply StepCycle and gait configuration to each LegStepper
     for (int i = 0; i < NUM_LEGS && i < static_cast<int>(leg_steppers_.size()); i++) {
@@ -147,9 +147,13 @@ void WalkController::applyGaitConfigToLegSteppers(const GaitConfiguration &gait_
         leg_stepper->setControlFrequency(gait_config.control_frequency);
         leg_stepper->setStepClearanceHeight(gait_config.swing_height);
 
-        // Calculate phase offset using StepCycle period
-        // OpenSHC: for tripod gait, second group should be offset by half the total period
-        int phase_offset_iterations = gait_config.offsets.getForLegIndex(i) * (step_cycle.period_ / 2);
+        // Calculate phase offset using OpenSHC formula
+        // OpenSHC: step_offset = (base_step_offset * multiplier) % step.period_
+        int base_step_period = gait_config.phase_config.stance_phase + gait_config.phase_config.swing_phase;
+        int normaliser = step_cycle.period_ / base_step_period;
+        int base_step_offset = gait_config.phase_config.phase_offset * normaliser;
+        int multiplier = gait_config.offsets.getForLegIndex(i);
+        int phase_offset_iterations = (base_step_offset * multiplier) % step_cycle.period_;
         double phase_offset = static_cast<double>(phase_offset_iterations) / static_cast<double>(step_cycle.period_);
         leg_stepper->setPhaseOffset(phase_offset);
 
@@ -459,8 +463,8 @@ void WalkController::updateWalk(const Point3D &linear_velocity_input, double ang
     bool step_cycle_calculated = false;
 
     if (is_active_walking) {
-        // Use OpenSHC default frequency (1.0 Hz) instead of calculated frequency
-        step_cycle = current_gait_config_.generateStepCycle(1.0);
+        // Use configured step frequency from gait configuration (OpenSHC pattern)
+        step_cycle = current_gait_config_.generateStepCycle();
         global_phase_ = (global_phase_ + 1) % step_cycle.period_;
         step_cycle_calculated = true;
     }

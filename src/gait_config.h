@@ -85,6 +85,7 @@ struct GaitConfiguration {
     // OpenSHC trajectory parameters
     double swing_width;       //< Lateral shift at mid-swing position in mm (OpenSHC mid_lateral_shift)
     double control_frequency; //< Control loop frequency in Hz (defines time_delta)
+    double step_frequency;    //< Step frequency in Hz (OpenSHC default: 1.0 Hz)
 
     // Gait performance parameters
     double max_velocity;         //< Maximum walking velocity in mm/s
@@ -97,14 +98,17 @@ struct GaitConfiguration {
     std::vector<std::string> step_order; //< Order of leg movements in the gait
 
     // Methods to generate StepCycle for this gait (OpenSHC-style normalization)
-    StepCycle generateStepCycle(double step_frequency = 1.0) const {
+    StepCycle generateStepCycle(double override_step_frequency = -1.0) const {
         StepCycle step_cycle;
         int base_step_period = phase_config.stance_phase + phase_config.swing_phase;
         double time_delta = 1.0 / control_frequency;
         double swing_ratio = double(phase_config.swing_phase) / double(base_step_period);
 
+        // Use configured step_frequency by default, or override if provided
+        double effective_step_frequency = (override_step_frequency > 0.0) ? override_step_frequency : step_frequency;
+
         // OpenSHC normalization logic
-        double raw_step_period = ((1.0 / step_frequency) / time_delta) / swing_ratio;
+        double raw_step_period = ((1.0 / effective_step_frequency) / time_delta) / swing_ratio;
 
         // Round to even multiple of base_step_period
         int normaliser = static_cast<int>(std::round(raw_step_period / base_step_period));
@@ -139,7 +143,7 @@ struct GaitConfiguration {
     }
 
     double getStepFrequency() const {
-        return 1.0; // Default OpenSHC step frequency
+        return step_frequency; // Configurable OpenSHC step frequency
     }
 
     double getStepCycleTime() const {
