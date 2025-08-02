@@ -134,8 +134,6 @@ void LegStepper::calculateSwingTiming(double time_delta) {
 
     // Calculate stance timing using same OpenSHC formula
     stance_iterations_ = int((double(step_cycle_.stance_period_) / step_cycle_.period_) / (step_cycle_.frequency_ * time_delta));
-    if (stance_iterations_ < 2)
-        stance_iterations_ = 2;
     stance_delta_t_ = 1.0 / stance_iterations_;
 }
 

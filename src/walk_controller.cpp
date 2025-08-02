@@ -14,24 +14,6 @@
 #include <string>
 #include <vector>
 
-/**
- * @brief Calculate proper step frequency to prevent stride vector multiplication bug
- *
- * This function prevents the abrupt jump bug that occurs when step_cycle_.frequency_
- * is too small, causing stride_vector *= (on_ground_ratio / frequency) to become
- * extremely large (e.g., 50x instead of 0.5x).
- *
- * @param gait_config The gait configuration containing phase and control frequency
- * @return Calculated step frequency in Hz
- */
-__attribute__((unused)) static double calculateStepFrequency(const GaitConfiguration &gait_config) {
-    double time_delta = 1.0 / gait_config.control_frequency;
-    int base_period = gait_config.phase_config.stance_phase + gait_config.phase_config.swing_phase;
-
-    // Use OpenSHC-style calculation: step.frequency_ = 1.0 / (step.period_ * time_delta_)
-    return 1.0 / (base_period * time_delta);
-}
-
 WalkController::WalkController(RobotModel &m, Leg legs[NUM_LEGS], const BodyPoseConfiguration &pose_config)
     : model(m), terrain_adaptation_(m), body_pose_controller_(nullptr),
       step_clearance_(30.0), step_depth_(10.0),
@@ -269,10 +251,9 @@ VelocityLimits::WorkspaceConfig WalkController::getWorkspaceConfig() const {
     return velocity_limits_.getWorkspaceConfig();
 }
 
-// TODO: Use defines
 // --- WalkController Methods Implementation ---
 void WalkController::init(const Eigen::Vector3d &current_body_position, const Eigen::Vector3d &current_body_orientation) {
-    time_delta_ = 0.01; // 10ms default
+
     walk_state_ = WALK_STOPPED;
     odometry_ideal_ = Point3D(0, 0, 0);
 
@@ -341,7 +322,6 @@ void WalkController::updateWalk(const Point3D &linear_velocity_input, double ang
                                 const Eigen::Vector3d &current_body_position, const Eigen::Vector3d &current_body_orientation) {
     // OpenSHC: Cache frequently used values to reduce function call overhead
     const Parameters &params = model.getParams();
-    time_delta_ = 1.0 / params.control_frequency;
     current_body_position_ = current_body_position;
     current_body_orientation_ = current_body_orientation;
 
@@ -503,32 +483,33 @@ void WalkController::updateWalk(const Point3D &linear_velocity_input, double ang
     // OpenSHC: Optimized analysis and odometry updates
     odometry_ideal_ = odometry_ideal_ + calculateOdometry(time_delta_);
 
+    // TODO: Enable this when walkspace analysis is implemented
     // OpenSHC: Conditional walkspace analysis with optimized stability control
-    if (walkspace_analyzer_ && walkspace_analyzer_->isAnalysisEnabled()) {
-        // Batch update leg positions
-        for (int i = 0; i < NUM_LEGS; ++i) {
-            current_leg_positions_[i] = legs_array_[i].getCurrentTipPositionGlobal();
-        }
+    // if (walkspace_analyzer_ && walkspace_analyzer_->isAnalysisEnabled()) {
+    //     // Batch update leg positions
+    //     for (int i = 0; i < NUM_LEGS; ++i) {
+    //         current_leg_positions_[i] = legs_array_[i].getCurrentTipPositionGlobal();
+    //     }
 
-        const WalkspaceAnalyzer::WalkspaceResult analysis_result =
-            walkspace_analyzer_->analyzeWalkspace(current_leg_positions_);
+    //     const WalkspaceAnalyzer::WalkspaceResult analysis_result =
+    //         walkspace_analyzer_->analyzeWalkspace(current_leg_positions_);
 
-        // OpenSHC: Optimized adaptive velocity control
-        if (walk_state_ == WALK_MOVING) {
-            if (!analysis_result.is_stable) {
-                const double stability_factor = math_utils::clamp(analysis_result.stability_margin / 50.0, 0.1, 1.0);
-                desired_linear_velocity_ = desired_linear_velocity_ * stability_factor;
-                desired_angular_velocity_ *= stability_factor;
-            } else {
-                const double stability_score = walkspace_analyzer_->getAnalysisInfo().overall_stability_score;
-                if (stability_score > 0.8) {
-                    const double boost_factor = std::min(1.2, 1.0 + (stability_score - 0.8) * 0.5);
-                    desired_linear_velocity_ = desired_linear_velocity_ * boost_factor;
-                    desired_angular_velocity_ *= boost_factor;
-                }
-            }
-        }
-    }
+    //     // OpenSHC: Optimized adaptive velocity control
+    //     if (walk_state_ == WALK_MOVING) {
+    //         if (!analysis_result.is_stable) {
+    //             const double stability_factor = math_utils::clamp(analysis_result.stability_margin / 50.0, 0.1, 1.0);
+    //             desired_linear_velocity_ = desired_linear_velocity_ * stability_factor;
+    //             desired_angular_velocity_ *= stability_factor;
+    //         } else {
+    //             const double stability_score = walkspace_analyzer_->getAnalysisInfo().overall_stability_score;
+    //             if (stability_score > 0.8) {
+    //                 const double boost_factor = std::min(1.2, 1.0 + (stability_score - 0.8) * 0.5);
+    //                 desired_linear_velocity_ = desired_linear_velocity_ * boost_factor;
+    //                 desired_angular_velocity_ *= boost_factor;
+    //             }
+    //         }
+    //     }
+    // }
 
     // OpenSHC: Conditional walkspace regeneration
     if (regenerate_walkspace_) {
