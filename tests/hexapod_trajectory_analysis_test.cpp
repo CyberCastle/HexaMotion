@@ -474,6 +474,64 @@ void printDetailedLegTrajectory(int leg_id, LegStepper &stepper, Leg &leg, const
     }
 }
 
+// New function to analyze geometric stance issues
+void analyzeStanceGeometry(const std::vector<LegAnalysisResult> &results, const Point3D &velocity) {
+    std::cout << "\n"
+              << std::string(80, '=') << std::endl;
+    std::cout << "STANCE GEOMETRY ANALYSIS" << std::endl;
+    std::cout << std::string(80, '=') << std::endl;
+
+    std::cout << "Movement velocity: (" << velocity.x << ", " << velocity.y << ", " << velocity.z << ") mm/s" << std::endl;
+    std::cout << "Movement direction angle: " << (std::atan2(velocity.y, velocity.x) * 180.0 / M_PI) << "°" << std::endl;
+
+    std::cout << "\nLeg | Position (x, y) | Leg Angle | Rel to Movement | Coxa Move | Tibia Move | Pattern" << std::endl;
+    std::cout << "----+-----------------+-----------+-----------------+-----------+------------+--------" << std::endl;
+
+    for (const auto &result : results) {
+        // Calculate leg angle from origin
+        double leg_angle = std::atan2(result.initial_position.y, result.initial_position.x) * 180.0 / M_PI;
+
+        // Calculate relative angle to movement direction
+        double movement_angle = std::atan2(velocity.y, velocity.x) * 180.0 / M_PI;
+        double relative_angle = leg_angle - movement_angle;
+
+        // Normalize to [-180, 180]
+        while (relative_angle > 180)
+            relative_angle -= 360;
+        while (relative_angle < -180)
+            relative_angle += 360;
+
+        std::string pattern_type = result.correct_stance_pattern ? "CORRECT" : "PROBLEM";
+
+        printf(" %2d | (%7.1f, %7.1f) | %9.1f | %15.1f | %9.2f | %10.2f | %s\n",
+               result.leg_id,
+               result.initial_position.x, result.initial_position.y,
+               leg_angle, relative_angle,
+               result.coxa_movement, result.tibia_movement,
+               pattern_type.c_str());
+    }
+
+    std::cout << "\nGEOMETRIC ANALYSIS:" << std::endl;
+    std::cout << "- Legs with relative angles close to ±90° may have geometric constraints" << std::endl;
+    std::cout << "- Tibia-dominant movement suggests workspace boundary issues" << std::endl;
+    std::cout << "- Problem legs may need velocity vector adjustment or IK tuning" << std::endl;
+
+    // Suggest optimal movement directions
+    std::cout << "\nOPTIMAL MOVEMENT SUGGESTIONS:" << std::endl;
+    for (const auto &result : results) {
+        if (!result.correct_stance_pattern) {
+            double leg_angle = std::atan2(result.initial_position.y, result.initial_position.x) * 180.0 / M_PI;
+            double optimal_angle = leg_angle + 45.0; // 45° offset for better coxa utilization
+
+            double optimal_vel_x = 50.0 * std::cos(optimal_angle * M_PI / 180.0);
+            double optimal_vel_y = 50.0 * std::sin(optimal_angle * M_PI / 180.0);
+
+            printf("  Leg %d: Try velocity (%.1f, %.1f) for better coxa dominance\n",
+                   result.leg_id, optimal_vel_x, optimal_vel_y);
+        }
+    }
+}
+
 int main() {
     std::cout << "=== HEXAPOD TRAJECTORY ANALYSIS TEST (All 6 Legs) ===" << std::endl;
     std::cout << "Analyzing trajectory generation for complete hexapod configuration\n"
@@ -603,6 +661,9 @@ int main() {
 
     // Print comprehensive summary
     printHexapodAnalysisSummary(analysis_results, tripod_config);
+
+    // Analyze stance geometry issues
+    analyzeStanceGeometry(analysis_results, Point3D(desired_velocity_x, desired_velocity_y, 0));
 
     // Print detailed trajectory for all legs
     std::cout << "\n"
