@@ -1,9 +1,9 @@
+#include "analytic_robot_model.h"
 #include "math_utils.h"
 #include "robot_model.h"
 #include <cmath>
 #include <iomanip>
 #include <iostream>
-#include "analytic_robot_model.h"
 
 int main() {
     Parameters p{};
@@ -29,8 +29,7 @@ int main() {
     // Define BASE_THETA_OFFSETS for the test (in radians)
     static const double BASE_THETA_OFFSETS[NUM_LEGS] = {
         -30.0 * M_PI / 180.0, -90.0 * M_PI / 180.0, -150.0 * M_PI / 180.0,
-        150.0 * M_PI / 180.0, 90.0 * M_PI / 180.0, 30.0 * M_PI / 180.0
-    };
+        150.0 * M_PI / 180.0, 90.0 * M_PI / 180.0, 30.0 * M_PI / 180.0};
 
     bool ok = true;
 
@@ -158,9 +157,146 @@ int main() {
         }
     }
 
+    // Test 6: Compare leg base position methods
+    std::cout << "\n--- Test 6: Leg Base Position Comparison ---" << std::endl;
+
+    for (int leg = 0; leg < NUM_LEGS; ++leg) {
+        Point3D analytic_base_pos = analytic_model.getAnalyticLegBasePosition(leg);
+        Point3D dh_base_pos = model.getLegBasePosition(leg);
+
+        double error = std::sqrt(std::pow(analytic_base_pos.x - dh_base_pos.x, 2) +
+                                 std::pow(analytic_base_pos.y - dh_base_pos.y, 2) +
+                                 std::pow(analytic_base_pos.z - dh_base_pos.z, 2));
+
+        std::cout << "Leg " << leg << " base position: analytic(" << analytic_base_pos.x << ", "
+                  << analytic_base_pos.y << ", " << analytic_base_pos.z
+                  << ") DH(" << dh_base_pos.x << ", " << dh_base_pos.y << ", " << dh_base_pos.z
+                  << ") error=" << error << std::endl;
+
+        if (error > 1e-6) {
+            std::cout << "  ⚠️  Base position mismatch for leg " << leg << std::endl;
+            ok = false;
+        }
+
+        // Verify expected position based on hexagon geometry
+        double expected_angle = BASE_THETA_OFFSETS[leg];
+        double expected_x = p.hexagon_radius * cos(expected_angle);
+        double expected_y = p.hexagon_radius * sin(expected_angle);
+        double expected_z = 0.0;
+
+        double analytic_error = std::sqrt(std::pow(analytic_base_pos.x - expected_x, 2) +
+                                          std::pow(analytic_base_pos.y - expected_y, 2) +
+                                          std::pow(analytic_base_pos.z - expected_z, 2));
+
+        std::cout << "  Expected(" << expected_x << ", " << expected_y << ", " << expected_z
+                  << ") analytic_error=" << analytic_error << std::endl;
+
+        if (analytic_error > 1e-6) {
+            std::cout << "  ⚠️  Analytic base position doesn't match expected geometry for leg " << leg << std::endl;
+            ok = false;
+        }
+
+        // Additional validation: verify hexagon properties
+        double distance_from_origin = std::sqrt(analytic_base_pos.x * analytic_base_pos.x +
+                                                analytic_base_pos.y * analytic_base_pos.y);
+        double distance_error = std::abs(distance_from_origin - p.hexagon_radius);
+
+        std::cout << "  Distance from origin=" << distance_from_origin
+                  << " (expected=" << p.hexagon_radius << ") error=" << distance_error << std::endl;
+
+        if (distance_error > 1e-6) {
+            std::cout << "  ⚠️  Distance from origin incorrect for leg " << leg << std::endl;
+            ok = false;
+        }
+
+        // Verify angle calculation
+        double calculated_angle = atan2(analytic_base_pos.y, analytic_base_pos.x);
+        double angle_difference = std::abs(calculated_angle - expected_angle);
+
+        // Handle angle wraparound (difference should be < π)
+        if (angle_difference > M_PI) {
+            angle_difference = 2.0 * M_PI - angle_difference;
+        }
+
+        std::cout << "  Calculated angle=" << calculated_angle * 180.0 / M_PI
+                  << "° (expected=" << expected_angle * 180.0 / M_PI
+                  << "°) error=" << angle_difference * 180.0 / M_PI << "°" << std::endl;
+
+        if (angle_difference > 1e-6) {
+            std::cout << "  ⚠️  Angle calculation incorrect for leg " << leg << std::endl;
+            ok = false;
+        }
+    }
+
+    // Test 7: Verify hexagon symmetry properties
+    std::cout << "\n--- Test 7: Hexagon Symmetry Validation ---" << std::endl;
+
+    // Check that opposite legs are symmetric (leg pairs: 0-3, 1-4, 2-5)
+    int leg_pairs[3][2] = {{0, 3}, {1, 4}, {2, 5}};
+
+    for (int p_idx = 0; p_idx < 3; ++p_idx) {
+        int leg1 = leg_pairs[p_idx][0];
+        int leg2 = leg_pairs[p_idx][1];
+
+        Point3D pos1 = analytic_model.getAnalyticLegBasePosition(leg1);
+        Point3D pos2 = analytic_model.getAnalyticLegBasePosition(leg2);
+
+        // Opposite legs should be symmetric about origin
+        double symmetry_error_x = std::abs(pos1.x + pos2.x);
+        double symmetry_error_y = std::abs(pos1.y + pos2.y);
+        double symmetry_error_z = std::abs(pos1.z - pos2.z);
+
+        std::cout << "Leg pair (" << leg1 << "," << leg2 << ") symmetry errors: "
+                  << "x=" << symmetry_error_x << " y=" << symmetry_error_y
+                  << " z=" << symmetry_error_z << std::endl;
+
+        if (symmetry_error_x > 1e-6 || symmetry_error_y > 1e-6 || symmetry_error_z > 1e-6) {
+            std::cout << "  ⚠️  Symmetry violation for leg pair (" << leg1 << "," << leg2 << ")" << std::endl;
+            ok = false;
+        }
+    }
+
+    // Test 8: Verify 60-degree spacing between adjacent legs
+    std::cout << "\n--- Test 8: Adjacent Leg Spacing Validation ---" << std::endl;
+
+    for (int leg = 0; leg < NUM_LEGS; ++leg) {
+        int next_leg = (leg + 1) % NUM_LEGS;
+
+        Point3D pos1 = analytic_model.getAnalyticLegBasePosition(leg);
+        Point3D pos2 = analytic_model.getAnalyticLegBasePosition(next_leg);
+
+        double angle1 = atan2(pos1.y, pos1.x);
+        double angle2 = atan2(pos2.y, pos2.x);
+
+        double angle_diff = angle2 - angle1;
+
+        // Normalize angle difference to [-π, π]
+        while (angle_diff > M_PI)
+            angle_diff -= 2.0 * M_PI;
+        while (angle_diff < -M_PI)
+            angle_diff += 2.0 * M_PI;
+
+        double expected_diff = -60.0 * M_PI / 180.0; // -60 degrees (clockwise)
+        double spacing_error = std::abs(angle_diff - expected_diff);
+
+        std::cout << "Legs " << leg << "->" << next_leg << " angle difference="
+                  << angle_diff * 180.0 / M_PI << "° (expected="
+                  << expected_diff * 180.0 / M_PI << "°) error="
+                  << spacing_error * 180.0 / M_PI << "°" << std::endl;
+
+        if (spacing_error > 1e-6) {
+            std::cout << "  ⚠️  Incorrect spacing between legs " << leg << " and " << next_leg << std::endl;
+            ok = false;
+        }
+    }
+
     if (ok) {
         std::cout << "\n✓ All DH vs Analytic comparison tests passed!" << std::endl;
         std::cout << "✓ DH-based methods are equivalent to analytic methods!" << std::endl;
+        std::cout << "✓ Leg base positions match expected hexagon geometry!" << std::endl;
+        std::cout << "✓ Hexagon symmetry properties validated!" << std::endl;
+        std::cout << "✓ 60-degree leg spacing verified!" << std::endl;
+        std::cout << "✓ AnalyticRobotModel::getAnalyticLegBasePosition is mathematically correct!" << std::endl;
         return 0;
     } else {
         std::cerr << "\n✗ Some DH vs Analytic comparison tests failed." << std::endl;
