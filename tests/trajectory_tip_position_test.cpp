@@ -418,12 +418,6 @@ void debugTipPositionGeneration(LegStepper &stepper, Leg &leg, const RobotModel 
     JointAngles initial_stance_angles = leg.getJointAngles();
     Point3D previous_stance_pos = initial_position;
 
-    // Use the initial_radio calculated in swing section
-
-    // MANUAL STANCE SIMULATION: Since LegStepper stance may not be implemented,
-    // we'll simulate the expected stance behavior manually
-    bool stance_working = false;
-
     for (int iteration = swing_iterations + 1; iteration <= total_iterations; iteration++) {
         // Get joint angles before update
         JointAngles angles_before = leg.getJointAngles();
@@ -505,7 +499,6 @@ void debugTipPositionGeneration(LegStepper &stepper, Leg &leg, const RobotModel 
     double total_tibia_change = (final_stance_angles.tibia - initial_stance_angles.tibia) * 180.0 / M_PI;
 
     std::cout << "\n=== STANCE PHASE ANALYSIS ===" << std::endl;
-    std::cout << "Stance implementation detected: " << (stance_working ? "AUTOMATIC" : "NEEDS IMPLEMENTATION") << std::endl;
     std::cout << "Total XY displacement: " << total_xy_displacement << " mm" << std::endl;
     std::cout << "Total joint angle changes:" << std::endl;
     std::cout << "  Coxa: " << total_coxa_change << "° (primary movement joint)" << std::endl;
@@ -516,11 +509,7 @@ void debugTipPositionGeneration(LegStepper &stepper, Leg &leg, const RobotModel 
     bool correct_stance_pattern = (std::abs(total_coxa_change) > std::abs(total_femur_change)) &&
                                   (std::abs(total_coxa_change) > std::abs(total_tibia_change));
 
-    if (!stance_working) {
-        std::cout << "⚠ STANCE PHASE NOT IMPLEMENTED: LegStepper.updateTipPositionIterative() does not handle STEP_STANCE" << std::endl;
-        std::cout << "  Recommendation: Implement stance phase in LegStepper to simulate body movement" << std::endl;
-        std::cout << "  Expected behavior: Leg tip should move backwards relative to body during stance" << std::endl;
-    } else if (total_xy_displacement < 0.1) {
+    if (total_xy_displacement < 0.1) {
         std::cout << "⚠ STANCE VALIDATION: Minimal movement detected" << std::endl;
         std::cout << "  This may be correct if stance phase is purely body-movement based" << std::endl;
     } else if (correct_stance_pattern) {
