@@ -174,7 +174,7 @@ int main() {
               << std::endl;
 
     // 3. Setup and Start Tripod Gait
-    if (!sys.startWalking(TRIPOD_GAIT, TEST_VELOCITY, 0.0, 0.0)) {
+    if (!sys.startWalking(TRIPOD_GAIT, TEST_VELOCITY, TEST_VELOCITY, 0.0)) {
         std::cerr << "ERROR: Failed to start tripod gait." << std::endl;
         return 1;
     }
