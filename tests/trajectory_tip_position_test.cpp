@@ -14,9 +14,9 @@
 
 // Helper function to check if a position is reachable using OpenSHC-style WorkspaceAnalyzer
 bool isPositionReachable(const RobotModel &model, int leg_id, const Point3D &position) {
-    // Use WorkspaceAnalyzer::isReachable like in OpenSHC/LocomotionSystem
-    WorkspaceAnalyzer temp_analyzer(const_cast<RobotModel &>(model));
-    return temp_analyzer.isReachable(leg_id, position);
+        // Use WorkspaceAnalyzer::isPositionReachable like in OpenSHC/LocomotionSystem
+    WorkspaceAnalyzer temp_analyzer(model);
+    return temp_analyzer.isPositionReachable(leg_id, position, false);
 }
 
 void debugTipPositionGeneration(LegStepper &stepper, Leg &leg, const RobotModel &model, const GaitConfiguration &gait_config) {

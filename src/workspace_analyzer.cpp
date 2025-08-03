@@ -23,6 +23,10 @@ WorkspaceAnalyzer::WorkspaceAnalyzer(const RobotModel &model, ComputeConfig conf
     analysis_info_.walkspace_map_generated = false;
     last_analysis_timestamp_ = 0;
 
+    initialize();
+}
+
+void WorkspaceAnalyzer::initialize() {
     // Calculate workspace bounds for each leg
     for (int i = 0; i < NUM_LEGS; i++) {
         calculateLegWorkspaceBounds(i);
@@ -30,19 +34,6 @@ WorkspaceAnalyzer::WorkspaceAnalyzer(const RobotModel &model, ComputeConfig conf
 
     // Generate initial walkspace
     generateWorkspace();
-}
-
-void WorkspaceAnalyzer::initialize() {
-    // Only initialize if not already done in constructor
-    if (!analysis_info_.walkspace_map_generated) {
-        // Calculate workspace bounds for each leg
-        for (int i = 0; i < NUM_LEGS; i++) {
-            calculateLegWorkspaceBounds(i);
-        }
-
-        // Generate initial walkspace
-        generateWorkspace();
-    }
 }
 
 // ========================================================================
@@ -57,13 +48,36 @@ void WorkspaceAnalyzer::generateWorkspace() {
         generateWalkspaceForLeg(leg);
     }
 
+    // Pre-calculate leg base positions and adjacent distances to avoid redundant calculations
+    Point3D leg_origins[NUM_LEGS];
+    double adjacent_distances[NUM_LEGS];
+    
+    JointAngles zero_angles(0, 0, 0);
+    for (int leg = 0; leg < NUM_LEGS; ++leg) {
+        Pose leg_origin_pose = model_.getPoseRobotFrame(leg, zero_angles, Pose::Identity());
+        leg_origins[leg] = leg_origin_pose.position;
+        
+        // Calculate minimum distance to adjacent legs
+        int adjacent1 = (leg + 1) % NUM_LEGS;
+        int adjacent2 = (leg + NUM_LEGS - 1) % NUM_LEGS;
+        
+        Pose adj1_pose = model_.getPoseRobotFrame(adjacent1, zero_angles, Pose::Identity());
+        Pose adj2_pose = model_.getPoseRobotFrame(adjacent2, zero_angles, Pose::Identity());
+        
+        double dist_to_adj1 = math_utils::distance(leg_origins[leg], adj1_pose.position) / 2.0f;
+        double dist_to_adj2 = math_utils::distance(leg_origins[leg], adj2_pose.position) / 2.0f;
+        
+        adjacent_distances[leg] = std::min(dist_to_adj1, dist_to_adj2);
+    }
+
     // Generate walkspace for each bearing
     for (int bearing = 0; bearing <= 360; bearing += BEARING_STEP) {
         double min_radius = MAX_WORKSPACE_RADIUS;
+        double bearing_rad = math_utils::degreesToRadians(bearing);
 
         // Find minimum radius across all legs for this bearing
         for (int leg = 0; leg < NUM_LEGS; leg++) {
-            // Use pre-generated workspace data instead of regenerating
+            // Use pre-generated workspace data
             Workplane workplane = getWorkplane(leg, 0.0); // Use ground level workplane
 
             if (!workplane.empty()) {
@@ -73,33 +87,12 @@ void WorkspaceAnalyzer::generateWorkspace() {
                 }
             }
 
-            // Calculate distance to adjacent legs to avoid overlap
-            int adjacent1 = (leg + 1) % NUM_LEGS;
-            int adjacent2 = (leg + NUM_LEGS - 1) % NUM_LEGS;
-
-            // Get leg origins using frame transformation with zero joint angles
-            JointAngles zero_angles(0, 0, 0);
-            Pose leg_origin_pose = model_.getPoseRobotFrame(leg, zero_angles, Pose::Identity());
-            Pose adj1_origin_pose = model_.getPoseRobotFrame(adjacent1, zero_angles, Pose::Identity());
-            Pose adj2_origin_pose = model_.getPoseRobotFrame(adjacent2, zero_angles, Pose::Identity());
-
-            Point3D leg_origin = leg_origin_pose.position;
-            Point3D adj1_origin = adj1_origin_pose.position;
-            Point3D adj2_origin = adj2_origin_pose.position;
-
-            double dist_to_adj1 = math_utils::distance(leg_origin, adj1_origin) / 2.0f;
-            double dist_to_adj2 = math_utils::distance(leg_origin, adj2_origin) / 2.0f;
-
-            double bearing_rad = math_utils::degreesToRadians(bearing);
-            double max_reach = std::min(dist_to_adj1, dist_to_adj2);
-
-            // Adjust for bearing direction - avoid division by zero
-            Point3D direction(cos(bearing_rad), sin(bearing_rad), 0);
-            double projected_reach = max_reach;
-
+            // Apply bearing direction constraint using pre-calculated adjacent distances
+            double projected_reach = adjacent_distances[leg];
+            
             // Only apply cosine correction if cosine is significant (not near 90°, 270°)
             if (std::abs(cos(bearing_rad)) > 0.1) {
-                projected_reach = max_reach / std::abs(cos(bearing_rad));
+                projected_reach = adjacent_distances[leg] / std::abs(cos(bearing_rad));
             }
 
             min_radius = std::min(min_radius, projected_reach);
@@ -196,7 +189,7 @@ WorkspaceAnalyzer::validateTarget(int leg_index, Point3D target_position,
     result.constrained_position = target_position;
 
     // 1. Basic geometric reachability
-    result.is_reachable = isReachable(leg_index, target_position);
+    result.is_reachable = isPositionReachable(leg_index, target_position, false);
     result.distance_from_base = getDistanceFromBase(leg_index, target_position);
 
     // 2. Collision checking
@@ -220,7 +213,7 @@ WorkspaceAnalyzer::validateTarget(int leg_index, Point3D target_position,
         result.constrained_position = constrainToValidWorkspace(leg_index, target_position, current_leg_positions);
 
         // Re-validate the constrained position
-        result.is_reachable = isReachable(leg_index, result.constrained_position);
+        result.is_reachable = isPositionReachable(leg_index, result.constrained_position, false);
         result.distance_from_base = getDistanceFromBase(leg_index, result.constrained_position);
 
         if (validation_config_.enable_collision_checking) {
@@ -237,64 +230,24 @@ WorkspaceAnalyzer::validateTarget(int leg_index, Point3D target_position,
 }
 
 bool WorkspaceAnalyzer::isPositionReachable(int leg_index, const Point3D &position, bool use_ik_validation) {
+    if (leg_index < 0 || leg_index >= NUM_LEGS) {
+        return false;
+    }
+
+    // Basic geometric reachability check
+    WorkspaceBounds bounds = getWorkspaceBounds(leg_index);
+    double distance = getDistanceFromBase(leg_index, position);
+    
+    if (distance < bounds.min_reach || distance > bounds.max_reach) {
+        return false;
+    }
+
+    // If IK validation is requested, perform additional joint limit checking
     if (use_ik_validation) {
-        // Use full IK validation for accuracy
-        return checkJointLimits(leg_index, position) && isReachable(leg_index, position);
-    } else {
-        // Use fast geometric check only
-        return isReachable(leg_index, position);
-    }
-}
-
-bool WorkspaceAnalyzer::isPositionReachableWithWorkplane(int leg_index, const Point3D &position) const {
-    if (leg_index >= NUM_LEGS) {
-        return false;
+        return checkJointLimits(leg_index, position);
     }
 
-    // Get workplane at the position's height
-    Workplane workplane = getWorkplane(leg_index, position.z);
-    if (workplane.empty()) {
-        return false; // No workplane available at this height
-    }
-
-    // Calculate bearing to position
-    double bearing_rad = atan2(position.y, position.x);
-    double bearing_deg = bearing_rad * RADIANS_TO_DEGREES_FACTOR;
-
-    // Normalize bearing to 0-360 range
-    while (bearing_deg < 0)
-        bearing_deg += 360;
-    while (bearing_deg >= 360)
-        bearing_deg -= 360;
-
-    // Find bounding bearings in workplane
-    int lower_bearing = static_cast<int>(bearing_deg / 45) * 45;
-    int upper_bearing = lower_bearing + 45;
-    if (upper_bearing >= 360)
-        upper_bearing = 0;
-
-    auto lower_it = workplane.find(lower_bearing);
-    auto upper_it = workplane.find(upper_bearing);
-
-    if (lower_it == workplane.end() || upper_it == workplane.end()) {
-        return false;
-    }
-
-    // Interpolate maximum radius at this bearing
-    double t = (bearing_deg - lower_bearing) / 45.0;
-    double max_radius = lower_it->second * (1.0f - t) + upper_it->second * t;
-
-    // Check if position is within reachable radius
-    double position_radius = sqrt(position.x * position.x + position.y * position.y);
-    return position_radius <= max_radius;
-}
-
-bool WorkspaceAnalyzer::isReachable(int leg_index, const Point3D &target_position) const {
-    double min_reach, max_reach;
-    getWorkspaceBounds(leg_index, min_reach, max_reach);
-
-    double distance = getDistanceFromBase(leg_index, target_position);
-    return (distance >= min_reach && distance <= max_reach);
+    return true;
 }
 
 // ========================================================================
@@ -436,16 +389,6 @@ bool WorkspaceAnalyzer::getOptimalStepPositions(const Point3D &body_movement,
 // ========================================================================
 // WORKSPACE BOUNDS AND CONSTRAINTS
 // ========================================================================
-
-void WorkspaceAnalyzer::getWorkspaceBounds(int leg_index, double &min_reach, double &max_reach) const {
-    const Parameters &params = model_.getParams();
-
-    double total_reach = params.coxa_length + params.femur_length + params.tibia_length;
-    double theoretical_min = std::abs(params.femur_length - params.tibia_length);
-
-    max_reach = total_reach * validation_config_.safety_margin_factor;
-    min_reach = theoretical_min * validation_config_.minimum_reach_factor;
-}
 
 WorkspaceBounds
 WorkspaceAnalyzer::getWorkspaceBounds(int leg_index) const {

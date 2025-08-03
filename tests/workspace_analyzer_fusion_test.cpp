@@ -81,7 +81,7 @@ int main() {
     std::cout << "Testing validation functions..." << std::endl;
     // Test point within reasonable reach (robot has max reach ~359mm: coxa+femur+tibia)
     Point3D test_point(250, 100, -150); // More realistic test point
-    bool is_reachable = analyzer.isReachable(0, test_point);
+    bool is_reachable = analyzer.isPositionReachable(0, test_point, false);
     std::cout << "Point (" << test_point.x << ", " << test_point.y << ", " << test_point.z
               << ") reachable for leg 0: " << (is_reachable ? "YES" : "NO") << std::endl;
 

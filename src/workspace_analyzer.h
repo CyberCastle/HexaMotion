@@ -221,22 +221,6 @@ class WorkspaceAnalyzer {
      */
     bool isPositionReachable(int leg_index, const Point3D &position, bool use_ik_validation = false);
 
-    /**
-     * @brief Check if position is reachable using workplane interpolation
-     * @param leg_index Leg index (0-5)
-     * @param position Target position in robot frame
-     * @return True if position is reachable according to workplane data
-     */
-    bool isPositionReachableWithWorkplane(int leg_index, const Point3D &position) const;
-
-    /**
-     * @brief Check if a position is geometrically reachable
-     * @param leg_index Index of the leg
-     * @param target Target position to check
-     * @return true if reachable
-     */
-    bool isReachable(int leg_index, const Point3D &target) const;
-
     // ========================================================================
     // COLLISION DETECTION AND AVOIDANCE
     // ========================================================================
@@ -293,14 +277,6 @@ class WorkspaceAnalyzer {
     // ========================================================================
     // WORKSPACE BOUNDS AND CONSTRAINTS
     // ========================================================================
-
-    /**
-     * @brief Get workspace bounds for a specific leg
-     * @param leg_index Index of the leg
-     * @param min_reach Output: minimum reachable distance
-     * @param max_reach Output: maximum reachable distance
-     */
-    void getWorkspaceBounds(int leg_index, double &min_reach, double &max_reach) const;
 
     /**
      * @brief Get comprehensive workspace bounds for a leg
@@ -397,12 +373,6 @@ class WorkspaceAnalyzer {
      * @return Map of bearing to radius values
      */
     const std::map<int, double> &getWalkspaceMap() const { return walkspace_map_; }
-
-    /**
-     * @brief Get current walkspace map for external use
-     * @return Map of bearing to radius values
-     */
-    const std::map<int, double> &getCurrentWalkspaceMap() const { return walkspace_map_; }
 
     /**
      * @brief Check if walkspace map has been generated
