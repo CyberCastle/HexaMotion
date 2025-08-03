@@ -831,111 +831,53 @@ void WorkspaceAnalyzer::calculateLegWorkspaceBounds(int leg_index) {
 }
 
 void WorkspaceAnalyzer::generateWalkspaceForLeg(int leg_index) {
-    // Simplified OpenSHC-equivalent workspace generation
-    if (leg_index < 0 || leg_index >= NUM_LEGS) {
+    if (leg_index < 0 || leg_index >= NUM_LEGS)
         return;
-    }
-
-    // Get robot parameters
     const Parameters &params = model_.getParams();
-    double total_leg_length = params.coxa_length + params.femur_length + params.tibia_length;
-    double max_realistic_radius = std::min(static_cast<double>(MAX_WORKSPACE_RADIUS), total_leg_length);
 
-    // Initialize max/min workplanes (OpenSHC style)
-    Workplane max_workplane;
-    Workplane min_workplane;
-    for (int bearing = 0; bearing <= 360; bearing += BEARING_STEP) {
-        max_workplane[bearing] = max_realistic_radius;
-        min_workplane[bearing] = 0.0;
+    // 1) inicializar workplanes vacíos
+    Workplane max_plane, min_plane;
+    for (int b = 0; b <= 360; b += BEARING_STEP) {
+        max_plane[b] = MAX_WORKSPACE_RADIUS;
+        min_plane[b] = 0.0;
     }
-
-    // Clear existing workspace for this leg
     leg_workspaces_[leg_index].clear();
 
-    // For LOW precision, use simple approach to avoid hanging
-    if (config_.precision == PRECISION_LOW) {
-        // Create workplanes at multiple heights for better compatibility
-        double standing_height = -params.standing_height; // Standing height is negative
-        double extended_height = standing_height - 50.0;  // Extend 50mm below standing height
-        leg_workspaces_[leg_index][extended_height] = max_workplane;
-        leg_workspaces_[leg_index][standing_height] = max_workplane;
-        leg_workspaces_[leg_index][standing_height / 2] = max_workplane;
-        leg_workspaces_[leg_index][0.0] = max_workplane;
+    // 2) calcular posición “identidad” del tip
+    JointAngles zero(0, 0, 0);
+    Point3D id_tip = model_.forwardKinematicsGlobalCoordinates(leg_index, zero);
+
+    // si no puede alcanzar identidad -> workspace vacío
+    if (!detailedReachabilityCheck(leg_index, id_tip)) {
+        leg_workspaces_[leg_index][0.0] = min_plane;
         return;
     }
 
-    // For MEDIUM precision, generate workplanes at multiple heights
-    if (config_.precision == PRECISION_MEDIUM) {
-        double standing_height = -params.standing_height; // Standing height is negative
-        double extended_height = standing_height - 50.0;  // Extend 50mm below standing height
-        double height_step = (0.0 - extended_height) / 4; // Create 5 layers from extended_height to 0
-
-        // Create workplanes at different heights
-        for (int layer = 0; layer < 5; layer++) {
-            double height = extended_height + (layer * height_step);
-
-            Workplane realistic_workplane;
-            for (int bearing = 0; bearing <= 360; bearing += BEARING_STEP) {
-                // Adjust radius based on height - closer to ground = smaller radius
-                double height_factor = 1.0 - (abs(height - standing_height) / abs(standing_height + 50.0));
-                height_factor = std::max(0.6, height_factor); // Minimum 60% radius
-                double safe_radius = max_realistic_radius * 0.8 * height_factor;
-                realistic_workplane[bearing] = safe_radius;
+    // 3) recorrer capas de altura
+    double height_min = -MAX_WORKSPACE_RADIUS;
+    double height_max = MAX_WORKSPACE_RADIUS;
+    double layer_step = (height_max - height_min) / WORKSPACE_LAYERS;
+    for (int layer = 0; layer <= WORKSPACE_LAYERS; ++layer) {
+        double h = height_min + layer * layer_step;
+        Workplane plane;
+        for (int b = 0; b <= 360; b += BEARING_STEP) {
+            double rad = b * M_PI / 180.0;
+            // barra de búsqueda radial
+            double best = 0.0;
+            for (double r = 0.0; r <= MAX_WORKSPACE_RADIUS; r += 20.0) {
+                Point3D p = id_tip;
+                p.z = h;
+                p.x += r * cos(rad);
+                p.y += r * sin(rad);
+                if (detailedReachabilityCheck(leg_index, p))
+                    best = r;
+                else
+                    break;
             }
-            // Ensure symmetry
-            realistic_workplane[360] = realistic_workplane[0];
-            leg_workspaces_[leg_index][height] = realistic_workplane;
+            plane[b] = best;
         }
-        return;
-    }
-
-    // For HIGH precision, use full workspace generation with multiple heights
-    try {
-        // Calculate identity tip pose
-        JointAngles identity_angles(0.0, 0.0, 0.0);
-        Point3D identity_tip_position = model_.forwardKinematicsGlobalCoordinates(leg_index, identity_angles);
-
-        double standing_height = -params.standing_height;
-        double height_step = standing_height / WORKSPACE_LAYERS;
-
-        // Generate workplanes at different heights
-        for (int layer = 0; layer < WORKSPACE_LAYERS; layer++) {
-            double height = standing_height + (layer * abs(height_step));
-
-            Workplane height_workplane;
-            for (int bearing = 0; bearing <= 360; bearing += BEARING_STEP) {
-                double bearing_rad = bearing * M_PI / 180.0;
-                double max_radius = 0.0;
-
-                // Search along bearing for maximum reachable distance at this height
-                Point3D base_position = identity_tip_position;
-                base_position.z = height;
-
-                for (double test_radius = 10.0; test_radius <= max_realistic_radius; test_radius += 20.0) {
-                    Point3D test_position = base_position;
-                    test_position.x += test_radius * cos(bearing_rad);
-                    test_position.y += test_radius * sin(bearing_rad);
-
-                    if (detailedReachabilityCheck(leg_index, test_position)) {
-                        max_radius = test_radius;
-                    } else {
-                        break; // Stop when we hit the limit
-                    }
-                }
-
-                height_workplane[bearing] = max_radius;
-            }
-
-            // Ensure symmetry
-            height_workplane[360] = height_workplane[0];
-            leg_workspaces_[leg_index][height] = height_workplane;
-        }
-
-    } catch (...) {
-        // Fallback to simple workspace if anything fails
-        double standing_height = -params.standing_height;
-        leg_workspaces_[leg_index][standing_height] = max_workplane;
-        leg_workspaces_[leg_index][0.0] = max_workplane;
+        plane[360] = plane[0];
+        leg_workspaces_[leg_index][h] = plane;
     }
 }
 
