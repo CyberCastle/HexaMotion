@@ -4,7 +4,6 @@
 #include "gait_config.h" // For StepCycle definition
 #include "leg.h"
 #include "robot_model.h"
-#include "workspace_analyzer.h"
 
 enum StepState {
     STEP_SWING,        //< The leg step cycle is in 'swing' state, the forward 'in air' progression of the step cycle
@@ -37,8 +36,7 @@ struct LegStepperExternalTarget {
 class LegStepper {
   public:
     // Constructor
-    LegStepper(int leg_index, const Point3D &identity_tip_pose, Leg &leg, RobotModel &robot_model,
-               WorkspaceAnalyzer *workspace_analyzer);
+    LegStepper(int leg_index, const Point3D &identity_tip_pose, Leg &leg, RobotModel &robot_model);
 
     // Accessors
     int getLegIndex() const { return leg_index_; }
@@ -173,8 +171,6 @@ class LegStepper {
     Point3D swing_1_nodes_[5];
     Point3D swing_2_nodes_[5];
     Point3D stance_nodes_[5];
-
-    WorkspaceAnalyzer *workspace_analyzer_ = nullptr;
 };
 
 #endif // LEG_STEPPER_H

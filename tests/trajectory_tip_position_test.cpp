@@ -12,11 +12,11 @@
 #include <iostream>
 #include <vector>
 
-// Helper function to check if a position is reachable using OpenSHC-style WorkspaceAnalyzer
+// Helper function to check if a position is reachable using basic kinematic validation
 bool isPositionReachable(const RobotModel &model, int leg_id, const Point3D &position) {
-        // Use WorkspaceAnalyzer::isPositionReachable like in OpenSHC/LocomotionSystem
-    WorkspaceAnalyzer temp_analyzer(model);
-    return temp_analyzer.isPositionReachable(leg_id, position, false);
+    // Use basic inverse kinematics validation
+    JointAngles angles = model.inverseKinematicsCurrentGlobalCoordinates(leg_id, JointAngles(0, 0, 0), position);
+    return model.checkJointLimits(leg_id, angles);
 }
 
 void debugTipPositionGeneration(LegStepper &stepper, Leg &leg, const RobotModel &model, const GaitConfiguration &gait_config) {
@@ -620,11 +620,8 @@ int main() {
     std::cout << "\nLeg stance position from config: (" << leg_stance_position.x << ", " << leg_stance_position.y << ", " << leg_stance_position.z << ")" << std::endl;
     std::cout << "Identity tip pose: (" << identity_tip_pose.x << ", " << identity_tip_pose.y << ", " << identity_tip_pose.z << ")" << std::endl;
 
-    // Create required objects for LegStepper
-    WorkspaceAnalyzer workspace_analyzer(const_cast<RobotModel &>(model));
-
     // Create LegStepper for leg 0 using the correct identity tip pose
-    LegStepper stepper(0, identity_tip_pose, test_legs[0], const_cast<RobotModel &>(model), &workspace_analyzer);
+    LegStepper stepper(0, identity_tip_pose, test_legs[0], const_cast<RobotModel &>(model));
     stepper.setDefaultTipPose(identity_tip_pose);
 
     // *** CONFIGURE USING TRIPOD GAIT PARAMETERS ***

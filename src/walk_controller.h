@@ -10,7 +10,6 @@
 #include "robot_model.h"
 #include "terrain_adaptation.h"
 #include "velocity_limits.h"
-#include "workspace_analyzer.h"
 #include <map>
 #include <memory>
 
@@ -159,24 +158,6 @@ class WalkController {
     const TerrainAdaptation &getTerrainAdaptation() const { return terrain_adaptation_; }
     RobotModel &getModel() { return model; }
 
-    // Walkspace analysis control methods (OpenSHC equivalent)
-    void enableWalkspaceAnalysis(bool enabled);
-    bool isWalkspaceAnalysisEnabled() const;
-    const WorkspaceAnalyzer::AnalysisInfo &getWalkspaceAnalysisInfo() const;
-    std::string getWalkspaceAnalysisInfoString() const;
-    void resetWalkspaceAnalysisStats();
-    WorkspaceAnalyzer::WalkspaceResult analyzeCurrentWalkspace();
-    bool generateWalkspaceMap();
-    double getWalkspaceRadius(double bearing_degrees) const;
-
-    // Enhanced walkspace analysis methods
-    const std::map<int, double> &getCurrentWalkspaceMap() const;
-    bool isWalkspaceMapGenerated() const;
-    double getStabilityMargin() const;
-    double getOverallStabilityScore() const;
-    std::map<int, double> getLegReachabilityScores() const;
-    bool isCurrentlyStable() const;
-
     // Gait configuration management methods (OpenSHC equivalent)
     /**
      * @brief Set gait configuration and apply to all leg steppers
@@ -314,9 +295,6 @@ class WalkController {
     VelocityLimits velocity_limits_;
     VelocityLimits::LimitValues current_velocity_limits_;
     VelocityLimits::LimitValues current_velocities_;
-
-    // Unified workspace analysis and validation
-    std::unique_ptr<WorkspaceAnalyzer> workspace_analyzer_;
 
     // Collision avoidance: track current leg positions
     Point3D current_leg_positions_[NUM_LEGS];

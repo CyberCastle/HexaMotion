@@ -5,13 +5,11 @@
 #include <algorithm>
 #include <cmath>
 
-LegStepper::LegStepper(int leg_index, const Point3D &identity_tip_pose, Leg &leg, RobotModel &robot_model,
-                       WorkspaceAnalyzer *workspace_analyzer)
+LegStepper::LegStepper(int leg_index, const Point3D &identity_tip_pose, Leg &leg, RobotModel &robot_model)
     : leg_index_(leg_index),
       leg_(leg),
       robot_model_(robot_model),
-      identity_tip_pose_(identity_tip_pose),
-      workspace_analyzer_(workspace_analyzer) {
+      identity_tip_pose_(identity_tip_pose) {
 
     // Initialize basic properties
     default_tip_pose_ = identity_tip_pose_;

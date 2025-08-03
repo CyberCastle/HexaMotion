@@ -12,10 +12,11 @@
 #include <iostream>
 #include <vector>
 
-// Helper function to check if a position is reachable using OpenSHC-style WorkspaceAnalyzer
+// Helper function to check if a position is reachable using basic kinematic validation
 bool isPositionReachable(const RobotModel &model, int leg_id, const Point3D &position) {
-    WorkspaceAnalyzer temp_analyzer(const_cast<RobotModel &>(model));
-    return temp_analyzer.isPositionReachable(leg_id, position, false);
+    // Use basic inverse kinematics validation
+    JointAngles angles = model.inverseKinematicsCurrentGlobalCoordinates(leg_id, JointAngles(0, 0, 0), position);
+    return model.checkJointLimits(leg_id, angles);
 }
 
 // Structure to hold analysis results for a single leg
@@ -601,9 +602,6 @@ int main() {
                angles.coxa * 180.0 / M_PI, angles.femur * 180.0 / M_PI, angles.tibia * 180.0 / M_PI);
     }
 
-    // Create required objects for LegSteppers
-    WorkspaceAnalyzer workspace_analyzer(const_cast<RobotModel &>(model));
-
     // Create LegSteppers for all 6 legs
     std::vector<std::unique_ptr<LegStepper>> steppers;
 
@@ -612,7 +610,7 @@ int main() {
         Point3D identity_tip_pose = Point3D(leg_stance_position.x, leg_stance_position.y, leg_stance_position.z);
 
         auto stepper = std::make_unique<LegStepper>(i, identity_tip_pose, hexapod_legs[i],
-                                                    const_cast<RobotModel &>(model), &workspace_analyzer);
+                                                    const_cast<RobotModel &>(model));
         stepper->setDefaultTipPose(identity_tip_pose);
 
         // Configure StepCycle from tripod gait configuration

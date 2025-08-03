@@ -1024,11 +1024,8 @@ int main() {
         // Get leg's identity pose for LegStepper initialization
         Point3D identity_pose = leg.getCurrentTipPositionGlobal();
 
-        // Create required objects for LegStepper
-        WorkspaceAnalyzer workspace_analyzer(const_cast<RobotModel &>(model));
-
         // Create LegStepper
-        LegStepper stepper(leg_index, identity_pose, leg, const_cast<RobotModel &>(model), &workspace_analyzer);
+        LegStepper stepper(leg_index, identity_pose, leg, const_cast<RobotModel &>(model));
         stepper.setDefaultTipPose(identity_pose);
 
         // CRITICAL: Configure velocity and stride BEFORE testing trajectory generation
@@ -1063,7 +1060,7 @@ int main() {
             test_params.dynamic_gait.swing_phase = 12;
             test_params.dynamic_gait.frequency = 2.0;
             RobotModel temp_model(test_params);
-            LegStepper temp_stepper(leg_index, identity_pose, leg, temp_model, &workspace_analyzer);
+            LegStepper temp_stepper(leg_index, identity_pose, leg, temp_model);
             temp_stepper.setDefaultTipPose(identity_pose);
 
             for (int i = 0; i < step_cycle.period_; ++i) {
@@ -1324,14 +1321,11 @@ int main() {
     // Test walk plane pose consistency across multiple leg coordination
     std::vector<double> walk_plane_heights_during_coordination;
 
-    // Create required objects for LegStepper
-    WorkspaceAnalyzer workspace_analyzer(const_cast<RobotModel &>(model));
-
     // Create LegSteppers for all legs (using pointers due to reference members)
     LegStepper *steppers[NUM_LEGS];
     for (int i = 0; i < NUM_LEGS; ++i) {
         Point3D identity_pose = test_legs[i].getCurrentTipPositionGlobal();
-        steppers[i] = new LegStepper(i, identity_pose, test_legs[i], const_cast<RobotModel &>(model), &workspace_analyzer);
+        steppers[i] = new LegStepper(i, identity_pose, test_legs[i], const_cast<RobotModel &>(model));
 
         // Set different phase offsets for tripod gait
         double phase_offset = (i % 2 == 0) ? 0.0 : 0.5; // Tripod gait pattern
