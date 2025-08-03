@@ -1,13 +1,15 @@
 #ifndef ADMITTANCE_CONTROLLER_H
 #define ADMITTANCE_CONTROLLER_H
 
-#include "robot_model.h"
 #include "precision_config.h"
+#include "robot_model.h"
 #include <memory>
 #include <vector>
 
-// Forward declaration to avoid circular dependency
-class WorkspaceValidator;
+// Forward declarations to avoid circular dependency
+class RobotModel;
+class TerrainAdaptation;
+class WorkspaceAnalyzer;
 
 /**
  * @brief Enhanced admittance controller with ODE integration
@@ -29,10 +31,10 @@ class AdmittanceController {
         double virtual_mass;      //< Virtual mass (kg)
         double virtual_damping;   //< Damping coefficient
         double virtual_stiffness; //< Spring stiffness
-        Point3D velocity;        //< Current velocity
-        Point3D acceleration;    //< Current acceleration
-        Point3D applied_force;   //< Applied force
-        Point3D position_delta;  //< Position change from admittance
+        Point3D velocity;         //< Current velocity
+        Point3D acceleration;     //< Current acceleration
+        Point3D applied_force;    //< Applied force
+        Point3D position_delta;   //< Position change from admittance
 
         AdmittanceParams() : virtual_mass(0.5f), virtual_damping(2.0f),
                              virtual_stiffness(100.0f), velocity(0, 0, 0),
@@ -43,9 +45,9 @@ class AdmittanceController {
      * @brief Parameters for derivative function in admittance equation
      */
     struct AdmittanceDerivativeParams {
-        double mass;             //< Virtual mass
-        double damping;          //< Damping coefficient
-        double stiffness;        //< Spring stiffness
+        double mass;            //< Virtual mass
+        double damping;         //< Damping coefficient
+        double stiffness;       //< Spring stiffness
         Point3D external_force; //< External force applied
         Point3D equilibrium;    //< Equilibrium position
 
@@ -76,7 +78,7 @@ class AdmittanceController {
 
   private:
     RobotModel &model_;
-    std::unique_ptr<WorkspaceValidator> workspace_validator_; // Workspace validation
+    std::unique_ptr<WorkspaceAnalyzer> workspace_analyzer_; // Workspace analysis and validation
     IIMUInterface *imu_;
     IFSRInterface *fsr_;
     ComputeConfig config_;
@@ -223,7 +225,7 @@ class AdmittanceController {
 
     // Dynamic stiffness calculation
     double calculateStiffnessScale(int leg_index, StepPhase leg_state,
-                                  const Point3D &leg_position);
+                                   const Point3D &leg_position);
     void updateAdjacentLegStiffness(int swing_leg_index, double load_scaling);
 };
 

@@ -3,7 +3,7 @@
 #include "hexamotion_constants.h"
 #include "math_utils.h"
 #include "walk_controller.h"
-#include "workspace_validator.h" // Add unified validator
+#include "workspace_analyzer.h" // Add unified analyzer
 #include <algorithm>
 #include <cmath>
 #include <vector>

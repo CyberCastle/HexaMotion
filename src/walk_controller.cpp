@@ -6,7 +6,7 @@
 #include "math_utils.h"
 #include "terrain_adaptation.h"
 #include "velocity_limits.h"
-#include "workspace_validator.h" // Use unified validator instead
+#include "workspace_analyzer.h" // Use unified analyzer instead
 #include <algorithm>
 #include <cmath>
 #include <iostream>
@@ -16,7 +16,6 @@
 
 WalkController::WalkController(RobotModel &m, Leg legs[NUM_LEGS], const BodyPoseConfiguration &pose_config)
     : model(m), terrain_adaptation_(m), body_pose_controller_(nullptr),
-      step_clearance_(30.0), step_depth_(10.0),
       desired_linear_velocity_(0, 0, 0), desired_angular_velocity_(0.0),
       walk_state_(WALK_STOPPED), pose_state_(0),
       regenerate_walkspace_(false), legs_at_correct_phase_(0), legs_completed_first_step_(0),
@@ -31,11 +30,8 @@ WalkController::WalkController(RobotModel &m, Leg legs[NUM_LEGS], const BodyPose
     GaitType default_gait_type = stringToGaitType(default_gait_name);
     setGait(default_gait_type);
 
-    // Initialize workspace validator
-    workspace_validator_ = std::make_unique<WorkspaceValidator>(model);
-
-    // Initialize walkspace analyzer
-    walkspace_analyzer_ = std::make_unique<WalkspaceAnalyzer>(model);
+    // Initialize workspace analyzer (unified class replaces both validator and analyzer)
+    workspace_analyzer_ = std::make_unique<WorkspaceAnalyzer>(model);
 
     // Create LegStepper objects for each leg
     for (int i = 0; i < NUM_LEGS; i++) {
@@ -53,7 +49,7 @@ WalkController::WalkController(RobotModel &m, Leg legs[NUM_LEGS], const BodyPose
 
         // Update terrain adaptation parameters
         auto stepper = std::make_shared<LegStepper>(i, identity_tip_pose, legs[i], model,
-                                                    walkspace_analyzer_.get(), workspace_validator_.get());
+                                                    workspace_analyzer_.get());
         leg_steppers_.push_back(stepper);
     }
 
@@ -485,14 +481,14 @@ void WalkController::updateWalk(const Point3D &linear_velocity_input, double ang
 
     // TODO: Enable this when walkspace analysis is implemented
     // OpenSHC: Conditional walkspace analysis with optimized stability control
-    // if (walkspace_analyzer_ && walkspace_analyzer_->isAnalysisEnabled()) {
+    // if (workspace_analyzer_ && workspace_analyzer_->isAnalysisEnabled()) {
     //     // Batch update leg positions
     //     for (int i = 0; i < NUM_LEGS; ++i) {
     //         current_leg_positions_[i] = legs_array_[i].getCurrentTipPositionGlobal();
     //     }
 
     //     const WalkspaceAnalyzer::WalkspaceResult analysis_result =
-    //         walkspace_analyzer_->analyzeWalkspace(current_leg_positions_);
+    //         workspace_analyzer_->analyzeWalkspace(current_leg_positions_);
 
     //     // OpenSHC: Optimized adaptive velocity control
     //     if (walk_state_ == WALK_MOVING) {
@@ -501,7 +497,7 @@ void WalkController::updateWalk(const Point3D &linear_velocity_input, double ang
     //             desired_linear_velocity_ = desired_linear_velocity_ * stability_factor;
     //             desired_angular_velocity_ *= stability_factor;
     //         } else {
-    //             const double stability_score = walkspace_analyzer_->getAnalysisInfo().overall_stability_score;
+    //             const double stability_score = workspace_analyzer_->getAnalysisInfo().overall_stability_score;
     //             if (stability_score > 0.8) {
     //                 const double boost_factor = std::min(1.2, 1.0 + (stability_score - 0.8) * 0.5);
     //                 desired_linear_velocity_ = desired_linear_velocity_ * boost_factor;
@@ -597,33 +593,33 @@ std::shared_ptr<LegStepper> WalkController::getLegStepper(int leg_index) const {
 // ===== WALKSPACE ANALYZER CONTROL METHODS (OpenSHC equivalent) =====
 
 void WalkController::enableWalkspaceAnalysis(bool enabled) {
-    if (walkspace_analyzer_) {
-        walkspace_analyzer_->enableAnalysis(enabled);
+    if (workspace_analyzer_) {
+        workspace_analyzer_->enableAnalysis(enabled);
     }
 }
 
 bool WalkController::isWalkspaceAnalysisEnabled() const {
-    return walkspace_analyzer_ ? walkspace_analyzer_->isAnalysisEnabled() : false;
+    return workspace_analyzer_ ? workspace_analyzer_->isAnalysisEnabled() : false;
 }
 
-const WalkspaceAnalyzer::AnalysisInfo &WalkController::getWalkspaceAnalysisInfo() const {
-    static WalkspaceAnalyzer::AnalysisInfo empty_info;
-    return walkspace_analyzer_ ? walkspace_analyzer_->getAnalysisInfo() : empty_info;
+const WorkspaceAnalyzer::AnalysisInfo &WalkController::getWalkspaceAnalysisInfo() const {
+    static WorkspaceAnalyzer::AnalysisInfo empty_info;
+    return workspace_analyzer_ ? workspace_analyzer_->getAnalysisInfo() : empty_info;
 }
 
 std::string WalkController::getWalkspaceAnalysisInfoString() const {
-    return walkspace_analyzer_ ? walkspace_analyzer_->getAnalysisInfoString() : "WalkspaceAnalyzer not available";
+    return workspace_analyzer_ ? workspace_analyzer_->getAnalysisInfoString() : "WorkspaceAnalyzer not available";
 }
 
 void WalkController::resetWalkspaceAnalysisStats() {
-    if (walkspace_analyzer_) {
-        walkspace_analyzer_->resetAnalysisStats();
+    if (workspace_analyzer_) {
+        workspace_analyzer_->resetAnalysisStats();
     }
 }
 
-WalkspaceAnalyzer::WalkspaceResult WalkController::analyzeCurrentWalkspace() {
-    if (!walkspace_analyzer_) {
-        return WalkspaceAnalyzer::WalkspaceResult();
+WorkspaceAnalyzer::WalkspaceResult WalkController::analyzeCurrentWalkspace() {
+    if (!workspace_analyzer_) {
+        return WorkspaceAnalyzer::WalkspaceResult();
     }
 
     // Use current leg positions for analysis
@@ -636,16 +632,16 @@ WalkspaceAnalyzer::WalkspaceResult WalkController::analyzeCurrentWalkspace() {
         }
     }
 
-    return walkspace_analyzer_->analyzeWalkspace(current_positions);
+    return workspace_analyzer_->analyzeWalkspace(current_positions);
 }
 
 bool WalkController::generateWalkspaceMap() {
-    if (!walkspace_analyzer_) {
+    if (!workspace_analyzer_) {
         return false;
     }
 
     try {
-        walkspace_analyzer_->generateWalkspace();
+        workspace_analyzer_->generateWorkspace();
         return true;
     } catch (...) {
         return false;
@@ -653,47 +649,47 @@ bool WalkController::generateWalkspaceMap() {
 }
 
 double WalkController::getWalkspaceRadius(double bearing_degrees) const {
-    return walkspace_analyzer_ ? walkspace_analyzer_->getWalkspaceRadius(bearing_degrees) : 0.0;
+    return workspace_analyzer_ ? workspace_analyzer_->getWalkspaceRadius(bearing_degrees) : 0.0;
 }
 
 const std::map<int, double> &WalkController::getCurrentWalkspaceMap() const {
     static std::map<int, double> empty_map;
-    return walkspace_analyzer_ ? walkspace_analyzer_->getCurrentWalkspaceMap() : empty_map;
+    return workspace_analyzer_ ? workspace_analyzer_->getCurrentWalkspaceMap() : empty_map;
 }
 
 bool WalkController::isWalkspaceMapGenerated() const {
-    return walkspace_analyzer_ ? walkspace_analyzer_->isWalkspaceMapGenerated() : false;
+    return workspace_analyzer_ ? workspace_analyzer_->isWalkspaceMapGenerated() : false;
 }
 
 double WalkController::getStabilityMargin() const {
-    if (!walkspace_analyzer_) {
+    if (!workspace_analyzer_) {
         return 0.0;
     }
-    const auto &analysis_info = walkspace_analyzer_->getAnalysisInfo();
+    const auto &analysis_info = workspace_analyzer_->getAnalysisInfo();
     return analysis_info.current_result.stability_margin;
 }
 
 double WalkController::getOverallStabilityScore() const {
-    if (!walkspace_analyzer_) {
+    if (!workspace_analyzer_) {
         return 0.0;
     }
-    const auto &analysis_info = walkspace_analyzer_->getAnalysisInfo();
+    const auto &analysis_info = workspace_analyzer_->getAnalysisInfo();
     return analysis_info.overall_stability_score;
 }
 
 std::map<int, double> WalkController::getLegReachabilityScores() const {
-    if (!walkspace_analyzer_) {
+    if (!workspace_analyzer_) {
         return std::map<int, double>();
     }
-    const auto &analysis_info = walkspace_analyzer_->getAnalysisInfo();
+    const auto &analysis_info = workspace_analyzer_->getAnalysisInfo();
     return analysis_info.leg_reachability;
 }
 
 bool WalkController::isCurrentlyStable() const {
-    if (!walkspace_analyzer_) {
+    if (!workspace_analyzer_) {
         return false;
     }
-    const auto &analysis_info = walkspace_analyzer_->getAnalysisInfo();
+    const auto &analysis_info = workspace_analyzer_->getAnalysisInfo();
     return analysis_info.current_result.is_stable;
 }
 
@@ -701,11 +697,11 @@ double WalkController::calculateStabilityIndex() const {
     // TODO: Simplified stability calculation
     // In a real implementation, this would use IMU and FSR data
 
-    if (!walkspace_analyzer_) {
+    if (!workspace_analyzer_) {
         return 0.5f; // Default moderate stability
     }
 
-    const auto &analysis_info = walkspace_analyzer_->getAnalysisInfo();
+    const auto &analysis_info = workspace_analyzer_->getAnalysisInfo();
     return analysis_info.overall_stability_score;
 }
 

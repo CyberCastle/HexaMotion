@@ -10,14 +10,14 @@
 #include "gait_config.h"
 #include "hexamotion_constants.h"
 #include "math_utils.h"
-#include "workspace_validator.h"
+#include "workspace_analyzer.h"
 #include <algorithm>
 #include <cmath>
 #include <memory>
 
 class VelocityLimits::Impl {
   public:
-    std::unique_ptr<WorkspaceValidator> workspace_validator_;
+    std::unique_ptr<WorkspaceAnalyzer> workspace_analyzer_;
     const RobotModel &model_;
     LimitMap limit_map_;
     WorkspaceConfig workspace_config_;
@@ -26,13 +26,13 @@ class VelocityLimits::Impl {
 
     explicit Impl(const RobotModel &model)
         : model_(model), angular_velocity_scaling_(DEFAULT_ANGULAR_SCALING) {
-        // Initialize WorkspaceValidator for all workspace calculations
+        // Initialize WorkspaceAnalyzer for all workspace calculations
         ValidationConfig config;
         config.enable_collision_checking = true;
         config.enable_joint_limit_checking = true;
         config.safety_margin = 30.0;
 
-        workspace_validator_ = std::make_unique<WorkspaceValidator>(model, config);
+        workspace_analyzer_ = std::make_unique<WorkspaceAnalyzer>(model, ComputeConfig::medium(), config);
 
         // Initialize with default gait configuration
         current_gait_config_ = GaitConfig();
@@ -112,7 +112,7 @@ void VelocityLimits::calculateWorkspace(const GaitConfig &gait_config) {
     double min_stance_radius = 1000.0;
 
     for (int leg = 0; leg < NUM_LEGS; ++leg) {
-        auto bounds = pimpl_->workspace_validator_->getWorkspaceBounds(leg);
+        auto bounds = pimpl_->workspace_analyzer_->getWorkspaceBounds(leg);
 
         // Use the most restrictive values across all legs
         min_walkspace_radius = std::min(min_walkspace_radius, bounds.max_radius);
@@ -120,7 +120,7 @@ void VelocityLimits::calculateWorkspace(const GaitConfig &gait_config) {
     }
 
     // Apply safety scaling
-    auto scaling_factors = pimpl_->workspace_validator_->getScalingFactors();
+    auto scaling_factors = pimpl_->workspace_analyzer_->getScalingFactors();
 
     pimpl_->workspace_config_.walkspace_radius = min_walkspace_radius * scaling_factors.workspace_scale;
     pimpl_->workspace_config_.stance_radius = min_stance_radius * scaling_factors.workspace_scale;
@@ -151,7 +151,7 @@ VelocityLimits::LimitValues VelocityLimits::scaleVelocityLimits(
     LimitValues scaled_limits = input_velocities;
 
     // Apply angular velocity scaling using scaling factors
-    auto scaling_factors = pimpl_->workspace_validator_->getScalingFactors();
+    auto scaling_factors = pimpl_->workspace_analyzer_->getScalingFactors();
     double angular_scale = angular_velocity_percentage * scaling_factors.angular_scale;
     scaled_limits.angular_z *= angular_scale;
 
@@ -207,7 +207,7 @@ VelocityLimits::LimitValues VelocityLimits::applyAccelerationLimits(
     double accel_z = (target_velocities.angular_z - current_velocities.angular_z) / dt;
 
     // Apply acceleration limits using constraints
-    auto scaling_factors = pimpl_->workspace_validator_->getScalingFactors();
+    auto scaling_factors = pimpl_->workspace_analyzer_->getScalingFactors();
     double max_accel = target_velocities.acceleration * scaling_factors.acceleration_scale;
 
     if (std::abs(accel_x) > max_accel) {
@@ -232,7 +232,7 @@ void VelocityLimits::calculateOvershoot(const GaitConfig &gait_config) {
     // Use velocity constraints instead of custom calculation
 
     // Get velocity constraints from validator for forward direction (0 degrees)
-    auto constraints = pimpl_->workspace_validator_->calculateVelocityConstraints(0, 0.0);
+    auto constraints = pimpl_->workspace_analyzer_->calculateVelocityConstraints(0, 0.0);
 
     double max_acceleration = constraints.max_acceleration;
 
@@ -242,7 +242,7 @@ void VelocityLimits::calculateOvershoot(const GaitConfig &gait_config) {
     pimpl_->workspace_config_.overshoot_y = pimpl_->workspace_config_.overshoot_x; // Symmetric for now
 
     // Apply safety margin
-    auto scaling_factors = pimpl_->workspace_validator_->getScalingFactors();
+    auto scaling_factors = pimpl_->workspace_analyzer_->getScalingFactors();
     pimpl_->workspace_config_.overshoot_x *= scaling_factors.safety_margin;
     pimpl_->workspace_config_.overshoot_y *= scaling_factors.safety_margin;
 }
@@ -340,7 +340,7 @@ double VelocityLimits::calculateMaxLinearSpeed(double walkspace_radius,
     double max_speed = (walkspace_radius * 2.0) / cycle_time;
 
     // Apply safety limits
-    auto scaling_factors = pimpl_->workspace_validator_->getScalingFactors();
+    auto scaling_factors = pimpl_->workspace_analyzer_->getScalingFactors();
     max_speed *= scaling_factors.velocity_scale;
 
     // Apply reasonable limits to prevent extreme values
@@ -356,7 +356,7 @@ double VelocityLimits::calculateMaxAngularSpeed(double max_linear_speed, double 
     double max_angular = max_linear_speed / stance_radius;
 
     // Apply angular scaling
-    auto scaling_factors = pimpl_->workspace_validator_->getScalingFactors();
+    auto scaling_factors = pimpl_->workspace_analyzer_->getScalingFactors();
     max_angular *= scaling_factors.angular_scale;
 
     // Apply reasonable limits to prevent extreme values
@@ -372,7 +372,7 @@ double VelocityLimits::calculateMaxAcceleration(double max_speed, double time_to
     double max_accel = max_speed / time_to_max;
 
     // Apply acceleration scaling
-    auto scaling_factors = pimpl_->workspace_validator_->getScalingFactors();
+    auto scaling_factors = pimpl_->workspace_analyzer_->getScalingFactors();
     max_accel *= scaling_factors.acceleration_scale;
 
     // Apply reasonable limits to prevent extreme values
@@ -389,7 +389,7 @@ VelocityLimits::LimitValues VelocityLimits::calculateLimitsForBearing(
     VelocityConstraints most_restrictive;
 
     for (int leg = 0; leg < NUM_LEGS; ++leg) {
-        auto constraints = pimpl_->workspace_validator_->calculateVelocityConstraints(leg, bearing_degrees);
+        auto constraints = pimpl_->workspace_analyzer_->calculateVelocityConstraints(leg, bearing_degrees);
 
         // Use the most restrictive constraints
         if (leg == 0 || constraints.workspace_radius < min_effective_radius) {
@@ -431,7 +431,7 @@ void VelocityLimits::setSafetyMargin(double margin) {
     pimpl_->workspace_config_.safety_margin = margin;
 
     // Update validator safety margin
-    pimpl_->workspace_validator_->updateSafetyMargin(margin);
+    pimpl_->workspace_analyzer_->updateSafetyMargin(margin);
 }
 
 void VelocityLimits::setAngularVelocityScaling(double scaling) {

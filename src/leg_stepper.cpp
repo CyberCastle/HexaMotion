@@ -6,13 +6,12 @@
 #include <cmath>
 
 LegStepper::LegStepper(int leg_index, const Point3D &identity_tip_pose, Leg &leg, RobotModel &robot_model,
-                       WalkspaceAnalyzer *walkspace_analyzer, WorkspaceValidator *workspace_validator)
+                       WorkspaceAnalyzer *workspace_analyzer)
     : leg_index_(leg_index),
       leg_(leg),
       robot_model_(robot_model),
       identity_tip_pose_(identity_tip_pose),
-      walkspace_analyzer_(walkspace_analyzer),
-      workspace_validator_(workspace_validator) {
+      workspace_analyzer_(workspace_analyzer) {
 
     // Initialize basic properties
     default_tip_pose_ = identity_tip_pose_;

@@ -4,8 +4,7 @@
 #include "../src/gait_config_factory.h"
 #include "../src/leg_stepper.h"
 #include "../src/walk_controller.h"
-#include "../src/walkspace_analyzer.h"
-#include "../src/workspace_validator.h"
+#include "../src/workspace_analyzer.h"
 #include "test_stubs.h"
 #include <algorithm>
 #include <cassert>
@@ -13,11 +12,11 @@
 #include <iostream>
 #include <vector>
 
-// Helper function to check if a position is reachable using OpenSHC-style WorkspaceValidator
+// Helper function to check if a position is reachable using OpenSHC-style WorkspaceAnalyzer
 bool isPositionReachable(const RobotModel &model, int leg_id, const Point3D &position) {
-    // Use WorkspaceValidator::isReachable like in OpenSHC/LocomotionSystem
-    WorkspaceValidator temp_validator(model);
-    return temp_validator.isReachable(leg_id, position);
+    // Use WorkspaceAnalyzer::isReachable like in OpenSHC/LocomotionSystem
+    WorkspaceAnalyzer temp_analyzer(const_cast<RobotModel &>(model));
+    return temp_analyzer.isReachable(leg_id, position);
 }
 
 void debugTipPositionGeneration(LegStepper &stepper, Leg &leg, const RobotModel &model, const GaitConfiguration &gait_config) {
@@ -622,11 +621,10 @@ int main() {
     std::cout << "Identity tip pose: (" << identity_tip_pose.x << ", " << identity_tip_pose.y << ", " << identity_tip_pose.z << ")" << std::endl;
 
     // Create required objects for LegStepper
-    WalkspaceAnalyzer walkspace_analyzer(model);
-    WorkspaceValidator workspace_validator(model);
+    WorkspaceAnalyzer workspace_analyzer(const_cast<RobotModel &>(model));
 
     // Create LegStepper for leg 0 using the correct identity tip pose
-    LegStepper stepper(0, identity_tip_pose, test_legs[0], model, &walkspace_analyzer, &workspace_validator);
+    LegStepper stepper(0, identity_tip_pose, test_legs[0], const_cast<RobotModel &>(model), &workspace_analyzer);
     stepper.setDefaultTipPose(identity_tip_pose);
 
     // *** CONFIGURE USING TRIPOD GAIT PARAMETERS ***

@@ -1,5 +1,5 @@
 #include "hexamotion_constants.h"
-#include "workspace_validator.h"
+#include "workspace_analyzer.h"
 #include <cmath>
 #include <iostream>
 

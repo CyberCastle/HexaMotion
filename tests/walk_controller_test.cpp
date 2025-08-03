@@ -4,8 +4,7 @@
 #include "../src/gait_config_factory.h"
 #include "../src/leg_stepper.h"
 #include "../src/walk_controller.h"
-#include "../src/walkspace_analyzer.h"
-#include "../src/workspace_validator.h"
+#include "../src/workspace_analyzer.h"
 #include "test_stubs.h"
 #include <algorithm>
 #include <cassert>
@@ -1026,11 +1025,10 @@ int main() {
         Point3D identity_pose = leg.getCurrentTipPositionGlobal();
 
         // Create required objects for LegStepper
-        WalkspaceAnalyzer walkspace_analyzer(model);
-        WorkspaceValidator workspace_validator(model);
+        WorkspaceAnalyzer workspace_analyzer(const_cast<RobotModel &>(model));
 
         // Create LegStepper
-        LegStepper stepper(leg_index, identity_pose, leg, model, &walkspace_analyzer, &workspace_validator);
+        LegStepper stepper(leg_index, identity_pose, leg, const_cast<RobotModel &>(model), &workspace_analyzer);
         stepper.setDefaultTipPose(identity_pose);
 
         // CRITICAL: Configure velocity and stride BEFORE testing trajectory generation
@@ -1065,7 +1063,7 @@ int main() {
             test_params.dynamic_gait.swing_phase = 12;
             test_params.dynamic_gait.frequency = 2.0;
             RobotModel temp_model(test_params);
-            LegStepper temp_stepper(leg_index, identity_pose, leg, temp_model, &walkspace_analyzer, &workspace_validator);
+            LegStepper temp_stepper(leg_index, identity_pose, leg, temp_model, &workspace_analyzer);
             temp_stepper.setDefaultTipPose(identity_pose);
 
             for (int i = 0; i < step_cycle.period_; ++i) {
@@ -1327,14 +1325,13 @@ int main() {
     std::vector<double> walk_plane_heights_during_coordination;
 
     // Create required objects for LegStepper
-    WalkspaceAnalyzer walkspace_analyzer(model);
-    WorkspaceValidator workspace_validator(model);
+    WorkspaceAnalyzer workspace_analyzer(const_cast<RobotModel &>(model));
 
     // Create LegSteppers for all legs (using pointers due to reference members)
     LegStepper *steppers[NUM_LEGS];
     for (int i = 0; i < NUM_LEGS; ++i) {
         Point3D identity_pose = test_legs[i].getCurrentTipPositionGlobal();
-        steppers[i] = new LegStepper(i, identity_pose, test_legs[i], model, &walkspace_analyzer, &workspace_validator);
+        steppers[i] = new LegStepper(i, identity_pose, test_legs[i], const_cast<RobotModel &>(model), &workspace_analyzer);
 
         // Set different phase offsets for tripod gait
         double phase_offset = (i % 2 == 0) ? 0.0 : 0.5; // Tripod gait pattern

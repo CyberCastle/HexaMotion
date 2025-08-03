@@ -4,8 +4,7 @@
 #include "../src/gait_config_factory.h"
 #include "../src/leg_stepper.h"
 #include "../src/walk_controller.h"
-#include "../src/walkspace_analyzer.h"
-#include "../src/workspace_validator.h"
+#include "../src/workspace_analyzer.h"
 #include "test_stubs.h"
 #include <algorithm>
 #include <cassert>
@@ -13,10 +12,10 @@
 #include <iostream>
 #include <vector>
 
-// Helper function to check if a position is reachable using OpenSHC-style WorkspaceValidator
+// Helper function to check if a position is reachable using OpenSHC-style WorkspaceAnalyzer
 bool isPositionReachable(const RobotModel &model, int leg_id, const Point3D &position) {
-    WorkspaceValidator temp_validator(model);
-    return temp_validator.isReachable(leg_id, position);
+    WorkspaceAnalyzer temp_analyzer(const_cast<RobotModel &>(model));
+    return temp_analyzer.isReachable(leg_id, position);
 }
 
 void analyzeAllLegsTrajectory(Leg test_legs[NUM_LEGS], LegStepper steppers[NUM_LEGS], const RobotModel &model, const GaitConfiguration &gait_config) {
@@ -506,17 +505,16 @@ int main() {
     }
 
     // Create required objects
-    WalkspaceAnalyzer walkspace_analyzer(model);
-    WorkspaceValidator workspace_validator(model);
+    WorkspaceAnalyzer workspace_analyzer(const_cast<RobotModel &>(model));
 
     // Create LegSteppers for all legs
     LegStepper steppers[NUM_LEGS] = {
-        LegStepper(0, test_legs[0].getCurrentTipPositionGlobal(), test_legs[0], model, &walkspace_analyzer, &workspace_validator),
-        LegStepper(1, test_legs[1].getCurrentTipPositionGlobal(), test_legs[1], model, &walkspace_analyzer, &workspace_validator),
-        LegStepper(2, test_legs[2].getCurrentTipPositionGlobal(), test_legs[2], model, &walkspace_analyzer, &workspace_validator),
-        LegStepper(3, test_legs[3].getCurrentTipPositionGlobal(), test_legs[3], model, &walkspace_analyzer, &workspace_validator),
-        LegStepper(4, test_legs[4].getCurrentTipPositionGlobal(), test_legs[4], model, &walkspace_analyzer, &workspace_validator),
-        LegStepper(5, test_legs[5].getCurrentTipPositionGlobal(), test_legs[5], model, &walkspace_analyzer, &workspace_validator)};
+        LegStepper(0, test_legs[0].getCurrentTipPositionGlobal(), test_legs[0], const_cast<RobotModel &>(model), &workspace_analyzer),
+        LegStepper(1, test_legs[1].getCurrentTipPositionGlobal(), test_legs[1], const_cast<RobotModel &>(model), &workspace_analyzer),
+        LegStepper(2, test_legs[2].getCurrentTipPositionGlobal(), test_legs[2], const_cast<RobotModel &>(model), &workspace_analyzer),
+        LegStepper(3, test_legs[3].getCurrentTipPositionGlobal(), test_legs[3], const_cast<RobotModel &>(model), &workspace_analyzer),
+        LegStepper(4, test_legs[4].getCurrentTipPositionGlobal(), test_legs[4], const_cast<RobotModel &>(model), &workspace_analyzer),
+        LegStepper(5, test_legs[5].getCurrentTipPositionGlobal(), test_legs[5], const_cast<RobotModel &>(model), &workspace_analyzer)};
 
     // Configure StepCycle from tripod gait configuration for all steppers
     StepCycle step_cycle = tripod_config.generateStepCycle();

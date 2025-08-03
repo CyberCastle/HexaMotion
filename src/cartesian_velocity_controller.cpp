@@ -1,7 +1,7 @@
 #include "cartesian_velocity_controller.h"
 #include "hexamotion_constants.h"
 #include "math_utils.h"
-#include "workspace_validator.h" // Use validator for workspace constraints
+#include "workspace_analyzer.h" // Use analyzer for workspace constraints
 #include <algorithm>
 #include <cmath>
 
@@ -216,7 +216,7 @@ double CartesianVelocityController::calculateLinearVelocityScale(double velocity
                    (velocity_scaling_.maximum_speed_ratio - velocity_scaling_.minimum_speed_ratio) * velocity_ratio;
 
     return math_utils::clamp<double>(scale, velocity_scaling_.minimum_speed_ratio,
-                              velocity_scaling_.maximum_speed_ratio);
+                                     velocity_scaling_.maximum_speed_ratio);
 }
 
 double CartesianVelocityController::calculateAngularVelocityScale(double angular_velocity) const {
@@ -240,7 +240,7 @@ double CartesianVelocityController::calculateAngularVelocityScale(double angular
     double scale = SERVO_SPEED_DEFAULT + angular_ratio * velocity_scaling_.angular_velocity_scale;
 
     return math_utils::clamp<double>(scale, velocity_scaling_.minimum_speed_ratio,
-                              velocity_scaling_.maximum_speed_ratio);
+                                     velocity_scaling_.maximum_speed_ratio);
 }
 
 double CartesianVelocityController::calculateGaitSpeedAdjustment(GaitType gait) const {
@@ -288,7 +288,7 @@ double CartesianVelocityController::calculateLegSpeedCompensation(int leg_index,
     double max_expected_velocity = 500.0; // mm/s - typical maximum leg velocity
     double velocity_ratio =
         math_utils::clamp<double>(total_leg_velocity / max_expected_velocity, 0.0,
-                           SERVO_SPEED_DEFAULT);
+                                  SERVO_SPEED_DEFAULT);
 
     // Apply compensation: faster legs need higher servo speeds
     double compensation = SERVO_SPEED_DEFAULT + velocity_ratio * 0.5; // Up to 50% speed increase

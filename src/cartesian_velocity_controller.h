@@ -9,8 +9,10 @@
 #include <array>
 #include <memory>
 
-// Forward declaration to avoid circular dependency
-class WorkspaceValidator;
+// Forward declarations to avoid circular dependencies
+class RobotModel;
+class AdmittanceController;
+class WorkspaceAnalyzer;
 
 /**
  * @brief Cartesian velocity controller equivalent to OpenSHC's velocity control system.
@@ -146,7 +148,7 @@ class CartesianVelocityController {
 
   private:
     const RobotModel &model_;
-    std::unique_ptr<WorkspaceValidator> workspace_validator_; // Workspace validation
+    std::unique_ptr<WorkspaceAnalyzer> workspace_analyzer_; // Workspace analysis and validation
     std::array<LegServoSpeeds, NUM_LEGS> leg_servo_speeds_;
     VelocityScaling velocity_scaling_;
     GaitSpeedModifiers gait_modifiers_;

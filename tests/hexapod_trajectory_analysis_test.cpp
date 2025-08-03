@@ -4,8 +4,7 @@
 #include "../src/gait_config_factory.h"
 #include "../src/leg_stepper.h"
 #include "../src/walk_controller.h"
-#include "../src/walkspace_analyzer.h"
-#include "../src/workspace_validator.h"
+#include "../src/workspace_analyzer.h"
 #include "test_stubs.h"
 #include <algorithm>
 #include <cassert>
@@ -13,10 +12,10 @@
 #include <iostream>
 #include <vector>
 
-// Helper function to check if a position is reachable using OpenSHC-style WorkspaceValidator
+// Helper function to check if a position is reachable using OpenSHC-style WorkspaceAnalyzer
 bool isPositionReachable(const RobotModel &model, int leg_id, const Point3D &position) {
-    WorkspaceValidator temp_validator(model);
-    return temp_validator.isReachable(leg_id, position);
+    WorkspaceAnalyzer temp_analyzer(const_cast<RobotModel &>(model));
+    return temp_analyzer.isReachable(leg_id, position);
 }
 
 // Structure to hold analysis results for a single leg
@@ -603,8 +602,7 @@ int main() {
     }
 
     // Create required objects for LegSteppers
-    WalkspaceAnalyzer walkspace_analyzer(model);
-    WorkspaceValidator workspace_validator(model);
+    WorkspaceAnalyzer workspace_analyzer(const_cast<RobotModel &>(model));
 
     // Create LegSteppers for all 6 legs
     std::vector<std::unique_ptr<LegStepper>> steppers;
@@ -614,7 +612,7 @@ int main() {
         Point3D identity_tip_pose = Point3D(leg_stance_position.x, leg_stance_position.y, leg_stance_position.z);
 
         auto stepper = std::make_unique<LegStepper>(i, identity_tip_pose, hexapod_legs[i],
-                                                    model, &walkspace_analyzer, &workspace_validator);
+                                                    const_cast<RobotModel &>(model), &workspace_analyzer);
         stepper->setDefaultTipPose(identity_tip_pose);
 
         // Configure StepCycle from tripod gait configuration

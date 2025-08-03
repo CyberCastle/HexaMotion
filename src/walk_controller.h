@@ -10,8 +10,7 @@
 #include "robot_model.h"
 #include "terrain_adaptation.h"
 #include "velocity_limits.h"
-#include "walkspace_analyzer.h"
-#include "workspace_validator.h"
+#include "workspace_analyzer.h"
 #include <map>
 #include <memory>
 
@@ -163,10 +162,10 @@ class WalkController {
     // Walkspace analysis control methods (OpenSHC equivalent)
     void enableWalkspaceAnalysis(bool enabled);
     bool isWalkspaceAnalysisEnabled() const;
-    const WalkspaceAnalyzer::AnalysisInfo &getWalkspaceAnalysisInfo() const;
+    const WorkspaceAnalyzer::AnalysisInfo &getWalkspaceAnalysisInfo() const;
     std::string getWalkspaceAnalysisInfoString() const;
     void resetWalkspaceAnalysisStats();
-    WalkspaceAnalyzer::WalkspaceResult analyzeCurrentWalkspace();
+    WorkspaceAnalyzer::WalkspaceResult analyzeCurrentWalkspace();
     bool generateWalkspaceMap();
     double getWalkspaceRadius(double bearing_degrees) const;
 
@@ -316,11 +315,8 @@ class WalkController {
     VelocityLimits::LimitValues current_velocity_limits_;
     VelocityLimits::LimitValues current_velocities_;
 
-    // Workspace validation
-    std::unique_ptr<WorkspaceValidator> workspace_validator_;
-
-    // Walkspace analysis (OpenSHC equivalent)
-    std::unique_ptr<WalkspaceAnalyzer> walkspace_analyzer_;
+    // Unified workspace analysis and validation
+    std::unique_ptr<WorkspaceAnalyzer> workspace_analyzer_;
 
     // Collision avoidance: track current leg positions
     Point3D current_leg_positions_[NUM_LEGS];
