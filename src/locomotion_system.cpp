@@ -127,21 +127,21 @@ JointAngles LocomotionSystem::calculateInverseKinematics(int leg,
 bool LocomotionSystem::isTargetReachable(int leg_index, const Point3D &target) {
     // Delegate to WorkspaceValidator for consistency
     // TODO: This creates a temporary validator. For better performance,
-    // consider using a shared validator instance in production code.
-    WorkspaceValidator temp_validator(model);
-    return temp_validator.isReachable(leg_index, target);
+    // consider using a shared analyzer instance in production code.
+    WorkspaceAnalyzer temp_analyzer(model);
+    return temp_analyzer.isReachable(leg_index, target);
 }
 
 Point3D LocomotionSystem::constrainToWorkspace(int leg_index, const Point3D &target) {
-    // Delegate to WorkspaceValidator for consistency
-    // TODO This creates a temporary validator. For better performance,
-    // consider using a shared validator instance in production code.
-    WorkspaceValidator temp_validator(model);
+    // Delegate to WorkspaceAnalyzer for consistency
+    // TODO This creates a temporary analyzer. For better performance,
+    // consider using a shared analyzer instance in production code.
+    WorkspaceAnalyzer temp_analyzer(model);
     Point3D dummy_positions[6]; // Empty positions for basic geometric constraint
     for (int i = 0; i < 6; i++) {
         dummy_positions[i] = Point3D(0, 0, 0);
     }
-    return temp_validator.constrainToValidWorkspace(leg_index, target, dummy_positions);
+    return temp_analyzer.constrainToValidWorkspace(leg_index, target, dummy_positions);
 }
 
 double LocomotionSystem::getJointLimitProximity(int leg_index, const JointAngles &angles) {

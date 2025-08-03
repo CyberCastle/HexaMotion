@@ -8,12 +8,12 @@
 CartesianVelocityController::CartesianVelocityController(const RobotModel &model)
     : model_(model), velocity_control_enabled_(true) {
 
-    // Initialize workspace validator for velocity constraints
+    // Initialize workspace analyzer for velocity constraints
     ValidationConfig config;
     config.enable_collision_checking = false;  // Disable for performance in velocity control
     config.enable_joint_limit_checking = true; // Enable for accurate servo speed calculation
-    workspace_validator_ = std::make_unique<WorkspaceValidator>(
-        const_cast<RobotModel &>(model), config);
+    workspace_analyzer_ = std::make_unique<WorkspaceAnalyzer>(
+        const_cast<RobotModel &>(model), ComputeConfig::medium(), config);
 
     // Initialize with default configurations
     resetToDefaults();
@@ -299,14 +299,14 @@ double CartesianVelocityController::calculateLegSpeedCompensation(int leg_index,
 double CartesianVelocityController::applyWorkspaceConstraints(int leg_index, int joint_index, double base_speed) const {
     // Use WorkspaceValidator for workspace constraints instead of hardcoded factors
 
-    if (!workspace_validator_) {
+    if (!workspace_analyzer_) {
         return base_speed; // Safety fallback
     }
 
     double constrained_speed = base_speed;
 
     // Get scaling factors instead of hardcoded constants
-    auto scaling_factors = workspace_validator_->getScalingFactors();
+    auto scaling_factors = workspace_analyzer_->getScalingFactors();
 
     // Apply joint-specific constraints using scaling
     switch (joint_index) {
