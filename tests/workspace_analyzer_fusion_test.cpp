@@ -31,7 +31,7 @@ int main() {
 
     // Test unified WorkspaceAnalyzer creation
     std::cout << "Creating WorkspaceAnalyzer..." << std::endl;
-    ComputeConfig config = ComputeConfig::medium(); // Use medium precision for realistic testing
+    ComputeConfig config = ComputeConfig::high(); // Use medium precision for realistic testing
     WorkspaceAnalyzer analyzer(model, config);
 
     // Initialize the analyzer to ensure proper setup

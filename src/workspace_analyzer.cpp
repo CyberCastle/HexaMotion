@@ -7,6 +7,7 @@
 #include <iomanip>
 #include <iostream>
 #include <limits>
+#include <set>
 #include <sstream>
 
 WorkspaceAnalyzer::WorkspaceAnalyzer(const RobotModel &model, ComputeConfig config, const ValidationConfig &validation_config)
@@ -22,8 +23,6 @@ WorkspaceAnalyzer::WorkspaceAnalyzer(const RobotModel &model, ComputeConfig conf
     analysis_info_.overall_stability_score = 0.0;
     analysis_info_.walkspace_map_generated = false;
     last_analysis_timestamp_ = 0;
-
-    initialize();
 }
 
 void WorkspaceAnalyzer::initialize() {
@@ -33,7 +32,7 @@ void WorkspaceAnalyzer::initialize() {
     }
 
     // Generate initial walkspace
-    generateWorkspace();
+    // generateWorkspace();
 }
 
 // ========================================================================
@@ -51,22 +50,22 @@ void WorkspaceAnalyzer::generateWorkspace() {
     // Pre-calculate leg base positions and adjacent distances to avoid redundant calculations
     Point3D leg_origins[NUM_LEGS];
     double adjacent_distances[NUM_LEGS];
-    
+
     JointAngles zero_angles(0, 0, 0);
     for (int leg = 0; leg < NUM_LEGS; ++leg) {
         Pose leg_origin_pose = model_.getPoseRobotFrame(leg, zero_angles, Pose::Identity());
         leg_origins[leg] = leg_origin_pose.position;
-        
+
         // Calculate minimum distance to adjacent legs
         int adjacent1 = (leg + 1) % NUM_LEGS;
         int adjacent2 = (leg + NUM_LEGS - 1) % NUM_LEGS;
-        
+
         Pose adj1_pose = model_.getPoseRobotFrame(adjacent1, zero_angles, Pose::Identity());
         Pose adj2_pose = model_.getPoseRobotFrame(adjacent2, zero_angles, Pose::Identity());
-        
+
         double dist_to_adj1 = math_utils::distance(leg_origins[leg], adj1_pose.position) / 2.0f;
         double dist_to_adj2 = math_utils::distance(leg_origins[leg], adj2_pose.position) / 2.0f;
-        
+
         adjacent_distances[leg] = std::min(dist_to_adj1, dist_to_adj2);
     }
 
@@ -89,7 +88,7 @@ void WorkspaceAnalyzer::generateWorkspace() {
 
             // Apply bearing direction constraint using pre-calculated adjacent distances
             double projected_reach = adjacent_distances[leg];
-            
+
             // Only apply cosine correction if cosine is significant (not near 90°, 270°)
             if (std::abs(cos(bearing_rad)) > 0.1) {
                 projected_reach = adjacent_distances[leg] / std::abs(cos(bearing_rad));
@@ -142,6 +141,19 @@ Workplane WorkspaceAnalyzer::getWorkplane(int leg_index, double height) const {
 
     // Find bounding workplanes for interpolation
     auto upper_it = workspace.upper_bound(height);
+
+    // Check if height is beyond all existing heights
+    if (upper_it == workspace.end()) {
+        // Return the last (highest) workplane
+        return workspace.rbegin()->second;
+    }
+
+    // Check if height is before all existing heights
+    if (upper_it == workspace.begin()) {
+        // Return the first (lowest) workplane
+        return workspace.begin()->second;
+    }
+
     auto lower_it = std::prev(upper_it);
 
     double upper_height = upper_it->first;
@@ -150,20 +162,51 @@ Workplane WorkspaceAnalyzer::getWorkplane(int leg_index, double height) const {
     const Workplane &lower_workplane = lower_it->second;
 
     // Calculate interpolation factor
-    double t = (height - lower_height) / (upper_height - lower_height);
+    double height_diff = upper_height - lower_height;
+    if (height_diff <= 0.001) {
+        // Heights are too close, return lower workplane
+        return lower_workplane;
+    }
+
+    double t = (height - lower_height) / height_diff;
+    t = std::max(0.0, std::min(1.0, t)); // Clamp to [0,1]
 
     // Interpolate between workplanes
     Workplane interpolated_workplane;
-    for (const auto &bearing_radius : upper_workplane) {
-        int bearing = bearing_radius.first;
-        double upper_radius = bearing_radius.second;
 
+    // Use all bearings from both workplanes
+    std::set<int> all_bearings;
+    for (const auto &bearing_radius : upper_workplane) {
+        all_bearings.insert(bearing_radius.first);
+    }
+    for (const auto &bearing_radius : lower_workplane) {
+        all_bearings.insert(bearing_radius.first);
+    }
+
+    for (int bearing : all_bearings) {
+        double upper_radius = 0.0;
+        double lower_radius = 0.0;
+
+        auto upper_bearing_it = upper_workplane.find(bearing);
         auto lower_bearing_it = lower_workplane.find(bearing);
-        if (lower_bearing_it != lower_workplane.end()) {
-            double lower_radius = lower_bearing_it->second;
-            double interpolated_radius = lower_radius * (1.0f - t) + upper_radius * t;
-            interpolated_workplane[bearing] = interpolated_radius;
+
+        if (upper_bearing_it != upper_workplane.end()) {
+            upper_radius = upper_bearing_it->second;
         }
+        if (lower_bearing_it != lower_workplane.end()) {
+            lower_radius = lower_bearing_it->second;
+        }
+
+        // If one workplane doesn't have this bearing, use the other's value
+        if (upper_bearing_it == upper_workplane.end()) {
+            upper_radius = lower_radius;
+        }
+        if (lower_bearing_it == lower_workplane.end()) {
+            lower_radius = upper_radius;
+        }
+
+        double interpolated_radius = lower_radius * (1.0 - t) + upper_radius * t;
+        interpolated_workplane[bearing] = interpolated_radius;
     }
 
     return interpolated_workplane;
@@ -237,7 +280,7 @@ bool WorkspaceAnalyzer::isPositionReachable(int leg_index, const Point3D &positi
     // Basic geometric reachability check
     WorkspaceBounds bounds = getWorkspaceBounds(leg_index);
     double distance = getDistanceFromBase(leg_index, position);
-    
+
     if (distance < bounds.min_reach || distance > bounds.max_reach) {
         return false;
     }
@@ -811,57 +854,87 @@ void WorkspaceAnalyzer::generateWalkspaceForLeg(int leg_index) {
 
     // For LOW precision, use simple approach to avoid hanging
     if (config_.precision == PRECISION_LOW) {
+        // Create workplanes at multiple heights for better compatibility
+        double standing_height = -params.standing_height; // Standing height is negative
+        double extended_height = standing_height - 50.0;  // Extend 50mm below standing height
+        leg_workspaces_[leg_index][extended_height] = max_workplane;
+        leg_workspaces_[leg_index][standing_height] = max_workplane;
+        leg_workspaces_[leg_index][standing_height / 2] = max_workplane;
         leg_workspaces_[leg_index][0.0] = max_workplane;
         return;
     }
 
-    // For MEDIUM precision, use simplified workspace generation
+    // For MEDIUM precision, generate workplanes at multiple heights
     if (config_.precision == PRECISION_MEDIUM) {
-        // Create basic workspace at ground level with realistic radius limits
-        Workplane realistic_workplane;
-        for (int bearing = 0; bearing <= 360; bearing += BEARING_STEP) {
-            // Use 80% of theoretical max reach for safety
-            double safe_radius = max_realistic_radius * 0.8;
-            realistic_workplane[bearing] = safe_radius;
+        double standing_height = -params.standing_height; // Standing height is negative
+        double extended_height = standing_height - 50.0;  // Extend 50mm below standing height
+        double height_step = (0.0 - extended_height) / 4; // Create 5 layers from extended_height to 0
+
+        // Create workplanes at different heights
+        for (int layer = 0; layer < 5; layer++) {
+            double height = extended_height + (layer * height_step);
+
+            Workplane realistic_workplane;
+            for (int bearing = 0; bearing <= 360; bearing += BEARING_STEP) {
+                // Adjust radius based on height - closer to ground = smaller radius
+                double height_factor = 1.0 - (abs(height - standing_height) / abs(standing_height + 50.0));
+                height_factor = std::max(0.6, height_factor); // Minimum 60% radius
+                double safe_radius = max_realistic_radius * 0.8 * height_factor;
+                realistic_workplane[bearing] = safe_radius;
+            }
+            // Ensure symmetry
+            realistic_workplane[360] = realistic_workplane[0];
+            leg_workspaces_[leg_index][height] = realistic_workplane;
         }
-        leg_workspaces_[leg_index][0.0] = realistic_workplane;
         return;
     }
 
-    // For HIGH precision, use full OpenSHC algorithm but with safety limits
+    // For HIGH precision, use full workspace generation with multiple heights
     try {
         // Calculate identity tip pose
         JointAngles identity_angles(0.0, 0.0, 0.0);
         Point3D identity_tip_position = model_.forwardKinematicsGlobalCoordinates(leg_index, identity_angles);
 
-        // Simple workspace generation with bearing-based search
-        Workplane ground_workplane;
-        for (int bearing = 0; bearing <= 360; bearing += BEARING_STEP) {
-            double bearing_rad = bearing * M_PI / 180.0;
-            double max_radius = 0.0;
+        double standing_height = -params.standing_height;
+        double height_step = standing_height / WORKSPACE_LAYERS;
 
-            // Search along bearing for maximum reachable distance
-            for (double test_radius = 10.0; test_radius <= max_realistic_radius; test_radius += 20.0) {
-                Point3D test_position = identity_tip_position;
-                test_position.x += test_radius * cos(bearing_rad);
-                test_position.y += test_radius * sin(bearing_rad);
+        // Generate workplanes at different heights
+        for (int layer = 0; layer < WORKSPACE_LAYERS; layer++) {
+            double height = standing_height + (layer * abs(height_step));
 
-                if (detailedReachabilityCheck(leg_index, test_position)) {
-                    max_radius = test_radius;
-                } else {
-                    break; // Stop when we hit the limit
+            Workplane height_workplane;
+            for (int bearing = 0; bearing <= 360; bearing += BEARING_STEP) {
+                double bearing_rad = bearing * M_PI / 180.0;
+                double max_radius = 0.0;
+
+                // Search along bearing for maximum reachable distance at this height
+                Point3D base_position = identity_tip_position;
+                base_position.z = height;
+
+                for (double test_radius = 10.0; test_radius <= max_realistic_radius; test_radius += 20.0) {
+                    Point3D test_position = base_position;
+                    test_position.x += test_radius * cos(bearing_rad);
+                    test_position.y += test_radius * sin(bearing_rad);
+
+                    if (detailedReachabilityCheck(leg_index, test_position)) {
+                        max_radius = test_radius;
+                    } else {
+                        break; // Stop when we hit the limit
+                    }
                 }
+
+                height_workplane[bearing] = max_radius;
             }
 
-            ground_workplane[bearing] = max_radius;
+            // Ensure symmetry
+            height_workplane[360] = height_workplane[0];
+            leg_workspaces_[leg_index][height] = height_workplane;
         }
-
-        // Ensure symmetry
-        ground_workplane[360] = ground_workplane[0];
-        leg_workspaces_[leg_index][0.0] = ground_workplane;
 
     } catch (...) {
         // Fallback to simple workspace if anything fails
+        double standing_height = -params.standing_height;
+        leg_workspaces_[leg_index][standing_height] = max_workplane;
         leg_workspaces_[leg_index][0.0] = max_workplane;
     }
 }
@@ -1077,7 +1150,7 @@ void WorkspaceAnalyzer::updateAnalysisInfo(const WalkspaceResult &result, unsign
     // Update timing statistics (simplified)
     analysis_info_.last_analysis_time = analysis_time_ms;
     analysis_info_.analysis_count++;
-    
+
     // Simple timing tracking without complex statistics
     if (analysis_time_ms > 0) {
         total_analysis_time_ += analysis_time_ms;

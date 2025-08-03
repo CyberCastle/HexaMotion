@@ -169,11 +169,11 @@
 #define IK_MAX_ANGLE_STEP 5.0          // Maximum angle change per IK iteration (degrees)
 
 // Workspace analysis parameters (OpenSHC equivalent, converted to mm)
-#define MAX_POSITION_DELTA 2.0      // Position delta increment for workspace generation (2mm, OpenSHC uses 0.002m)
-#define MAX_WORKSPACE_RADIUS 1000.0 // Maximum radius in workspace polygon plane (1000mm, from OpenSHC 1.0m)
-#define BEARING_STEP 45             // Bearing step for workspace generation (45°, from OpenSHC)
-#define WORKSPACE_LAYERS 10         // Number of height layers for workspace generation (from OpenSHC)
-#define WORKSPACE_RESOLUTION 10     // Discretization resolution for workspace analysis
+#define MAX_POSITION_DELTA 2.0     // Position delta increment for workspace generation (2mm, OpenSHC uses 0.002m)
+#define MAX_WORKSPACE_RADIUS 400.0 // Maximum radius in workspace polygon plane (1000mm, from OpenSHC 1.0m)
+#define BEARING_STEP 30            // Bearing step for workspace generation (45°, from OpenSHC)
+#define WORKSPACE_LAYERS 10        // Number of height layers for workspace generation (from OpenSHC)
+#define WORKSPACE_RESOLUTION 10    // Discretization resolution for workspace analysis
 
 // ========================================================================
 // TERRAIN ADAPTATION CONSTANTS
