@@ -654,7 +654,7 @@ double WalkController::getWalkspaceRadius(double bearing_degrees) const {
 
 const std::map<int, double> &WalkController::getCurrentWalkspaceMap() const {
     static std::map<int, double> empty_map;
-    return workspace_analyzer_ ? workspace_analyzer_->getCurrentWalkspaceMap() : empty_map;
+    return workspace_analyzer_ ? workspace_analyzer_->getWalkspaceMap() : empty_map;
 }
 
 bool WalkController::isWalkspaceMapGenerated() const {

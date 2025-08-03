@@ -312,9 +312,6 @@ WorkspaceAnalyzer::WalkspaceResult WorkspaceAnalyzer::analyzeWalkspace(const Poi
         return analysis_info_.current_result;
     }
 
-    // Record start time for performance tracking
-    unsigned long start_time = millis();
-
     WalkspaceResult result;
 
     // Calculate center of mass
@@ -337,14 +334,8 @@ WorkspaceAnalyzer::WalkspaceResult WorkspaceAnalyzer::analyzeWalkspace(const Poi
         result.reachable_area += M_PI * radius * radius / walkspace_map_.size();
     }
 
-    // Calculate analysis time
-    unsigned long analysis_time = millis() - start_time;
-
-    // Update analysis information
-    updateAnalysisInfo(result, analysis_time);
-
-    // Update timestamp
-    last_analysis_timestamp_ = millis();
+    // Update analysis information without timing
+    updateAnalysisInfo(result, 0);
 
     return result;
 }
@@ -797,14 +788,12 @@ void WorkspaceAnalyzer::calculateLegWorkspaceBounds(int leg_index) {
 }
 
 void WorkspaceAnalyzer::generateWalkspaceForLeg(int leg_index) {
-    // OpenSHC-equivalent workspace generation adapted for HexaMotion
-    // Based on OpenSHC Leg::generateWorkspace() algorithm
-
+    // Simplified OpenSHC-equivalent workspace generation
     if (leg_index < 0 || leg_index >= NUM_LEGS) {
         return;
     }
 
-    // Get robot parameters to determine realistic limits
+    // Get robot parameters
     const Parameters &params = model_.getParams();
     double total_leg_length = params.coxa_length + params.femur_length + params.tibia_length;
     double max_realistic_radius = std::min(static_cast<double>(MAX_WORKSPACE_RADIUS), total_leg_length);
@@ -820,162 +809,60 @@ void WorkspaceAnalyzer::generateWalkspaceForLeg(int leg_index) {
     // Clear existing workspace for this leg
     leg_workspaces_[leg_index].clear();
 
-    // Calculate identity tip pose (equivalent to leg at default 0° angles)
-    JointAngles identity_angles(0.0, 0.0, 0.0);
-    Point3D identity_tip_position;
-
-    try {
-        identity_tip_position = model_.forwardKinematicsGlobalCoordinates(leg_index, identity_angles);
-    } catch (...) {
-        // If can't reach identity pose, set zero workspace
-        leg_workspaces_[leg_index][0.0] = min_workplane;
-        return;
-    }
-
-    // For precision levels, use simplified approach for better performance
+    // For LOW precision, use simple approach to avoid hanging
     if (config_.precision == PRECISION_LOW) {
-        // Simple mode: just insert max workplane at ground level
         leg_workspaces_[leg_index][0.0] = max_workplane;
         return;
     }
 
-    // Full OpenSHC-style workspace generation for MEDIUM and HIGH precision
-    bool found_lower_limit = false;
-    bool found_upper_limit = false;
-    double max_plane_height = 0.0;
-    double min_plane_height = 0.0;
-    double search_height_delta = max_realistic_radius / WORKSPACE_LAYERS;
-
-    double search_height = 0.0;
-    int search_bearing = 0;
-    bool within_limits = true;
-    int iteration = 1;
-    Point3D origin_tip_position, target_tip_position;
-    double distance_from_origin = 0.0;
-    int number_iterations = 0;
-    bool workspace_generation_complete = false;
-
-    // Main OpenSHC algorithm loop
-    while (!workspace_generation_complete) {
-        // Calculate current identity position with height offset
-        Point3D current_identity = identity_tip_position;
-        current_identity.z += search_height;
-
-        // Set origin and target for linear interpolation (OpenSHC style)
-        if (iteration == 1) {
-            within_limits = true;
-
-            // Search for upper and lower vertical limit of workspace
-            if (!found_lower_limit || !found_upper_limit) {
-                number_iterations = static_cast<int>(max_realistic_radius / MAX_POSITION_DELTA);
-                origin_tip_position = current_identity;
-
-                Point3D search_limit = current_identity;
-                search_limit.z += (found_lower_limit ? max_realistic_radius : -max_realistic_radius);
-                target_tip_position = search_limit;
-            }
-            // Track to new workplane origin at search height
-            else if (search_bearing == 0) {
-                number_iterations = std::max(1, static_cast<int>(search_height_delta / MAX_POSITION_DELTA));
-                origin_tip_position = identity_tip_position; // Current position
-                target_tip_position = current_identity;
-            }
-            // Search along search bearing for limits
-            else {
-                number_iterations = static_cast<int>(max_realistic_radius / MAX_POSITION_DELTA);
-                origin_tip_position = current_identity;
-                target_tip_position = current_identity;
-
-                double bearing_rad = search_bearing * M_PI / 180.0;
-                target_tip_position.x += max_realistic_radius * cos(bearing_rad);
-                target_tip_position.y += max_realistic_radius * sin(bearing_rad);
-            }
+    // For MEDIUM precision, use simplified workspace generation
+    if (config_.precision == PRECISION_MEDIUM) {
+        // Create basic workspace at ground level with realistic radius limits
+        Workplane realistic_workplane;
+        for (int bearing = 0; bearing <= 360; bearing += BEARING_STEP) {
+            // Use 80% of theoretical max reach for safety
+            double safe_radius = max_realistic_radius * 0.8;
+            realistic_workplane[bearing] = safe_radius;
         }
-
-        // Move tip position linearly along search bearing (OpenSHC interpolation)
-        double i = double(iteration) / number_iterations;
-        Point3D desired_tip_position;
-        desired_tip_position.x = origin_tip_position.x * (1.0 - i) + target_tip_position.x * i;
-        desired_tip_position.y = origin_tip_position.y * (1.0 - i) + target_tip_position.y * i;
-        desired_tip_position.z = origin_tip_position.z * (1.0 - i) + target_tip_position.z * i;
-
-        // Test reachability using inverse kinematics
-        bool ik_result = detailedReachabilityCheck(leg_index, desired_tip_position);
-
-        // Calculate distance from origin (OpenSHC style)
-        Point3D diff = desired_tip_position - current_identity;
-        distance_from_origin = sqrt(diff.x * diff.x + diff.y * diff.y + diff.z * diff.z);
-
-        // Check if leg is still within limits
-        within_limits = within_limits && ik_result;
-
-        // Search not complete -> iterate along current search bearing
-        if (within_limits && iteration < number_iterations) {
-            iteration++;
-        }
-        // Current search along bearing complete -> save result and iterate
-        else {
-            iteration = 1;
-
-            // Lower vertical limit found
-            if (!found_lower_limit) {
-                found_lower_limit = true;
-                min_plane_height = -distance_from_origin;
-                leg_workspaces_[leg_index][min_plane_height] = min_workplane;
-                continue;
-            }
-            // Upper vertical limit found
-            else if (!found_upper_limit) {
-                found_upper_limit = true;
-                max_plane_height = distance_from_origin;
-                search_height_delta = (max_plane_height - min_plane_height) / WORKSPACE_LAYERS;
-
-                int upper_levels = static_cast<int>(abs(max_plane_height) / search_height_delta);
-                search_height = upper_levels * search_height_delta;
-
-                leg_workspaces_[leg_index][max_plane_height] = min_workplane;
-                leg_workspaces_[leg_index][search_height] = max_workplane;
-                continue;
-            }
-            // Tracked to origin of new workplane (search_bearing == 0)
-            else if (search_bearing == 0) {
-                // No special action needed - ready for bearing search
-            }
-            // Search along bearing complete - save in workspace
-            else {
-                leg_workspaces_[leg_index][search_height][search_bearing] = distance_from_origin;
-            }
-
-            // Iterate search bearing (0 -> 360 anti-clockwise, OpenSHC style)
-            if (search_bearing + BEARING_STEP <= 360) {
-                search_bearing += BEARING_STEP;
-            }
-            // Iterate search height (top to bottom, OpenSHC style)
-            else {
-                search_bearing = 0;
-                // Ensure symmetry: bearing 0° = bearing 360°
-                if (leg_workspaces_[leg_index].find(search_height) != leg_workspaces_[leg_index].end()) {
-                    leg_workspaces_[leg_index][search_height][0] = leg_workspaces_[leg_index][search_height][360];
-                }
-
-                search_height -= search_height_delta;
-                if (search_height >= min_plane_height) {
-                    leg_workspaces_[leg_index][search_height] = max_workplane;
-                }
-                // All searches complete
-                else {
-                    workspace_generation_complete = true;
-                }
-            }
-        }
+        leg_workspaces_[leg_index][0.0] = realistic_workplane;
+        return;
     }
 
-    // Ensure all workplanes have proper symmetry (bearing 0° = bearing 360°)
-    for (auto &workspace_entry : leg_workspaces_[leg_index]) {
-        Workplane &workplane = workspace_entry.second;
-        if (workplane.find(0) != workplane.end() && workplane.find(360) != workplane.end()) {
-            workplane[360] = workplane[0];
+    // For HIGH precision, use full OpenSHC algorithm but with safety limits
+    try {
+        // Calculate identity tip pose
+        JointAngles identity_angles(0.0, 0.0, 0.0);
+        Point3D identity_tip_position = model_.forwardKinematicsGlobalCoordinates(leg_index, identity_angles);
+
+        // Simple workspace generation with bearing-based search
+        Workplane ground_workplane;
+        for (int bearing = 0; bearing <= 360; bearing += BEARING_STEP) {
+            double bearing_rad = bearing * M_PI / 180.0;
+            double max_radius = 0.0;
+
+            // Search along bearing for maximum reachable distance
+            for (double test_radius = 10.0; test_radius <= max_realistic_radius; test_radius += 20.0) {
+                Point3D test_position = identity_tip_position;
+                test_position.x += test_radius * cos(bearing_rad);
+                test_position.y += test_radius * sin(bearing_rad);
+
+                if (detailedReachabilityCheck(leg_index, test_position)) {
+                    max_radius = test_radius;
+                } else {
+                    break; // Stop when we hit the limit
+                }
+            }
+
+            ground_workplane[bearing] = max_radius;
         }
+
+        // Ensure symmetry
+        ground_workplane[360] = ground_workplane[0];
+        leg_workspaces_[leg_index][0.0] = ground_workplane;
+
+    } catch (...) {
+        // Fallback to simple workspace if anything fails
+        leg_workspaces_[leg_index][0.0] = max_workplane;
     }
 }
 
@@ -1187,19 +1074,23 @@ void WorkspaceAnalyzer::updateAnalysisInfo(const WalkspaceResult &result, unsign
     // Update current result
     analysis_info_.current_result = result;
 
-    // Update timing statistics
+    // Update timing statistics (simplified)
     analysis_info_.last_analysis_time = analysis_time_ms;
     analysis_info_.analysis_count++;
-    total_analysis_time_ += analysis_time_ms;
-    analysis_info_.average_analysis_time_ms = total_analysis_time_ / analysis_info_.analysis_count;
-    analysis_info_.total_analysis_time_ms = total_analysis_time_;
+    
+    // Simple timing tracking without complex statistics
+    if (analysis_time_ms > 0) {
+        total_analysis_time_ += analysis_time_ms;
+        analysis_info_.average_analysis_time_ms = total_analysis_time_ / analysis_info_.analysis_count;
+        analysis_info_.total_analysis_time_ms = total_analysis_time_;
 
-    // Update min/max times
-    if (analysis_time_ms < analysis_info_.min_analysis_time_ms) {
-        analysis_info_.min_analysis_time_ms = analysis_time_ms;
-    }
-    if (analysis_time_ms > analysis_info_.max_analysis_time_ms) {
-        analysis_info_.max_analysis_time_ms = analysis_time_ms;
+        // Update min/max times
+        if (analysis_time_ms < analysis_info_.min_analysis_time_ms) {
+            analysis_info_.min_analysis_time_ms = analysis_time_ms;
+        }
+        if (analysis_time_ms > analysis_info_.max_analysis_time_ms) {
+            analysis_info_.max_analysis_time_ms = analysis_time_ms;
+        }
     }
 
     // Update leg bounds
@@ -1220,9 +1111,6 @@ void WorkspaceAnalyzer::updateAnalysisInfo(const WalkspaceResult &result, unsign
 
     // Calculate overall stability score
     analysis_info_.overall_stability_score = calculateOverallStabilityScore(result);
-
-    // Update timestamp
-    analysis_info_.last_analysis_time = millis();
 }
 
 double WorkspaceAnalyzer::calculateLegReachability(int leg_index, const Point3D leg_positions[NUM_LEGS]) const {

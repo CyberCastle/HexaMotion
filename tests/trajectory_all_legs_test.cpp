@@ -457,8 +457,9 @@ int main() {
     p.tibia_angle_limits[1] = 45;
 
     // Configure gait factors for tripod gait
-    p.gait_factors.tripod_length_factor = 0.4;  // 40% of leg reach for step length
-    p.gait_factors.tripod_height_factor = 0.15; // 15% of standing height for swing
+    // Note: gait_factors not available in current Parameters structure
+    // p.gait_factors.tripod_length_factor = 0.4;  // 40% of leg reach for step length
+    // p.gait_factors.tripod_height_factor = 0.15; // 15% of standing height for swing
 
     // Create tripod gait configuration
     GaitConfiguration tripod_config = createTripodGaitConfig(p);

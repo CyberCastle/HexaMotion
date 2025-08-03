@@ -129,7 +129,7 @@ bool LocomotionSystem::isTargetReachable(int leg_index, const Point3D &target) {
     // TODO: This creates a temporary validator. For better performance,
     // consider using a shared analyzer instance in production code.
     WorkspaceAnalyzer temp_analyzer(model);
-    return temp_analyzer.isReachable(leg_index, target);
+    return temp_analyzer.isPositionReachable(leg_index, target);
 }
 
 Point3D LocomotionSystem::constrainToWorkspace(int leg_index, const Point3D &target) {
