@@ -250,7 +250,7 @@ void TerrainAdaptation::detectTouchdownEvents(int leg_index, const FSRData &fsr_
         double base_angle = model_.getLegBaseAngleOffset(leg_index);
 
         // Use scaling instead of hardcoded 65%
-        double safe_reach = bounds.max_radius * scaling_factors.workspace_scale;
+        double safe_reach = bounds.max_reach * scaling_factors.workspace_scale;
 
         Point3D foot_position;
         foot_position.x = base_x + safe_reach * cos(base_angle);

@@ -441,12 +441,8 @@ WorkspaceAnalyzer::getWorkspaceBounds(int leg_index) const {
     double theoretical_min = std::abs(params.femur_length - params.tibia_length);
 
     // Apply safety factors from configuration
-    bounds.max_radius = total_leg_length * validation_config_.safety_margin_factor;
-    bounds.min_radius = params.coxa_length * validation_config_.minimum_reach_factor;
-
-    // Set reach values (same as radius values for compatibility)
-    bounds.max_reach = bounds.max_radius;
-    bounds.min_reach = bounds.min_radius;
+    bounds.max_reach = total_leg_length * validation_config_.safety_margin_factor;
+    bounds.min_reach = params.coxa_length * validation_config_.minimum_reach_factor;
 
     // Set preferred reach values (using the theoretical minimum calculation)
     bounds.preferred_max_reach = total_leg_length * validation_config_.safety_margin_factor;
@@ -484,8 +480,8 @@ WorkspaceAnalyzer::calculateVelocityConstraints(int leg_index, double bearing_de
     double directional_efficiency = std::cos(math_utils::degreesToRadians(bearing_offset));
     directional_efficiency = math_utils::clamp<double>(directional_efficiency, 0.3, 1.0); // Minimum 30% efficiency
 
-    constraints.workspace_radius = bounds.max_radius * directional_efficiency;
-    constraints.stance_radius = bounds.max_radius * 0.8f; // For angular calculations
+    constraints.workspace_radius = bounds.max_reach * directional_efficiency;
+    constraints.stance_radius = bounds.max_reach * 0.8f; // For angular calculations
 
     // Calculate velocity limits based on gait parameters
     double cycle_time = stance_ratio / gait_frequency;
@@ -543,12 +539,6 @@ ScalingFactors WorkspaceAnalyzer::getScalingFactors() const {
 void WorkspaceAnalyzer::updateSafetyMargin(double margin) {
     validation_config_.safety_margin_factor =
         math_utils::clamp<double>(margin, 0.1, 1.0);
-}
-
-void WorkspaceAnalyzer::updateAngularScaling(double scaling) {
-    // TODO:Store angular scaling in configuration for future use
-    // Note: This could be extended to modify a stored scaling factor if needed
-    // For now, angular scaling is handled in getScalingFactors()
 }
 
 // ========================================================================
@@ -685,7 +675,6 @@ double WorkspaceAnalyzer::calculateSafeHexagonRadius(double leg_reach, double sa
     // Where c = minimum separation, a = b = hexagon_radius + leg_reach, C = 60°
 
     double min_separation = 2.0f * leg_reach + safety_margin;
-    // double cos_60 = 0.5f; // cos(60°) = 0.5 - Currently unused
 
     // Solving: min_separation² = 2 * (hexagon_radius + leg_reach)² * (1 - cos_60)
     // min_separation² = 2 * (hexagon_radius + leg_reach)² * 0.5
@@ -836,12 +825,10 @@ void WorkspaceAnalyzer::calculateLegWorkspaceBounds(int leg_index) {
     double min_reach = 30.0f; // Minimum practical reach when leg is folded
 
     WorkspaceBounds &bounds = leg_workspace_[leg_index];
-    bounds.min_radius = min_reach;
-    bounds.max_radius = total_reach;
+    bounds.min_reach = min_reach;
+    bounds.max_reach = total_reach;
     bounds.min_height = -total_reach;
     bounds.max_height = total_reach;
-    bounds.min_angle = -HALF_ROTATION_DEGREES;
-    bounds.max_angle = HALF_ROTATION_DEGREES;
 }
 
 void WorkspaceAnalyzer::generateWalkspaceForLeg(int leg_index) {
@@ -917,7 +904,7 @@ void WorkspaceAnalyzer::generateWalkspaceForLeg(int leg_index) {
         const double radius_step = RADIUS_STEP_DEFAULT;   // mm
         const double bearing_step = BEARING_STEP_DEGREES; // degrees
 
-        for (double radius = 0; radius < bounds.max_radius; radius += radius_step) {
+        for (double radius = 0; radius < bounds.max_reach; radius += radius_step) {
             for (double bearing = 0; bearing < FULL_ROTATION_DEGREES; bearing += bearing_step) {
                 double bearing_rad = bearing * DEGREES_TO_RADIANS_FACTOR;
 
@@ -927,7 +914,7 @@ void WorkspaceAnalyzer::generateWalkspaceForLeg(int leg_index) {
                 test_point.z = 0; // Ground level for fast calculation
 
                 // Simple reachability check
-                if (radius <= bounds.max_radius) {
+                if (radius <= bounds.max_reach) {
                     // Point is within simplified workspace
                 }
             }
@@ -1081,9 +1068,9 @@ bool WorkspaceAnalyzer::balancedStepOptimization(const Point3D &movement,
             double distance = math_utils::magnitude(relative);
 
             const WorkspaceBounds &bounds = leg_workspace_[i];
-            if (distance > bounds.max_radius) {
+            if (distance > bounds.max_reach) {
                 // Scale down to maximum reach
-                double scale = bounds.max_radius / distance;
+                double scale = bounds.max_reach / distance;
                 relative.x *= scale;
                 relative.y *= scale;
                 relative.z *= scale;
@@ -1201,12 +1188,12 @@ double WorkspaceAnalyzer::calculateLegReachability(int leg_index, const Point3D 
     double distance = math_utils::magnitude(relative_pos);
 
     // Calculate reachability score (0-1)
-    double reach_range = bounds.max_radius - bounds.min_radius;
+    double reach_range = bounds.max_reach - bounds.min_reach;
     if (reach_range <= 0) {
         return 0.0;
     }
 
-    double normalized_distance = (distance - bounds.min_radius) / reach_range;
+    double normalized_distance = (distance - bounds.min_reach) / reach_range;
     return math_utils::clamp<double>(normalized_distance, 0.0, 1.0);
 }
 

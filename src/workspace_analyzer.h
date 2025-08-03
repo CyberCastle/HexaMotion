@@ -40,11 +40,7 @@ struct WorkspaceBounds {
     bool has_height_restrictions;
     double min_height;
     double max_height;
-    double min_radius;       // Added for compatibility
-    double max_radius;       // Added for compatibility
-    double min_angle;        // Angular constraints
-    double max_angle;        // Angular constraints
-    Point3D center_position; // Added for center position tracking
+    Point3D center_position;
 };
 
 /**
@@ -57,10 +53,10 @@ struct VelocityConstraints {
     double max_angular_velocity;
     bool direction_blocked;
     double scaling_factor;
-    double max_linear_velocity; // Added for compatibility
-    double max_acceleration;    // Added for acceleration
-    double workspace_radius;    // Added for workspace calculations
-    double stance_radius;       // Added for angular calculations
+    double max_linear_velocity;
+    double max_acceleration;
+    double workspace_radius;
+    double stance_radius;
 };
 
 /**
@@ -71,9 +67,9 @@ struct ScalingFactors {
     double angular_scale;
     double workspace_scale;
     double collision_scale;
-    double velocity_scale;     // Added for velocity scaling
-    double acceleration_scale; // Added for acceleration scaling
-    double safety_margin;      // Added for safety margin scaling
+    double velocity_scale;
+    double acceleration_scale;
+    double safety_margin;
 };
 
 /**
@@ -143,7 +139,7 @@ class WorkspaceAnalyzer {
 
     // Workspace geometry
     WorkspaceBounds leg_workspace_[NUM_LEGS];
-    std::map<int, double> walkspace_map_; // Bearing -> radius mapping (legacy)
+    std::map<int, double> walkspace_map_; // Bearing -> radius mapping for analysis
 
     // Enhanced workspace storage with height layers (OpenSHC-compatible)
     Workspace leg_workspaces_[NUM_LEGS]; // 3D workspace per leg
@@ -383,12 +379,6 @@ class WorkspaceAnalyzer {
      * @param margin New safety margin value
      */
     void updateSafetyMargin(double margin);
-
-    /**
-     * @brief Update angular scaling
-     * @param scaling New angular scaling value
-     */
-    void updateAngularScaling(double scaling);
 
     /**
      * @brief Update configuration

@@ -115,8 +115,8 @@ void VelocityLimits::calculateWorkspace(const GaitConfig &gait_config) {
         auto bounds = pimpl_->workspace_analyzer_->getWorkspaceBounds(leg);
 
         // Use the most restrictive values across all legs
-        min_walkspace_radius = std::min(min_walkspace_radius, bounds.max_radius);
-        min_stance_radius = std::min(min_stance_radius, bounds.max_radius * 0.8);
+        min_walkspace_radius = std::min(min_walkspace_radius, bounds.max_reach);
+        min_stance_radius = std::min(min_stance_radius, bounds.max_reach * 0.8);
     }
 
     // Apply safety scaling
