@@ -144,11 +144,9 @@ class WorkspaceAnalyzer {
     // Enhanced workspace storage with height layers (OpenSHC-compatible)
     Workspace leg_workspaces_[NUM_LEGS]; // 3D workspace per leg
 
-    // Analysis parameters
-    static constexpr int BEARING_STEP = 5;                 // Degrees
-    static constexpr double MAX_WORKSPACE_RADIUS = 500.0f; // mm
-    static constexpr double STABILITY_THRESHOLD = 10.0f;   // mm
-    static constexpr double MIN_LEG_SEPARATION = 50.0f;    // Minimum distance between leg tips (mm)
+    // Analysis parameters (constants now defined in hexamotion_constants.h)
+    static constexpr double STABILITY_THRESHOLD = 10.0f; // mm
+    static constexpr double MIN_LEG_SEPARATION = 50.0f;  // Minimum distance between leg tips (mm)
 
     // Runtime control flags
     bool analysis_enabled_;                 //< Flag to enable/disable real-time analysis

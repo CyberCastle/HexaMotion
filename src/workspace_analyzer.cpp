@@ -2,6 +2,7 @@
 #include "hexamotion_constants.h"
 #include "math_utils.h"
 #include <algorithm>
+#include <chrono>
 #include <cmath>
 #include <iomanip>
 #include <iostream>
@@ -32,13 +33,16 @@ WorkspaceAnalyzer::WorkspaceAnalyzer(const RobotModel &model, ComputeConfig conf
 }
 
 void WorkspaceAnalyzer::initialize() {
-    // Calculate workspace bounds for each leg
-    for (int i = 0; i < NUM_LEGS; i++) {
-        calculateLegWorkspaceBounds(i);
-    }
+    // Only initialize if not already done in constructor
+    if (!analysis_info_.walkspace_map_generated) {
+        // Calculate workspace bounds for each leg
+        for (int i = 0; i < NUM_LEGS; i++) {
+            calculateLegWorkspaceBounds(i);
+        }
 
-    // Generate initial walkspace
-    generateWorkspace();
+        // Generate initial walkspace
+        generateWorkspace();
+    }
 }
 
 // ========================================================================
@@ -48,13 +52,26 @@ void WorkspaceAnalyzer::initialize() {
 void WorkspaceAnalyzer::generateWorkspace() {
     walkspace_map_.clear();
 
+    // Generate walkspace for all legs first (only once per leg)
+    for (int leg = 0; leg < NUM_LEGS; leg++) {
+        generateWalkspaceForLeg(leg);
+    }
+
     // Generate walkspace for each bearing
     for (int bearing = 0; bearing <= 360; bearing += BEARING_STEP) {
         double min_radius = MAX_WORKSPACE_RADIUS;
 
         // Find minimum radius across all legs for this bearing
         for (int leg = 0; leg < NUM_LEGS; leg++) {
-            generateWalkspaceForLeg(leg);
+            // Use pre-generated workspace data instead of regenerating
+            Workplane workplane = getWorkplane(leg, 0.0); // Use ground level workplane
+
+            if (!workplane.empty()) {
+                auto bearing_it = workplane.find(bearing);
+                if (bearing_it != workplane.end()) {
+                    min_radius = std::min(min_radius, bearing_it->second);
+                }
+            }
 
             // Calculate distance to adjacent legs to avoid overlap
             int adjacent1 = (leg + 1) % NUM_LEGS;
@@ -76,9 +93,14 @@ void WorkspaceAnalyzer::generateWorkspace() {
             double bearing_rad = math_utils::degreesToRadians(bearing);
             double max_reach = std::min(dist_to_adj1, dist_to_adj2);
 
-            // Adjust for bearing direction
+            // Adjust for bearing direction - avoid division by zero
             Point3D direction(cos(bearing_rad), sin(bearing_rad), 0);
-            double projected_reach = max_reach / cos(bearing_rad);
+            double projected_reach = max_reach;
+
+            // Only apply cosine correction if cosine is significant (not near 90°, 270°)
+            if (std::abs(cos(bearing_rad)) > 0.1) {
+                projected_reach = max_reach / std::abs(cos(bearing_rad));
+            }
 
             min_radius = std::min(min_radius, projected_reach);
         }
@@ -832,92 +854,184 @@ void WorkspaceAnalyzer::calculateLegWorkspaceBounds(int leg_index) {
 }
 
 void WorkspaceAnalyzer::generateWalkspaceForLeg(int leg_index) {
-    // OpenSHC-equivalent workspace generation with Workplanes
-    // Generates multiple height layers (workplanes) for complete 3D workspace
-    if (config_.precision == PRECISION_HIGH) {
-        // OpenSHC algorithm parameters
-        const int WORKSPACE_LAYERS = 10;          // Height layers (from OpenSHC)
-        const int BEARING_STEP = 45;              // 45° steps = 8 directions (from OpenSHC)
-        const double MAX_POSITION_DELTA = 0.005f; // 5mm increments (optimized for speed)
-        const double MAX_WORKSPACE_RADIUS = 0.3f; // 300mm max radius
+    // OpenSHC-equivalent workspace generation adapted for HexaMotion
+    // Based on OpenSHC Leg::generateWorkspace() algorithm
 
-        // Clear existing workspace for this leg
-        leg_workspaces_[leg_index].clear();
+    if (leg_index < 0 || leg_index >= NUM_LEGS) {
+        return;
+    }
 
-        // Calculate layer heights
-        const double min_height = -MAX_WORKSPACE_RADIUS;
-        const double max_height = MAX_WORKSPACE_RADIUS;
-        const double height_step = (max_height - min_height) / (WORKSPACE_LAYERS - 1);
+    // Get robot parameters to determine realistic limits
+    const Parameters &params = model_.getParams();
+    double total_leg_length = params.coxa_length + params.femur_length + params.tibia_length;
+    double max_realistic_radius = std::min(static_cast<double>(MAX_WORKSPACE_RADIUS), total_leg_length);
 
-        int total_checks = 0;
+    // Initialize max/min workplanes (OpenSHC style)
+    Workplane max_workplane;
+    Workplane min_workplane;
+    for (int bearing = 0; bearing <= 360; bearing += BEARING_STEP) {
+        max_workplane[bearing] = max_realistic_radius;
+        min_workplane[bearing] = 0.0;
+    }
 
-        // Generate each workplane (height layer)
-        for (int layer = 0; layer < WORKSPACE_LAYERS; layer++) {
-            double search_height = min_height + (layer * height_step);
+    // Clear existing workspace for this leg
+    leg_workspaces_[leg_index].clear();
 
-            // Create new workplane for this height
-            Workplane workplane;
+    // Calculate identity tip pose (equivalent to leg at default 0° angles)
+    JointAngles identity_angles(0.0, 0.0, 0.0);
+    Point3D identity_tip_position;
 
-            // Generate workplane for each bearing direction
-            for (int bearing = 0; bearing < 360; bearing += BEARING_STEP) {
-                double bearing_rad = bearing * M_PI / 180.0f;
-                double max_reachable_radius = 0.0f;
+    try {
+        identity_tip_position = model_.forwardKinematicsGlobalCoordinates(leg_index, identity_angles);
+    } catch (...) {
+        // If can't reach identity pose, set zero workspace
+        leg_workspaces_[leg_index][0.0] = min_workplane;
+        return;
+    }
 
-                // Radial search from center outward until kinematic limit
-                int max_iterations = static_cast<int>(MAX_WORKSPACE_RADIUS / MAX_POSITION_DELTA);
+    // For precision levels, use simplified approach for better performance
+    if (config_.precision == PRECISION_LOW) {
+        // Simple mode: just insert max workplane at ground level
+        leg_workspaces_[leg_index][0.0] = max_workplane;
+        return;
+    }
 
-                for (int step = 1; step <= max_iterations; step++) {
-                    double radius = step * MAX_POSITION_DELTA;
+    // Full OpenSHC-style workspace generation for MEDIUM and HIGH precision
+    bool found_lower_limit = false;
+    bool found_upper_limit = false;
+    double max_plane_height = 0.0;
+    double min_plane_height = 0.0;
+    double search_height_delta = max_realistic_radius / WORKSPACE_LAYERS;
 
-                    Point3D test_point;
-                    test_point.x = radius * cos(bearing_rad);
-                    test_point.y = radius * sin(bearing_rad);
-                    test_point.z = search_height;
+    double search_height = 0.0;
+    int search_bearing = 0;
+    bool within_limits = true;
+    int iteration = 1;
+    Point3D origin_tip_position, target_tip_position;
+    double distance_from_origin = 0.0;
+    int number_iterations = 0;
+    bool workspace_generation_complete = false;
 
-                    total_checks++;
+    // Main OpenSHC algorithm loop
+    while (!workspace_generation_complete) {
+        // Calculate current identity position with height offset
+        Point3D current_identity = identity_tip_position;
+        current_identity.z += search_height;
 
-                    if (detailedReachabilityCheck(leg_index, test_point)) {
-                        max_reachable_radius = radius;
-                    } else {
-                        // Found kinematic limit - stop searching in this direction
-                        break;
-                    }
-                }
+        // Set origin and target for linear interpolation (OpenSHC style)
+        if (iteration == 1) {
+            within_limits = true;
 
-                // Store max radius for this bearing in workplane
-                workplane[bearing] = max_reachable_radius;
+            // Search for upper and lower vertical limit of workspace
+            if (!found_lower_limit || !found_upper_limit) {
+                number_iterations = static_cast<int>(max_realistic_radius / MAX_POSITION_DELTA);
+                origin_tip_position = current_identity;
+
+                Point3D search_limit = current_identity;
+                search_limit.z += (found_lower_limit ? max_realistic_radius : -max_realistic_radius);
+                target_tip_position = search_limit;
             }
+            // Track to new workplane origin at search height
+            else if (search_bearing == 0) {
+                number_iterations = std::max(1, static_cast<int>(search_height_delta / MAX_POSITION_DELTA));
+                origin_tip_position = identity_tip_position; // Current position
+                target_tip_position = current_identity;
+            }
+            // Search along search bearing for limits
+            else {
+                number_iterations = static_cast<int>(max_realistic_radius / MAX_POSITION_DELTA);
+                origin_tip_position = current_identity;
+                target_tip_position = current_identity;
 
-            // Ensure symmetry (bearing 360° = bearing 0°)
-            workplane[360] = workplane[0];
-
-            // Store workplane in workspace
-            leg_workspaces_[leg_index][search_height] = workplane;
+                double bearing_rad = search_bearing * M_PI / 180.0;
+                target_tip_position.x += max_realistic_radius * cos(bearing_rad);
+                target_tip_position.y += max_realistic_radius * sin(bearing_rad);
+            }
         }
 
-    } else {
-        // Fast workspace generation using simplified bounds
-        WorkspaceBounds bounds;
-        calculateLegWorkspaceBounds(leg_index); // Use existing method instead of calculateSimpleWorkspace
+        // Move tip position linearly along search bearing (OpenSHC interpolation)
+        double i = double(iteration) / number_iterations;
+        Point3D desired_tip_position;
+        desired_tip_position.x = origin_tip_position.x * (1.0 - i) + target_tip_position.x * i;
+        desired_tip_position.y = origin_tip_position.y * (1.0 - i) + target_tip_position.y * i;
+        desired_tip_position.z = origin_tip_position.z * (1.0 - i) + target_tip_position.z * i;
 
-        // Sample at lower resolution for PRECISION_FAST
-        const double radius_step = RADIUS_STEP_DEFAULT;   // mm
-        const double bearing_step = BEARING_STEP_DEGREES; // degrees
+        // Test reachability using inverse kinematics
+        bool ik_result = detailedReachabilityCheck(leg_index, desired_tip_position);
 
-        for (double radius = 0; radius < bounds.max_reach; radius += radius_step) {
-            for (double bearing = 0; bearing < FULL_ROTATION_DEGREES; bearing += bearing_step) {
-                double bearing_rad = bearing * DEGREES_TO_RADIANS_FACTOR;
+        // Calculate distance from origin (OpenSHC style)
+        Point3D diff = desired_tip_position - current_identity;
+        distance_from_origin = sqrt(diff.x * diff.x + diff.y * diff.y + diff.z * diff.z);
 
-                Point3D test_point;
-                test_point.x = radius * cos(bearing_rad);
-                test_point.y = radius * sin(bearing_rad);
-                test_point.z = 0; // Ground level for fast calculation
+        // Check if leg is still within limits
+        within_limits = within_limits && ik_result;
 
-                // Simple reachability check
-                if (radius <= bounds.max_reach) {
-                    // Point is within simplified workspace
+        // Search not complete -> iterate along current search bearing
+        if (within_limits && iteration < number_iterations) {
+            iteration++;
+        }
+        // Current search along bearing complete -> save result and iterate
+        else {
+            iteration = 1;
+
+            // Lower vertical limit found
+            if (!found_lower_limit) {
+                found_lower_limit = true;
+                min_plane_height = -distance_from_origin;
+                leg_workspaces_[leg_index][min_plane_height] = min_workplane;
+                continue;
+            }
+            // Upper vertical limit found
+            else if (!found_upper_limit) {
+                found_upper_limit = true;
+                max_plane_height = distance_from_origin;
+                search_height_delta = (max_plane_height - min_plane_height) / WORKSPACE_LAYERS;
+
+                int upper_levels = static_cast<int>(abs(max_plane_height) / search_height_delta);
+                search_height = upper_levels * search_height_delta;
+
+                leg_workspaces_[leg_index][max_plane_height] = min_workplane;
+                leg_workspaces_[leg_index][search_height] = max_workplane;
+                continue;
+            }
+            // Tracked to origin of new workplane (search_bearing == 0)
+            else if (search_bearing == 0) {
+                // No special action needed - ready for bearing search
+            }
+            // Search along bearing complete - save in workspace
+            else {
+                leg_workspaces_[leg_index][search_height][search_bearing] = distance_from_origin;
+            }
+
+            // Iterate search bearing (0 -> 360 anti-clockwise, OpenSHC style)
+            if (search_bearing + BEARING_STEP <= 360) {
+                search_bearing += BEARING_STEP;
+            }
+            // Iterate search height (top to bottom, OpenSHC style)
+            else {
+                search_bearing = 0;
+                // Ensure symmetry: bearing 0° = bearing 360°
+                if (leg_workspaces_[leg_index].find(search_height) != leg_workspaces_[leg_index].end()) {
+                    leg_workspaces_[leg_index][search_height][0] = leg_workspaces_[leg_index][search_height][360];
+                }
+
+                search_height -= search_height_delta;
+                if (search_height >= min_plane_height) {
+                    leg_workspaces_[leg_index][search_height] = max_workplane;
+                }
+                // All searches complete
+                else {
+                    workspace_generation_complete = true;
                 }
             }
+        }
+    }
+
+    // Ensure all workplanes have proper symmetry (bearing 0° = bearing 360°)
+    for (auto &workspace_entry : leg_workspaces_[leg_index]) {
+        Workplane &workplane = workspace_entry.second;
+        if (workplane.find(0) != workplane.end() && workplane.find(360) != workplane.end()) {
+            workplane[360] = workplane[0];
         }
     }
 }
