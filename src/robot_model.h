@@ -7,6 +7,9 @@
 #include <ArduinoEigen.h>
 #include <utility>
 
+// Forward declaration para evitar dependencias circulares
+class WorkspaceAnalyzer;
+
 // System configuration
 #define NUM_LEGS 6
 #define DOF_PER_LEG 3
@@ -466,8 +469,9 @@ class RobotModel {
     /**
      * @brief Construct a robot model using the provided parameters.
      * @param params Reference to configuration parameters.
+     * @param workspace_analyzer Reference to WorkspaceAnalyzer (mandatorio)
      */
-    explicit RobotModel(const Parameters &params);
+    explicit RobotModel(const Parameters &params, WorkspaceAnalyzer &workspace_analyzer);
 
     /**
      * \brief Initialize DH parameters from robot dimensions.
@@ -620,6 +624,9 @@ class RobotModel {
      * This function follows OpenSHC's approach to automatically adjust positions that are
      * outside the leg's workspace to be within reachable bounds.
      *
+     * REFACTORIZADO: Ahora utiliza WorkspaceAnalyzer::generateWorkspace() y
+     * WorkspaceAnalyzer::getWorkplane() siguiendo el patrón de OpenSHC.
+     *
      * @param leg_index Index of the leg (0-5)
      * @param reference_tip_position Target position that may be outside workspace
      * @return Adjusted position that is guaranteed to be within leg workspace
@@ -679,6 +686,9 @@ class RobotModel {
     double tibia_angle_limits_rad[2];
     double max_angular_velocity_rad;
     double body_comp_max_tilt_rad;
+
+    // WorkspaceAnalyzer para análisis del espacio de trabajo (estilo OpenSHC)
+    WorkspaceAnalyzer &workspace_analyzer_;
 
     JointAngles solveIK(int leg, const Point3D &local_target, JointAngles current) const;
 

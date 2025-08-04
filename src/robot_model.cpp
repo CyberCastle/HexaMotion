@@ -1,5 +1,6 @@
 #include "robot_model.h"
 #include "hexamotion_constants.h"
+#include "workspace_analyzer.h"
 
 /**
  * @file robot_model.cpp
@@ -11,7 +12,8 @@
 
 // Remove BASE_THETA_OFFSETS definition from here and move it to hexamotion_constants.h
 
-RobotModel::RobotModel(const Parameters &p) : params(p) {
+RobotModel::RobotModel(const Parameters &p, WorkspaceAnalyzer &workspace_analyzer)
+    : params(p), workspace_analyzer_(workspace_analyzer) {
     // Convert configuration angles from degrees to radians for internal use
     // Keep original parameters in degrees for configuration
     for (int i = 0; i < 2; ++i) {
@@ -497,33 +499,88 @@ JointAngles RobotModel::estimateInitialAngles(int leg, const Point3D &target_pos
 }
 
 Point3D RobotModel::makeReachable(int leg_index, const Point3D &reference_tip_position) const {
-    // OpenSHC-style makeReachable: constrain position to leg workspace
-    Point3D leg_base = getLegBasePosition(leg_index);
 
-    // Calculate vector from leg base to target
+    // Asegurar que el workspace esté generado (equivalente a OpenSHC's generateWorkspace())
+    workspace_analyzer_.generateWorkspace();
+
+    // Obtener el workplane para la altura de la posición objetivo
+    auto workplane = workspace_analyzer_.getWorkplane(leg_index, reference_tip_position.z);
+
+    if (!workplane.empty()) {
+        // Convertir la posición a coordenadas polares relativas a la base de la pata
+        Point3D leg_base = getLegBasePosition(leg_index);
+        Point3D relative_pos = reference_tip_position - leg_base;
+
+        // Calcular bearing (ángulo) y radio
+        double bearing_rad = atan2(relative_pos.y, relative_pos.x);
+        double bearing_deg = bearing_rad * 180.0 / M_PI;
+
+        // Normalizar bearing a [0, 360)
+        if (bearing_deg < 0)
+            bearing_deg += 360.0;
+
+        double requested_radius = sqrt(relative_pos.x * relative_pos.x + relative_pos.y * relative_pos.y);
+
+        // Buscar el radio máximo permitido en el workplane para este bearing
+        double max_radius = 0.0;
+
+        // Interpolación entre bearings adyacentes en el workplane
+        int bearing_int = static_cast<int>(bearing_deg);
+        auto it_current = workplane.find(bearing_int);
+        auto it_next = workplane.find((bearing_int + 1) % 360);
+
+        if (it_current != workplane.end()) {
+            max_radius = it_current->second;
+
+            // Interpolación lineal si tenemos bearing siguiente
+            if (it_next != workplane.end()) {
+                double fraction = bearing_deg - bearing_int;
+                max_radius = it_current->second * (1.0 - fraction) + it_next->second * fraction;
+            }
+        } else {
+            // Si no tenemos datos exactos, buscar bearings cercanos
+            double min_bearing_diff = 360.0;
+            for (const auto &bearing_pair : workplane) {
+                double diff = std::min(std::abs(bearing_deg - bearing_pair.first),
+                                       360.0 - std::abs(bearing_deg - bearing_pair.first));
+                if (diff < min_bearing_diff) {
+                    min_bearing_diff = diff;
+                    max_radius = bearing_pair.second;
+                }
+            }
+        }
+
+        // Si la posición solicitada está fuera del workspace, constrañirla
+        if (requested_radius > max_radius && max_radius > 0.0) {
+            double scale_factor = max_radius / requested_radius;
+            Point3D constrained_relative = relative_pos * scale_factor;
+
+            // Mantener la altura original
+            constrained_relative.z = relative_pos.z;
+
+            return leg_base + constrained_relative;
+        }
+
+        // La posición ya está dentro del workspace
+        return reference_tip_position;
+    }
+
+    // Si el workplane está vacío, usar constrañimiento geométrico básico
+    // (esto solo debería ocurrir en casos excepcionales)
+    Point3D leg_base = getLegBasePosition(leg_index);
     Point3D target_vector = reference_tip_position - leg_base;
     double distance_to_target = target_vector.norm();
 
-    // Get maximum reachable distance (conservative estimate)
     double max_reach = params.femur_length + params.tibia_length;
-    double safety_margin = 0.95; // 95% of max reach for stability
-    double safe_max_reach = max_reach * safety_margin;
+    double safe_max_reach = max_reach * 0.95; // 95% del alcance máximo
 
-    // If target is beyond safe reach, scale it to be within reach
     if (distance_to_target > safe_max_reach) {
-        // Scale the vector to safe reach distance
         Point3D safe_direction = target_vector / distance_to_target;
         Point3D safe_position = leg_base + safe_direction * safe_max_reach;
-
-        // Maintain original Z coordinate if reasonable
-        if (std::abs(reference_tip_position.z - leg_base.z) < max_reach * 0.8) {
-            safe_position.z = reference_tip_position.z;
-        }
-
+        safe_position.z = reference_tip_position.z; // Mantener altura original
         return safe_position;
     }
 
-    // Target is already reachable
     return reference_tip_position;
 }
 
