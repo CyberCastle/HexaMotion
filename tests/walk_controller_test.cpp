@@ -927,6 +927,7 @@ int main() {
     p.tibia_angle_limits[1] = 45;
 
     RobotModel model(p);
+    model.workspaceAnalyzerInitializer(); // Inicializar WorkspaceAnalyzer
 
     // Create leg objects for testing
     Leg test_legs[NUM_LEGS] = {
@@ -1060,6 +1061,7 @@ int main() {
             test_params.dynamic_gait.swing_phase = 12;
             test_params.dynamic_gait.frequency = 2.0;
             RobotModel temp_model(test_params);
+            temp_model.workspaceAnalyzerInitializer(); // Inicializar WorkspaceAnalyzer
             LegStepper temp_stepper(leg_index, identity_pose, leg, temp_model);
             temp_stepper.setDefaultTipPose(identity_pose);
 

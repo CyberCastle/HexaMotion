@@ -472,6 +472,7 @@ int main() {
     std::cout << "  Ratio swing: " << tripod_config.getSwingRatio() << std::endl;
 
     RobotModel model(p);
+    model.workspaceAnalyzerInitializer(); // Inicializar WorkspaceAnalyzer
 
     // Create all 6 legs
     Leg test_legs[NUM_LEGS] = {

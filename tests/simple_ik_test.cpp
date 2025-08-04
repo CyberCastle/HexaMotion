@@ -28,6 +28,7 @@ int main() {
     p.tibia_angle_limits[1] = 45;
 
     RobotModel model(p);
+    model.workspaceAnalyzerInitializer(); // Inicializar WorkspaceAnalyzer
 
     std::cout << std::fixed << std::setprecision(3);
     std::cout << "=== Inverse Kinematics Validation Test ===" << std::endl;

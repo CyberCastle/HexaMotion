@@ -27,6 +27,7 @@ int main() {
     p.tibia_angle_limits[1] = 45;
 
     RobotModel model(p);
+    model.workspaceAnalyzerInitializer(); // Inicializar WorkspaceAnalyzer
 
     std::cout << std::fixed << std::setprecision(3);
     std::cout << "=== Advanced IK Round-Trip Validation Test ===" << std::endl;

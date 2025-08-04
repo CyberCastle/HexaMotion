@@ -574,6 +574,7 @@ int main() {
     std::cout << "  Swing ratio: " << tripod_config.getSwingRatio() << std::endl;
 
     RobotModel model(p);
+    model.workspaceAnalyzerInitializer(); // Inicializar WorkspaceAnalyzer
 
     // Create leg object for testing (using leg 0)
     Leg test_leg(0, model);

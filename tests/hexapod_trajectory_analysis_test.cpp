@@ -563,6 +563,7 @@ int main() {
     std::cout << "  Swing ratio: " << tripod_config.getSwingRatio() << std::endl;
 
     RobotModel model(p);
+    model.workspaceAnalyzerInitializer(); // Inicializar WorkspaceAnalyzer
 
     // Create array of legs for all 6 legs
     Leg hexapod_legs[NUM_LEGS] = {

@@ -272,6 +272,7 @@ int main() {
     p.tibia_angle_limits[1] = 50;
 
     RobotModel model(p);
+    model.workspaceAnalyzerInitializer(); // Inicializar WorkspaceAnalyzer
 
     std::cout << std::fixed << std::setprecision(2);
     std::cout << "=== BÚSQUEDA DE ÁNGULOS ÓPTIMOS PARA ALTURA MÍNIMA ESPECÍFICA ===" << std::endl;

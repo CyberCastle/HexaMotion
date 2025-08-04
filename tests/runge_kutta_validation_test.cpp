@@ -16,6 +16,7 @@ int main() {
     p.control_frequency = 50;
 
     RobotModel model(p);
+    model.workspaceAnalyzerInitializer(); // Inicializar WorkspaceAnalyzer
     DummyIMU imu;
     DummyFSR fsr;
 

@@ -37,7 +37,7 @@ void WorkspaceAnalyzer::initialize() {
     }
 
     // Generate initial walkspace
-    // generateWorkspace();
+    generateWorkspace();
 }
 
 // ========================================================================

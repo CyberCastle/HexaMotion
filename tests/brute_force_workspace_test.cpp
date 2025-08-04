@@ -20,6 +20,7 @@ int main() {
     p.tibia_angle_limits[1] = 45;
 
     RobotModel model(p);
+    model.workspaceAnalyzerInitializer(); // Inicializar WorkspaceAnalyzer
     if (!model.validate()) {
         std::cerr << "Invalid model parameters" << std::endl;
         return 1;
@@ -78,4 +79,3 @@ int main() {
     std::cout << "Max IK/FK error encountered: " << max_error << " mm" << std::endl;
     return 0;
 }
-

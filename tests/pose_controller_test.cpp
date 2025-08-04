@@ -69,6 +69,7 @@ int main() {
     p.tibia_angle_limits[1] = 45;
 
     RobotModel model(p);
+    model.workspaceAnalyzerInitializer(); // Inicializar WorkspaceAnalyzer
     DummyServo servos;
 
     // Create default configuration using factory (proper approach)

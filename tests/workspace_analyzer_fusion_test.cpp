@@ -28,6 +28,7 @@ int main() {
     params.tibia_angle_limits[1] = 45;
 
     RobotModel model(params);
+    model.workspaceAnalyzerInitializer(); // Inicializar WorkspaceAnalyzer
 
     // Test unified WorkspaceAnalyzer creation
     std::cout << "Creating WorkspaceAnalyzer..." << std::endl;

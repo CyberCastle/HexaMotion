@@ -156,6 +156,7 @@ class KinematicsValidator {
     KinematicsValidator() {
         setupParameters();
         model = std::make_unique<RobotModel>(params);
+        model->workspaceAnalyzerInitializer(); // Inicializar WorkspaceAnalyzer
     }
 
     void setupParameters() {

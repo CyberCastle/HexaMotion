@@ -3,12 +3,15 @@
 
 #include "hexamotion_constants.h"
 #include "math_utils.h"
+#include "precision_config.h"
 #include <Arduino.h>
 #include <ArduinoEigen.h>
+#include <memory>
 #include <utility>
 
 // Forward declaration para evitar dependencias circulares
 class WorkspaceAnalyzer;
+struct ValidationConfig;
 
 // System configuration
 #define NUM_LEGS 6
@@ -469,9 +472,35 @@ class RobotModel {
     /**
      * @brief Construct a robot model using the provided parameters.
      * @param params Reference to configuration parameters.
-     * @param workspace_analyzer Reference to WorkspaceAnalyzer (mandatorio)
      */
-    explicit RobotModel(const Parameters &params, WorkspaceAnalyzer &workspace_analyzer);
+    explicit RobotModel(const Parameters &params);
+
+    /**
+     * @brief Destructor - implemented in .cpp to handle unique_ptr properly
+     */
+    ~RobotModel();
+
+    /**
+     * @brief Initialize the WorkspaceAnalyzer with custom configuration.
+     * Este método permite inicializar el WorkspaceAnalyzer después de la construcción
+     * del RobotModel con configuraciones específicas.
+     * @param config Configuración de cómputo para el WorkspaceAnalyzer
+     * @param validation_config Configuración de validación (opcional)
+     */
+    void workspaceAnalyzerInitializer(ComputeConfig config = ComputeConfig::medium(),
+                                      const ValidationConfig *validation_config = nullptr);
+
+    /**
+     * @brief Get reference to the internal WorkspaceAnalyzer
+     * @return Reference to WorkspaceAnalyzer for use by other classes
+     */
+    WorkspaceAnalyzer &getWorkspaceAnalyzer();
+
+    /**
+     * @brief Get const reference to the internal WorkspaceAnalyzer
+     * @return Const reference to WorkspaceAnalyzer for read-only access
+     */
+    const WorkspaceAnalyzer &getWorkspaceAnalyzer() const;
 
     /**
      * \brief Initialize DH parameters from robot dimensions.
@@ -688,7 +717,7 @@ class RobotModel {
     double body_comp_max_tilt_rad;
 
     // WorkspaceAnalyzer para análisis del espacio de trabajo (estilo OpenSHC)
-    WorkspaceAnalyzer &workspace_analyzer_;
+    std::unique_ptr<WorkspaceAnalyzer> workspace_analyzer_;
 
     JointAngles solveIK(int leg, const Point3D &local_target, JointAngles current) const;
 

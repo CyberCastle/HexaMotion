@@ -8,12 +8,14 @@
  */
 #include <limits>
 #include <math.h>
+#include <memory>
+#include <stdexcept>
 #include <vector>
 
 // Remove BASE_THETA_OFFSETS definition from here and move it to hexamotion_constants.h
 
-RobotModel::RobotModel(const Parameters &p, WorkspaceAnalyzer &workspace_analyzer)
-    : params(p), workspace_analyzer_(workspace_analyzer) {
+RobotModel::RobotModel(const Parameters &p)
+    : params(p), workspace_analyzer_(nullptr) {
     // Convert configuration angles from degrees to radians for internal use
     // Keep original parameters in degrees for configuration
     for (int i = 0; i < 2; ++i) {
@@ -26,6 +28,39 @@ RobotModel::RobotModel(const Parameters &p, WorkspaceAnalyzer &workspace_analyze
     body_comp_max_tilt_rad = math_utils::degreesToRadians(params.body_comp.max_tilt_deg);
 
     initializeDH();
+}
+
+RobotModel::~RobotModel() {
+    // El destructor debe estar en .cpp donde WorkspaceAnalyzer está completamente definido
+}
+
+void RobotModel::workspaceAnalyzerInitializer(ComputeConfig config, const ValidationConfig *validation_config) {
+    // Crear el WorkspaceAnalyzer solo si no existe
+    if (!workspace_analyzer_) {
+        if (validation_config) {
+            workspace_analyzer_ = std::make_unique<WorkspaceAnalyzer>(*this, config, *validation_config);
+        } else {
+            // Usar configuración por defecto
+            ValidationConfig default_config;
+            workspace_analyzer_ = std::make_unique<WorkspaceAnalyzer>(*this, config, default_config);
+        }
+        workspace_analyzer_->initialize();
+    }
+}
+
+WorkspaceAnalyzer &RobotModel::getWorkspaceAnalyzer() {
+    if (!workspace_analyzer_) {
+        // Si no se ha inicializado, usar configuración por defecto
+        workspaceAnalyzerInitializer();
+    }
+    return *workspace_analyzer_;
+}
+
+const WorkspaceAnalyzer &RobotModel::getWorkspaceAnalyzer() const {
+    if (!workspace_analyzer_) {
+        throw std::runtime_error("WorkspaceAnalyzer no ha sido inicializado. Llame a workspaceAnalyzerInitializer() primero.");
+    }
+    return *workspace_analyzer_;
 }
 
 void RobotModel::initializeDH() {
@@ -501,10 +536,11 @@ JointAngles RobotModel::estimateInitialAngles(int leg, const Point3D &target_pos
 Point3D RobotModel::makeReachable(int leg_index, const Point3D &reference_tip_position) const {
 
     // Asegurar que el workspace esté generado (equivalente a OpenSHC's generateWorkspace())
-    workspace_analyzer_.generateWorkspace();
+    // Note: Necesitamos usar const_cast porque el método es const pero necesitamos modificar el workspace_analyzer
+    const_cast<RobotModel *>(this)->getWorkspaceAnalyzer().generateWorkspace();
 
     // Obtener el workplane para la altura de la posición objetivo
-    auto workplane = workspace_analyzer_.getWorkplane(leg_index, reference_tip_position.z);
+    auto workplane = getWorkspaceAnalyzer().getWorkplane(leg_index, reference_tip_position.z);
 
     if (!workplane.empty()) {
         // Convertir la posición a coordenadas polares relativas a la base de la pata
