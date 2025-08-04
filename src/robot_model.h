@@ -131,6 +131,9 @@ struct Parameters {
 
     // Gait phase offset multiplier for tripod gait synchronization
     double offset_multiplier = 0.5; // Default offset multiplier for tripod gait phase synchronization
+
+    // Walkspace overlap control (OpenSHC equivalent)
+    bool overlapping_walkspaces = false; // Flag denoting if walkspaces are allowed to overlap (default: false, same as OpenSHC)
 };
 
 enum GaitType {

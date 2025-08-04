@@ -337,16 +337,14 @@ std::pair<double, double> RobotModel::calculateHeightRange() const {
 
     // Workspace analysis: discretize the joint configuration space
     // Based on "Introduction to Robotics" - Craig and "Robotics: Modelling, Planning and Control" - Siciliano
-    const int resolution = WORKSPACE_RESOLUTION; // discretization resolution
-
-    const double coxa_step = (coxa_angle_limits_rad[1] - coxa_angle_limits_rad[0]) / resolution;
-    const double femur_step = (femur_angle_limits_rad[1] - femur_angle_limits_rad[0]) / resolution;
-    const double tibia_step = (tibia_angle_limits_rad[1] - tibia_angle_limits_rad[0]) / resolution;
+    const double coxa_step = (coxa_angle_limits_rad[1] - coxa_angle_limits_rad[0]) / WORKSPACE_RESOLUTION;
+    const double femur_step = (femur_angle_limits_rad[1] - femur_angle_limits_rad[0]) / WORKSPACE_RESOLUTION;
+    const double tibia_step = (tibia_angle_limits_rad[1] - tibia_angle_limits_rad[0]) / WORKSPACE_RESOLUTION;
 
     // Evaluate the entire workspace of valid joint configurations
-    for (int i = 0; i <= resolution; i++) {
-        for (int j = 0; j <= resolution; j++) {
-            for (int k = 0; k <= resolution; k++) {
+    for (int i = 0; i <= WORKSPACE_RESOLUTION; i++) {
+        for (int j = 0; j <= WORKSPACE_RESOLUTION; j++) {
+            for (int k = 0; k <= WORKSPACE_RESOLUTION; k++) {
                 double coxa = coxa_angle_limits_rad[0] + i * coxa_step;
                 double femur = femur_angle_limits_rad[0] + j * femur_step;
                 double tibia = tibia_angle_limits_rad[0] + k * tibia_step;

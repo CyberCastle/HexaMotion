@@ -835,49 +835,108 @@ void WorkspaceAnalyzer::generateWalkspaceForLeg(int leg_index) {
         return;
     const Parameters &params = model_.getParams();
 
-    // 1) inicializar workplanes vacíos
+    // 1) Pre-calcular datos para overlap constraints
     Workplane max_plane, min_plane;
-    for (int b = 0; b <= 360; b += BEARING_STEP) {
-        max_plane[b] = MAX_WORKSPACE_RADIUS;
-        min_plane[b] = 0.0;
-    }
     leg_workspaces_[leg_index].clear();
 
-    // 2) calcular posición “identidad” del tip
+    // 2) calcular posición "identidad" del tip
     JointAngles zero(0, 0, 0);
     Point3D id_tip = model_.forwardKinematicsGlobalCoordinates(leg_index, zero);
 
     // si no puede alcanzar identidad -> workspace vacío
-    if (!detailedReachabilityCheck(leg_index, id_tip)) {
-        leg_workspaces_[leg_index][0.0] = min_plane;
-        return;
+    bool identity_reachable = detailedReachabilityCheck(leg_index, id_tip);
+
+    // Pre-calcular datos para overlap constraints (OpenSHC-equivalent)
+    double distance_to_adjacent_leg_1 = MAX_WORKSPACE_RADIUS;
+    double distance_to_adjacent_leg_2 = MAX_WORKSPACE_RADIUS;
+    double bearing_to_adjacent_leg_1 = 0.0;
+    double bearing_to_adjacent_leg_2 = 0.0;
+
+    if (!params.overlapping_walkspaces && identity_reachable) {
+        int adjacent_leg_1 = (leg_index + 1) % NUM_LEGS;
+        int adjacent_leg_2 = (leg_index + NUM_LEGS - 1) % NUM_LEGS;
+
+        Point3D current_leg_tip = model_.forwardKinematicsGlobalCoordinates(leg_index, zero);
+        Point3D adjacent_1_tip = model_.forwardKinematicsGlobalCoordinates(adjacent_leg_1, zero);
+        Point3D adjacent_2_tip = model_.forwardKinematicsGlobalCoordinates(adjacent_leg_2, zero);
+
+        distance_to_adjacent_leg_1 = math_utils::distance(current_leg_tip, adjacent_1_tip) / 2.0;
+        distance_to_adjacent_leg_2 = math_utils::distance(current_leg_tip, adjacent_2_tip) / 2.0;
+
+        bearing_to_adjacent_leg_1 = math_utils::radiansToDegrees(
+            atan2(adjacent_1_tip.y - current_leg_tip.y, adjacent_1_tip.x - current_leg_tip.x));
+        bearing_to_adjacent_leg_2 = math_utils::radiansToDegrees(
+            atan2(adjacent_2_tip.y - current_leg_tip.y, adjacent_2_tip.x - current_leg_tip.x));
     }
 
-    // 3) recorrer capas de altura
+    // Bucle unificado optimizado: maneja todos los casos en un solo loop
     double height_min = -MAX_WORKSPACE_RADIUS;
     double height_max = MAX_WORKSPACE_RADIUS;
     double layer_step = (height_max - height_min) / WORKSPACE_LAYERS;
-    for (int layer = 0; layer <= WORKSPACE_LAYERS; ++layer) {
-        double h = height_min + layer * layer_step;
-        Workplane plane;
-        for (int b = 0; b <= 360; b += BEARING_STEP) {
-            double rad = b * M_PI / 180.0;
-            // barra de búsqueda radial
-            double best = 0.0;
-            for (double r = 0.0; r <= MAX_WORKSPACE_RADIUS; r += 20.0) {
-                Point3D p = id_tip;
-                p.z = h;
-                p.x += r * cos(rad);
-                p.y += r * sin(rad);
-                if (detailedReachabilityCheck(leg_index, p))
-                    best = r;
-                else
-                    break;
+
+    for (int b = 0; b <= 360; b += BEARING_STEP) {
+        double rad = b * M_PI / 180.0;
+
+        // Calcular max_allowed_radius para este bearing
+        double max_allowed_radius = MAX_WORKSPACE_RADIUS;
+
+        if (!identity_reachable) {
+            // Caso de workspace vacío
+            max_allowed_radius = 0.0;
+        } else if (!params.overlapping_walkspaces) {
+            // Aplicar constraints de overlap
+            int bearing_diff_1 = abs(static_cast<int>(bearing_to_adjacent_leg_1) - b);
+            int bearing_diff_2 = abs(static_cast<int>(bearing_to_adjacent_leg_2) - b);
+
+            if (bearing_diff_1 > 180)
+                bearing_diff_1 = 360 - bearing_diff_1;
+            if (bearing_diff_2 > 180)
+                bearing_diff_2 = 360 - bearing_diff_2;
+
+            double distance_to_overlap_1 = MAX_WORKSPACE_RADIUS;
+            double distance_to_overlap_2 = MAX_WORKSPACE_RADIUS;
+
+            if ((bearing_diff_1 < 90 || bearing_diff_1 > 270) && distance_to_adjacent_leg_1 > 0.0) {
+                distance_to_overlap_1 = distance_to_adjacent_leg_1 / cos(math_utils::degreesToRadians(bearing_diff_1));
             }
-            plane[b] = best;
+            if ((bearing_diff_2 < 90 || bearing_diff_2 > 270) && distance_to_adjacent_leg_2 > 0.0) {
+                distance_to_overlap_2 = distance_to_adjacent_leg_2 / cos(math_utils::degreesToRadians(bearing_diff_2));
+            }
+
+            double min_distance = std::min(distance_to_overlap_1, distance_to_overlap_2);
+            max_allowed_radius = std::min(MAX_WORKSPACE_RADIUS, min_distance);
         }
-        plane[360] = plane[0];
-        leg_workspaces_[leg_index][h] = plane;
+
+        // Procesar todas las capas de altura para este bearing
+        for (int layer = 0; layer <= WORKSPACE_LAYERS; ++layer) {
+            double h = height_min + layer * layer_step;
+
+            // Buscar el radio máximo alcanzable en esta altura y bearing
+            double best = 0.0;
+            if (max_allowed_radius > 0.0) {
+                for (double r = 0.0; r <= max_allowed_radius; r += RADIUS_STEP_DEFAULT) {
+                    Point3D p = id_tip;
+                    p.z = h;
+                    p.x += r * cos(rad);
+                    p.y += r * sin(rad);
+                    if (detailedReachabilityCheck(leg_index, p))
+                        best = r;
+                    else
+                        break;
+                }
+            }
+
+            // Almacenar resultado en el workspace
+            if (leg_workspaces_[leg_index].find(h) == leg_workspaces_[leg_index].end()) {
+                leg_workspaces_[leg_index][h] = Workplane();
+            }
+            leg_workspaces_[leg_index][h][b] = best;
+        }
+    }
+
+    // Asegurar simetría para todos los planos
+    for (auto &height_plane : leg_workspaces_[leg_index]) {
+        height_plane.second[360] = height_plane.second[0];
     }
 }
 
