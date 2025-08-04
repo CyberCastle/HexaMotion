@@ -253,16 +253,6 @@ bool LocomotionSystem::planGaitSequence(double velocity_x, double velocity_y, do
     return true;
 }
 
-// Foot trajectory calculation
-Point3D LocomotionSystem::calculateFootTrajectory(int leg_index, double phase) {
-    auto leg_stepper = walk_ctrl->getLegStepper(leg_index);
-    if (!leg_stepper)
-        return Point3D(0, 0, 0);
-    // Calculate tip position using modern configuration
-    // Aquí puedes llamar a leg_stepper->getCurrentTipPose() o lógica equivalente
-    return leg_stepper->getCurrentTipPose();
-}
-
 // Forward locomotion control
 bool LocomotionSystem::walkForward(double velocity) {
     return planGaitSequence(velocity, 0.0f, 0.0f);
