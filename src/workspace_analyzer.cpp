@@ -914,7 +914,7 @@ void WorkspaceAnalyzer::generateWalkspaceForLeg(int leg_index) {
             // Buscar el radio máximo alcanzable en esta altura y bearing
             double best = 0.0;
             if (max_allowed_radius > 0.0) {
-                for (double r = 0.0; r <= max_allowed_radius; r += RADIUS_STEP_DEFAULT) {
+                for (double r = 0.0; r <= max_allowed_radius; r += MAX_POSITION_DELTA) {
                     Point3D p = id_tip;
                     p.z = h;
                     p.x += r * cos(rad);
