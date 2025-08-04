@@ -154,6 +154,9 @@ class WorkspaceAnalyzer {
     unsigned long last_analysis_timestamp_; //< Timestamp of last analysis
     double total_analysis_time_;            //< Total time spent in analysis
 
+    // Workspace cache flags (OpenSHC-style caching)
+    bool leg_workspace_generated_[NUM_LEGS]; //< Cache flags for each leg workspace
+
   public:
     /**
      * @brief Constructor
@@ -332,6 +335,18 @@ class WorkspaceAnalyzer {
      */
     void resetAnalysisStats();
 
+    /**
+     * @brief Invalidate workspace cache for all legs (force regeneration)
+     * Similar to OpenSHC's approach when robot configuration changes
+     */
+    void invalidateWorkspaceCache();
+
+    /**
+     * @brief Invalidate workspace cache for specific leg
+     * @param leg_index Index of leg to invalidate (0-5)
+     */
+    void invalidateWorkspaceCache(int leg_index);
+
     // ========================================================================
     // CONFIGURATION AND SCALING
     // ========================================================================
@@ -379,6 +394,15 @@ class WorkspaceAnalyzer {
      * @return True if walkspace map is available
      */
     bool isWalkspaceMapGenerated() const { return analysis_info_.walkspace_map_generated; }
+
+    /**
+     * @brief Check if workspace for specific leg has been cached
+     * @param leg_index Index of leg to check (0-5)
+     * @return True if workspace is cached for this leg
+     */
+    bool isLegWorkspaceCached(int leg_index) const {
+        return (leg_index >= 0 && leg_index < NUM_LEGS) ? leg_workspace_generated_[leg_index] : false;
+    }
 
     /**
      * @brief Calculate limit proximity for joint angles (OpenSHC-style)

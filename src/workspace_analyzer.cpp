@@ -23,6 +23,11 @@ WorkspaceAnalyzer::WorkspaceAnalyzer(const RobotModel &model, ComputeConfig conf
     analysis_info_.overall_stability_score = 0.0;
     analysis_info_.walkspace_map_generated = false;
     last_analysis_timestamp_ = 0;
+
+    // Initialize workspace cache flags (OpenSHC-style)
+    for (int i = 0; i < NUM_LEGS; i++) {
+        leg_workspace_generated_[i] = false;
+    }
 }
 
 void WorkspaceAnalyzer::initialize() {
@@ -42,9 +47,9 @@ void WorkspaceAnalyzer::initialize() {
 void WorkspaceAnalyzer::generateWorkspace() {
     walkspace_map_.clear();
 
-    // Generate walkspace for all legs first (only once per leg)
+    // Generate walkspace for all legs (using OpenSHC-style caching)
     for (int leg = 0; leg < NUM_LEGS; leg++) {
-        generateWalkspaceForLeg(leg);
+        generateWalkspaceForLeg(leg); // Will use cache if already generated
     }
 
     // Pre-calculate leg base positions and adjacent distances to avoid redundant calculations
@@ -780,6 +785,21 @@ std::string WorkspaceAnalyzer::getAnalysisInfoString() const {
     ss << "Total Analysis Time: " << std::fixed << std::setprecision(2)
        << analysis_info_.total_analysis_time_ms << " ms\n";
     ss << "Walkspace Map Generated: " << (analysis_info_.walkspace_map_generated ? "YES" : "NO") << "\n";
+
+    // OpenSHC-style cache information
+    ss << "\n=== Workspace Cache Status (OpenSHC-style) ===\n";
+    int cached_legs = 0;
+    for (int i = 0; i < NUM_LEGS; i++) {
+        if (leg_workspace_generated_[i])
+            cached_legs++;
+    }
+    ss << "Cached Legs: " << cached_legs << "/" << NUM_LEGS << "\n";
+    ss << "Leg Cache Status: ";
+    for (int i = 0; i < NUM_LEGS; i++) {
+        ss << "L" << i << ":" << (leg_workspace_generated_[i] ? "✓" : "✗") << " ";
+    }
+    ss << "\n";
+
     ss << "Overall Stability Score: " << std::fixed << std::setprecision(3)
        << analysis_info_.overall_stability_score << "\n";
 
@@ -813,6 +833,21 @@ void WorkspaceAnalyzer::resetAnalysisStats() {
     analysis_info_.last_analysis_time = 0;
 }
 
+void WorkspaceAnalyzer::invalidateWorkspaceCache() {
+    // Invalidate cache for all legs (OpenSHC-style)
+    for (int i = 0; i < NUM_LEGS; i++) {
+        leg_workspace_generated_[i] = false;
+    }
+    analysis_info_.walkspace_map_generated = false;
+}
+
+void WorkspaceAnalyzer::invalidateWorkspaceCache(int leg_index) {
+    // Invalidate cache for specific leg
+    if (leg_index >= 0 && leg_index < NUM_LEGS) {
+        leg_workspace_generated_[leg_index] = false;
+    }
+}
+
 // ========================================================================
 // PRIVATE ANALYSIS METHODS
 // ========================================================================
@@ -833,11 +868,17 @@ void WorkspaceAnalyzer::calculateLegWorkspaceBounds(int leg_index) {
 void WorkspaceAnalyzer::generateWalkspaceForLeg(int leg_index) {
     if (leg_index < 0 || leg_index >= NUM_LEGS)
         return;
+
+    // OpenSHC-style caching: Check if workspace already generated
+    if (leg_workspace_generated_[leg_index]) {
+        return; // Use cached workspace data
+    }
+
     const Parameters &params = model_.getParams();
 
     // 1) Pre-calcular datos para overlap constraints
     Workplane max_plane, min_plane;
-    leg_workspaces_[leg_index].clear();
+    leg_workspaces_[leg_index].clear(); // Only clear when regenerating
 
     // 2) calcular posición "identidad" del tip
     JointAngles zero(0, 0, 0);
@@ -938,6 +979,9 @@ void WorkspaceAnalyzer::generateWalkspaceForLeg(int leg_index) {
     for (auto &height_plane : leg_workspaces_[leg_index]) {
         height_plane.second[360] = height_plane.second[0];
     }
+
+    // Mark workspace as generated (OpenSHC-style caching)
+    leg_workspace_generated_[leg_index] = true;
 }
 
 bool WorkspaceAnalyzer::detailedReachabilityCheck(int leg_index, const Point3D &position) {
