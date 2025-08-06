@@ -2,6 +2,7 @@
 #include "hexamotion_constants.h"
 #include "math_utils.h"
 #include "velocity_limits.h"
+#include "workspace_analyzer.h"
 #include <algorithm>
 #include <cmath>
 
@@ -360,7 +361,9 @@ void LegStepper::updateTipPositionIterative(int iteration, double time_delta, bo
 
         // OpenSHC pattern: Accumulate delta position instead of setting absolute position
         Point3D target_pose = current_tip_pose_ + delta_pos;
-        current_tip_pose_ = target_pose; // Update internal position (OpenSHC pattern - NO IK here)
+
+        // Apply workspace constraints to ensure position is physically reachable (OpenSHC pattern - NO IK here)
+        current_tip_pose_ = robot_model_.getWorkspaceAnalyzer().constrainToGeometricWorkspace(leg_index_, target_pose);
 
         // Calculate velocity for this iteration (OpenSHC pattern)
         current_tip_velocity_ = delta_pos / time_delta;

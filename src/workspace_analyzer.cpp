@@ -641,9 +641,12 @@ Point3D WorkspaceAnalyzer::constrainToGeometricWorkspace(int leg_index, const Po
     const Parameters &params = model_.getParams();
     Point3D leg_base = getLegBase(leg_index);
 
-    // Calculate max reach
-    double max_reach = params.coxa_length + params.femur_length + params.tibia_length;
-    max_reach *= validation_config_.safety_margin_factor;
+    // Calculate max reach based on physical morphology without exceeding safety margin
+    double physical_max_reach = params.coxa_length + params.femur_length + params.tibia_length;
+    double max_reach = physical_max_reach * validation_config_.safety_margin_factor;
+
+    // Ensure we never exceed the physical maximum, even if safety factor is > 1.0
+    max_reach = std::min(max_reach, physical_max_reach);
 
     // Calculate distance from base
     double distance = getDistanceFromBase(leg_index, target_position);
@@ -855,8 +858,9 @@ void WorkspaceAnalyzer::invalidateWorkspaceCache(int leg_index) {
 void WorkspaceAnalyzer::calculateLegWorkspaceBounds(int leg_index) {
     const Parameters &params = model_.getParams();
 
-    double total_reach = params.femur_length + params.tibia_length;
-    double min_reach = 30.0f; // Minimum practical reach when leg is folded
+    // Calculate correct total reach including all leg segments
+    double total_reach = params.coxa_length + params.femur_length + params.tibia_length;
+    double min_reach = params.coxa_length; // Minimum reach is at least the coxa length
 
     WorkspaceBounds &bounds = leg_workspace_[leg_index];
     bounds.min_reach = min_reach;

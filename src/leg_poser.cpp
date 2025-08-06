@@ -1,6 +1,7 @@
 #include "leg_poser.h"
 #include "hexamotion_constants.h"
 #include "math_utils.h"
+#include "workspace_analyzer.h"
 #include <algorithm>
 #include <cmath>
 
@@ -115,6 +116,9 @@ bool LegPoser::stepToPosition(const Pose &target_tip_pose, const Pose &target_po
         time_input = (swing_iteration_count - half_swing_iteration) * delta_t * 2.0;
         new_tip_position = math_utils::quarticBezier(control_nodes_secondary, time_input);
     }
+
+    // Apply workspace constraints to the calculated position
+    new_tip_position = robot_model_.getWorkspaceAnalyzer().constrainToGeometricWorkspace(leg_index_, new_tip_position);
 
     // OpenSHC pattern: Apply pose transformation to tip position
     current_tip_pose_.position = new_tip_position - pose_influence;
