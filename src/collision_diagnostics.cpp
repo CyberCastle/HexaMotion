@@ -29,7 +29,7 @@ class CollisionDiagnostics {
         std::cout << "Safe reach (65%): " << safe_reach << " mm" << std::endl;
 
         // Calculate minimum safe radius
-        double min_safe_radius = WorkspaceValidator::calculateSafeHexagonRadius(safe_reach, 30.0f);
+        double min_safe_radius = WorkspaceAnalyzer::calculateSafeHexagonRadius(safe_reach, 30.0f);
         std::cout << "Minimum safe radius: " << min_safe_radius << " mm" << std::endl;
 
         if (p.hexagon_radius < min_safe_radius) {
@@ -68,10 +68,10 @@ class CollisionDiagnostics {
             Point3D base2(p.hexagon_radius * cos(angle2 * M_PI / 180.0f),
                           p.hexagon_radius * sin(angle2 * M_PI / 180.0f), 0);
 
-            bool overlap = WorkspaceValidator::checkWorkspaceOverlap(
+            bool overlap = WorkspaceAnalyzer::checkWorkspaceOverlap(
                 base1, safe_reach, base2, safe_reach, 20.0f);
 
-            double distance = WorkspaceValidator::getDistance2D(base1, base2);
+            double distance = WorkspaceAnalyzer::getDistance2D(base1, base2);
             double workspace_separation = distance - (2 * safe_reach);
 
             std::cout << "Legs " << leg << "-" << next_leg << ": ";
@@ -94,9 +94,9 @@ class CollisionDiagnostics {
         double safe_reach = leg_reach * 0.65f;
 
         // Calculate minimum safe radius with different safety margins
-        double conservative_radius = WorkspaceValidator::calculateSafeHexagonRadius(safe_reach, 50.0f);
-        double standard_radius = WorkspaceValidator::calculateSafeHexagonRadius(safe_reach, 30.0f);
-        double minimum_radius = WorkspaceValidator::calculateSafeHexagonRadius(safe_reach, 20.0f);
+        double conservative_radius = WorkspaceAnalyzer::calculateSafeHexagonRadius(safe_reach, 50.0f);
+        double standard_radius = WorkspaceAnalyzer::calculateSafeHexagonRadius(safe_reach, 30.0f);
+        double minimum_radius = WorkspaceAnalyzer::calculateSafeHexagonRadius(safe_reach, 20.0f);
 
         std::cout << "\n=== Radius Recommendations ===" << std::endl;
         std::cout << "Conservative (50mm margin): " << conservative_radius << " mm" << std::endl;
