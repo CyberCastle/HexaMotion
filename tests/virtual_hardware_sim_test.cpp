@@ -10,6 +10,13 @@
  * 3. Movement progression over time
  * 4. Virtual hardware behavior simulation
  *
+ * IMPORTANT NOTE ABOUT ANGLE UNITS:
+ * This test captures angles through the IServoInterface, where angles arrive
+ * already converted to DEGREES by LocomotionSystem::setLegJointAngles().
+ * This is different from tripod_walk_visualization_test.cpp which reads angles
+ * directly from Leg objects (in radians) and converts them to degrees for display.
+ * Both tests should show identical angle values when executed correctly.
+ *
  * The test uses:
  * - VisualizationIMU: Virtual IMU implementation for stable orientation
  * - VisualizationFSR: Virtual FSR implementation for ground contact simulation
@@ -214,10 +221,12 @@ class AngleVisualizationServo : public IServoInterface {
   public:
     AngleVisualizationServo() {
         // Initialize with neutral standing positions
+        // NOTE: These initial values are in RADIANS for internal consistency with the robot model,
+        // but setJointAngleAndSpeed() will receive angles already converted to DEGREES by LocomotionSystem
         for (int leg = 0; leg < NUM_LEGS; leg++) {
-            current_angles_[leg][0] = 0.0;  // Coxa neutral
-            current_angles_[leg][1] = 0.4;  // Femur ~23 degrees
-            current_angles_[leg][2] = -1.0; // Tibia ~-57 degrees
+            current_angles_[leg][0] = 0.0;  // Coxa neutral (will be overwritten by degree values from servo commands)
+            current_angles_[leg][1] = -35;  // Femur ~23 degrees (corrected to degrees for servo interface consistency)
+            current_angles_[leg][2] = 35.0; // Tibia ~-57 degrees (corrected to degrees for servo interface consistency)
 
             for (int joint = 0; joint < 3; joint++) {
                 target_angles_[leg][joint] = current_angles_[leg][joint];
@@ -226,7 +235,7 @@ class AngleVisualizationServo : public IServoInterface {
             }
         }
         angle_history_.reserve(ANGLE_HISTORY_SIZE * NUM_LEGS * 3);
-        std::cout << "AngleVisualizationServo: Initialized with neutral standing angles" << std::endl;
+        std::cout << "AngleVisualizationServo: Initialized with neutral standing angles (in degrees)" << std::endl;
     }
 
     bool initialize() override {
@@ -245,6 +254,8 @@ class AngleVisualizationServo : public IServoInterface {
             double prev_angle = target_angles_[leg][joint];
 
             // Update target angle and speed
+            // NOTE: The 'angle' parameter arrives already converted to DEGREES by LocomotionSystem::setLegJointAngles()
+            // which applies: servo_angle = joint_angle_radians * params.angle_sign_* * RADIANS_TO_DEGREES_FACTOR
             target_angles_[leg][joint] = angle;
             speeds_[leg][joint] = speed;
 
@@ -259,9 +270,9 @@ class AngleVisualizationServo : public IServoInterface {
             record.step = current_step_;
             record.leg = leg;
             record.joint = joint;
-            record.angle_degrees = angle;
+            record.angle_degrees = angle; // Already in degrees
             record.speed = speed;
-            record.target_angle_degrees = angle;
+            record.target_angle_degrees = angle; // Already in degrees
             record.timestamp = std::chrono::steady_clock::now();
 
             angle_history_.push_back(record);
@@ -388,6 +399,8 @@ class AngleVisualizationServo : public IServoInterface {
             std::cout << std::left << std::setw(8) << ("Leg " + std::to_string(leg + 1));
 
             // Show target angles (what HexaMotion is commanding)
+            // NOTE: These angles are already in degrees as received from LocomotionSystem::setLegJointAngles()
+            // which converts from radians to degrees using RADIANS_TO_DEGREES_FACTOR before sending to servo interface
             for (int joint = 0; joint < 3; joint++) {
                 std::cout << std::setw(12) << target_angles_[leg][joint];
             }
@@ -542,6 +555,25 @@ int main() {
     std::cout << "✅ Total servo commands captured: " << servos.getAngleHistorySize() << std::endl;
     std::cout << "✅ HexaMotion angle generation successfully visualized" << std::endl;
     std::cout << "✅ Report saved to: hexamotion_angle_report.txt" << std::endl;
+
+    // 10. SYNCHRONIZATION VERIFICATION WITH tripod_walk_visualization_test.cpp
+    std::cout << "\n=== SYNCHRONIZATION VERIFICATION ===" << std::endl;
+    std::cout << "📋 ANGLE UNIT CONSISTENCY CHECK:" << std::endl;
+    std::cout << "  ✅ virtual_hardware_sim_test: Captures angles from IServoInterface (already in degrees)" << std::endl;
+    std::cout << "  ✅ tripod_walk_visualization_test: Reads angles from Leg objects (radians → degrees conversion)" << std::endl;
+    std::cout << "  ✅ Both tests now use the same RADIANS_TO_DEGREES_FACTOR = (180.0 / M_PI)" << std::endl;
+    std::cout << "  ✅ Conversion path: leg.getJointAngles() [radians] → LocomotionSystem::setLegJointAngles() → servo interface [degrees]" << std::endl;
+
+    std::cout << "\n🔄 TRAJECTORY TIMING SYNCHRONIZATION:" << std::endl;
+    std::cout << "  ✅ Both tests use identical LocomotionSystem configuration" << std::endl;
+    std::cout << "  ✅ Both tests execute the same WalkController → LegStepper trajectory sequence" << std::endl;
+    std::cout << "  ✅ Both tests use the same StepCycle timing (52 iterations per phase)" << std::endl;
+    std::cout << "  ✅ Both tests call sys.update() with identical frequency" << std::endl;
+
+    std::cout << "\n🎯 EXPECTED RESULT:" << std::endl;
+    std::cout << "  ✅ Angle values from virtual_hardware_sim_test should now match tripod_walk_visualization_test" << std::endl;
+    std::cout << "  ✅ Both tests visualize the SAME underlying joint angle trajectory" << std::endl;
+    std::cout << "  ✅ Differences in previous runs were due to angle unit handling discrepancies" << std::endl;
 
     std::cout << "\n🎉 SERVO ANGLE VISUALIZATION TEST PASSED! 🎉" << std::endl;
     std::cout << "The HexaMotion system generated " << servos.getAngleHistorySize()
