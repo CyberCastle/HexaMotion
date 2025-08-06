@@ -54,6 +54,8 @@ These are the characteristics of a real robot, used to test this library.
 
 **Note:** Physically, if the robot has all servo angles at 0°, the femur remains horizontal, in line with the coxa. The tibia, on the other hand, remains vertical, perpendicular to the ground. This allows the robot to stand stably by default when all angles are at 0°. Due to the aforementioned peculiarity, the robot's body will be positioned at z = -208, this value being the length of the tibia equal to the default height.
 
+**Default Height Configuration:** The library now supports configurable default height through the `default_height_offset` parameter. This parameter defines the Z-axis offset when all servo angles are at 0°. If set to 0.0 (default), the system falls back to using `-tibia_length` for backward compatibility. For explicit configuration, set it to `-208.0` (or `-tibia_length`) to match the physical robot characteristics.
+
 ### Test Parameters
 
 Use the following `Parameters` configuration in the test files:
@@ -64,6 +66,7 @@ p.hexagon_radius = 200;
 p.coxa_length = 50;
 p.femur_length = 101;
 p.tibia_length = 208;
+p.default_height_offset = -208.0;  // Set to -tibia_length for explicit configuration
 p.robot_height = 208;
 p.standing_height = 150;
 p.control_frequency = 50;

@@ -16,8 +16,8 @@
 LegPoser::LegPoser(int leg_index, Leg &leg, RobotModel &robot_model)
     : leg_index_(leg_index), leg_(leg), robot_model_(robot_model), first_iteration_(true), master_iteration_count_(0) {
 
-    // Initialize physical reference height (z = -tibia_length when all angles are 0°)
-    physical_reference_height_ = -robot_model_.getParams().tibia_length;
+    // Initialize physical reference height (z = getDefaultHeightOffset() when all angles are 0°)
+    physical_reference_height_ = robot_model_.getDefaultHeightOffset();
 
     // Initialize poses
     auto_pose_ = Pose();

@@ -31,8 +31,9 @@ struct Parameters {
     double tibia_length;
 
     double robot_height;
-    double standing_height = 150; //< Default standing height in mm
-    double height_offset = 0.0f;  //< structural body height offset
+    double standing_height = 150;        //< Default standing height in mm
+    double height_offset = 0.0f;         //< structural body height offset
+    double default_height_offset = 0.0f; //< Default height offset when all joint angles are 0°
     double robot_weight;
     Eigen::Vector3d center_of_mass;
 
@@ -557,6 +558,13 @@ class RobotModel {
      */
     std::pair<double, double> calculateHeightRange() const;
     const Parameters &getParams() const { return params; }
+
+    /**
+     * @brief Get the default height offset when all joint angles are 0°
+     * @return Default height offset in mm. If default_height_offset is set (non-zero),
+     *         returns that value. Otherwise, returns -tibia_length for backwards compatibility.
+     */
+    double getDefaultHeightOffset() const;
 
     /**
      * @brief Get pose in robot frame (equivalent to OpenSHC's getPoseRobotFrame)

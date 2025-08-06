@@ -165,6 +165,7 @@ class KinematicsValidator {
         params.coxa_length = A_COXA;
         params.femur_length = B_FEMUR;
         params.tibia_length = C_TIBIA;
+        params.default_height_offset = -C_TIBIA; // Set to -tibia_length for explicit configuration
         params.robot_height = 208.0f;
 
         // Límites de angle_calculus.cpp

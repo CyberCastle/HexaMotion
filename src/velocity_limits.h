@@ -59,7 +59,7 @@ class VelocityLimits {
         double overshoot_x;      // Overshoot compensation in X direction
         double overshoot_y;      // Overshoot compensation in Y direction
         double safety_margin;    // Safety factor for workspace limits
-        double reference_height; // Physical reference height (z = -tibia_length)
+        double reference_height; // Physical reference height (z = getDefaultHeightOffset())
 
         WorkspaceConfig() : walkspace_radius(0.0f), stance_radius(0.0f),
                             overshoot_x(0.0f), overshoot_y(0.0f), safety_margin(0.85f),

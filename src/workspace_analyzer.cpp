@@ -14,8 +14,8 @@ WorkspaceAnalyzer::WorkspaceAnalyzer(const RobotModel &model, ComputeConfig conf
     : model_(model), config_(config), validation_config_(validation_config), analysis_enabled_(true), total_analysis_time_(0.0) {
 
     // Initialize physical robot configuration offset
-    // When all servo angles are 0°, robot body is positioned at z = -tibia_length
-    reference_height_offset_ = -model_.getParams().tibia_length;
+    // When all servo angles are 0°, robot body is positioned at getDefaultHeightOffset()
+    reference_height_offset_ = model_.getDefaultHeightOffset();
 
     // Initialize analysis info structure
     analysis_info_.analysis_enabled = true;
@@ -458,7 +458,7 @@ WorkspaceAnalyzer::getWorkspaceBounds(int leg_index) const {
     bounds.preferred_min_reach = theoretical_min * validation_config_.minimum_reach_factor;
 
     // Height bounds aplicando offset de altura física
-    // Cuando ángulos son 0°, robot está en z = -tibia_length (referencia física)
+    // Cuando ángulos son 0°, robot está en z = getDefaultHeightOffset() (referencia física)
     double reach_range = total_leg_length * 0.7; // Usar un rango más realista del 70%
     bounds.min_height = reference_height_offset_ - reach_range;
     bounds.max_height = reference_height_offset_ + reach_range;
@@ -873,7 +873,7 @@ void WorkspaceAnalyzer::calculateLegWorkspaceBounds(int leg_index) {
     bounds.min_reach = min_reach;
     bounds.max_reach = total_reach;
 
-    // Aplicar offset de altura física: cuando ángulos son 0°, robot está en z = -tibia_length
+    // Aplicar offset de altura física: cuando ángulos son 0°, robot está en z = getDefaultHeightOffset()
     // Las alturas del workspace están centradas en esta posición de referencia
     double reach_range = total_reach * 0.7; // Usar un rango más realista del 70% del reach total
     bounds.min_height = reference_height_offset_ - reach_range;
@@ -899,7 +899,7 @@ void WorkspaceAnalyzer::generateWalkspaceForLeg(int leg_index) {
     JointAngles zero(0, 0, 0);
     Point3D id_tip = model_.forwardKinematicsGlobalCoordinates(leg_index, zero);
 
-    // Aplicar offset de altura física: cuando ángulos son 0°, robot está en z = -tibia_length
+    // Aplicar offset de altura física: cuando ángulos son 0°, robot está en z = getDefaultHeightOffset()
     id_tip.z += reference_height_offset_;
 
     // si no puede alcanzar identidad -> workspace vacío

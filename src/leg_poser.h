@@ -143,7 +143,7 @@ class LegPoser {
 
     bool leg_completed_step_ = false; //< Flag denoting if leg has completed its required step in a sequence
 
-    double physical_reference_height_; //< Physical reference height (z = -tibia_length when all angles are 0°)
+    double physical_reference_height_; //< Physical reference height (z = getDefaultHeightOffset() when all angles are 0°)
 
     // Constants
     static constexpr double JOINT_TOLERANCE = 0.01; // rad

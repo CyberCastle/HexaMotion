@@ -138,7 +138,7 @@ class WorkspaceAnalyzer {
     ValidationConfig validation_config_;
 
     // Physical robot configuration offset
-    double reference_height_offset_; // z = -tibia_length offset for physical robot configuration
+    double reference_height_offset_; // z = getDefaultHeightOffset() offset for physical robot configuration
 
     // Workspace geometry
     WorkspaceBounds leg_workspace_[NUM_LEGS];
@@ -307,7 +307,7 @@ class WorkspaceAnalyzer {
     // ========================================================================
 
     /**
-     * @brief Get physical reference height offset (z = -tibia_length)
+     * @brief Get physical reference height offset (z = getDefaultHeightOffset())
      * @return Reference height offset where robot body is positioned when all angles are 0°
      */
     double getPhysicalReferenceHeight() const { return reference_height_offset_; }

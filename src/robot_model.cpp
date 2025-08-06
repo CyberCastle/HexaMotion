@@ -447,6 +447,11 @@ double RobotModel::getLegReach() const {
     return params.femur_length + params.tibia_length;
 }
 
+double RobotModel::getDefaultHeightOffset() const {
+    // Return the default height offset used in the robot model
+    return params.default_height_offset;
+}
+
 JointAngles RobotModel::calculateTargetFromCurrentPosition(int leg, const JointAngles &current_angles,
                                                            const Pose &current_pose, const Point3D &target_in_current_frame) const {
     // OpenSHC logic: transform target from current pose frame to robot frame
@@ -549,9 +554,9 @@ Point3D RobotModel::makeReachable(int leg_index, const Point3D &reference_tip_po
     // Note: Necesitamos usar const_cast porque el método es const pero necesitamos modificar el workspace_analyzer
     const_cast<RobotModel *>(this)->getWorkspaceAnalyzer().generateWorkspace();
 
-    // Aplicar offset de altura física: cuando ángulos son 0°, robot está en z = -tibia_length
+    // Aplicar offset de altura física: cuando ángulos son 0°, robot está en z = getDefaultHeightOffset()
     // El workspace está generado considerando este offset, por lo que necesitamos ajustar la altura de consulta
-    double physical_reference_height = -params.tibia_length;
+    double physical_reference_height = getDefaultHeightOffset();
     Point3D adjusted_reference = reference_tip_position;
     // La altura para consultar el workplane debe considerar el offset físico
     double workspace_query_height = reference_tip_position.z;

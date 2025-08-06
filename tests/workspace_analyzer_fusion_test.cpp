@@ -17,6 +17,7 @@ int main() {
     params.coxa_length = 50;
     params.femur_length = 101;
     params.tibia_length = 208;
+    params.default_height_offset = -208.0; // Set to -tibia_length for explicit configuration
     params.robot_height = 208;
     params.standing_height = 150;
     params.control_frequency = 50;

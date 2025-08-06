@@ -12,9 +12,9 @@ LegStepper::LegStepper(int leg_index, const Point3D &identity_tip_pose, Leg &leg
       robot_model_(robot_model),
       identity_tip_pose_(identity_tip_pose) {
 
-    // Validate physical reference height (z = -208 mm when all angles are 0°)
+    // Validate physical reference height (z = getDefaultHeightOffset() when all angles are 0°)
     const Parameters &params = robot_model_.getParams();
-    double physical_reference_height = -params.tibia_length;
+    double physical_reference_height = robot_model_.getDefaultHeightOffset();
     double expected_z_range_min = physical_reference_height - params.standing_height;
     double expected_z_range_max = physical_reference_height + params.standing_height;
 
