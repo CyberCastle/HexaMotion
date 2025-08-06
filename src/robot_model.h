@@ -483,10 +483,10 @@ class RobotModel {
 
     /**
      * @brief Initialize the WorkspaceAnalyzer with custom configuration.
-     * Este método permite inicializar el WorkspaceAnalyzer después de la construcción
-     * del RobotModel con configuraciones específicas.
-     * @param config Configuración de cómputo para el WorkspaceAnalyzer
-     * @param validation_config Configuración de validación (opcional)
+     * This method allows initializing the WorkspaceAnalyzer after constructing
+     * the RobotModel with specific configurations.
+     * @param config Compute configuration for the WorkspaceAnalyzer
+     * @param validation_config Validation configuration (optional)
      */
     void workspaceAnalyzerInitializer(ComputeConfig config = ComputeConfig::medium(),
                                       const ValidationConfig *validation_config = nullptr);
@@ -668,8 +668,8 @@ class RobotModel {
      * This function follows OpenSHC's approach to automatically adjust positions that are
      * outside the leg's workspace to be within reachable bounds.
      *
-     * REFACTORIZADO: Ahora utiliza WorkspaceAnalyzer::generateWorkspace() y
-     * WorkspaceAnalyzer::getWorkplane() siguiendo el patrón de OpenSHC.
+     * REFACTORED: Now uses WorkspaceAnalyzer::generateWorkspace() and
+     * WorkspaceAnalyzer::getWorkplane() following the OpenSHC pattern.
      *
      * @param leg_index Index of the leg (0-5)
      * @param reference_tip_position Target position that may be outside workspace
@@ -731,7 +731,7 @@ class RobotModel {
     double max_angular_velocity_rad;
     double body_comp_max_tilt_rad;
 
-    // WorkspaceAnalyzer para análisis del espacio de trabajo (estilo OpenSHC)
+    // WorkspaceAnalyzer for workspace analysis (OpenSHC-style)
     std::unique_ptr<WorkspaceAnalyzer> workspace_analyzer_;
 
     JointAngles solveIK(int leg, const Point3D &local_target, JointAngles current) const;
