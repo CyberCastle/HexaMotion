@@ -105,11 +105,11 @@ void testTrajectoryGeneration(LegStepper &stepper, const RobotModel &model) {
 
     // Test swing trajectory generation step by step
     std::cout << "  Generating primary swing control nodes..." << std::endl;
-    stepper.generatePrimarySwingControlNodes();
+    stepper.testGeneratePrimarySwingControlNodes();
     std::cout << "  Primary swing nodes generated successfully" << std::endl;
 
     std::cout << "  Generating secondary swing control nodes..." << std::endl;
-    stepper.generateSecondarySwingControlNodes(false);
+    stepper.testGenerateSecondarySwingControlNodes(false);
     std::cout << "  Secondary swing nodes generated successfully" << std::endl;
 
     // Test getting and validating multiple nodes
@@ -145,7 +145,7 @@ void testTrajectoryGeneration(LegStepper &stepper, const RobotModel &model) {
     }
 
     // Test stance trajectory generation
-    stepper.generateStanceControlNodes(1.0);
+    stepper.testGenerateStanceControlNodes(1.0);
 
     // Validate stance nodes
     bool stance_nodes_valid = true;
@@ -180,9 +180,9 @@ void testTipPositionUpdates(LegStepper &stepper, Leg &leg, const RobotModel &mod
 
     // Configure stepper for movement by setting up stride and trajectories
     stepper.updateStride();
-    stepper.generatePrimarySwingControlNodes();
-    stepper.generateSecondarySwingControlNodes(false);
-    stepper.generateStanceControlNodes(1.0);
+    stepper.testGeneratePrimarySwingControlNodes();
+    stepper.testGenerateSecondarySwingControlNodes(false);
+    stepper.testGenerateStanceControlNodes(1.0);
 
     // Set up initial velocity to ensure trajectory generation
     Point3D initial_velocity = Point3D(10.0, 0, 0);
@@ -206,7 +206,7 @@ void testTipPositionUpdates(LegStepper &stepper, Leg &leg, const RobotModel &mod
     stepper.setStepProgress(0.5); // Set progress to 50%
 
     // Generate stance control nodes if not already done
-    stepper.generateStanceControlNodes(1.0);
+    stepper.testGenerateStanceControlNodes(1.0);
 
     Point3D stance_initial = leg.getCurrentTipPositionGlobal();
     stepper.updateTipPositionIterative(15, time_delta, false, false);
@@ -407,8 +407,8 @@ void testSwingHeightCompliance(LegStepper &stepper, Leg &leg, const RobotModel &
     stepper.updateStride();
 
     // Generar nodos de control de swing
-    stepper.generatePrimarySwingControlNodes();
-    stepper.generateSecondarySwingControlNodes(false);
+    stepper.testGeneratePrimarySwingControlNodes();
+    stepper.testGenerateSecondarySwingControlNodes(false);
 
     // Simular diferentes puntos de la trayectoria de swing
     double max_swing_height = initial_z;
@@ -1077,9 +1077,9 @@ int main() {
             Point3D initial_velocity = Point3D(10.0, 0, 0);
             stepper.setSwingOriginTipVelocity(initial_velocity);
             stepper.updateTipPositionIterative(10, 0.02);
-            stepper.generatePrimarySwingControlNodes();
-            stepper.generateSecondarySwingControlNodes(false);
-            stepper.generateStanceControlNodes(1.0);
+            stepper.testGeneratePrimarySwingControlNodes();
+            stepper.testGenerateSecondarySwingControlNodes(false);
+            stepper.testGenerateStanceControlNodes(1.0);
 
             // Verificar que los nodos no son NaN
             bool nodes_valid = true;
@@ -1137,8 +1137,8 @@ int main() {
             stepper.setStepProgress(0.5);
             stepper.setDesiredVelocity(Point3D(40.0, 0.0, 0.0), 0.0);
             stepper.updateStride();
-            stepper.generatePrimarySwingControlNodes();
-            stepper.generateSecondarySwingControlNodes(false);
+            stepper.testGeneratePrimarySwingControlNodes();
+            stepper.testGenerateSecondarySwingControlNodes(false);
 
             double max_height = results.initial_position.z;
             for (double progress = 0.0; progress <= 1.0; progress += 0.1) {

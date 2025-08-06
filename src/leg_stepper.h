@@ -136,6 +136,13 @@ class LegStepper {
     // Comprehensive safety validation (combines all 4 steps)
     bool validateCurrentTrajectory() const;
 
+// Testing interface methods (only use in test code)
+#ifdef TESTING_ENABLED
+    void testGeneratePrimarySwingControlNodes() { generatePrimarySwingControlNodes(); }
+    void testGenerateSecondarySwingControlNodes(bool ground_contact = false) { generateSecondarySwingControlNodes(ground_contact); }
+    void testGenerateStanceControlNodes(double stride_scaler = 1.0) { generateStanceControlNodes(stride_scaler); }
+#endif
+
   private:
     // Auxiliary method for velocity calculations
     Point3D calculateCurrentTipVelocity() const;
