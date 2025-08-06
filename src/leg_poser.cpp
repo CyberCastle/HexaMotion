@@ -16,6 +16,9 @@
 LegPoser::LegPoser(int leg_index, Leg &leg, RobotModel &robot_model)
     : leg_index_(leg_index), leg_(leg), robot_model_(robot_model), first_iteration_(true), master_iteration_count_(0) {
 
+    // Initialize physical reference height (z = -tibia_length when all angles are 0°)
+    physical_reference_height_ = -robot_model_.getParams().tibia_length;
+
     // Initialize poses
     auto_pose_ = Pose();
     origin_tip_pose_ = Pose();
@@ -28,7 +31,7 @@ LegPoser::LegPoser(int leg_index, Leg &leg, RobotModel &robot_model)
 }
 
 LegPoser::LegPoser(const LegPoser *leg_poser)
-    : leg_index_(leg_poser->leg_index_), leg_(leg_poser->leg_), robot_model_(leg_poser->robot_model_), auto_pose_(leg_poser->auto_pose_), first_iteration_(leg_poser->first_iteration_), master_iteration_count_(leg_poser->master_iteration_count_), origin_tip_pose_(leg_poser->origin_tip_pose_), current_tip_pose_(leg_poser->current_tip_pose_), target_tip_pose_(leg_poser->target_tip_pose_), external_target_(leg_poser->external_target_), leg_completed_step_(leg_poser->leg_completed_step_) {
+    : leg_index_(leg_poser->leg_index_), leg_(leg_poser->leg_), robot_model_(leg_poser->robot_model_), auto_pose_(leg_poser->auto_pose_), first_iteration_(leg_poser->first_iteration_), master_iteration_count_(leg_poser->master_iteration_count_), origin_tip_pose_(leg_poser->origin_tip_pose_), current_tip_pose_(leg_poser->current_tip_pose_), target_tip_pose_(leg_poser->target_tip_pose_), external_target_(leg_poser->external_target_), leg_completed_step_(leg_poser->leg_completed_step_), physical_reference_height_(leg_poser->physical_reference_height_) {
 }
 
 bool LegPoser::stepToPosition(const Pose &target_tip_pose, const Pose &target_pose,
@@ -156,7 +159,7 @@ void LegPoser::updateAutoPose(int phase) {
     Point3D compensated_position = default_stance_pos;
 
     // Enhanced phase-based Z compensation (body height variation)
-    // Use sinusoidal compensation for smooth transitions
+    // Use sinusoidal compensation for smooth transitions relative to physical reference
     double z_compensation = 0.0;
     if (phase_ratio < 0.5) {
         // First half of gait cycle - gradual lift for stability
@@ -165,6 +168,11 @@ void LegPoser::updateAutoPose(int phase) {
         // Second half of gait cycle - gradual drop for natural movement
         z_compensation = -body_clearance * 0.015 * sin((phase_ratio - 0.5) * 2.0 * M_PI);
     }
+
+    // Consider physical reference height in Z compensation calculations
+    // This ensures compensation is relative to the actual physical robot configuration
+    double base_z_position = physical_reference_height_ + body_clearance;
+    compensated_position.z = base_z_position + z_compensation;
 
     // Enhanced phase-based XY compensation (body roll/pitch compensation)
     // Consider leg position relative to body center for more accurate compensation
@@ -192,10 +200,11 @@ void LegPoser::updateAutoPose(int phase) {
         stability_compensation = body_clearance * 0.005 * cos((phase_ratio - 0.5) * 10.0 * M_PI);
     }
 
-    // Apply all compensations
+    // Apply XY compensations
     compensated_position.x += x_compensation;
     compensated_position.y += y_compensation;
-    compensated_position.z += z_compensation + stability_compensation;
+    // Z position was already set above with base_z_position + z_compensation
+    compensated_position.z += stability_compensation;
 
     // Create auto pose with compensated position and identity rotation
     auto_pose_ = Pose(compensated_position, Eigen::Vector3d(0, 0, 0));

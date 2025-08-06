@@ -12,6 +12,19 @@ LegStepper::LegStepper(int leg_index, const Point3D &identity_tip_pose, Leg &leg
       robot_model_(robot_model),
       identity_tip_pose_(identity_tip_pose) {
 
+    // Validate physical reference height (z = -208 mm when all angles are 0°)
+    const Parameters &params = robot_model_.getParams();
+    double physical_reference_height = -params.tibia_length;
+    double expected_z_range_min = physical_reference_height - params.standing_height;
+    double expected_z_range_max = physical_reference_height + params.standing_height;
+
+    // Validate that identity_tip_pose is within expected physical range
+    if (identity_tip_pose_.z < expected_z_range_min || identity_tip_pose_.z > expected_z_range_max) {
+        // Log warning about unexpected tip pose height but continue execution
+        // In a real implementation, this would use proper logging
+        // For now, we accept the pose but note the physical reference
+    }
+
     // Initialize basic properties
     default_tip_pose_ = identity_tip_pose_;
     origin_tip_pose_ = identity_tip_pose_;

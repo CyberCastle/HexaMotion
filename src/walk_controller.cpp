@@ -276,7 +276,7 @@ void WalkController::init(const Eigen::Vector3d &current_body_position, const Ei
             Point3D stance_position(
                 base_pos.x + stance_radius * cos(base_angle),
                 base_pos.y + stance_radius * sin(base_angle),
-                current_body_position.z());
+                -model.getParams().tibia_length + model.getParams().standing_height); // Physical reference: z = -208 + standing_height
 
             leg_stepper->setDefaultTipPose(stance_position);
         } // OpenSHC pattern: Initialize current tip pose to default stance position
