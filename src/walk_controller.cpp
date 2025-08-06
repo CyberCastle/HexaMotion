@@ -14,11 +14,11 @@
 #include <vector>
 
 WalkController::WalkController(RobotModel &m, Leg legs[NUM_LEGS], const BodyPoseConfiguration &pose_config)
-    : model(m), terrain_adaptation_(m), body_pose_controller_(nullptr),
-      desired_linear_velocity_(0, 0, 0), desired_angular_velocity_(0.0),
+    : model(m), desired_linear_velocity_(0, 0, 0), desired_angular_velocity_(0.0),
       walk_state_(WALK_STOPPED), pose_state_(0),
       regenerate_walkspace_(false), legs_at_correct_phase_(0), legs_completed_first_step_(0),
-      return_to_default_attempted_(false), velocity_limits_(m), legs_array_(legs) {
+      return_to_default_attempted_(false), terrain_adaptation_(m), body_pose_controller_(nullptr),
+      velocity_limits_(m), legs_array_(legs) {
 
     // Initialize leg_steppers_ with references to actual legs from LocomotionSystem
     leg_steppers_.clear();
@@ -99,9 +99,6 @@ bool WalkController::setGait(GaitType gait_type) {
 }
 
 void WalkController::applyGaitConfigToLegSteppers(const GaitConfiguration &gait_config) {
-    // Use configured step frequency from gait configuration (OpenSHC pattern)
-    // This ensures consistency with trajectory_tip_position_test and OpenSHC behavior
-    double step_frequency = gait_config.getStepFrequency(); // OpenSHC configured frequency
 
     // Generate StepCycle with configured frequency like OpenSHC
     StepCycle step_cycle = gait_config.generateStepCycle();
@@ -311,8 +308,8 @@ void WalkController::init(const Eigen::Vector3d &current_body_position, const Ei
  */
 void WalkController::updateWalk(const Point3D &linear_velocity_input, double angular_velocity_input,
                                 const Eigen::Vector3d &current_body_position, const Eigen::Vector3d &current_body_orientation) {
+
     // OpenSHC: Cache frequently used values to reduce function call overhead
-    const Parameters &params = model.getParams();
     current_body_position_ = current_body_position;
     current_body_orientation_ = current_body_orientation;
 
