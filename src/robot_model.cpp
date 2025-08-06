@@ -31,16 +31,16 @@ RobotModel::RobotModel(const Parameters &p)
 }
 
 RobotModel::~RobotModel() {
-    // El destructor debe estar en .cpp donde WorkspaceAnalyzer está completamente definido
+    // The destructor must be in the .cpp where WorkspaceAnalyzer is fully defined
 }
 
 void RobotModel::workspaceAnalyzerInitializer(ComputeConfig config, const ValidationConfig *validation_config) {
-    // Crear el WorkspaceAnalyzer solo si no existe
+    // Create the WorkspaceAnalyzer only if it doesn't exist
     if (!workspace_analyzer_) {
         if (validation_config) {
             workspace_analyzer_ = std::make_unique<WorkspaceAnalyzer>(*this, config, *validation_config);
         } else {
-            // Usar configuración por defecto
+            // Use default configuration
             ValidationConfig default_config;
             workspace_analyzer_ = std::make_unique<WorkspaceAnalyzer>(*this, config, default_config);
         }
@@ -50,7 +50,7 @@ void RobotModel::workspaceAnalyzerInitializer(ComputeConfig config, const Valida
 
 WorkspaceAnalyzer &RobotModel::getWorkspaceAnalyzer() {
     if (!workspace_analyzer_) {
-        // Si no se ha inicializado, usar configuración por defecto
+        // If it hasn't been initialized, use default configuration
         workspaceAnalyzerInitializer();
     }
     return *workspace_analyzer_;
@@ -58,7 +58,7 @@ WorkspaceAnalyzer &RobotModel::getWorkspaceAnalyzer() {
 
 const WorkspaceAnalyzer &RobotModel::getWorkspaceAnalyzer() const {
     if (!workspace_analyzer_) {
-        throw std::runtime_error("WorkspaceAnalyzer no ha sido inicializado. Llame a workspaceAnalyzerInitializer() primero.");
+        throw std::runtime_error("WorkspaceAnalyzer has not been initialized. Call workspaceAnalyzerInitializer() first.");
     }
     return *workspace_analyzer_;
 }
@@ -464,7 +464,7 @@ JointAngles RobotModel::calculateTargetFromCurrentPosition(int leg, const JointA
 
 JointAngles RobotModel::calculateTargetFromDefaultStance(int leg, const JointAngles &current_angles,
                                                          const Pose &current_pose, const Pose &default_stance_pose) const {
-    // La pose por defecto ya está en el frame del robot, pasar directamente
+    // The default pose is already in the robot frame, pass it directly
     return inverseKinematicsCurrentGlobalCoordinates(leg, current_angles, default_stance_pose.position);
 }
 
@@ -550,35 +550,35 @@ JointAngles RobotModel::estimateInitialAngles(int leg, const Point3D &target_pos
 
 Point3D RobotModel::makeReachable(int leg_index, const Point3D &reference_tip_position) const {
 
-    // Asegurar que el workspace esté generado (equivalente a OpenSHC's generateWorkspace())
-    // Note: Necesitamos usar const_cast porque el método es const pero necesitamos modificar el workspace_analyzer
+    // Ensure that the workspace is generated (equivalent to OpenSHC's generateWorkspace())
+    // Note: We need to use const_cast because the method is const but we need to modify the workspace_analyzer
     const_cast<RobotModel *>(this)->getWorkspaceAnalyzer().generateWorkspace();
 
-    // La altura para consultar el workplane debe considerar el offset físico
+    // The height used to query the workplane must consider the physical offset
     double workspace_query_height = reference_tip_position.z;
 
-    // Obtener el workplane para la altura ajustada de la posición objetivo
+    // Get the workplane for the target position's adjusted height
     auto workplane = getWorkspaceAnalyzer().getWorkplane(leg_index, workspace_query_height);
 
     if (!workplane.empty()) {
-        // Convertir la posición a coordenadas polares relativas a la base de la pata
+        // Convert the position to polar coordinates relative to the leg base
         Point3D leg_base = getLegBasePosition(leg_index);
         Point3D relative_pos = reference_tip_position - leg_base;
 
-        // Calcular bearing (ángulo) y radio
+        // Calculate bearing (angle) and radius
         double bearing_rad = atan2(relative_pos.y, relative_pos.x);
         double bearing_deg = bearing_rad * 180.0 / M_PI;
 
-        // Normalizar bearing a [0, 360)
+        // Normalize bearing to [0, 360)
         if (bearing_deg < 0)
             bearing_deg += 360.0;
 
         double requested_radius = sqrt(relative_pos.x * relative_pos.x + relative_pos.y * relative_pos.y);
 
-        // Buscar el radio máximo permitido en el workplane para este bearing
+        // Find the maximum allowed radius in the workplane for this bearing
         double max_radius = 0.0;
 
-        // Interpolación entre bearings adyacentes en el workplane
+        // Interpolation between adjacent bearings in the workplane
         int bearing_int = static_cast<int>(bearing_deg);
         auto it_current = workplane.find(bearing_int);
         auto it_next = workplane.find((bearing_int + 1) % 360);
@@ -586,13 +586,13 @@ Point3D RobotModel::makeReachable(int leg_index, const Point3D &reference_tip_po
         if (it_current != workplane.end()) {
             max_radius = it_current->second;
 
-            // Interpolación lineal si tenemos bearing siguiente
+            // Linear interpolation if we have the next bearing
             if (it_next != workplane.end()) {
                 double fraction = bearing_deg - bearing_int;
                 max_radius = it_current->second * (1.0 - fraction) + it_next->second * fraction;
             }
         } else {
-            // Si no tenemos datos exactos, buscar bearings cercanos
+            // If we don't have exact data, search for nearby bearings
             double min_bearing_diff = 360.0;
             for (const auto &bearing_pair : workplane) {
                 double diff = std::min(std::abs(bearing_deg - bearing_pair.first),
@@ -604,34 +604,34 @@ Point3D RobotModel::makeReachable(int leg_index, const Point3D &reference_tip_po
             }
         }
 
-        // Si la posición solicitada está fuera del workspace, constrañirla
+        // If the requested position is outside the workspace, constrain it
         if (requested_radius > max_radius && max_radius > 0.0) {
             double scale_factor = max_radius / requested_radius;
             Point3D constrained_relative = relative_pos * scale_factor;
 
-            // Mantener la altura original considerando la referencia física
+            // Keep the original height considering the physical reference
             constrained_relative.z = relative_pos.z;
 
             return leg_base + constrained_relative;
         }
 
-        // La posición ya está dentro del workspace
+        // The position is already within the workspace
         return reference_tip_position;
     }
 
-    // Si el workplane está vacío, usar constrañimiento geométrico básico
-    // (esto solo debería ocurrir en casos excepcionales)
+    // If the workplane is empty, use basic geometric constraint
+    // (this should only occur in exceptional cases)
     Point3D leg_base = getLegBasePosition(leg_index);
     Point3D target_vector = reference_tip_position - leg_base;
     double distance_to_target = target_vector.norm();
 
     double max_reach = params.femur_length + params.tibia_length;
-    double safe_max_reach = max_reach * 0.95; // 95% del alcance máximo
+    double safe_max_reach = max_reach * 0.95; // 95% of the maximum reach
 
     if (distance_to_target > safe_max_reach) {
         Point3D safe_direction = target_vector / distance_to_target;
         Point3D safe_position = leg_base + safe_direction * safe_max_reach;
-        // Mantener altura original considerando que el workspace ya incluye el offset físico
+        // Keep the original height considering that the workspace already includes the physical offset
         safe_position.z = reference_tip_position.z;
         return safe_position;
     }

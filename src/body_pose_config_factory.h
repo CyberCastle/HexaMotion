@@ -13,7 +13,7 @@
  */
 
 /**
- * @brief Estructura para ángulos calculados por IK analítico (OpenSHC)
+ * @brief Structure for angles calculated by analytic IK (OpenSHC)
  */
 struct CalculatedServoAngles {
     double coxa;  // coxa servo angle (degrees)

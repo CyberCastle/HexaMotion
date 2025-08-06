@@ -625,12 +625,12 @@ bool LocomotionSystem::update() {
         // Use stored velocities that were set during startWalking()
         Point3D persistent_linear_velocity(commanded_linear_velocity_x_, commanded_linear_velocity_y_, 0.0);
 
-        // PASO 1: Update walk controller - calculates ALL Bézier trajectories (OpenSHC pattern)
+        // STEP 1: Update walk controller - calculates ALL Bézier trajectories (OpenSHC pattern)
         walk_ctrl->updateWalk(persistent_linear_velocity,
                               commanded_angular_velocity_,
                               body_position, body_orientation);
 
-        // PASO 2: Collect desired positions from Bézier trajectories (= OpenSHC::setDesiredTipPose)
+        // STEP 2: Collect desired positions from Bézier trajectories (= OpenSHC::setDesiredTipPose)
         for (int i = 0; i < NUM_LEGS; i++) {
             auto leg_stepper = walk_ctrl->getLegStepper(i);
             if (leg_stepper) {
@@ -651,10 +651,10 @@ bool LocomotionSystem::update() {
             }
         }
 
-        // PASO 3: Apply IK to ALL legs at once (= OpenSHC::Model::updateModel)
+        // STEP 3: Apply IK to ALL legs at once (= OpenSHC::Model::updateModel)
         applyInverseKinematicsToAllLegs();
 
-        // PASO 4: Publish ALL joint angles to servos (= OpenSHC::publishDesiredJointState)
+        // STEP 4: Publish ALL joint angles to servos (= OpenSHC::publishDesiredJointState)
         publishJointAnglesToServos();
     } else if (system_state == SYSTEM_READY) {
         // OpenSHC: When system is READY (after shutdown), maintain STANCE_PHASE for ALL legs

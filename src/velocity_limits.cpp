@@ -60,7 +60,7 @@ void VelocityLimits::generateLimits(const GaitConfig &gait_config) {
     // Calculate overshoot compensation using workspace data
     calculateOvershoot(gait_config);
 
-    // Para cada dirección (bearing), calcular límites de velocidad y aceleración
+    // For each direction (bearing), calculate velocity and acceleration limits
     for (int bearing = 0; bearing < 360; ++bearing) {
         double walkspace_radius = pimpl_->workspace_config_.walkspace_radius;
         double step_frequency = gait_config.frequency;
@@ -77,7 +77,7 @@ void VelocityLimits::generateLimits(const GaitConfig &gait_config) {
         double time_to_max_stride = gait_config.time_to_max_stride;
         double max_linear_acceleration = max_linear_speed / time_to_max_stride;
 
-        // Crear y asignar los límites
+        // Create and assign the limits
         LimitValues limits;
         limits.linear_x = max_linear_speed;
         limits.linear_y = max_linear_speed;
