@@ -233,12 +233,14 @@ bool LocomotionSystem::setGaitType(GaitType gait) {
     return result;
 }
 
-// Gait sequence planning - Use WalkController with LegStepper
+// Gait sequence planning - Use WalkController with LegStepper (OpenSHC pattern)
 bool LocomotionSystem::planGaitSequence(double velocity_x, double velocity_y, double angular_velocity) {
-    commanded_linear_velocity_ = velocity_x;
+    // Store persistent velocities (OpenSHC pattern)
+    commanded_linear_velocity_x_ = velocity_x;
+    commanded_linear_velocity_y_ = velocity_y; // Now properly stored!
     commanded_angular_velocity_ = angular_velocity;
 
-    // Configure velocity in ALL leg steppers, not just store the values
+    // Configure velocity in ALL leg steppers (immediate application for runtime changes)
     for (int i = 0; i < NUM_LEGS; i++) {
         auto leg_stepper = walk_ctrl->getLegStepper(i);
         if (leg_stepper) {
@@ -360,14 +362,15 @@ bool LocomotionSystem::executeStartupSequence() {
     bool startup_complete = body_pose_ctrl->executeStartupSequence(legs);
 
     if (startup_complete) {
-        // Initialize walk controller for RUNNING state
+        // Initialize walk controller for RUNNING state (OpenSHC pattern)
         walk_ctrl->init(body_position, body_orientation);
         walk_ctrl->generateWalkspace();
 
-        // Activate gait sequence with stored velocities
-        planGaitSequence(commanded_linear_velocity_, 0.0, commanded_angular_velocity_);
+        // OpenSHC PATTERN: DO NOT apply velocities during startup!
+        // Velocities will be applied in update() method after startup completes
+        // This prevents the velocity_y loss bug that was happening here
 
-        // Initialize leg phases based on gait pattern
+        // Initialize leg phases based on gait pattern (without velocity application)
         for (int i = 0; i < NUM_LEGS; i++) {
             auto leg_stepper = walk_ctrl->getLegStepper(i);
             if (leg_stepper) {
@@ -618,8 +621,12 @@ bool LocomotionSystem::update() {
 
     // Only update leg trajectories if system is in RUNNING state
     if (walk_ctrl && system_state == SYSTEM_RUNNING) {
+        // OpenSHC PATTERN: Apply persistent velocities (fixes the velocity_y loss bug)
+        // Use stored velocities that were set during startWalking()
+        Point3D persistent_linear_velocity(commanded_linear_velocity_x_, commanded_linear_velocity_y_, 0.0);
+
         // PASO 1: Update walk controller - calculates ALL Bézier trajectories (OpenSHC pattern)
-        walk_ctrl->updateWalk(Point3D(commanded_linear_velocity_, 0.0, 0.0),
+        walk_ctrl->updateWalk(persistent_linear_velocity,
                               commanded_angular_velocity_,
                               body_position, body_orientation);
 
@@ -1077,8 +1084,9 @@ bool LocomotionSystem::startWalking(GaitType gait_type, double velocity_x, doubl
     }
 
     // Store velocities but don't start gait sequence yet
-    // It will be activated when startup sequence completes
-    commanded_linear_velocity_ = velocity_x;
+    // It will be activated when startup sequence completes (OpenSHC pattern)
+    commanded_linear_velocity_x_ = velocity_x;
+    commanded_linear_velocity_y_ = velocity_y;
     commanded_angular_velocity_ = angular_velocity;
 
     // Execute startup sequence to transition from READY to RUNNING

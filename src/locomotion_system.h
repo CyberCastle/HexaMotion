@@ -68,8 +68,9 @@ class LocomotionSystem {
     bool startup_in_progress;
     bool shutdown_in_progress;
 
-    // Último comando de velocidad deseado
-    double commanded_linear_velocity_ = 0.0;
+    // Último comando de velocidad deseado (OpenSHC-style persistent velocities)
+    double commanded_linear_velocity_x_ = 0.0; // X component
+    double commanded_linear_velocity_y_ = 0.0; // Y component
     double commanded_angular_velocity_ = 0.0;
 
     bool setLegJointAngles(int leg_index, const JointAngles &q);
