@@ -137,6 +137,9 @@ class WorkspaceAnalyzer {
     ComputeConfig config_;
     ValidationConfig validation_config_;
 
+    // Physical robot configuration offset
+    double reference_height_offset_; // z = -tibia_length offset for physical robot configuration
+
     // Workspace geometry
     WorkspaceBounds leg_workspace_[NUM_LEGS];
     std::map<int, double> walkspace_map_; // Bearing -> radius mapping for analysis
@@ -302,6 +305,12 @@ class WorkspaceAnalyzer {
     // ========================================================================
     // ANALYSIS CONTROL AND INFORMATION
     // ========================================================================
+
+    /**
+     * @brief Get physical reference height offset (z = -tibia_length)
+     * @return Reference height offset where robot body is positioned when all angles are 0°
+     */
+    double getPhysicalReferenceHeight() const { return reference_height_offset_; }
 
     /**
      * @brief Enable or disable real-time walkspace analysis

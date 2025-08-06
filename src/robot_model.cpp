@@ -549,8 +549,15 @@ Point3D RobotModel::makeReachable(int leg_index, const Point3D &reference_tip_po
     // Note: Necesitamos usar const_cast porque el método es const pero necesitamos modificar el workspace_analyzer
     const_cast<RobotModel *>(this)->getWorkspaceAnalyzer().generateWorkspace();
 
-    // Obtener el workplane para la altura de la posición objetivo
-    auto workplane = getWorkspaceAnalyzer().getWorkplane(leg_index, reference_tip_position.z);
+    // Aplicar offset de altura física: cuando ángulos son 0°, robot está en z = -tibia_length
+    // El workspace está generado considerando este offset, por lo que necesitamos ajustar la altura de consulta
+    double physical_reference_height = -params.tibia_length;
+    Point3D adjusted_reference = reference_tip_position;
+    // La altura para consultar el workplane debe considerar el offset físico
+    double workspace_query_height = reference_tip_position.z;
+
+    // Obtener el workplane para la altura ajustada de la posición objetivo
+    auto workplane = getWorkspaceAnalyzer().getWorkplane(leg_index, workspace_query_height);
 
     if (!workplane.empty()) {
         // Convertir la posición a coordenadas polares relativas a la base de la pata
@@ -601,7 +608,7 @@ Point3D RobotModel::makeReachable(int leg_index, const Point3D &reference_tip_po
             double scale_factor = max_radius / requested_radius;
             Point3D constrained_relative = relative_pos * scale_factor;
 
-            // Mantener la altura original
+            // Mantener la altura original considerando la referencia física
             constrained_relative.z = relative_pos.z;
 
             return leg_base + constrained_relative;
@@ -623,7 +630,8 @@ Point3D RobotModel::makeReachable(int leg_index, const Point3D &reference_tip_po
     if (distance_to_target > safe_max_reach) {
         Point3D safe_direction = target_vector / distance_to_target;
         Point3D safe_position = leg_base + safe_direction * safe_max_reach;
-        safe_position.z = reference_tip_position.z; // Mantener altura original
+        // Mantener altura original considerando que el workspace ya incluye el offset físico
+        safe_position.z = reference_tip_position.z;
         return safe_position;
     }
 

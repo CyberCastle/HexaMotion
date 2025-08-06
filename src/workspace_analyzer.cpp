@@ -12,6 +12,11 @@
 
 WorkspaceAnalyzer::WorkspaceAnalyzer(const RobotModel &model, ComputeConfig config, const ValidationConfig &validation_config)
     : model_(model), config_(config), validation_config_(validation_config), analysis_enabled_(true), total_analysis_time_(0.0) {
+
+    // Initialize physical robot configuration offset
+    // When all servo angles are 0°, robot body is positioned at z = -tibia_length
+    reference_height_offset_ = -model_.getParams().tibia_length;
+
     // Initialize analysis info structure
     analysis_info_.analysis_enabled = true;
     analysis_info_.analysis_count = 0;
@@ -452,9 +457,11 @@ WorkspaceAnalyzer::getWorkspaceBounds(int leg_index) const {
     bounds.preferred_max_reach = total_leg_length * validation_config_.safety_margin_factor;
     bounds.preferred_min_reach = theoretical_min * validation_config_.minimum_reach_factor;
 
-    // Height bounds (assuming ground level operation)
-    bounds.min_height = leg_base.z - total_leg_length;
-    bounds.max_height = leg_base.z + total_leg_length * 0.5f; // Limited upward reach
+    // Height bounds aplicando offset de altura física
+    // Cuando ángulos son 0°, robot está en z = -tibia_length (referencia física)
+    double reach_range = total_leg_length * 0.7; // Usar un rango más realista del 70%
+    bounds.min_height = reference_height_offset_ - reach_range;
+    bounds.max_height = reference_height_offset_ + reach_range;
 
     bounds.center_position = leg_base;
 
@@ -865,8 +872,12 @@ void WorkspaceAnalyzer::calculateLegWorkspaceBounds(int leg_index) {
     WorkspaceBounds &bounds = leg_workspace_[leg_index];
     bounds.min_reach = min_reach;
     bounds.max_reach = total_reach;
-    bounds.min_height = -total_reach;
-    bounds.max_height = total_reach;
+
+    // Aplicar offset de altura física: cuando ángulos son 0°, robot está en z = -tibia_length
+    // Las alturas del workspace están centradas en esta posición de referencia
+    double reach_range = total_reach * 0.7; // Usar un rango más realista del 70% del reach total
+    bounds.min_height = reference_height_offset_ - reach_range;
+    bounds.max_height = reference_height_offset_ + reach_range;
 }
 
 void WorkspaceAnalyzer::generateWalkspaceForLeg(int leg_index) {
@@ -884,9 +895,12 @@ void WorkspaceAnalyzer::generateWalkspaceForLeg(int leg_index) {
     Workplane max_plane, min_plane;
     leg_workspaces_[leg_index].clear(); // Only clear when regenerating
 
-    // 2) calcular posición "identidad" del tip
+    // 2) calcular posición "identidad" del tip con offset físico del robot
     JointAngles zero(0, 0, 0);
     Point3D id_tip = model_.forwardKinematicsGlobalCoordinates(leg_index, zero);
+
+    // Aplicar offset de altura física: cuando ángulos son 0°, robot está en z = -tibia_length
+    id_tip.z += reference_height_offset_;
 
     // si no puede alcanzar identidad -> workspace vacío
     bool identity_reachable = detailedReachabilityCheck(leg_index, id_tip);
@@ -905,6 +919,11 @@ void WorkspaceAnalyzer::generateWalkspaceForLeg(int leg_index) {
         Point3D adjacent_1_tip = model_.forwardKinematicsGlobalCoordinates(adjacent_leg_1, zero);
         Point3D adjacent_2_tip = model_.forwardKinematicsGlobalCoordinates(adjacent_leg_2, zero);
 
+        // Aplicar offset de altura física a todas las posiciones
+        current_leg_tip.z += reference_height_offset_;
+        adjacent_1_tip.z += reference_height_offset_;
+        adjacent_2_tip.z += reference_height_offset_;
+
         distance_to_adjacent_leg_1 = math_utils::distance(current_leg_tip, adjacent_1_tip) / 2.0;
         distance_to_adjacent_leg_2 = math_utils::distance(current_leg_tip, adjacent_2_tip) / 2.0;
 
@@ -915,8 +934,9 @@ void WorkspaceAnalyzer::generateWalkspaceForLeg(int leg_index) {
     }
 
     // Bucle unificado optimizado: maneja todos los casos en un solo loop
-    double height_min = -MAX_WORKSPACE_RADIUS;
-    double height_max = MAX_WORKSPACE_RADIUS;
+    // Aplicar offset de altura física: las alturas se calculan relativas a la posición física real
+    double height_min = reference_height_offset_ - MAX_WORKSPACE_RADIUS;
+    double height_max = reference_height_offset_ + MAX_WORKSPACE_RADIUS;
     double layer_step = (height_max - height_min) / WORKSPACE_LAYERS;
 
     for (int b = 0; b <= 360; b += BEARING_STEP) {
@@ -961,7 +981,7 @@ void WorkspaceAnalyzer::generateWalkspaceForLeg(int leg_index) {
             if (max_allowed_radius > 0.0) {
                 for (double r = 0.0; r <= max_allowed_radius; r += MAX_POSITION_DELTA) {
                     Point3D p = id_tip;
-                    p.z = h;
+                    p.z = h; // h ya incluye el offset de altura física
                     p.x += r * cos(rad);
                     p.y += r * sin(rad);
                     if (detailedReachabilityCheck(leg_index, p))

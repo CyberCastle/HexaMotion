@@ -34,6 +34,10 @@ class VelocityLimits::Impl {
 
         workspace_analyzer_ = std::make_unique<WorkspaceAnalyzer>(model, ComputeConfig::medium(), config);
 
+        // Initialize workspace config with physical robot reference height
+        // When all servo angles are 0°, robot body is positioned at z = -tibia_length
+        workspace_config_.reference_height = -model.getParams().tibia_length;
+
         // Initialize with default gait configuration
         current_gait_config_ = GaitConfig();
     }
@@ -471,4 +475,8 @@ double VelocityLimits::getOvershootX() const {
 
 double VelocityLimits::getOvershootY() const {
     return pimpl_->workspace_config_.overshoot_y;
+}
+
+double VelocityLimits::getPhysicalReferenceHeight() const {
+    return pimpl_->workspace_config_.reference_height;
 }

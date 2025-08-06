@@ -59,9 +59,11 @@ class VelocityLimits {
         double overshoot_x;      // Overshoot compensation in X direction
         double overshoot_y;      // Overshoot compensation in Y direction
         double safety_margin;    // Safety factor for workspace limits
+        double reference_height; // Physical reference height (z = -tibia_length)
 
         WorkspaceConfig() : walkspace_radius(0.0f), stance_radius(0.0f),
-                            overshoot_x(0.0f), overshoot_y(0.0f), safety_margin(0.85f) {}
+                            overshoot_x(0.0f), overshoot_y(0.0f), safety_margin(0.85f),
+                            reference_height(0.0f) {}
     };
 
     /**
@@ -89,6 +91,9 @@ class VelocityLimits {
     void calculateWorkspace(const GaitConfig &gait_config);
     void calculateWorkspace(const GaitConfiguration &gait_config); // Unified configuration interface
     const WorkspaceConfig &getWorkspaceConfig() const;
+
+    // Physical robot configuration
+    double getPhysicalReferenceHeight() const;
 
     // Velocity scaling and validation
     LimitValues scaleVelocityLimits(const LimitValues &input_velocities,
@@ -140,8 +145,8 @@ class VelocityLimits {
      * @return Point3D Calculated stride vector (mm)
      */
     static Point3D calculateStrideVector(double linear_velocity_x, double linear_velocity_y,
-                                        double angular_velocity, const Point3D& current_tip_position,
-                                        double stance_ratio, double step_frequency);
+                                         double angular_velocity, const Point3D &current_tip_position,
+                                         double stance_ratio, double step_frequency);
 
   private:
     // PIMPL idiom to hide WorkspaceValidator dependency
