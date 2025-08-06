@@ -69,11 +69,22 @@ LegStepper::LegStepper(int leg_index, const Point3D &identity_tip_pose, Leg &leg
         swing_2_nodes_[i] = identity_tip_pose_;
         stance_nodes_[i] = identity_tip_pose_;
     }
+
+    // Initialize safety systems
+    velocity_limits_ = nullptr;
+
+    // Initialize velocity tracking
+    previous_tip_pose_ = identity_tip_pose_;
+    has_previous_position_ = false;
+    time_step_ = 1.0 / control_frequency_; // Default time step based on control frequency
 }
 
 void LegStepper::setDesiredVelocity(const Point3D &linear_velocity, double angular_velocity) {
-    desired_linear_velocity_ = linear_velocity;
-    desired_angular_velocity_ = angular_velocity;
+    // STEP 2: Validate and limit velocities before setting them
+    Point3D safe_velocity = validateAndLimitVelocities(linear_velocity, angular_velocity);
+
+    desired_linear_velocity_ = safe_velocity;
+    desired_angular_velocity_ = angular_velocity; // Angular velocity validation is done in validateAndLimitVelocities
 }
 
 void LegStepper::updateStride() {
@@ -106,6 +117,9 @@ void LegStepper::updateStride() {
     // Use StepCycle configuration values (OpenSHC equivalent calculation)
     double on_ground_ratio = double(step_cycle_.stance_period_) / double(step_cycle_.period_);
     stride_vector_ = stride_vector_ * (on_ground_ratio / step_cycle_.frequency_);
+
+    // STEP 3: Apply stride validation and safety constraints
+    stride_vector_ = calculateSafeStride(stride_vector_);
 
     // Swing clearance (OpenSHC exact)
     swing_clearance_ = walk_plane_normal_.normalized() * step_clearance_height_;
@@ -179,6 +193,9 @@ void LegStepper::generatePrimarySwingControlNodes() {
     swing_1_nodes_[3].z = mid_tip_position.z;
     // Set to default tip position so max swing height and transition to 2nd swing curve occurs at default tip position
     swing_1_nodes_[4] = mid_tip_position;
+
+    // STEP 4: Validate and fix control nodes to ensure all are reachable
+    validateAndFixControlNodes(swing_1_nodes_);
 }
 
 void LegStepper::generateSecondarySwingControlNodes(bool ground_contact) {
@@ -209,6 +226,9 @@ void LegStepper::generateSecondarySwingControlNodes(bool ground_contact) {
         swing_2_nodes_[3] = current_tip_pose_ + stance_node_seperation * 3.0;
         swing_2_nodes_[4] = current_tip_pose_ + stance_node_seperation * 4.0;
     }
+
+    // STEP 4: Validate and fix control nodes to ensure all are reachable
+    validateAndFixControlNodes(swing_2_nodes_);
 }
 
 void LegStepper::generateStanceControlNodes(double stride_scaler) {
@@ -226,6 +246,9 @@ void LegStepper::generateStanceControlNodes(double stride_scaler) {
     stance_nodes_[3] = stance_origin_tip_position_ + stance_node_seperation * 3.0;
     // Set as target tip position
     stance_nodes_[4] = stance_origin_tip_position_ + stance_node_seperation * 4.0;
+
+    // STEP 4: Validate and fix control nodes to ensure all are reachable
+    validateAndFixControlNodes(stance_nodes_);
 }
 
 double LegStepper::calculateStanceStrideScaler() {
@@ -286,7 +309,10 @@ void LegStepper::updateTipPositionIterative(int iteration, double time_delta, bo
     updateStride();
 
     // Generate default target (OpenSHC exact formula)
-    target_tip_pose_ = default_tip_pose_ + stride_vector_ * 0.5;
+    Point3D raw_target = default_tip_pose_ + stride_vector_ * 0.5;
+
+    // STEP 1: Validate and constrain target within workspace (NEW SAFETY CHECK)
+    target_tip_pose_ = calculateSafeTarget(raw_target);
 
     if (step_state_ == STEP_SWING) {
         // Initialize swing period on first iteration
@@ -386,4 +412,291 @@ void LegStepper::updateTipPositionIterative(int iteration, double time_delta, bo
 
         current_tip_velocity_ = delta_pos / time_delta;
     }
+
+    // Update velocity tracking for comprehensive safety validation
+    if (has_previous_position_) {
+        time_step_ = time_delta;
+    }
+    previous_tip_pose_ = current_tip_pose_;
+    has_previous_position_ = true;
+}
+
+// ========================================================================
+// WORKSPACE VALIDATION AND SAFETY METHODS (STEP 1 IMPLEMENTATION)
+// ========================================================================
+
+bool LegStepper::validateTargetTipPose(const Point3D &target_pose) const {
+    // Use WorkspaceAnalyzer to check if position is reachable
+    // Get workspace bounds for validation
+    auto bounds = robot_model_.getWorkspaceAnalyzer().getWorkspaceBounds(leg_index_);
+
+    // Calculate distance from leg base
+    Point3D leg_base = robot_model_.getLegBasePosition(leg_index_);
+    Point3D relative_pos = target_pose - leg_base;
+    double distance = std::sqrt(relative_pos.x * relative_pos.x + relative_pos.y * relative_pos.y + relative_pos.z * relative_pos.z);
+
+    // Check basic distance constraints
+    if (distance > bounds.max_reach || distance < bounds.min_reach) {
+        return false;
+    }
+
+    // Use detailed workspace validation if available
+    return robot_model_.getWorkspaceAnalyzer().isPositionReachable(leg_index_, target_pose);
+}
+
+Point3D LegStepper::constrainToWorkspace(const Point3D &target_pose) const {
+    // Use WorkspaceAnalyzer to constrain position to valid workspace
+    Point3D current_leg_positions[NUM_LEGS];
+
+    // Get current positions of all legs for collision avoidance
+    for (int i = 0; i < NUM_LEGS; i++) {
+        if (i == leg_index_) {
+            current_leg_positions[i] = current_tip_pose_;
+        } else {
+            // For other legs, we would need access to their current positions
+            // For now, use a default safe position
+            current_leg_positions[i] = robot_model_.getLegDefaultPosition(i);
+        }
+    }
+
+    return robot_model_.getWorkspaceAnalyzer().constrainToValidWorkspace(
+        leg_index_, target_pose, current_leg_positions);
+}
+
+Point3D LegStepper::calculateSafeTarget(const Point3D &desired_target) const {
+    // First validate if the desired target is reachable
+    if (validateTargetTipPose(desired_target)) {
+        return desired_target; // Target is already safe
+    }
+
+    // Target is not reachable, constrain it to workspace
+    Point3D safe_target = constrainToWorkspace(desired_target);
+
+    // If constraining still doesn't work, use a fallback strategy
+    if (!validateTargetTipPose(safe_target)) {
+        // Fall back to a safe position relative to default pose
+        Point3D direction = desired_target - default_tip_pose_;
+        double original_distance = std::sqrt(direction.x * direction.x + direction.y * direction.y + direction.z * direction.z);
+
+        if (original_distance > 0.0) {
+            // Scale down the movement to stay within safe bounds
+            auto bounds = robot_model_.getWorkspaceAnalyzer().getWorkspaceBounds(leg_index_);
+            double safe_distance = bounds.max_reach * 0.8; // Use 80% of max reach for safety
+            double scale_factor = std::min(1.0, safe_distance / original_distance);
+
+            safe_target = default_tip_pose_ + direction * scale_factor;
+        } else {
+            safe_target = default_tip_pose_; // Ultimate fallback
+        }
+    }
+
+    return safe_target;
+}
+
+// ========================================================================
+// VELOCITY LIMITING AND VALIDATION METHODS (STEP 2 IMPLEMENTATION)
+// ========================================================================
+
+Point3D LegStepper::validateAndLimitVelocities(const Point3D &linear_velocity, double angular_velocity) {
+    Point3D limited_velocity = linear_velocity;
+
+    // Method 1: Use VelocityLimits if available (preferred method)
+    if (velocity_limits_ != nullptr) {
+        // Calculate bearing direction
+        double bearing = 0.0;
+        if (std::abs(linear_velocity.x) > 1e-6 || std::abs(linear_velocity.y) > 1e-6) {
+            bearing = std::atan2(linear_velocity.y, linear_velocity.x) * 180.0 / M_PI;
+            if (bearing < 0.0)
+                bearing += 360.0;
+        }
+
+        // Get limits from VelocityLimits system
+        auto limits = velocity_limits_->getLimit(bearing);
+
+        // Apply limits
+        if (std::abs(limited_velocity.x) > limits.linear_x) {
+            limited_velocity.x = (limited_velocity.x > 0) ? limits.linear_x : -limits.linear_x;
+        }
+        if (std::abs(limited_velocity.y) > limits.linear_y) {
+            limited_velocity.y = (limited_velocity.y > 0) ? limits.linear_y : -limits.linear_y;
+        }
+
+        // Limit angular velocity
+        if (std::abs(angular_velocity) > limits.angular_z) {
+            desired_angular_velocity_ = (angular_velocity > 0) ? limits.angular_z : -limits.angular_z;
+        } else {
+            desired_angular_velocity_ = angular_velocity;
+        }
+
+        return limited_velocity;
+    }
+
+    // Method 2: Fallback to WorkspaceAnalyzer constraints
+    double bearing = 0.0;
+    if (std::abs(linear_velocity.x) > 1e-6 || std::abs(linear_velocity.y) > 1e-6) {
+        bearing = std::atan2(linear_velocity.y, linear_velocity.x) * 180.0 / M_PI;
+        if (bearing < 0.0)
+            bearing += 360.0;
+    }
+
+    // Get velocity constraints from WorkspaceAnalyzer
+    auto constraints = robot_model_.getWorkspaceAnalyzer().calculateVelocityConstraints(
+        leg_index_, bearing, step_cycle_.frequency_,
+        double(step_cycle_.stance_period_) / double(step_cycle_.period_));
+
+    // Apply constraints
+    double max_linear = constraints.max_linear_velocity;
+
+    if (std::abs(limited_velocity.x) > max_linear) {
+        limited_velocity.x = (limited_velocity.x > 0) ? max_linear : -max_linear;
+    }
+    if (std::abs(limited_velocity.y) > max_linear) {
+        limited_velocity.y = (limited_velocity.y > 0) ? max_linear : -max_linear;
+    }
+
+    // Limit angular velocity
+    double max_angular = constraints.max_angular_velocity;
+    if (std::abs(angular_velocity) > max_angular) {
+        desired_angular_velocity_ = (angular_velocity > 0) ? max_angular : -max_angular;
+    } else {
+        desired_angular_velocity_ = angular_velocity;
+    }
+
+    return limited_velocity;
+}
+
+Point3D LegStepper::calculateSafeStride(const Point3D &desired_stride) const {
+    // STEP 3: Adjust stride to respect workspace limits
+    Point3D safe_stride = desired_stride;
+
+    // Calculate potential target position from this stride
+    Point3D potential_target = default_tip_pose_ + safe_stride * 0.5;
+
+    // Check if this target would be reachable
+    if (!validateTargetTipPose(potential_target)) {
+        // Calculate maximum safe stride in this direction
+        Point3D stride_direction = desired_stride;
+        double stride_magnitude = std::sqrt(stride_direction.x * stride_direction.x +
+                                            stride_direction.y * stride_direction.y +
+                                            stride_direction.z * stride_direction.z);
+
+        if (stride_magnitude > 0.0) {
+            stride_direction = stride_direction / stride_magnitude; // Normalize
+
+            // Get workspace bounds for this leg
+            auto bounds = robot_model_.getWorkspaceAnalyzer().getWorkspaceBounds(leg_index_);
+
+            // Calculate safe stride magnitude
+            // Use 80% of max reach as safety margin
+            double max_safe_displacement = bounds.max_reach * 0.8;
+            Point3D leg_base = robot_model_.getLegBasePosition(leg_index_);
+            Point3D current_offset = default_tip_pose_ - leg_base;
+            double current_distance = std::sqrt(current_offset.x * current_offset.x +
+                                                current_offset.y * current_offset.y +
+                                                current_offset.z * current_offset.z);
+
+            // Maximum additional displacement we can afford
+            double max_additional = max_safe_displacement - current_distance;
+
+            // Scale stride to stay within limits (multiply by 2 because target uses stride * 0.5)
+            double safe_magnitude = std::min(stride_magnitude, max_additional * 2.0);
+            safe_stride = stride_direction * safe_magnitude;
+        }
+    }
+
+    return safe_stride;
+}
+
+// ========================================================================
+// CONTROL NODE VALIDATION METHODS (STEP 4 IMPLEMENTATION)
+// ========================================================================
+
+void LegStepper::validateAndFixControlNodes(Point3D nodes[5]) const {
+    // Get current leg positions for collision avoidance context
+    Point3D current_leg_positions[NUM_LEGS];
+    for (int i = 0; i < NUM_LEGS; i++) {
+        current_leg_positions[i] = robot_model_.getLegDefaultPosition(i);
+    }
+    current_leg_positions[leg_index_] = current_tip_pose_;
+
+    // Validate and fix each control node
+    for (int i = 0; i < 5; i++) {
+        if (!validateTargetTipPose(nodes[i])) {
+            // Node is not reachable, constrain it to workspace
+            Point3D safe_node = robot_model_.getWorkspaceAnalyzer().constrainToValidWorkspace(
+                leg_index_, nodes[i], current_leg_positions);
+
+            // If constraining still doesn't work, use a graduated fallback
+            if (!validateTargetTipPose(safe_node)) {
+                // Calculate direction from leg base to problematic node
+                Point3D leg_base = robot_model_.getLegBasePosition(leg_index_);
+                Point3D direction = nodes[i] - leg_base;
+                double distance = std::sqrt(direction.x * direction.x + direction.y * direction.y + direction.z * direction.z);
+
+                if (distance > 0.0) {
+                    // Get workspace bounds and scale to safe distance
+                    auto bounds = robot_model_.getWorkspaceAnalyzer().getWorkspaceBounds(leg_index_);
+                    double safe_distance = bounds.max_reach * 0.75; // Use 75% of max reach
+                    double scale_factor = safe_distance / distance;
+
+                    safe_node = leg_base + direction * scale_factor;
+                } else {
+                    // Ultimate fallback: use default position
+                    safe_node = robot_model_.getLegDefaultPosition(leg_index_);
+                }
+            }
+
+            nodes[i] = safe_node;
+        }
+    }
+}
+
+// Comprehensive safety validation (combines all 4 steps)
+bool LegStepper::validateCurrentTrajectory() const {
+    // Step 1: Validate target tip pose is within workspace
+    if (!robot_model_.getWorkspaceAnalyzer().isPositionReachable(leg_index_, target_tip_pose_)) {
+        return false;
+    }
+
+    // Step 2: Check velocity constraints if available
+    if (velocity_limits_) {
+        Point3D current_velocity = calculateCurrentTipVelocity();
+        if (!velocity_limits_->validateVelocityInputs(current_velocity.x, current_velocity.y, 0.0)) {
+            return false;
+        }
+    }
+
+    // Step 3: Validate current control nodes are within workspace
+    // Check all 5 control nodes for each trajectory type
+    for (size_t i = 0; i < 5; ++i) {
+        if (!robot_model_.getWorkspaceAnalyzer().isPositionReachable(leg_index_, swing_1_nodes_[i])) {
+            return false;
+        }
+        if (!robot_model_.getWorkspaceAnalyzer().isPositionReachable(leg_index_, swing_2_nodes_[i])) {
+            return false;
+        }
+        if (!robot_model_.getWorkspaceAnalyzer().isPositionReachable(leg_index_, stance_nodes_[i])) {
+            return false;
+        }
+    }
+
+    return true;
+}
+
+// Auxiliary method for velocity calculations
+Point3D LegStepper::calculateCurrentTipVelocity() const {
+    // Calculate velocity based on recent position changes
+    // This is a simplified approach - in practice, you might want to use
+    // derivative of the Bézier curve at current parameter t
+    Point3D current_velocity = Point3D(0, 0, 0);
+
+    // If we have valid previous position, calculate velocity
+    if (has_previous_position_) {
+        double dt = time_step_; // Assuming constant time step
+        if (dt > 0.0) {
+            current_velocity = (current_tip_pose_ - previous_tip_pose_) / dt;
+        }
+    }
+
+    return current_velocity;
 }

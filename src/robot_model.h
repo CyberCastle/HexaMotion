@@ -503,6 +503,13 @@ class RobotModel {
     const WorkspaceAnalyzer &getWorkspaceAnalyzer() const;
 
     /**
+     * @brief Get default position for a leg based on robot geometry
+     * @param leg_index Index of the leg (0-5)
+     * @return Default tip position for the leg
+     */
+    Point3D getLegDefaultPosition(int leg_index) const;
+
+    /**
      * \brief Initialize DH parameters from robot dimensions.
      */
     void initializeDH();

@@ -63,6 +63,16 @@ const WorkspaceAnalyzer &RobotModel::getWorkspaceAnalyzer() const {
     return *workspace_analyzer_;
 }
 
+Point3D RobotModel::getLegDefaultPosition(int leg_index) const {
+    if (leg_index < 0 || leg_index >= NUM_LEGS) {
+        return Point3D(0, 0, 0); // Return origin for invalid index
+    }
+
+    // Calculate default position using zero joint angles (standing pose)
+    JointAngles zero_angles(0, 0, 0);
+    return forwardKinematicsGlobalCoordinates(leg_index, zero_angles);
+}
+
 void RobotModel::initializeDH() {
 
     // Initialize default DH parameters if custom parameters are not used.
