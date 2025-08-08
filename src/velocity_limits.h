@@ -128,26 +128,6 @@ class VelocityLimits {
     static double normalizeBearing(double bearing_degrees);
     static double calculateBearing(double vx, double vy);
 
-    /**
-     * @brief Calculate stride vector using OpenSHC-equivalent method
-     *
-     * This function implements the same stride vector calculation as OpenSHC's updateStride():
-     * 1. Linear stride vector from velocity input
-     * 2. Angular stride vector from angular velocity and leg radius
-     * 3. Combination and scaling by stance ratio and frequency
-     *
-     * @param linear_velocity_x Linear velocity in X direction (mm/s)
-     * @param linear_velocity_y Linear velocity in Y direction (mm/s)
-     * @param angular_velocity Angular velocity around Z axis (rad/s)
-     * @param current_tip_position Current tip position for radius calculation
-     * @param stance_ratio Ratio of stance phase (0.0 - 1.0)
-     * @param step_frequency Step frequency (Hz)
-     * @return Point3D Calculated stride vector (mm)
-     */
-    static Point3D calculateStrideVector(double linear_velocity_x, double linear_velocity_y,
-                                         double angular_velocity, const Point3D &current_tip_position,
-                                         double stance_ratio, double step_frequency);
-
   private:
     // PIMPL idiom to hide WorkspaceValidator dependency
     class Impl;
