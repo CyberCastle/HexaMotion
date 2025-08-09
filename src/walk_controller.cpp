@@ -58,6 +58,48 @@ WalkController::WalkController(RobotModel &m, Leg legs[NUM_LEGS], const BodyPose
     generateWalkspace();
 }
 
+// ================== Accessor Implementations (moved from header) ==================
+StepCycle WalkController::getStepCycle() const {
+    // Calculate proper step frequency to prevent stride vector bug
+    double time_delta = 1.0 / current_gait_config_.control_frequency;
+    int base_period = current_gait_config_.phase_config.stance_phase + current_gait_config_.phase_config.swing_phase;
+    double calculated_step_frequency = 0.0;
+    if (base_period > 0) {
+        calculated_step_frequency = 1.0 / (base_period * time_delta);
+    }
+    return current_gait_config_.generateStepCycle(calculated_step_frequency);
+}
+
+double WalkController::getTimeDelta() const { return time_delta_; }
+double WalkController::getStepClearance() const { return step_clearance_; }
+double WalkController::getStepDepth() const { return step_depth_; }
+
+Point3D WalkController::getWalkPlane() const {
+    return body_pose_controller_ ? body_pose_controller_->getWalkPlanePose().position : Point3D(0, 0, 0);
+}
+
+Point3D WalkController::getWalkPlaneNormal() const {
+    if (body_pose_controller_) {
+        Pose pose = body_pose_controller_->getWalkPlanePose();
+        Eigen::Vector3d z_axis(0, 0, 1);
+        Eigen::Vector3d normal = pose.rotation * z_axis;
+        return Point3D(normal.x(), normal.y(), normal.z());
+    }
+    return Point3D(0, 0, 1);
+}
+
+double WalkController::getStanceDuration() const {
+    double total_period = current_gait_config_.phase_config.stance_phase + current_gait_config_.phase_config.swing_phase;
+    return total_period > 0 ? static_cast<double>(current_gait_config_.phase_config.stance_phase) / total_period : 0.0;
+}
+
+double WalkController::getSwingDuration() const {
+    double denom = (current_gait_config_.phase_config.stance_phase + current_gait_config_.phase_config.swing_phase);
+    return denom > 0 ? static_cast<double>(current_gait_config_.phase_config.swing_phase) / denom : 0.0;
+}
+
+double WalkController::getCycleFrequency() const { return current_gait_config_.getStepFrequency(); }
+
 // Gait configuration management methods (OpenSHC equivalent)
 bool WalkController::setGaitConfiguration(const GaitConfiguration &gait_config) {
     // Store the new gait configuration

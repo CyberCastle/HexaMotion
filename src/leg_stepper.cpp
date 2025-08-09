@@ -103,11 +103,28 @@ void LegStepper::setDesiredVelocity(const Point3D &linear_velocity, double angul
 
 void LegStepper::updateStride() {
     // OpenSHC-based implementation (logic adapted with safety validation)
+    // Implements original OpenSHC semantics of LegStepper::updateStride():
+    //   1. Acquire walk plane pose & normal (here provided externally via setters)
+    //   2. Compute linear + angular stride components
+    //   3. Scale by on-ground ratio / frequency
+    //   4. Derive swing clearance vector
 
-    // TODO: Update walk plane and normal from external source (equivalent to walker_->getWalkPlane())
-    // These should be set by the higher-level controller
-    // walk_plane_ = walker_->getWalkPlane();
-    // walk_plane_normal_ = walker_->getWalkPlaneNormal();
+    // --- Walk plane acquisition (fulfills previous TODO) ---
+    // In OpenSHC this comes from walker_->getWalkPlane()/getWalkPlaneNormal().
+    // We decouple by allowing WalkController (or another higher layer) to call
+    // setWalkPlane()/setWalkPlaneNormal() each cycle. If not provided, fall back
+    // to a flat horizontal walk plane with +Z normal through identity pose.
+    auto normal_mag = std::sqrt(walk_plane_normal_.x * walk_plane_normal_.x +
+                                walk_plane_normal_.y * walk_plane_normal_.y +
+                                walk_plane_normal_.z * walk_plane_normal_.z);
+    if (normal_mag < 1e-6) {
+        walk_plane_normal_ = Point3D(0, 0, 1); // fallback normal
+        walk_plane_ = Point3D(identity_tip_pose_.x, identity_tip_pose_.y, identity_tip_pose_.z);
+    }
+    // Normalize plane normal (protect against extreme values)
+    if (normal_mag > 1e-6) {
+        walk_plane_normal_ = walk_plane_normal_ / normal_mag;
+    }
 
     // Linear stride vector (OpenSHC formula)
     Point3D stride_vector_linear(desired_linear_velocity_.x, desired_linear_velocity_.y, 0.0);
@@ -135,8 +152,8 @@ void LegStepper::updateStride() {
     // STEP 3: Apply stride validation and safety constraints
     stride_vector_ = calculateSafeStride(stride_vector_);
 
-    // Swing clearance (OpenSHC formula)
-    swing_clearance_ = walk_plane_normal_.normalized() * step_clearance_height_;
+    // Swing clearance (OpenSHC formula) using validated & normalized plane normal
+    swing_clearance_ = walk_plane_normal_ * step_clearance_height_;
 }
 
 void LegStepper::calculateSwingTiming(double time_delta) {

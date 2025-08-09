@@ -93,35 +93,18 @@ class WalkController {
     Point3D estimateGravity() const;
 
     // Accessors
-    StepCycle getStepCycle() const {
-        // Calculate proper step frequency to prevent stride vector bug
-        double time_delta = 1.0 / current_gait_config_.control_frequency;
-        int base_period = current_gait_config_.phase_config.stance_phase + current_gait_config_.phase_config.swing_phase;
-        double calculated_step_frequency = 1.0 / (base_period * time_delta);
-        return current_gait_config_.generateStepCycle(calculated_step_frequency);
-    }
-    double getTimeDelta() const { return time_delta_; }
-    double getStepClearance() const { return step_clearance_; }
-    double getStepDepth() const { return step_depth_; }
+    StepCycle getStepCycle() const;  // moved implementation to cpp
+    double getTimeDelta() const;     // moved implementation to cpp
+    double getStepClearance() const; // moved implementation to cpp
+    double getStepDepth() const;     // moved implementation to cpp
 
     Point3D getDesiredLinearVelocity() const { return desired_linear_velocity_; }
     double getDesiredAngularVelocity() const { return desired_angular_velocity_; }
     WalkState getWalkState() const { return walk_state_; }
     std::map<int, double> getWalkspace() const { return walkspace_; }
     // Walk plane functionality moved to BodyPoseController
-    Point3D getWalkPlane() const {
-        return body_pose_controller_ ? body_pose_controller_->getWalkPlanePose().position : Point3D(0, 0, 0);
-    }
-    Point3D getWalkPlaneNormal() const {
-        if (body_pose_controller_) {
-            // Extract normal from walk plane pose quaternion
-            Pose pose = body_pose_controller_->getWalkPlanePose();
-            Eigen::Vector3d z_axis(0, 0, 1);
-            Eigen::Vector3d normal = pose.rotation * z_axis;
-            return Point3D(normal.x(), normal.y(), normal.z());
-        }
-        return Point3D(0, 0, 1);
-    }
+    Point3D getWalkPlane() const;       // moved implementation to cpp
+    Point3D getWalkPlaneNormal() const; // moved implementation to cpp
     Point3D getOdometryIdeal() const { return odometry_ideal_; }
     std::shared_ptr<LegStepper> getLegStepper(int leg_index) const;
 
@@ -208,27 +191,19 @@ class WalkController {
      * @brief Get current stance duration from gait configuration
      * @return Stance duration (0-1)
      */
-    double getStanceDuration() const {
-        // Return normalized value [0.0-1.0] for stance duration
-        double total_period = current_gait_config_.phase_config.stance_phase +
-                              current_gait_config_.phase_config.swing_phase;
-        return total_period > 0 ? static_cast<double>(current_gait_config_.phase_config.stance_phase) / total_period : 0.0;
-    }
+    double getStanceDuration() const; // moved implementation to cpp
 
     /**
      * @brief Get current swing duration from gait configuration
      * @return Swing duration (0-1)
      */
-    double getSwingDuration() const {
-        return (double)current_gait_config_.phase_config.swing_phase /
-               (current_gait_config_.phase_config.stance_phase + current_gait_config_.phase_config.swing_phase);
-    }
+    double getSwingDuration() const; // moved implementation to cpp
 
     /**
      * @brief Get current cycle frequency from gait configuration
      * @return Cycle frequency in Hz
      */
-    double getCycleFrequency() const { return current_gait_config_.getStepFrequency(); }
+    double getCycleFrequency() const; // moved implementation to cpp
 
     /**
      * @brief Get calculated leg trajectory information for locomotion system
