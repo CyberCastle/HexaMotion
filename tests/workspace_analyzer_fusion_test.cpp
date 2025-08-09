@@ -378,5 +378,13 @@ int main() {
         std::cout << "❌ VelocityLimits tests encountered failures" << std::endl;
     }
 
+    // ==============================================================
+    // Compatibility Mode Comparison Test
+    // ==============================================================
+    // NOTE: Compatibility (OpenSHC diameter traversal) mode removed. Unified stride-based velocity limiting
+    // provides a single coherent surface, integrates overshoot directly into stride_length, and avoids
+    // inflated theoretical maxima (2R / (stance_ratio/f)) that were not achievable under the configured
+    // stride fraction and scaling. Legacy comparison and divergence diagnostics deleted intentionally.
+
     return 0;
 }

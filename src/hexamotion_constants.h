@@ -143,6 +143,12 @@
 #define HALF_ROTATION_DEGREES 180.0        // Half rotation in degrees
 #define BEARING_STEP_DEGREES 30.0          // Bearing sampling step in degrees
 
+// Directional efficiency attenuation parameters (tunable)
+// Exponent > 1 accentuates attenuation for off-axis bearings while preserving near-axis efficiency.
+// Floor prevents pathological collapse of effective workspace when a subset of legs are misaligned.
+#define DIRECTIONAL_EFFICIENCY_EXPONENT 1.4
+#define DIRECTIONAL_EFFICIENCY_FLOOR 0.15
+
 // ========================================================================
 // MATHEMATICAL CONSTANTS
 // ========================================================================

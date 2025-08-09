@@ -26,14 +26,15 @@ class VelocityLimits {
      * @brief Velocity limits for a specific bearing.
      */
     struct LimitValues {
-        double linear_x;     // Maximum linear velocity in X direction (mm/s)
-        double linear_y;     // Maximum linear velocity in Y direction (mm/s)
-        double angular_z;    // Maximum angular velocity around Z axis (rad/s)
-        double acceleration; // Maximum acceleration (mm/s²)
+        double linear_x;      // Maximum linear velocity in X direction (mm/s)
+        double linear_y;      // Maximum linear velocity in Y direction (mm/s)
+        double angular_z;     // Maximum angular velocity around Z axis (rad/s)
+        double acceleration;  // Maximum acceleration (mm/s²)
+        double angular_accel; // Maximum angular acceleration (rad/s²) - added for symmetry
 
-        LimitValues() : linear_x(0.0f), linear_y(0.0f), angular_z(0.0f), acceleration(0.0f) {}
+        LimitValues() : linear_x(0.0f), linear_y(0.0f), angular_z(0.0f), acceleration(0.0f), angular_accel(0.0f) {}
         LimitValues(double lx, double ly, double az, double acc)
-            : linear_x(lx), linear_y(ly), angular_z(az), acceleration(acc) {}
+            : linear_x(lx), linear_y(ly), angular_z(az), acceleration(acc), angular_accel(0.0f) {}
     };
 
     /**
@@ -54,14 +55,15 @@ class VelocityLimits {
      * @brief Workspace parameters used for limit generation.
      */
     struct WorkspaceConfig {
-        double walkspace_radius; // Effective workspace radius for walking (mm)
-        double stance_radius;    // Radius for angular velocity calculations (mm)
-        double overshoot_x;      // Overshoot compensation in X direction
-        double overshoot_y;      // Overshoot compensation in Y direction
-        double safety_margin;    // Safety factor for workspace limits
-        double reference_height; // Physical reference height (z = getDefaultHeightOffset())
+        double walkspace_radius;        // Effective workspace radius for walking (mm)
+        double stance_radius;           // Radius for angular velocity calculations (mm)
+        double scaled_walkspace_radius; // Walkspace radius after dynamic overshoot deductions (compat mode)
+        double overshoot_x;             // Overshoot compensation in X direction
+        double overshoot_y;             // Overshoot compensation in Y direction
+        double safety_margin;           // Safety factor for workspace limits
+        double reference_height;        // Physical reference height (z = getDefaultHeightOffset())
 
-        WorkspaceConfig() : walkspace_radius(0.0f), stance_radius(0.0f),
+        WorkspaceConfig() : walkspace_radius(0.0f), stance_radius(0.0f), scaled_walkspace_radius(0.0f),
                             overshoot_x(0.0f), overshoot_y(0.0f), safety_margin(0.85f),
                             reference_height(0.0f) {}
     };
@@ -86,6 +88,10 @@ class VelocityLimits {
     void generateLimits(const GaitConfig &gait_config);
     void generateLimits(const GaitConfiguration &gait_config); // Unified configuration interface
     LimitValues getLimit(double bearing_degrees) const;
+
+    // Angular acceleration map access (separate from general LimitValues for focused queries)
+    double getAngularAcceleration(double bearing_degrees) const; // Interpolated angular acceleration
+    std::array<double, 360> getAngularAccelerationMap() const;   // Raw per-bearing angular acceleration
 
     // Workspace generation and calculation
     void calculateWorkspace(const GaitConfig &gait_config);
@@ -118,6 +124,20 @@ class VelocityLimits {
     void updateGaitParameters(const GaitConfiguration &gait_config); // Unified configuration interface
     void setSafetyMargin(double margin);
     void setAngularVelocityScaling(double scaling);
+
+    // NOTE: Removed OpenSHC diameter traversal formula because:
+    //  1) Its overshoot scaling model (multiplicative rational reduction) diverges from the
+    //     stride-based reach fraction used here, producing incomparable magnitudes.
+    //  2) It inflated theoretical max speed (2*R / (stance_ratio/f)) far beyond practical
+    //     stride-based limits after velocity scaling and safety margins, yielding persistent
+    //     diagnostic divergence noise.
+    //  3) The simplified physics-based overshoot (min(v^2/2a, 0.5 a t^2) capped) is integrated
+    //     symmetrically in stride length deduction; duplicating a second overshoot pathway added
+    //     maintenance complexity without actionable benefit.
+    //  4) Downstream consumers require a single coherent limit surface for predictability and
+    //     tuning; dual-mode branching obscured regression sources.
+    //  If strict OpenSHC parity is ever required, reintroduce via a separate adapter/utility
+    //  that outputs a reference map for analysis only (not in-line limiting logic).
 
     // Debug and analysis functions
     LimitValues getMaxLimits() const;
