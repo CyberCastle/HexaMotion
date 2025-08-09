@@ -1,5 +1,6 @@
 #include "../src/hexamotion_constants.h"
 #include "../src/robot_model.h"
+#include "../src/velocity_limits.h"
 #include "../src/workspace_analyzer.h"
 #include <cmath>
 #include <iostream>
@@ -259,6 +260,97 @@ int main() {
     }
 
     std::cout << "=== All WorkspaceAnalyzer functions tested successfully! ===" << std::endl;
+
+    // ==============================================================
+    // VelocityLimits integration & behavior validation
+    // ==============================================================
+    std::cout << "\n=== VelocityLimits Behavior Tests ===" << std::endl;
+
+    VelocityLimits velocity_limits(model);
+
+    std::vector<int> bearings = {0, 45, 90, 135, 180};
+    bool velocity_limits_ok = true;
+
+    auto workspace_cfg = velocity_limits.getWorkspaceConfig();
+    std::cout << "Workspace radii (walk/stance): " << workspace_cfg.walkspace_radius
+              << " / " << workspace_cfg.stance_radius << " mm" << std::endl;
+
+    if (workspace_cfg.stance_radius <= 0 || workspace_cfg.walkspace_radius <= 0) {
+        std::cout << "❌ Invalid workspace radii in VelocityLimits" << std::endl;
+        velocity_limits_ok = false;
+    }
+
+    std::cout << "Retrieving limits for bearings:" << std::endl;
+    for (int b : bearings) {
+        auto limits = velocity_limits.getLimit((double)b);
+        std::cout << "  Bearing " << b << "° -> Vx: " << limits.linear_x
+                  << " mm/s, Vy: " << limits.linear_y
+                  << " mm/s, Wz: " << limits.angular_z
+                  << " rad/s, Accel: " << limits.acceleration << " mm/s²" << std::endl;
+        if (limits.linear_x <= 0 || limits.linear_y <= 0 || limits.angular_z <= 0 || limits.acceleration <= 0) {
+            std::cout << "    ❌ Non-positive limit value detected" << std::endl;
+            velocity_limits_ok = false;
+        }
+    }
+
+    // Interpolation test (0° a 1°)
+    auto limit0 = velocity_limits.getLimit(0.0);
+    auto limit1 = velocity_limits.getLimit(1.0);
+    auto mid = velocity_limits.getLimit(0.5);
+    if (!(mid.linear_x >= std::min(limit0.linear_x, limit1.linear_x) - 1e-6 &&
+          mid.linear_x <= std::max(limit0.linear_x, limit1.linear_x) + 1e-6)) {
+        std::cout << "❌ Interpolation out of bounds for linear_x" << std::endl;
+        velocity_limits_ok = false;
+    } else {
+        std::cout << "✅ Interpolation bounds check passed" << std::endl;
+    }
+
+    // Angular scaling & coupling test
+    auto base_limits = velocity_limits.getLimit(0.0);
+    VelocityLimits::LimitValues scaled = velocity_limits.scaleVelocityLimits(base_limits, 1.0);
+    double planar_mag = std::hypot(scaled.linear_x, scaled.linear_y);
+    double kinematic_cap = scaled.angular_z * std::max(1.0, velocity_limits.getWorkspaceConfig().stance_radius);
+    if (planar_mag - kinematic_cap > 1e-6) {
+        std::cout << "❌ Kinematic coupling violated (" << planar_mag << " > " << kinematic_cap << ")" << std::endl;
+        velocity_limits_ok = false;
+    } else {
+        std::cout << "✅ Kinematic coupling respected (planar mag ≤ ω * r)" << std::endl;
+    }
+
+    // Validation function (in-range)
+    double test_vx = base_limits.linear_x * 0.5;
+    double test_vy = base_limits.linear_y * 0.4;
+    double test_wz = base_limits.angular_z * 0.6;
+    if (!velocity_limits.validateVelocityInputs(test_vx, test_vy, test_wz)) {
+        std::cout << "❌ validateVelocityInputs rejected valid velocities" << std::endl;
+        velocity_limits_ok = false;
+    } else {
+        std::cout << "✅ validateVelocityInputs accepted in-range velocities" << std::endl;
+    }
+
+    // Over-limit linear
+    if (velocity_limits.validateVelocityInputs(base_limits.linear_x * 1.05, 0, 0)) {
+        std::cout << "❌ validateVelocityInputs failed to reject over-limit linear_x" << std::endl;
+        velocity_limits_ok = false;
+    } else {
+        std::cout << "✅ Over-limit linear_x correctly rejected" << std::endl;
+    }
+
+    // Overshoot sanity
+    double ox = velocity_limits.getOvershootX();
+    double oy = velocity_limits.getOvershootY();
+    if (ox < 0 || oy < 0) {
+        std::cout << "❌ Overshoot values negative" << std::endl;
+        velocity_limits_ok = false;
+    } else {
+        std::cout << "✅ Overshoot values OK (" << ox << ", " << oy << ")" << std::endl;
+    }
+
+    if (velocity_limits_ok) {
+        std::cout << "✅ VelocityLimits tests passed" << std::endl;
+    } else {
+        std::cout << "❌ VelocityLimits tests encountered failures" << std::endl;
+    }
 
     return 0;
 }
