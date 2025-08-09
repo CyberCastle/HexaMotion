@@ -239,19 +239,7 @@ bool LocomotionSystem::planGaitSequence(double velocity_x, double velocity_y, do
     commanded_linear_velocity_x_ = velocity_x;
     commanded_linear_velocity_y_ = velocity_y; // Now properly stored!
     commanded_angular_velocity_ = angular_velocity;
-
-    // Configure velocity in ALL leg steppers (immediate application for runtime changes)
-    for (int i = 0; i < NUM_LEGS; i++) {
-        auto leg_stepper = walk_ctrl->getLegStepper(i);
-        if (leg_stepper) {
-            leg_stepper->setDesiredVelocity(Point3D(velocity_x, velocity_y, 0), angular_velocity);
-            leg_stepper->updateStride();
-        } else {
-            last_error = PARAMETER_ERROR;
-            return false;
-        }
-    }
-
+    // Defer stride recomputation to per-cycle update() after ramp/limit applied
     return true;
 }
 
@@ -272,117 +260,9 @@ bool LocomotionSystem::turnInPlace(double angular_velocity) {
 
 // Sideways locomotion control
 bool LocomotionSystem::walkSideways(double velocity, bool right_direction) {
-    double lateral_velocity = right_direction ? velocity : -velocity;
+    // Framework convention: +Y = left, -Y = right
+    double lateral_velocity = right_direction ? -velocity : velocity;
     return planGaitSequence(0.0f, lateral_velocity, 0.0f);
-}
-
-// Advance for "duration"seconds
-bool LocomotionSystem::walkForward(double velocity, double duration) {
-    // Plan gait to move forward along X (velocity m/s)
-    planGaitSequence(velocity, 0.0f, 0.0f);
-
-    unsigned long startTime = millis();
-    unsigned long durationMs = (unsigned long)(duration * 1000.0f);
-
-    // Blocking loop: run update() until duration elapsed
-    while (millis() - startTime < durationMs) {
-        update();
-        // In a real Arduino environment there may be delay(1) calls
-        // delay(1);
-    }
-
-    stopMovement();
-    return true;
-}
-
-// Move backward for "duration"seconds
-bool LocomotionSystem::walkBackward(double velocity, double duration) {
-    // Plan gait to move in -X (backwards)
-    planGaitSequence(-velocity, 0.0f, 0.0f);
-
-    unsigned long startTime = millis();
-    unsigned long durationMs = (unsigned long)(duration * 1000.0f);
-
-    while (millis() - startTime < durationMs) {
-        update();
-        // In a real Arduino environment there may be delay(1)
-        // delay(1);
-    }
-
-    stopMovement();
-    return true;
-}
-
-// Turn in place for "duration"seconds
-bool LocomotionSystem::turnInPlace(double angular_velocity, double duration) {
-    // Plan gait with only angular component
-    planGaitSequence(0.0f, 0.0f, angular_velocity);
-
-    unsigned long startTime = millis();
-    unsigned long durationMs = (unsigned long)(duration * 1000.0f);
-
-    while (millis() - startTime < durationMs) {
-        update();
-        // In a real Arduino environment there may be delay(1)
-        // delay(1);
-    }
-
-    stopMovement();
-    return true;
-}
-
-// Walk sideways (right/left) for "duration"seconds
-bool LocomotionSystem::walkSideways(double velocity, double duration, bool right_direction) {
-    double lateral_velocity = right_direction ? velocity : -velocity;
-    planGaitSequence(0.0f, lateral_velocity, 0.0f);
-
-    unsigned long startTime = millis();
-    unsigned long durationMs = (unsigned long)(duration * 1000.0f);
-
-    while (millis() - startTime < durationMs) {
-        update();
-        // In a real Arduino environment there may be delay(1)
-        // delay(1);
-    }
-
-    stopMovement();
-    return true;
-}
-
-// Stop movement while keeping current pose
-bool LocomotionSystem::stopMovement() {
-    if (!walk_ctrl) {
-        last_error = PARAMETER_ERROR;
-        return false;
-    }
-
-    // Zero persistent commanded velocities (OpenSHC pattern: STOP triggered by zero command)
-    commanded_linear_velocity_x_ = 0.0;
-    commanded_linear_velocity_y_ = 0.0;
-    commanded_angular_velocity_ = 0.0;
-
-    // Issue a zero-velocity update to enter WALK_STOPPING (if currently MOVING/STARTING)
-    // Body pose/orientation remain current
-    walk_ctrl->updateWalk(Point3D(0.0, 0.0, 0.0), 0.0, body_position, body_orientation);
-
-    // If after first update we're still not fully stopped, run an additional settling update
-    if (walk_ctrl->getWalkState() != WALK_STOPPED) {
-        walk_ctrl->updateWalk(Point3D(0.0, 0.0, 0.0), 0.0, body_position, body_orientation);
-    }
-
-    // Force legs into stance/force-stop if still not reported stopped to ensure deterministic halt
-    if (walk_ctrl->getWalkState() != WALK_STOPPED) {
-        for (int i = 0; i < NUM_LEGS; ++i) {
-            auto leg_stepper = walk_ctrl->getLegStepper(i);
-            if (leg_stepper) {
-                leg_stepper->setStepState(STEP_FORCE_STOP);
-                leg_stepper->setPhase(0.0);
-            }
-            legs[i].setStepPhase(STANCE_PHASE);
-        }
-    }
-
-    return true;
 }
 
 bool LocomotionSystem::executeStartupSequence() {
@@ -650,12 +530,9 @@ bool LocomotionSystem::update() {
 
     // Only update leg trajectories if system is in RUNNING state
     if (walk_ctrl && system_state == SYSTEM_RUNNING) {
-        // OpenSHC PATTERN: Apply persistent velocities (fixes the velocity_y loss bug)
-        // Use stored velocities that were set during startWalking()
-        Point3D persistent_linear_velocity(commanded_linear_velocity_x_, commanded_linear_velocity_y_, 0.0);
-
-        // STEP 1: Update walk controller - calculates ALL Bézier trajectories (OpenSHC pattern)
-        walk_ctrl->updateWalk(persistent_linear_velocity,
+        // STEP 1: Update walk controller (it performs its own limiting & ramping via VelocityLimits)
+        Point3D applied_linear_velocity(commanded_linear_velocity_x_, commanded_linear_velocity_y_, 0.0);
+        walk_ctrl->updateWalk(applied_linear_velocity,
                               commanded_angular_velocity_,
                               body_position, body_orientation);
 
@@ -1094,49 +971,56 @@ double LocomotionSystem::getCurrentServoSpeed(int leg_index, int joint_index) co
 
 // Execute startup sequence (READY -> RUNNING transition)
 // Start walking with specified gait type
-bool LocomotionSystem::startWalking(GaitType gait_type, double velocity_x, double velocity_y, double angular_velocity) {
+bool LocomotionSystem::startWalking() {
     if (!system_enabled || !walk_ctrl) {
         last_error = PARAMETER_ERROR;
         return false;
     }
-
-    // Check if system is in READY state (OpenSHC equivalent)
     if (system_state != SYSTEM_READY) {
         last_error = STATE_ERROR;
         return false;
     }
-
-    // Set gait type
-    if (!setGaitType(gait_type)) {
-        last_error = PARAMETER_ERROR;
-        return false;
-    }
-
-    // Store velocities but don't start gait sequence yet
-    // It will be activated when startup sequence completes (OpenSHC pattern)
-    commanded_linear_velocity_x_ = velocity_x;
-    commanded_linear_velocity_y_ = velocity_y;
-    commanded_angular_velocity_ = angular_velocity;
-
-    // Execute startup sequence to transition from READY to RUNNING
+    // Assumes gait already selected via setGaitType() and velocities set via walkForward/back/sideways/turn methods
     startup_in_progress = true;
-    system_state = SYSTEM_READY; // Will transition to RUNNING when sequence completes
-
+    system_state = SYSTEM_READY;
     return true;
 }
 
 // Stop walking and return to standing pose
 bool LocomotionSystem::stopWalking() {
-    // Check if system is in RUNNING state
+    if (!walk_ctrl) {
+        last_error = PARAMETER_ERROR;
+        return false;
+    }
     if (system_state != SYSTEM_RUNNING) {
         last_error = STATE_ERROR;
         return false;
     }
+    // Zero velocities
+    commanded_linear_velocity_x_ = 0.0;
+    commanded_linear_velocity_y_ = 0.0;
+    commanded_angular_velocity_ = 0.0;
 
-    // Execute shutdown sequence to transition from RUNNING to READY
+    // Apply stop update(s)
+    walk_ctrl->updateWalk(Point3D(0.0, 0.0, 0.0), 0.0, body_position, body_orientation);
+    if (walk_ctrl->getWalkState() != WALK_STOPPED) {
+        walk_ctrl->updateWalk(Point3D(0.0, 0.0, 0.0), 0.0, body_position, body_orientation);
+    }
+
+    if (walk_ctrl->getWalkState() != WALK_STOPPED) {
+        for (int i = 0; i < NUM_LEGS; ++i) {
+            auto leg_stepper = walk_ctrl->getLegStepper(i);
+            if (leg_stepper) {
+                leg_stepper->setStepState(STEP_FORCE_STOP);
+                leg_stepper->setPhase(0.0);
+            }
+            legs[i].setStepPhase(STANCE_PHASE);
+        }
+    }
+
+    // Trigger shutdown sequence to return to standing pose
     shutdown_in_progress = true;
-    system_state = SYSTEM_RUNNING; // Will transition to READY when sequence completes
-
+    system_state = SYSTEM_RUNNING;
     return true;
 }
 

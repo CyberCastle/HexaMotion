@@ -464,10 +464,15 @@ int main() {
 
     servos.printCurrentAngles();
 
-    // 3. Start tripod gait
+    // 3. Start tripod gait (new API)
     std::cout << "Starting tripod gait..." << std::endl;
-    if (!sys.startWalking(TRIPOD_GAIT, TEST_VELOCITY, 0.0, 0.0)) {
-        std::cerr << "ERROR: Failed to start tripod gait." << std::endl;
+    if (!sys.setGaitType(TRIPOD_GAIT)) {
+        std::cerr << "ERROR: Failed to set gait type." << std::endl;
+        return 1;
+    }
+    sys.walkForward(TEST_VELOCITY);
+    if (!sys.startWalking()) {
+        std::cerr << "ERROR: Failed to start walking (startup sequence)." << std::endl;
         return 1;
     }
 

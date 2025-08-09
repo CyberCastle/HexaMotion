@@ -87,8 +87,9 @@ class CartesianVelocityController {
 
     /**
      * @brief Update servo speeds based on commanded Cartesian velocity.
-     * @param linear_velocity_x Linear velocity in X direction (m/s)
-     * @param linear_velocity_y Linear velocity in Y direction (m/s)
+     *        All linear velocity units are millimetres per second (mm/s); angular in rad/s.
+     * @param linear_velocity_x Linear velocity in X direction (mm/s)
+     * @param linear_velocity_y Linear velocity in Y direction (mm/s)
      * @param angular_velocity Angular velocity around Z axis (rad/s)
      * @param current_gait Active gait type
      * @return True if servo speeds were successfully calculated
@@ -137,7 +138,7 @@ class CartesianVelocityController {
 
     /**
      * @brief Get current Cartesian velocity magnitude.
-     * @return Total velocity magnitude in m/s
+     * @return Total velocity magnitude in mm/s
      */
     double getCurrentVelocityMagnitude() const;
 
@@ -163,7 +164,7 @@ class CartesianVelocityController {
 
     /**
      * @brief Calculate velocity scaling factor for linear motion.
-     * @param velocity_magnitude Linear velocity magnitude (m/s)
+     * @param velocity_magnitude Linear velocity magnitude (mm/s)
      * @return Scaling factor for servo speeds
      */
     double calculateLinearVelocityScale(double velocity_magnitude) const;

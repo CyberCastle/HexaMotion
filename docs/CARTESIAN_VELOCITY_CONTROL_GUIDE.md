@@ -86,14 +86,14 @@ locomotion.setGaitSpeedModifiers(modifiers);
 ### Command Motion with Automatic Speed Control
 
 ```cpp
-// Forward motion - servo speeds automatically scale with velocity
-locomotion.planGaitSequence(0.1f, 0.0f, 0.0f);  // 0.1 m/s forward
+// Forward motion - servo speeds automatically scale with velocity (values now in mm/s)
+locomotion.planGaitSequence(100.0f, 0.0f, 0.0f);  // 100 mm/s forward
 
-// Rotation - outer legs automatically get higher speeds
+// Rotation - outer legs automatically get higher speeds (angular remains in rad/s)
 locomotion.planGaitSequence(0.0f, 0.0f, 0.5f);  // 0.5 rad/s rotation
 
 // Combined motion - speeds balanced for both linear and angular
-locomotion.planGaitSequence(0.08f, 0.0f, 0.3f); // Forward + rotation
+locomotion.planGaitSequence(80.0f, 0.0f, 0.3f); // 80 mm/s + rotation
 ```
 
 ### Get Current Servo Speeds
@@ -111,23 +111,21 @@ float coxa_effective = leg_speeds.coxa.getEffectiveSpeed();
 
 ## OpenSHC Equivalence
 
-This system provides equivalent functionality to OpenSHC's velocity control through:
+This system provides equivalent functionality to OpenSHC's velocity control in REAL velocity mode only. HexaMotion core
+no implementa internamente el modo "throttle"; cualquier joystick o entrada normalizada debe convertirse fuera de la
+biblioteca a velocidades físicas (mm/s y rad/s) antes de llamar `planGaitSequence`.
 
 ### 1. Body Velocity Scaling
 
-Similar to OpenSHC's `body_velocity_scaler` parameter, but applied directly to servo speeds rather than velocity commands.
+Un efecto similar a `body_velocity_scaler` puede lograrse pre-escalando las velocidades o ajustando los factores de servo.
 
 ### 2. Joint Velocity Limits
 
-Equivalent to OpenSHC's per-joint `max_angular_speed` constraints, but implemented as dynamic scaling rather than hard limits.
+Equivalentes mediante escalado dinámico de velocidades de servos.
 
-### 3. Velocity Input Modes
+### 3. Gait-Dependent Speed Control
 
-Supports both "throttle" and "real" velocity modes through appropriate scaling configurations.
-
-### 4. Gait-Dependent Speed Control
-
-Different gaits automatically receive appropriate servo speed adjustments, similar to OpenSHC's gait-specific parameter sets.
+Factores específicos por gait replican el ajuste de OpenSHC.
 
 ## Technical Implementation
 
@@ -201,8 +199,8 @@ angular_scale = 1.0 + angular_ratio × angular_scale_factor
 Robot automatically adjusts movement speed based on commanded velocity:
 
 ```cpp
-locomotion.planGaitSequence(0.05f, 0.0f, 0.0f);  // Slow, careful movement
-locomotion.planGaitSequence(0.15f, 0.0f, 0.0f);  // Fast, responsive movement
+locomotion.planGaitSequence(50.0f, 0.0f, 0.0f);   // Slow, careful movement (mm/s)
+locomotion.planGaitSequence(150.0f, 0.0f, 0.0f);  // Fast, responsive movement (mm/s)
 ```
 
 ### 2. Adaptive Turning

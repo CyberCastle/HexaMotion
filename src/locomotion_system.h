@@ -148,16 +148,6 @@ class LocomotionSystem {
     bool turnInPlace(double angular_velocity);
     /** Walk laterally to one side indefinitely. */
     bool walkSideways(double velocity, bool right_direction = true);
-    /** Walk forward for a fixed duration. */
-    bool walkForward(double velocity, double duration);
-    /** Walk backward for a fixed duration. */
-    bool walkBackward(double velocity, double duration);
-    /** Rotate in place for a fixed duration. */
-    bool turnInPlace(double angular_velocity, double duration);
-    /** Walk sideways for a fixed duration. */
-    bool walkSideways(double velocity, double duration, bool right_direction = true);
-    /** Immediately stop all leg motion. */
-    bool stopMovement();
 
     /**
      * @brief Execute one iteration of the startup sequence.
@@ -172,8 +162,8 @@ class LocomotionSystem {
     bool executeShutdownSequence();
 
     // OpenSHC-style walking control
-    /** Start walking with specified gait type (triggers startup sequence) */
-    bool startWalking(GaitType gait_type, double velocity_x, double velocity_y, double angular_velocity);
+    /** Start walking (startup sequence only). Gait and velocities must have been set beforehand. */
+    bool startWalking();
     /** Stop walking and return to standing pose (triggers shutdown sequence) */
     bool stopWalking();
 

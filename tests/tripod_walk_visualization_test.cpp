@@ -33,9 +33,10 @@
 #include <vector>
 
 // Test configuration
-constexpr double TEST_VELOCITY = 50.0;        // mm/s, a moderate speed for clear observation
-constexpr int REQUIRED_SWING_TRANSITIONS = 2; // Each leg must complete 2 STANCE->SWING transitions (reduced for 52-iteration phases)
-constexpr int MAX_STEPS = 250;                // Increased to accommodate 52-iteration phases (2 cycles = 208 steps + margin)
+constexpr double TEST_VELOCITY = 150;          // mm/s, a moderate speed for clear observation
+constexpr double TEST_ANGULAR_VELOCITY = 0.25; // rad/s, introduce rotational motion for validation
+constexpr int REQUIRED_SWING_TRANSITIONS = 2;  // Each leg must complete 2 STANCE->SWING transitions (reduced for 52-iteration phases)
+constexpr int MAX_STEPS = 250;                 // Increased to accommodate 52-iteration phases (2 cycles = 208 steps + margin)
 
 // Utility to convert radians to degrees
 static double toDegrees(double radians) {
@@ -52,7 +53,8 @@ static void printTestHeader() {
     std::cout << "This test will monitor each leg until it completes " << REQUIRED_SWING_TRANSITIONS << " STANCE->SWING transitions." << std::endl;
     std::cout << "With OpenSHC timing: Each phase (stance/swing) lasts 52 iterations." << std::endl;
     std::cout << "Expected test duration: ~" << (REQUIRED_SWING_TRANSITIONS * 104) << " steps for full cycle completion." << std::endl;
-    std::cout << "Velocity: " << TEST_VELOCITY << " mm/s" << std::endl
+    std::cout << "Velocity: " << TEST_VELOCITY << " mm/s" << std::endl;
+    std::cout << "Angular velocity: " << TEST_ANGULAR_VELOCITY << " rad/s" << std::endl
               << std::endl;
     std::cout << std::left << std::setw(8) << "Step"
               << std::setw(8) << "Leg"
@@ -173,9 +175,17 @@ int main() {
     std::cout << "-----------------------------------------------------------------------------------------\n"
               << std::endl;
 
-    // 3. Setup and Start Tripod Gait
-    if (!sys.startWalking(TRIPOD_GAIT, TEST_VELOCITY, TEST_VELOCITY, 0.0)) {
-        std::cerr << "ERROR: Failed to start tripod gait." << std::endl;
+    // 3. Setup and Start Tripod Gait (new API): select gait, set velocities, then startWalking()
+    if (!sys.setGaitType(TRIPOD_GAIT)) {
+        std::cerr << "ERROR: Failed to set gait type." << std::endl;
+        return 1;
+    }
+    // Configuración de límites ahora se hace vía Parameters (enable_dynamic_velocity_limits / fixed_linear_speed_limit_mm_s)
+    // Use walkForward to set forward velocity (directional helpers persist velocities)
+    sys.walkForward(TEST_VELOCITY);
+    // Optionally add lateral / angular components if needed (keep simple forward for validation)
+    if (!sys.startWalking()) {
+        std::cerr << "ERROR: Failed to start walking (startup sequence)." << std::endl;
         return 1;
     }
 

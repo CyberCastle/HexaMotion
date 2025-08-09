@@ -120,6 +120,9 @@ class LegStepper {
     void calculateSwingTiming(double time_delta);
     void updateStride();
     void updateTipPositionIterative(int iteration, double time_delta, bool rough_terrain_mode = false, bool force_normal_touchdown = false);
+    // Freeze stride & target (OpenSHC philosophical alignment) called on state transitions
+    void beginSwingPhase();
+    void beginStancePhase();
 
     // Workspace validation and safety methods (Step 1 implementation)
     bool validateTargetTipPose(const Point3D &target_pose) const;
@@ -208,6 +211,16 @@ class LegStepper {
 
     // Additional swing trajectory variable (was missing)
     Point3D swing_clearance_; // Swing clearance vector (OpenSHC)
+
+    // === OpenSHC philosophical alignment additions ===
+    // We freeze (cache) stride components at the start of each phase to avoid intra-phase drift caused
+    // by using the continuously-updated current_tip_pose_ (difference vs. prior HexaMotion implementation).
+    Point3D frozen_stride_vector_linear_;
+    Point3D frozen_stride_vector_angular_;
+    Point3D frozen_stride_vector_total_;
+    Point3D frozen_target_tip_pose_;
+    bool stride_frozen_ = false;
+    bool target_frozen_ = false;
 
     // Bezier control nodes (5 nodes for quartic curves)
     Point3D swing_1_nodes_[5];

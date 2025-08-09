@@ -60,7 +60,8 @@ void loop() {
         delay(2000);
         locomotion_system.turnInPlace(30.0f);     // 30°/s giro
         delay(1000);
-        locomotion_system.stopMovement();
+    // API update: stopMovement() replaced by stopWalking()
+    locomotion_system.stopWalking();
     }
 
     state_controller.update();

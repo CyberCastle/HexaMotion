@@ -102,14 +102,12 @@ void LegStepper::setDesiredVelocity(const Point3D &linear_velocity, double angul
 }
 
 void LegStepper::updateStride() {
-    // OpenSHC-based implementation (logic adapted with safety validation)
-    // Implements original OpenSHC semantics of LegStepper::updateStride():
-    //   1. Acquire walk plane pose & normal (here provided externally via setters)
-    //   2. Compute linear + angular stride components
-    //   3. Scale by on-ground ratio / frequency
-    //   4. Derive swing clearance vector
+    // OpenSHC-based implementation with philosophical alignment adjustments:
+    // Previous HexaMotion recalculated stride every iteration using current_tip_pose_, causing intra-phase drift.
+    // Here we compute stride each call but freeze (cache) its value at phase start; downstream code uses the
+    // frozen copy, preventing migration of the swing target. This mirrors OpenSHC intent where stride parameters
+    // remain effectively constant during a phase.
 
-    // --- Walk plane acquisition (fulfills previous TODO) ---
     // In OpenSHC this comes from walker_->getWalkPlane()/getWalkPlaneNormal().
     // We decouple by allowing WalkController (or another higher layer) to call
     // setWalkPlane()/setWalkPlaneNormal() each cycle. If not provided, fall back
@@ -133,7 +131,8 @@ void LegStepper::updateStride() {
     Point3D z_unit(0, 0, 1);
     double dot_product = current_tip_pose_.x * z_unit.x + current_tip_pose_.y * z_unit.y + current_tip_pose_.z * z_unit.z;
     Point3D projection_on_z = z_unit * dot_product;
-    Point3D radius = current_tip_pose_ - projection_on_z; // getRejection equivalent
+    // Difference vs prior implementation: use default_tip_pose_ for stable angular radius (reduces drift)
+    Point3D radius = default_tip_pose_ - projection_on_z; // reference rejection (philosophically constant like OpenSHC)
 
     Point3D angular_velocity_vector(0, 0, desired_angular_velocity_);
 
@@ -152,8 +151,28 @@ void LegStepper::updateStride() {
     // STEP 3: Apply stride validation and safety constraints
     stride_vector_ = calculateSafeStride(stride_vector_);
 
+    // Freeze stride if not yet frozen for current phase
+    if (!stride_frozen_) {
+        frozen_stride_vector_linear_ = stride_vector_linear * (on_ground_ratio / step_cycle_.frequency_);
+        // recompute angular component scaled the same way
+        Point3D stride_vector_angular_scaled = (stride_vector_ - stride_vector_linear * (on_ground_ratio / step_cycle_.frequency_));
+        frozen_stride_vector_angular_ = stride_vector_angular_scaled; // already scaled
+        frozen_stride_vector_total_ = stride_vector_;
+        stride_frozen_ = true;
+    }
+
     // Swing clearance (OpenSHC formula) using validated & normalized plane normal
     swing_clearance_ = walk_plane_normal_ * step_clearance_height_;
+}
+
+void LegStepper::beginSwingPhase() {
+    stride_frozen_ = false;
+    target_frozen_ = false;
+}
+
+void LegStepper::beginStancePhase() {
+    stride_frozen_ = false;
+    target_frozen_ = false;
 }
 
 void LegStepper::calculateSwingTiming(double time_delta) {
@@ -340,17 +359,24 @@ void LegStepper::updateTipPositionIterative(int iteration, double time_delta, bo
         step_progress_ = std::min(1.0, step_progress_);
     }
 
-    // Update stride vector FIRST
+    // Update stride vector FIRST (freezes on phase entry)
     updateStride();
 
-    // Generate default target (OpenSHC-derived formula)
-    Point3D raw_target = default_tip_pose_ + stride_vector_ * 0.5;
+    // Use frozen stride to compute a stable mid-stride target (prevents target migration)
+    Point3D active_stride = stride_frozen_ ? frozen_stride_vector_total_ : stride_vector_;
+    Point3D raw_target = default_tip_pose_ + active_stride * 0.5;
 
     // STEP 1: Validate and constrain target within workspace (NEW SAFETY CHECK)
-    if (robot_model_.getParams().enable_workspace_constrain) {
-        target_tip_pose_ = calculateSafeTarget(raw_target);
+    if (!target_frozen_) {
+        if (robot_model_.getParams().enable_workspace_constrain) {
+            target_tip_pose_ = calculateSafeTarget(raw_target);
+        } else {
+            target_tip_pose_ = raw_target; // unconstrained (debug mode)
+        }
+        frozen_target_tip_pose_ = target_tip_pose_;
+        target_frozen_ = true;
     } else {
-        target_tip_pose_ = raw_target; // unconstrained (debug mode)
+        target_tip_pose_ = frozen_target_tip_pose_;
     }
 
     if (step_state_ == STEP_SWING) {
@@ -396,15 +422,13 @@ void LegStepper::updateTipPositionIterative(int iteration, double time_delta, bo
             // OpenSHC pattern: Use quarticBezierDot for velocity-based calculation
             delta_pos = math_utils::quarticBezierDot(swing_2_nodes_, time_input) * swing_delta_t_;
         }
-
-        // OpenSHC pattern: Accumulate delta position instead of setting absolute position
-        Point3D target_pose = current_tip_pose_ + delta_pos;
-
-        // Apply workspace constraints (extension for safety). Skip if disabled via params.
+        // Update current tip pose based on calculated delta position
+        // OpenSHC pattern: accumulate delta position to current tip pose
+        Point3D next_pose = current_tip_pose_ + delta_pos;
         if (robot_model_.getParams().enable_workspace_constrain) {
-            current_tip_pose_ = robot_model_.getWorkspaceAnalyzer().constrainToGeometricWorkspace(leg_index_, target_pose);
+            current_tip_pose_ = robot_model_.getWorkspaceAnalyzer().constrainToGeometricWorkspace(leg_index_, next_pose);
         } else {
-            current_tip_pose_ = target_pose; // unchecked (debug mode)
+            current_tip_pose_ = next_pose;
         }
 
         // Calculate velocity for this iteration (OpenSHC pattern)
@@ -461,9 +485,24 @@ void LegStepper::updateTipPositionIterative(int iteration, double time_delta, bo
 
         // OpenSHC uses quarticBezierDot (derivative) + delta accumulation, NOT absolute position
         Point3D delta_pos = math_utils::quarticBezierDot(stance_nodes_, time_input) * stance_delta_t_;
-        current_tip_pose_ += delta_pos; // ACCUMULATE like OpenSHC (NO IK here)
-
+        current_tip_pose_ += delta_pos; // OpenSHC accumulation
         current_tip_velocity_ = delta_pos / time_delta;
+    }
+
+    // Optional phase-end snap to frozen target (enhancement; documented difference from vanilla OpenSHC)
+    const Parameters &params = robot_model_.getParams();
+    if (params.enable_phase_end_snap && target_frozen_) {
+        bool at_end = (step_progress_ >= 0.999);
+        if (at_end) {
+            Point3D err = frozen_target_tip_pose_ - current_tip_pose_;
+            double e2 = err.x * err.x + err.y * err.y + err.z * err.z;
+            double tol2 = params.phase_end_snap_tolerance_mm * params.phase_end_snap_tolerance_mm;
+            if (params.phase_end_snap_alpha >= 1.0 || e2 <= tol2) {
+                current_tip_pose_ = frozen_target_tip_pose_;
+            } else {
+                current_tip_pose_ = current_tip_pose_ + err * params.phase_end_snap_alpha;
+            }
+        }
     }
 
     // Update velocity tracking for comprehensive safety validation

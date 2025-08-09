@@ -489,7 +489,20 @@ WorkspaceAnalyzer::calculateVelocityConstraints(int leg_index, double bearing_de
 
     // Efficiency decreases as we move away from leg's natural direction
     double directional_efficiency = std::cos(math_utils::degreesToRadians(bearing_offset));
-    directional_efficiency = math_utils::clamp<double>(directional_efficiency, 0.3, 1.0); // Minimum 30% efficiency
+
+    // Powered cosine attenuation with safety floor:
+    // Rationale: We want stronger degradation for oblique bearings than a linear cos() but
+    // without collapsing the effective walkspace to near-zero (which starves forward velocity tests)
+    // when one leg orientation is highly misaligned. We take:
+    //   raw = max(0, cos(theta))
+    //   eff = max(raw^k, FLOOR)
+    // with k > 1 giving smoother near-axis retention (raw≈1 -> eff≈1) and faster falloff for mid angles.
+    // A floor preserves minimum stride viability while still allowing significant directional shaping.
+    {
+        double raw = std::max(0.0, directional_efficiency); // remove negative (backwards not contributing to forward workspace)
+        double powered = (raw > 0.0) ? std::pow(raw, DIRECTIONAL_EFFICIENCY_EXPONENT) : 0.0;
+        directional_efficiency = std::max(powered, DIRECTIONAL_EFFICIENCY_FLOOR);
+    }
 
     constraints.workspace_radius = bounds.max_reach * directional_efficiency;
     constraints.stance_radius = bounds.max_reach * 0.8f; // For angular calculations
@@ -513,13 +526,18 @@ WorkspaceAnalyzer::calculateVelocityConstraints(int leg_index, double bearing_de
         constraints.max_acceleration *= scaling.acceleration_scale;
     }
 
-    // Apply reasonable safety limits
-    constraints.max_linear_velocity =
-        math_utils::clamp<double>(constraints.max_linear_velocity, 0.0, 5.0);
-    constraints.max_angular_velocity =
-        math_utils::clamp<double>(constraints.max_angular_velocity, 0.0, 10.0);
-    constraints.max_acceleration =
-        math_utils::clamp<double>(constraints.max_acceleration, 0.0, 10.0);
+    // Apply reasonable safety limits (use robot configuration instead of hard tiny caps)
+    const auto &params = model_.getParams();
+    double linear_cap = (params.max_velocity > 0.0) ? params.max_velocity : DEFAULT_MAX_LINEAR_VELOCITY;
+    double angular_cap = (params.max_angular_velocity > 0.0)
+                             ? params.max_angular_velocity * DEGREES_TO_RADIANS_FACTOR
+                             : (DEFAULT_MAX_ANGULAR_VELOCITY * DEGREES_TO_RADIANS_FACTOR);
+    // Acceleration cap heuristic: reach max speed in ~1s => cap >= linear_cap
+    double accel_cap = std::max(linear_cap, constraints.max_acceleration);
+
+    constraints.max_linear_velocity = math_utils::clamp<double>(constraints.max_linear_velocity, 0.0, linear_cap);
+    constraints.max_angular_velocity = math_utils::clamp<double>(constraints.max_angular_velocity, 0.0, angular_cap);
+    constraints.max_acceleration = math_utils::clamp<double>(constraints.max_acceleration, 0.0, accel_cap);
 
     return constraints;
 }

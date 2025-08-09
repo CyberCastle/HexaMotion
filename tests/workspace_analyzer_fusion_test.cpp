@@ -1,5 +1,6 @@
 #include "../src/hexamotion_constants.h"
 #include "../src/robot_model.h"
+#include "../src/velocity_limits.h"
 #include "../src/workspace_analyzer.h"
 #include <cmath>
 #include <iostream>
@@ -259,6 +260,131 @@ int main() {
     }
 
     std::cout << "=== All WorkspaceAnalyzer functions tested successfully! ===" << std::endl;
+
+    // ==============================================================
+    // VelocityLimits integration & behavior validation
+    // ==============================================================
+    std::cout << "\n=== VelocityLimits Behavior Tests ===" << std::endl;
+
+    VelocityLimits velocity_limits(model);
+
+    std::vector<int> bearings = {0, 45, 90, 135, 180};
+    bool velocity_limits_ok = true;
+
+    auto workspace_cfg = velocity_limits.getWorkspaceConfig();
+    std::cout << "Workspace radii (walk/stance): " << workspace_cfg.walkspace_radius
+              << " / " << workspace_cfg.stance_radius << " mm" << std::endl;
+
+    if (workspace_cfg.stance_radius <= 0 || workspace_cfg.walkspace_radius <= 0) {
+        std::cout << "❌ Invalid workspace radii in VelocityLimits" << std::endl;
+        velocity_limits_ok = false;
+    }
+
+    std::cout << "Retrieving limits for bearings:" << std::endl;
+    for (int b : bearings) {
+        auto limits = velocity_limits.getLimit((double)b);
+        std::cout << "  Bearing " << b << "° -> Vx: " << limits.linear_x
+                  << " mm/s, Vy: " << limits.linear_y
+                  << " mm/s, Wz: " << limits.angular_z
+                  << " rad/s, Accel: " << limits.acceleration << " mm/s²" << std::endl;
+        if (limits.linear_x <= 0 || limits.linear_y <= 0 || limits.angular_z <= 0 || limits.acceleration <= 0) {
+            std::cout << "    ❌ Non-positive limit value detected" << std::endl;
+            velocity_limits_ok = false;
+        }
+    }
+
+    // Interpolation test (0° a 1°)
+    auto limit0 = velocity_limits.getLimit(0.0);
+    auto limit1 = velocity_limits.getLimit(1.0);
+    auto mid = velocity_limits.getLimit(0.5);
+    if (!(mid.linear_x >= std::min(limit0.linear_x, limit1.linear_x) - 1e-6 &&
+          mid.linear_x <= std::max(limit0.linear_x, limit1.linear_x) + 1e-6)) {
+        std::cout << "❌ Interpolation out of bounds for linear_x" << std::endl;
+        velocity_limits_ok = false;
+    } else {
+        std::cout << "✅ Interpolation bounds check passed" << std::endl;
+    }
+
+    // Angular scaling & coupling test
+    auto base_limits = velocity_limits.getLimit(0.0);
+    // 0% angular demand should not reduce linear limits now
+    VelocityLimits::LimitValues no_demand_scaled = velocity_limits.scaleVelocityLimits(base_limits, 0.0);
+    if (std::abs(no_demand_scaled.linear_x - base_limits.linear_x) > 1e-6 ||
+        std::abs(no_demand_scaled.linear_y - base_limits.linear_y) > 1e-6) {
+        std::cout << "❌ Linear limits reduced with zero angular demand" << std::endl;
+        velocity_limits_ok = false;
+    } else {
+        std::cout << "✅ No linear reduction at zero angular demand" << std::endl;
+    }
+
+    // 100% angular demand should enforce v_planar <= w * r
+    VelocityLimits::LimitValues full_scaled = velocity_limits.scaleVelocityLimits(base_limits, 1.0);
+    double planar_mag = std::hypot(full_scaled.linear_x, full_scaled.linear_y);
+    double stance_r = std::max(1.0, velocity_limits.getWorkspaceConfig().stance_radius);
+    double kinematic_cap = base_limits.angular_z * stance_r; // base (not scaled angular_z)
+    if (planar_mag - kinematic_cap > 1e-6) {
+        std::cout << "❌ Kinematic coupling violated (" << planar_mag << " > " << kinematic_cap << ")" << std::endl;
+        velocity_limits_ok = false;
+    } else {
+        std::cout << "✅ Kinematic coupling respected (planar mag ≤ ω * r)" << std::endl;
+    }
+
+    // Forward progress expectation: ensure forward linear_x is a meaningful fraction of configured cap
+    double expected_min_forward = 0.3 * (params.max_velocity > 0 ? params.max_velocity : DEFAULT_MAX_LINEAR_VELOCITY);
+    if (base_limits.linear_x < expected_min_forward) {
+        std::cout << "❌ Forward linear_x too low (" << base_limits.linear_x << " < " << expected_min_forward << ")" << std::endl;
+        velocity_limits_ok = false;
+    } else {
+        std::cout << "✅ Forward linear_x acceptable (" << base_limits.linear_x << " mm/s)" << std::endl;
+    }
+
+    // Validation function (in-range)
+    double test_vx = base_limits.linear_x * 0.5;
+    double test_vy = base_limits.linear_y * 0.4;
+    double test_wz = base_limits.angular_z * 0.6;
+    if (!velocity_limits.validateVelocityInputs(test_vx, test_vy, test_wz)) {
+        std::cout << "❌ validateVelocityInputs rejected valid velocities" << std::endl;
+        velocity_limits_ok = false;
+    } else {
+        std::cout << "✅ validateVelocityInputs accepted in-range velocities" << std::endl;
+    }
+
+    // Over-limit linear
+    if (velocity_limits.validateVelocityInputs(base_limits.linear_x * 1.05, 0, 0)) {
+        std::cout << "❌ validateVelocityInputs failed to reject over-limit linear_x" << std::endl;
+        velocity_limits_ok = false;
+    } else {
+        std::cout << "✅ Over-limit linear_x correctly rejected" << std::endl;
+    }
+
+    // Overshoot sanity
+    double ox = velocity_limits.getOvershootX();
+    double oy = velocity_limits.getOvershootY();
+    double walk_r = workspace_cfg.walkspace_radius;
+    double overshoot_cap = 0.25 * walk_r + 1e-6; // tolerance
+    if (ox <= 0 || oy <= 0) {
+        std::cout << "❌ Overshoot should be positive" << std::endl;
+        velocity_limits_ok = false;
+    } else if (ox > overshoot_cap || oy > overshoot_cap) {
+        std::cout << "❌ Overshoot exceeds 25% walkspace radius (" << ox << " / cap " << overshoot_cap << ")" << std::endl;
+        velocity_limits_ok = false;
+    } else {
+        std::cout << "✅ Overshoot within expected bounds (" << ox << ", cap " << overshoot_cap << ")" << std::endl;
+    }
+
+    if (velocity_limits_ok) {
+        std::cout << "✅ VelocityLimits tests passed" << std::endl;
+    } else {
+        std::cout << "❌ VelocityLimits tests encountered failures" << std::endl;
+    }
+
+    // ==============================================================
+    // Compatibility Mode Comparison Test
+    // ==============================================================
+    // NOTE: Compatibility (OpenSHC diameter traversal) mode removed. Unified stride-based velocity limiting
+    // provides a single coherent surface, integrates overshoot directly into stride_length, and avoids
+    // inflated theoretical maxima (2R / (stance_ratio/f)) that were not achievable under the configured
+    // stride fraction and scaling. Legacy comparison and divergence diagnostics deleted intentionally.
 
     return 0;
 }
