@@ -514,7 +514,6 @@ Point3D WalkController::calculateOdometry(double time_period) {
     return rotated_delta;
 }
 
-// TODO: Use defines
 void WalkController::generateWalkspace() {
     // Implement full walkspace calculation like OpenSHC
     walkspace_.clear();

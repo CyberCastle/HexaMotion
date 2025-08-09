@@ -351,8 +351,37 @@ bool LocomotionSystem::walkSideways(double velocity, double duration, bool right
 
 // Stop movement while keeping current pose
 bool LocomotionSystem::stopMovement() {
-    // TODO: Delegate to WalkController for movement control
-    // WalkController handles stopping internally
+    if (!walk_ctrl) {
+        last_error = PARAMETER_ERROR;
+        return false;
+    }
+
+    // Zero persistent commanded velocities (OpenSHC pattern: STOP triggered by zero command)
+    commanded_linear_velocity_x_ = 0.0;
+    commanded_linear_velocity_y_ = 0.0;
+    commanded_angular_velocity_ = 0.0;
+
+    // Issue a zero-velocity update to enter WALK_STOPPING (if currently MOVING/STARTING)
+    // Body pose/orientation remain current
+    walk_ctrl->updateWalk(Point3D(0.0, 0.0, 0.0), 0.0, body_position, body_orientation);
+
+    // If after first update we're still not fully stopped, run an additional settling update
+    if (walk_ctrl->getWalkState() != WALK_STOPPED) {
+        walk_ctrl->updateWalk(Point3D(0.0, 0.0, 0.0), 0.0, body_position, body_orientation);
+    }
+
+    // Force legs into stance/force-stop if still not reported stopped to ensure deterministic halt
+    if (walk_ctrl->getWalkState() != WALK_STOPPED) {
+        for (int i = 0; i < NUM_LEGS; ++i) {
+            auto leg_stepper = walk_ctrl->getLegStepper(i);
+            if (leg_stepper) {
+                leg_stepper->setStepState(STEP_FORCE_STOP);
+                leg_stepper->setPhase(0.0);
+            }
+            legs[i].setStepPhase(STANCE_PHASE);
+        }
+    }
+
     return true;
 }
 
