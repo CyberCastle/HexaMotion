@@ -513,13 +513,18 @@ WorkspaceAnalyzer::calculateVelocityConstraints(int leg_index, double bearing_de
         constraints.max_acceleration *= scaling.acceleration_scale;
     }
 
-    // Apply reasonable safety limits
-    constraints.max_linear_velocity =
-        math_utils::clamp<double>(constraints.max_linear_velocity, 0.0, 5.0);
-    constraints.max_angular_velocity =
-        math_utils::clamp<double>(constraints.max_angular_velocity, 0.0, 10.0);
-    constraints.max_acceleration =
-        math_utils::clamp<double>(constraints.max_acceleration, 0.0, 10.0);
+    // Apply reasonable safety limits (use robot configuration instead of hard tiny caps)
+    const auto &params = model_.getParams();
+    double linear_cap = (params.max_velocity > 0.0) ? params.max_velocity : DEFAULT_MAX_LINEAR_VELOCITY;
+    double angular_cap = (params.max_angular_velocity > 0.0)
+                             ? params.max_angular_velocity * DEGREES_TO_RADIANS_FACTOR
+                             : (DEFAULT_MAX_ANGULAR_VELOCITY * DEGREES_TO_RADIANS_FACTOR);
+    // Acceleration cap heuristic: reach max speed in ~1s => cap >= linear_cap
+    double accel_cap = std::max(linear_cap, constraints.max_acceleration);
+
+    constraints.max_linear_velocity = math_utils::clamp<double>(constraints.max_linear_velocity, 0.0, linear_cap);
+    constraints.max_angular_velocity = math_utils::clamp<double>(constraints.max_angular_velocity, 0.0, angular_cap);
+    constraints.max_acceleration = math_utils::clamp<double>(constraints.max_acceleration, 0.0, accel_cap);
 
     return constraints;
 }

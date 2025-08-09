@@ -130,42 +130,34 @@ void VelocityLimits::calculateWorkspace(const GaitConfiguration &gait_config) {
 
 VelocityLimits::LimitValues VelocityLimits::scaleVelocityLimits(
     const LimitValues &input_velocities, double angular_velocity_percentage) const {
+    // New policy:
+    // - If there's no angular demand (percentage <= 0) return original limits (no artificial reduction)
+    // - Preserve angular_z limit (do NOT scale it down to zero when no demand)
+    // - Apply only kinematic coupling: v_planar <= omega_demand * stance_radius
+    // - Maintain direction of linear components while scaling magnitude if needed
 
-    LimitValues scaled_limits = input_velocities;
-
-    // Apply angular velocity scaling using scaling factors
-    auto scaling_factors = pimpl_->workspace_analyzer_->getScalingFactors();
-    // Combine external scaling (set via setAngularVelocityScaling) with analyzer-provided scale
-    double angular_scale = angular_velocity_percentage * scaling_factors.angular_scale * pimpl_->angular_velocity_scaling_;
-    scaled_limits.angular_z *= angular_scale;
-
-    // Scale linear velocities based on angular velocity demand using simple kinematic coupling
-    // Ensure that for a desired angular velocity w, v <= w * stance_radius (circular motion constraint)
-    double stance_radius = std::max(1.0, pimpl_->workspace_config_.stance_radius);   // avoid div 0
-    double kinematic_linear_cap = std::abs(scaled_limits.angular_z) * stance_radius; // mm/s
-
-    // Base coupling factor reduces linear speed as angular demand rises
-    double base_coupling = 1.0 - (std::abs(angular_scale) * ANGULAR_LINEAR_COUPLING);
-    base_coupling = math_utils::clamp<double>(base_coupling, 0.1, 1.0);
-
-    // Apply base coupling
-    scaled_limits.linear_x *= base_coupling;
-    scaled_limits.linear_y *= base_coupling;
-
-    // Enforce kinematic cap isotropically on planar linear magnitude
-    double planar_mag = std::hypot(scaled_limits.linear_x, scaled_limits.linear_y);
-    if (planar_mag > 0.0 && planar_mag > kinematic_linear_cap) {
-        double scale = kinematic_linear_cap / planar_mag;
-        scale = std::max(0.1, scale); // keep some authority
-        scaled_limits.linear_x *= scale;
-        scaled_limits.linear_y *= scale;
+    if (angular_velocity_percentage <= 0.0) {
+        return input_velocities; // No coupling needed
     }
 
-    // Final clamp vs original per-axis limit (can't exceed input)
-    scaled_limits.linear_x = math_utils::clamp<double>(scaled_limits.linear_x, -input_velocities.linear_x, input_velocities.linear_x);
-    scaled_limits.linear_y = math_utils::clamp<double>(scaled_limits.linear_y, -input_velocities.linear_y, input_velocities.linear_y);
+    LimitValues scaled = input_velocities; // Start from base (keep angular_z unchanged)
 
-    return scaled_limits;
+    double stance_radius = std::max(1.0, pimpl_->workspace_config_.stance_radius);
+    // Requested angular velocity (rad/s)
+    double requested_w = angular_velocity_percentage * input_velocities.angular_z;
+    double kinematic_cap = std::abs(requested_w) * stance_radius; // mm/s
+
+    // Current planar magnitude of allowable linear limits
+    double linear_mag = std::hypot(scaled.linear_x, scaled.linear_y);
+    if (linear_mag > 1e-9 && kinematic_cap > 0.0 && linear_mag > kinematic_cap) {
+        double reduction = kinematic_cap / linear_mag;
+        // Keep at least a modest fraction (avoid total stall unless kinematic_cap==0)
+        reduction = math_utils::clamp<double>(reduction, 0.0, 1.0);
+        scaled.linear_x *= reduction;
+        scaled.linear_y *= reduction;
+    }
+
+    return scaled;
 }
 
 bool VelocityLimits::validateVelocityInputs(double vx, double vy, double omega) const {
@@ -231,22 +223,32 @@ VelocityLimits::LimitValues VelocityLimits::applyAccelerationLimits(
 }
 
 void VelocityLimits::calculateOvershoot(const GaitConfig &gait_config) {
-    // Use velocity constraints instead of custom calculation
+    // Revised overshoot model:
+    // Physical basis: if accelerating from rest to v_max with constant a_max, distance = 0.5 * (v_max^2 / a_max)
+    // Additionally, if ramp time (t_ramp = time_to_max_stride) is specified, theoretical distance under constant accel is 0.5 * a * t_ramp^2.
+    // We'll compute both and take the minimum (more conservative), then cap to a fraction of walkspace radius.
 
-    // Get velocity constraints from validator for forward direction (0 degrees)
-    auto constraints = pimpl_->workspace_analyzer_->calculateVelocityConstraints(0, 0.0);
+    auto constraints = pimpl_->workspace_analyzer_->calculateVelocityConstraints(0, 0.0); // forward
+    double v_max = constraints.max_linear_velocity;
+    double a_max = std::max(1e-6, constraints.max_acceleration); // avoid div by zero
+    double t_ramp = std::max(0.0, gait_config.time_to_max_stride);
 
-    double max_acceleration = constraints.max_acceleration;
+    double dist_v2_over_a = 0.5 * (v_max * v_max) / a_max;  // mm
+    double dist_time_based = 0.5 * a_max * t_ramp * t_ramp; // mm
+    double raw_overshoot = std::min(dist_v2_over_a, dist_time_based);
 
-    // Overshoot distance during acceleration phase
-    double accel_time = gait_config.time_to_max_stride;
-    pimpl_->workspace_config_.overshoot_x = WORKSPACE_SCALING_FACTOR * max_acceleration * accel_time * accel_time;
-    pimpl_->workspace_config_.overshoot_y = pimpl_->workspace_config_.overshoot_x; // Symmetric for now
+    // Cap overshoot to a fraction of available walkspace radius (prevents unrealistic large values)
+    double walk_r = std::max(1.0, pimpl_->workspace_config_.walkspace_radius);
+    double max_allowable = 0.25 * walk_r; // at most 25% of effective radius
+    raw_overshoot = std::min(raw_overshoot, max_allowable);
 
-    // Apply safety margin
+    // Apply global scaling & safety margin (kept moderate)
     auto scaling_factors = pimpl_->workspace_analyzer_->getScalingFactors();
-    pimpl_->workspace_config_.overshoot_x *= scaling_factors.safety_margin;
-    pimpl_->workspace_config_.overshoot_y *= scaling_factors.safety_margin;
+    double safety = scaling_factors.safety_margin; // typically <=1
+    raw_overshoot *= safety;
+
+    pimpl_->workspace_config_.overshoot_x = raw_overshoot;
+    pimpl_->workspace_config_.overshoot_y = raw_overshoot;
 }
 
 void VelocityLimits::updateGaitParameters(const GaitConfig &gait_config) {
@@ -328,28 +330,28 @@ double VelocityLimits::calculateBearing(double vx, double vy) {
 
 double VelocityLimits::calculateMaxLinearSpeed(double walkspace_radius,
                                                double on_ground_ratio, double frequency) const {
-    // Use simplified OpenSHC-equivalent calculation with constraints
-    if (on_ground_ratio <= 0.0 || frequency <= 0.0 || walkspace_radius <= 0.0) {
+    // Revised approach grounded in morphology and gait stride:
+    // max_linear_speed ≈ stride_length * step_frequency
+    // stride_length ≈ leg_reach * gait_length_factor (bounded by safety factors)
+    if (frequency <= 0.0) {
         return 0.0;
     }
 
-    // Ensure reasonable bounds to prevent numerical issues
-    double cycle_time = on_ground_ratio / frequency;
-    if (cycle_time <= 0.0) {
-        return 0.0;
-    }
+    double leg_reach = pimpl_->model_.getLegReach();
+    // Derive a provisional length factor from stance ratio (heuristic) clamped to configured bounds.
+    double provisional_factor = on_ground_ratio; // stance_ratio typically 0.5-0.65
+    double gait_length_factor = math_utils::clamp<double>(provisional_factor, GAIT_MIN_LENGTH_FACTOR, GAIT_MAX_LENGTH_FACTOR);
 
-    double max_speed = (walkspace_radius * 2.0) / cycle_time; // mm/s
+    double stride_length = leg_reach * gait_length_factor; // mm
+    double max_speed = stride_length * frequency;          // mm/s
 
-    // Apply safety limits
+    // Apply validator velocity scaling
     auto scaling_factors = pimpl_->workspace_analyzer_->getScalingFactors();
     max_speed *= scaling_factors.velocity_scale;
 
-    // Apply reasonable limits to prevent extreme values
-    // Clamp against morphological and configured maxima
+    // Clamp against configuration and a hard upper bound
     const auto &params = pimpl_->model_.getParams();
     double configured_cap = params.max_velocity > 0.0 ? params.max_velocity : DEFAULT_MAX_LINEAR_VELOCITY;
-    // Hard safety ceiling remains (acts as absolute upper bound)
     return std::min({max_speed, configured_cap, 5000.0});
 }
 
