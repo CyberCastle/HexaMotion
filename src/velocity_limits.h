@@ -26,10 +26,10 @@ class VelocityLimits {
      * @brief Velocity limits for a specific bearing.
      */
     struct LimitValues {
-        double linear_x;     // Maximum linear velocity in X direction (m/s)
-        double linear_y;     // Maximum linear velocity in Y direction (m/s)
+        double linear_x;     // Maximum linear velocity in X direction (mm/s)
+        double linear_y;     // Maximum linear velocity in Y direction (mm/s)
         double angular_z;    // Maximum angular velocity around Z axis (rad/s)
-        double acceleration; // Maximum acceleration (m/s²)
+        double acceleration; // Maximum acceleration (mm/s²)
 
         LimitValues() : linear_x(0.0f), linear_y(0.0f), angular_z(0.0f), acceleration(0.0f) {}
         LimitValues(double lx, double ly, double az, double acc)
@@ -54,8 +54,8 @@ class VelocityLimits {
      * @brief Workspace parameters used for limit generation.
      */
     struct WorkspaceConfig {
-        double walkspace_radius; // Effective workspace radius for walking
-        double stance_radius;    // Radius for angular velocity calculations
+        double walkspace_radius; // Effective workspace radius for walking (mm)
+        double stance_radius;    // Radius for angular velocity calculations (mm)
         double overshoot_x;      // Overshoot compensation in X direction
         double overshoot_y;      // Overshoot compensation in Y direction
         double safety_margin;    // Safety factor for workspace limits

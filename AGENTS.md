@@ -56,6 +56,18 @@ These are the characteristics of a real robot, used to test this library.
 
 **Default Height Configuration:** The library now supports configurable default height through the `default_height_offset` parameter. This parameter defines the Z-axis offset when all servo angles are at 0°. If set to 0.0 (default), the system falls back to using `-tibia_length` for backward compatibility. For explicit configuration, set it to `-208.0` (or `-tibia_length`) to match the physical robot characteristics.
 
+### Leg base orientation
+
+The internal DH/base orientation offsets are (degrees): leg0 = -30, leg1 = -90, leg2 = -150, leg3 = +150, leg4 = +90, leg5 = +30. This preserves 60° separation while rotating the frame so opposing pairs are symmetric ((0,3), (1,4), (2,5)). Forward remains +X; external tools assuming leg0 at 0° should account for this -30° global rotation.
+
+### Velocity and acceleration units
+
+All internal kinematic/dynamic calculations use millimeters (mm), millimeters per second (mm/s) and millimeters per second squared (mm/s²). Convert to SI only at integration boundaries if required.
+
+### Stance and workspace radii
+
+Workspace and stance radii derive from physical reach (coxa + femur + tibia = 359 mm) subject to safety scaling. The stance radius is clamped not to exceed the walkspace radius and respects safety margins to avoid commanding unreachable circular trajectories at high angular velocities.
+
 ### Test Parameters
 
 Use the following `Parameters` configuration in the test files:

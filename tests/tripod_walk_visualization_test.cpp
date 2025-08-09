@@ -33,7 +33,7 @@
 #include <vector>
 
 // Test configuration
-constexpr double TEST_VELOCITY = 20.0;         // mm/s, a moderate speed for clear observation
+constexpr double TEST_VELOCITY = 150;          // mm/s, a moderate speed for clear observation
 constexpr double TEST_ANGULAR_VELOCITY = 0.25; // rad/s, introduce rotational motion for validation
 constexpr int REQUIRED_SWING_TRANSITIONS = 2;  // Each leg must complete 2 STANCE->SWING transitions (reduced for 52-iteration phases)
 constexpr int MAX_STEPS = 250;                 // Increased to accommodate 52-iteration phases (2 cycles = 208 steps + margin)
@@ -180,6 +180,7 @@ int main() {
         std::cerr << "ERROR: Failed to set gait type." << std::endl;
         return 1;
     }
+    // Configuración de límites ahora se hace vía Parameters (enable_dynamic_velocity_limits / fixed_linear_speed_limit_mm_s)
     // Use walkForward to set forward velocity (directional helpers persist velocities)
     sys.walkForward(TEST_VELOCITY);
     // Optionally add lateral / angular components if needed (keep simple forward for validation)

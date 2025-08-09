@@ -139,13 +139,31 @@ VelocityLimits::LimitValues VelocityLimits::scaleVelocityLimits(
     double angular_scale = angular_velocity_percentage * scaling_factors.angular_scale * pimpl_->angular_velocity_scaling_;
     scaled_limits.angular_z *= angular_scale;
 
-    // Scale linear velocities based on angular velocity demand
-    // High angular velocities reduce available linear velocity
-    double linear_scale = 1.0 - (std::abs(angular_scale) * 0.3); // 30% coupling factor
-    linear_scale = std::max(0.1, linear_scale);                  // Minimum 10% linear velocity
+    // Scale linear velocities based on angular velocity demand using simple kinematic coupling
+    // Ensure that for a desired angular velocity w, v <= w * stance_radius (circular motion constraint)
+    double stance_radius = std::max(1.0, pimpl_->workspace_config_.stance_radius);   // avoid div 0
+    double kinematic_linear_cap = std::abs(scaled_limits.angular_z) * stance_radius; // mm/s
 
-    scaled_limits.linear_x *= linear_scale;
-    scaled_limits.linear_y *= linear_scale;
+    // Base coupling factor reduces linear speed as angular demand rises
+    double base_coupling = 1.0 - (std::abs(angular_scale) * ANGULAR_LINEAR_COUPLING);
+    base_coupling = math_utils::clamp<double>(base_coupling, 0.1, 1.0);
+
+    // Apply base coupling
+    scaled_limits.linear_x *= base_coupling;
+    scaled_limits.linear_y *= base_coupling;
+
+    // Enforce kinematic cap isotropically on planar linear magnitude
+    double planar_mag = std::hypot(scaled_limits.linear_x, scaled_limits.linear_y);
+    if (planar_mag > 0.0 && planar_mag > kinematic_linear_cap) {
+        double scale = kinematic_linear_cap / planar_mag;
+        scale = std::max(0.1, scale); // keep some authority
+        scaled_limits.linear_x *= scale;
+        scaled_limits.linear_y *= scale;
+    }
+
+    // Final clamp vs original per-axis limit (can't exceed input)
+    scaled_limits.linear_x = math_utils::clamp<double>(scaled_limits.linear_x, -input_velocities.linear_x, input_velocities.linear_x);
+    scaled_limits.linear_y = math_utils::clamp<double>(scaled_limits.linear_y, -input_velocities.linear_y, input_velocities.linear_y);
 
     return scaled_limits;
 }
@@ -321,14 +339,18 @@ double VelocityLimits::calculateMaxLinearSpeed(double walkspace_radius,
         return 0.0;
     }
 
-    double max_speed = (walkspace_radius * 2.0) / cycle_time;
+    double max_speed = (walkspace_radius * 2.0) / cycle_time; // mm/s
 
     // Apply safety limits
     auto scaling_factors = pimpl_->workspace_analyzer_->getScalingFactors();
     max_speed *= scaling_factors.velocity_scale;
 
     // Apply reasonable limits to prevent extreme values
-    return std::min(max_speed, 5000.0); // Cap at 5000 mm/s for safety
+    // Clamp against morphological and configured maxima
+    const auto &params = pimpl_->model_.getParams();
+    double configured_cap = params.max_velocity > 0.0 ? params.max_velocity : DEFAULT_MAX_LINEAR_VELOCITY;
+    // Hard safety ceiling remains (acts as absolute upper bound)
+    return std::min({max_speed, configured_cap, 5000.0});
 }
 
 double VelocityLimits::calculateMaxAngularSpeed(double max_linear_speed, double stance_radius) const {
@@ -337,14 +359,19 @@ double VelocityLimits::calculateMaxAngularSpeed(double max_linear_speed, double 
         return 0.0;
     }
 
-    double max_angular = max_linear_speed / stance_radius;
+    double max_angular = max_linear_speed / stance_radius; // rad/s (linear mm/s divided by mm)
 
     // Apply angular scaling
     auto scaling_factors = pimpl_->workspace_analyzer_->getScalingFactors();
     max_angular *= scaling_factors.angular_scale;
 
     // Apply reasonable limits to prevent extreme values
-    return std::min(max_angular, 10.0); // Cap at 10 rad/s for safety
+    const auto &params = pimpl_->model_.getParams();
+    // params.max_angular_velocity is assumed in degrees/s per constants; convert if >0
+    double configured_cap_rad = (params.max_angular_velocity > 0.0)
+                                    ? params.max_angular_velocity * DEGREES_TO_RADIANS_FACTOR
+                                    : (DEFAULT_MAX_ANGULAR_VELOCITY * DEGREES_TO_RADIANS_FACTOR);
+    return std::min({max_angular, configured_cap_rad, 10.0});
 }
 
 double VelocityLimits::calculateMaxAcceleration(double max_speed, double time_to_max) const {
@@ -360,7 +387,7 @@ double VelocityLimits::calculateMaxAcceleration(double max_speed, double time_to
     max_accel *= scaling_factors.acceleration_scale;
 
     // Apply reasonable limits to prevent extreme values
-    return std::min(max_accel, 10000.0); // Cap at 10000 mm/s² for safety
+    return std::min(max_accel, 10000.0); // Cap retains mm/s²
 }
 
 VelocityLimits::LimitValues VelocityLimits::calculateLimitsForBearing(
@@ -399,6 +426,18 @@ VelocityLimits::LimitValues VelocityLimits::calculateLimitsForBearing(
     limits.linear_y = std::min(max_linear_speed, most_restrictive.max_linear_velocity);
     limits.angular_z = std::min(max_angular_speed, most_restrictive.max_angular_velocity);
     limits.acceleration = std::min(max_acceleration, most_restrictive.max_acceleration);
+
+    // Ensure stance radius never exceeds walkspace (sanity) and is morphologically plausible
+    if (pimpl_->workspace_config_.stance_radius > pimpl_->workspace_config_.walkspace_radius) {
+        pimpl_->workspace_config_.stance_radius = pimpl_->workspace_config_.walkspace_radius;
+    }
+
+    // Final guard: linear limit should not exceed circumference constraint for instantaneous rotation
+    if (limits.angular_z > 0.0) {
+        double kinematic_cap = limits.angular_z * pimpl_->workspace_config_.stance_radius;
+        limits.linear_x = std::min(limits.linear_x, kinematic_cap);
+        limits.linear_y = std::min(limits.linear_y, kinematic_cap);
+    }
 
     return limits;
 }
