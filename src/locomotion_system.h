@@ -148,14 +148,6 @@ class LocomotionSystem {
     bool turnInPlace(double angular_velocity);
     /** Walk laterally to one side indefinitely. */
     bool walkSideways(double velocity, bool right_direction = true);
-    /** Walk forward for a fixed duration. */
-    bool walkForward(double velocity, double duration);
-    /** Walk backward for a fixed duration. */
-    bool walkBackward(double velocity, double duration);
-    /** Rotate in place for a fixed duration. */
-    bool turnInPlace(double angular_velocity, double duration);
-    /** Walk sideways for a fixed duration. */
-    bool walkSideways(double velocity, double duration, bool right_direction = true);
 
     /**
      * @brief Execute one iteration of the startup sequence.
