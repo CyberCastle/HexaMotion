@@ -110,7 +110,7 @@ class Leg {
     /**
      * @brief Set the current tip position in global coordinates
      */
-    bool setCurrentTipPositionGlobal(const Point3D &position);
+    void setCurrentTipPositionGlobal(const Point3D &position);
 
     /**
      * @brief Get leg base position in world coordinates.

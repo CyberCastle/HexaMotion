@@ -55,30 +55,13 @@ void Leg::setJointAngle(int joint_index, double angle) {
     updateTipPosition();
 }
 
-bool Leg::setCurrentTipPositionGlobal(const Point3D &position) {
-    // Store the target position
-    Point3D target = position;
+void Leg::setCurrentTipPositionGlobal(const Point3D &position) {
+    // Delegate reachability adjustment to RobotModel to avoid duplicating workspace logic.
+    // makeReachable implements OpenSHC-style constraint (workplane + geometric fallback).
+    Point3D reachable = model_.makeReachable(leg_id_, position);
 
-    // For global coordinates, we need to check reachability relative to the leg's base position
-    Point3D leg_base = model_.getLegBasePosition(leg_id_);
-
-    // Calculate distance from leg base to target position
-    double dx = target.x - leg_base.x;
-    double dy = target.y - leg_base.y;
-    double dz = target.z - leg_base.z;
-    double distance = sqrt(dx * dx + dy * dy + dz * dz);
-
-    double max_reach = model_.getLegReach();
-
-    if (distance > max_reach) {
-        // TODO: OpenSHC approach: could adjust position to be within reach
-        // For now, we reject it
-        return false; // Target too far
-    }
-
-    // Update tip position (IK will be calculated when needed)
-    tip_position_ = target;
-    return true;
+    // Update stored tip position reference (joint angles not updated here; IK applied elsewhere when needed).
+    tip_position_ = reachable;
 }
 
 /**
