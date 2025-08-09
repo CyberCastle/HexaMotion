@@ -175,9 +175,16 @@ int main() {
     std::cout << "-----------------------------------------------------------------------------------------\n"
               << std::endl;
 
-    // 3. Setup and Start Tripod Gait
-    if (!sys.startWalking(TRIPOD_GAIT, TEST_VELOCITY, TEST_VELOCITY, TEST_ANGULAR_VELOCITY)) {
-        std::cerr << "ERROR: Failed to start tripod gait." << std::endl;
+    // 3. Setup and Start Tripod Gait (new API): select gait, set velocities, then startWalking()
+    if (!sys.setGaitType(TRIPOD_GAIT)) {
+        std::cerr << "ERROR: Failed to set gait type." << std::endl;
+        return 1;
+    }
+    // Use walkForward to set forward velocity (directional helpers persist velocities)
+    sys.walkForward(TEST_VELOCITY);
+    // Optionally add lateral / angular components if needed (keep simple forward for validation)
+    if (!sys.startWalking()) {
+        std::cerr << "ERROR: Failed to start walking (startup sequence)." << std::endl;
         return 1;
     }
 
