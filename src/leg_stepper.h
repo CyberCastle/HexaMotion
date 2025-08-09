@@ -4,8 +4,8 @@
 #include "gait_config.h" // For StepCycle definition
 #include "leg.h"
 #include "robot_model.h"
-#include "walkspace_analyzer.h"
-#include "workspace_validator.h"
+#include "velocity_limits.h"
+#include "workspace_analyzer.h"
 
 enum StepState {
     STEP_SWING,        //< The leg step cycle is in 'swing' state, the forward 'in air' progression of the step cycle
@@ -38,8 +38,18 @@ struct LegStepperExternalTarget {
 class LegStepper {
   public:
     // Constructor
-    LegStepper(int leg_index, const Point3D &identity_tip_pose, Leg &leg, RobotModel &robot_model,
-               WalkspaceAnalyzer *walkspace_analyzer, WorkspaceValidator *workspace_validator);
+    LegStepper(int leg_index, const Point3D &identity_tip_pose, Leg &leg, RobotModel &robot_model);
+
+    // Destructor
+    ~LegStepper() = default;
+
+    // Disable copy constructor and assignment operator (due to reference members)
+    LegStepper(const LegStepper &) = delete;
+    LegStepper &operator=(const LegStepper &) = delete;
+
+    // Enable move constructor but disable move assignment operator (due to reference members)
+    LegStepper(LegStepper &&) = default;
+    LegStepper &operator=(LegStepper &&) = delete;
 
     // Accessors
     int getLegIndex() const { return leg_index_; }
@@ -111,10 +121,39 @@ class LegStepper {
     void updateStride();
     void updateTipPositionIterative(int iteration, double time_delta, bool rough_terrain_mode = false, bool force_normal_touchdown = false);
 
+    // Workspace validation and safety methods (Step 1 implementation)
+    bool validateTargetTipPose(const Point3D &target_pose) const;
+    Point3D constrainToWorkspace(const Point3D &target_pose) const;
+    Point3D calculateSafeTarget(const Point3D &desired_target) const;
+
+    // Velocity limiting and validation methods (Step 2 implementation)
+    Point3D validateAndLimitVelocities(const Point3D &linear_velocity, double angular_velocity);
+    Point3D calculateSafeStride(const Point3D &desired_stride) const;
+
+    // VelocityLimits integration for enhanced safety
+    void setVelocityLimits(const VelocityLimits *velocity_limits) { velocity_limits_ = velocity_limits; }
+
+    // Comprehensive safety validation (combines all 4 steps)
+    bool validateCurrentTrajectory() const;
+
+// Testing interface methods (only use in test code)
+#ifdef TESTING_ENABLED
+    void testGeneratePrimarySwingControlNodes() { generatePrimarySwingControlNodes(); }
+    void testGenerateSecondarySwingControlNodes(bool ground_contact = false) { generateSecondarySwingControlNodes(ground_contact); }
+    void testGenerateStanceControlNodes(double stride_scaler = 1.0) { generateStanceControlNodes(stride_scaler); }
+#endif
+
+  private:
+    // Auxiliary method for velocity calculations
+    Point3D calculateCurrentTipVelocity() const;
+
     // Control node generation (OpenSHC style)
     void generatePrimarySwingControlNodes();
     void generateSecondarySwingControlNodes(bool ground_contact = false);
     void generateStanceControlNodes(double stride_scaler = 1.0);
+
+    // Control node validation methods (Step 4 implementation)
+    void validateAndFixControlNodes(Point3D nodes[5]) const;
 
     // OpenSHC-style stride scaler calculation
     double calculateStanceStrideScaler();
@@ -175,8 +214,13 @@ class LegStepper {
     Point3D swing_2_nodes_[5];
     Point3D stance_nodes_[5];
 
-    WalkspaceAnalyzer *walkspace_analyzer_ = nullptr;
-    WorkspaceValidator *workspace_validator_ = nullptr;
+    // Safety and validation systems
+    const VelocityLimits *velocity_limits_; // Optional velocity limits for enhanced validation
+
+    // Variables for velocity tracking
+    Point3D previous_tip_pose_;
+    bool has_previous_position_;
+    double time_step_;
 };
 
 #endif // LEG_STEPPER_H

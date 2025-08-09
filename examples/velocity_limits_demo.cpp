@@ -1,5 +1,5 @@
-#include "robot_model.h"
 #include "hexamotion_constants.h"
+#include "robot_model.h"
 #include "velocity_limits.h"
 #include "walk_controller.h"
 #include <cmath>
@@ -217,6 +217,7 @@ int main() {
     params.tibia_length = 0.15f;   // 15cm tibia
 
     RobotModel model(params);
+    model.workspaceAnalyzerInitializer(); // Inicializar WorkspaceAnalyzer
     VelocityLimits velocity_limits(model);
     WalkController walk_controller(model);
 

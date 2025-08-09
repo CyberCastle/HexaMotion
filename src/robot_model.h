@@ -3,9 +3,15 @@
 
 #include "hexamotion_constants.h"
 #include "math_utils.h"
+#include "precision_config.h"
 #include <Arduino.h>
 #include <ArduinoEigen.h>
+#include <memory>
 #include <utility>
+
+// Forward declaration para evitar dependencias circulares
+class WorkspaceAnalyzer;
+struct ValidationConfig;
 
 // System configuration
 #define NUM_LEGS 6
@@ -25,8 +31,9 @@ struct Parameters {
     double tibia_length;
 
     double robot_height;
-    double standing_height = 150; //< Default standing height in mm
-    double height_offset = 0.0f;  //< structural body height offset
+    double standing_height = 150;        //< Default standing height in mm
+    double height_offset = 0.0f;         //< structural body height offset
+    double default_height_offset = 0.0f; //< Default height offset when all joint angles are 0°
     double robot_weight;
     Eigen::Vector3d center_of_mass;
 
@@ -131,6 +138,20 @@ struct Parameters {
 
     // Gait phase offset multiplier for tripod gait synchronization
     double offset_multiplier = 0.5; // Default offset multiplier for tripod gait phase synchronization
+
+    // Walkspace overlap control (OpenSHC equivalent)
+    bool overlapping_walkspaces = false; // Flag denoting if walkspaces are allowed to overlap (default: false, same as OpenSHC)
+
+    // Gait continuity control: when true, preserve the swing end (touchdown) pose as stance origin instead of
+    // resetting to the default tip pose. This yields smoother, continuous trajectories (OpenSHC-style continuity)
+    // at the cost of potential long-term drift. When false (default), an anti-drift policy resets the leg to the
+    // calibrated default tip pose at the start of stance for deterministic repeatability.
+    bool preserve_swing_end_pose = false; // false = anti-drift reset (current default), true = continuous stance origin
+
+    // Workspace constraint toggle: when true (default) all target and intermediate tip poses are constrained
+    // via WorkspaceAnalyzer to remain within geometric reach envelopes. When false, raw trajectories are used
+    // (useful for debugging or external safety layers). Disabling can cause IK failures or unrealistic poses.
+    bool enable_workspace_constrain = true;
 };
 
 enum GaitType {
@@ -467,6 +488,40 @@ class RobotModel {
     explicit RobotModel(const Parameters &params);
 
     /**
+     * @brief Destructor - implemented in .cpp to handle unique_ptr properly
+     */
+    ~RobotModel();
+
+    /**
+     * @brief Initialize the WorkspaceAnalyzer with custom configuration.
+     * This method allows initializing the WorkspaceAnalyzer after constructing
+     * the RobotModel with specific configurations.
+     * @param config Compute configuration for the WorkspaceAnalyzer
+     * @param validation_config Validation configuration (optional)
+     */
+    void workspaceAnalyzerInitializer(ComputeConfig config = ComputeConfig::medium(),
+                                      const ValidationConfig *validation_config = nullptr);
+
+    /**
+     * @brief Get reference to the internal WorkspaceAnalyzer
+     * @return Reference to WorkspaceAnalyzer for use by other classes
+     */
+    WorkspaceAnalyzer &getWorkspaceAnalyzer();
+
+    /**
+     * @brief Get const reference to the internal WorkspaceAnalyzer
+     * @return Const reference to WorkspaceAnalyzer for read-only access
+     */
+    const WorkspaceAnalyzer &getWorkspaceAnalyzer() const;
+
+    /**
+     * @brief Get default position for a leg based on robot geometry
+     * @param leg_index Index of the leg (0-5)
+     * @return Default tip position for the leg
+     */
+    Point3D getLegDefaultPosition(int leg_index) const;
+
+    /**
      * \brief Initialize DH parameters from robot dimensions.
      */
     void initializeDH();
@@ -514,6 +569,13 @@ class RobotModel {
      */
     std::pair<double, double> calculateHeightRange() const;
     const Parameters &getParams() const { return params; }
+
+    /**
+     * @brief Get the default height offset when all joint angles are 0°
+     * @return Default height offset in mm. If default_height_offset is set (non-zero),
+     *         returns that value. Otherwise, returns -tibia_length for backwards compatibility.
+     */
+    double getDefaultHeightOffset() const;
 
     /**
      * @brief Get pose in robot frame (equivalent to OpenSHC's getPoseRobotFrame)
@@ -617,6 +679,9 @@ class RobotModel {
      * This function follows OpenSHC's approach to automatically adjust positions that are
      * outside the leg's workspace to be within reachable bounds.
      *
+     * REFACTORED: Now uses WorkspaceAnalyzer::generateWorkspace() and
+     * WorkspaceAnalyzer::getWorkplane() following the OpenSHC pattern.
+     *
      * @param leg_index Index of the leg (0-5)
      * @param reference_tip_position Target position that may be outside workspace
      * @return Adjusted position that is guaranteed to be within leg workspace
@@ -676,6 +741,9 @@ class RobotModel {
     double tibia_angle_limits_rad[2];
     double max_angular_velocity_rad;
     double body_comp_max_tilt_rad;
+
+    // WorkspaceAnalyzer for workspace analysis (OpenSHC-style)
+    std::unique_ptr<WorkspaceAnalyzer> workspace_analyzer_;
 
     JointAngles solveIK(int leg, const Point3D &local_target, JointAngles current) const;
 

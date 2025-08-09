@@ -68,8 +68,9 @@ class LocomotionSystem {
     bool startup_in_progress;
     bool shutdown_in_progress;
 
-    // Último comando de velocidad deseado
-    double commanded_linear_velocity_ = 0.0;
+    // Último comando de velocidad deseado (OpenSHC-style persistent velocities)
+    double commanded_linear_velocity_x_ = 0.0; // X component
+    double commanded_linear_velocity_y_ = 0.0; // Y component
     double commanded_angular_velocity_ = 0.0;
 
     bool setLegJointAngles(int leg_index, const JointAngles &q);
@@ -129,9 +130,6 @@ class LocomotionSystem {
     bool setGaitType(GaitType gait);
     /** Plan the next gait step from desired velocities. */
     bool planGaitSequence(double velocity_x, double velocity_y, double angular_velocity);
-
-    /** Compute foot trajectory for a leg at given phase. */
-    Point3D calculateFootTrajectory(int leg_index, double phase);
 
     // State management (OpenSHC equivalent)
     /** Check if startup sequence is in progress */

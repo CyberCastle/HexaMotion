@@ -4,8 +4,7 @@
 #include "../src/gait_config_factory.h"
 #include "../src/leg_stepper.h"
 #include "../src/walk_controller.h"
-#include "../src/walkspace_analyzer.h"
-#include "../src/workspace_validator.h"
+#include "../src/workspace_analyzer.h"
 #include "test_stubs.h"
 #include <algorithm>
 #include <cassert>
@@ -13,10 +12,11 @@
 #include <iostream>
 #include <vector>
 
-// Helper function to check if a position is reachable using OpenSHC-style WorkspaceValidator
+// Helper function to check if a position is reachable using basic kinematic validation
 bool isPositionReachable(const RobotModel &model, int leg_id, const Point3D &position) {
-    WorkspaceValidator temp_validator(model);
-    return temp_validator.isReachable(leg_id, position);
+    // Use basic inverse kinematics validation
+    JointAngles angles = model.inverseKinematicsCurrentGlobalCoordinates(leg_id, JointAngles(0, 0, 0), position);
+    return model.checkJointLimits(leg_id, angles);
 }
 
 // Structure to hold analysis results for a single leg
@@ -543,6 +543,7 @@ int main() {
     p.coxa_length = 50;
     p.femur_length = 101;
     p.tibia_length = 208;
+    p.default_height_offset = -208.0; // Set to -tibia_length for explicit configuration
     p.robot_height = 208;
     p.standing_height = 150;
     p.control_frequency = 50;
@@ -563,6 +564,7 @@ int main() {
     std::cout << "  Swing ratio: " << tripod_config.getSwingRatio() << std::endl;
 
     RobotModel model(p);
+    model.workspaceAnalyzerInitializer(); // Inicializar WorkspaceAnalyzer
 
     // Create array of legs for all 6 legs
     Leg hexapod_legs[NUM_LEGS] = {
@@ -602,10 +604,6 @@ int main() {
                angles.coxa * 180.0 / M_PI, angles.femur * 180.0 / M_PI, angles.tibia * 180.0 / M_PI);
     }
 
-    // Create required objects for LegSteppers
-    WalkspaceAnalyzer walkspace_analyzer(model);
-    WorkspaceValidator workspace_validator(model);
-
     // Create LegSteppers for all 6 legs
     std::vector<std::unique_ptr<LegStepper>> steppers;
 
@@ -614,7 +612,7 @@ int main() {
         Point3D identity_tip_pose = Point3D(leg_stance_position.x, leg_stance_position.y, leg_stance_position.z);
 
         auto stepper = std::make_unique<LegStepper>(i, identity_tip_pose, hexapod_legs[i],
-                                                    model, &walkspace_analyzer, &workspace_validator);
+                                                    const_cast<RobotModel &>(model));
         stepper->setDefaultTipPose(identity_tip_pose);
 
         // Configure StepCycle from tripod gait configuration

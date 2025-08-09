@@ -1,6 +1,6 @@
 #include "terrain_adaptation.h"
 #include "hexamotion_constants.h"
-#include "workspace_validator.h" // Use unified validator for workspace logic
+#include "workspace_analyzer.h" // Use unified analyzer for workspace logic
 
 /**
  * @file terrain_adaptation.cpp
@@ -25,7 +25,7 @@ TerrainAdaptation::TerrainAdaptation(RobotModel &model)
     ValidationConfig validator_config;
     validator_config.enable_collision_checking = false;  // Disable for terrain adaptation
     validator_config.enable_joint_limit_checking = true; // Enable for accuracy
-    workspace_validator_ = std::make_unique<WorkspaceValidator>(model_, validator_config);
+    workspace_analyzer_ = std::make_unique<WorkspaceAnalyzer>(model_, ComputeConfig::medium(), validator_config);
 
     // Initialize FSR thresholds from model parameters or use defaults
     const Parameters &params = model_.getParams();
@@ -163,13 +163,13 @@ Point3D TerrainAdaptation::adaptTrajectoryForTerrain(int leg_index, const Point3
 }
 
 bool TerrainAdaptation::isTargetReachableOnTerrain(int leg_index, const Point3D &target) {
-    // Use WorkspaceValidator instead of custom IK validation
-    if (!workspace_validator_) {
+    // Use WorkspaceAnalyzer instead of custom IK validation
+    if (!workspace_analyzer_) {
         return false; // Safety fallback
     }
 
     // Use high-precision IK validation for terrain adaptation
-    bool is_reachable = workspace_validator_->isPositionReachable(leg_index, target, true);
+    bool is_reachable = workspace_analyzer_->isPositionReachable(leg_index, target, true);
 
     if (!is_reachable) {
         return false;
@@ -182,7 +182,7 @@ bool TerrainAdaptation::isTargetReachableOnTerrain(int leg_index, const Point3D 
         double walk_plane_deviation = abs(target.z - projected.z);
 
         // Use workspace bounds for step height validation
-        auto bounds = workspace_validator_->getWorkspaceBounds(leg_index);
+        auto bounds = workspace_analyzer_->getWorkspaceBounds(leg_index);
         double max_step_height = bounds.max_height - bounds.min_height;
 
         // Allow deviation up to 50% of workspace height range
@@ -233,14 +233,14 @@ void TerrainAdaptation::detectTouchdownEvents(int leg_index, const FSRData &fsr_
 
     // Touchdown detection
     if (fsr_data.pressure > touchdown_threshold_ && !step_plane.valid) {
-        // Use WorkspaceValidator for foot position calculation
-        if (!workspace_validator_) {
+        // Use WorkspaceAnalyzer for foot position calculation
+        if (!workspace_analyzer_) {
             return; // Safety fallback
         }
 
         // Get workspace bounds instead of manual calculation
-        auto bounds = workspace_validator_->getWorkspaceBounds(leg_index);
-        auto scaling_factors = workspace_validator_->getScalingFactors();
+        auto bounds = workspace_analyzer_->getWorkspaceBounds(leg_index);
+        auto scaling_factors = workspace_analyzer_->getScalingFactors();
 
         // Calculate foot position using workspace scaling
         const Parameters &p = model_.getParams();
@@ -250,7 +250,7 @@ void TerrainAdaptation::detectTouchdownEvents(int leg_index, const FSRData &fsr_
         double base_angle = model_.getLegBaseAngleOffset(leg_index);
 
         // Use scaling instead of hardcoded 65%
-        double safe_reach = bounds.max_radius * scaling_factors.workspace_scale;
+        double safe_reach = bounds.max_reach * scaling_factors.workspace_scale;
 
         Point3D foot_position;
         foot_position.x = base_x + safe_reach * cos(base_angle);

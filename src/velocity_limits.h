@@ -59,9 +59,11 @@ class VelocityLimits {
         double overshoot_x;      // Overshoot compensation in X direction
         double overshoot_y;      // Overshoot compensation in Y direction
         double safety_margin;    // Safety factor for workspace limits
+        double reference_height; // Physical reference height (z = getDefaultHeightOffset())
 
         WorkspaceConfig() : walkspace_radius(0.0f), stance_radius(0.0f),
-                            overshoot_x(0.0f), overshoot_y(0.0f), safety_margin(0.85f) {}
+                            overshoot_x(0.0f), overshoot_y(0.0f), safety_margin(0.85f),
+                            reference_height(0.0f) {}
     };
 
     /**
@@ -89,6 +91,9 @@ class VelocityLimits {
     void calculateWorkspace(const GaitConfig &gait_config);
     void calculateWorkspace(const GaitConfiguration &gait_config); // Unified configuration interface
     const WorkspaceConfig &getWorkspaceConfig() const;
+
+    // Physical robot configuration
+    double getPhysicalReferenceHeight() const;
 
     // Velocity scaling and validation
     LimitValues scaleVelocityLimits(const LimitValues &input_velocities,
@@ -122,26 +127,6 @@ class VelocityLimits {
     // Utility functions
     static double normalizeBearing(double bearing_degrees);
     static double calculateBearing(double vx, double vy);
-
-    /**
-     * @brief Calculate stride vector using OpenSHC-equivalent method
-     *
-     * This function implements the same stride vector calculation as OpenSHC's updateStride():
-     * 1. Linear stride vector from velocity input
-     * 2. Angular stride vector from angular velocity and leg radius
-     * 3. Combination and scaling by stance ratio and frequency
-     *
-     * @param linear_velocity_x Linear velocity in X direction (mm/s)
-     * @param linear_velocity_y Linear velocity in Y direction (mm/s)
-     * @param angular_velocity Angular velocity around Z axis (rad/s)
-     * @param current_tip_position Current tip position for radius calculation
-     * @param stance_ratio Ratio of stance phase (0.0 - 1.0)
-     * @param step_frequency Step frequency (Hz)
-     * @return Point3D Calculated stride vector (mm)
-     */
-    static Point3D calculateStrideVector(double linear_velocity_x, double linear_velocity_y,
-                                        double angular_velocity, const Point3D& current_tip_position,
-                                        double stance_ratio, double step_frequency);
 
   private:
     // PIMPL idiom to hide WorkspaceValidator dependency

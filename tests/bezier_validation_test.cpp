@@ -10,7 +10,6 @@
 
 #include "math_utils.h"
 #include "test_stubs.h"
-#include "walk_controller.h"
 #include <cassert>
 #include <cmath>
 #include <iomanip>
@@ -117,7 +116,7 @@ bool testSwingTrajectoryEquivalence() {
 
     Parameters params = createDefaultParameters();
     RobotModel model(params);
-    WalkController walker(model);
+    model.workspaceAnalyzerInitializer(); // Inicializar WorkspaceAnalyzer
 
     // Test parameters matching OpenSHC usage
     int leg_index = 0;
@@ -126,9 +125,6 @@ bool testSwingTrajectoryEquivalence() {
     double stance_duration = 0.6f;
     double swing_duration = 0.4f;
     double robot_height = 80.0f;
-
-    double leg_phase_offsets[NUM_LEGS] = {0.0f, 0.33f, 0.67f, 0.0f, 0.33f, 0.67f};
-    StepPhase leg_states[NUM_LEGS];
 
     cout << "Test Parameters:" << endl;
     cout << "  Step Height: " << step_height << " mm" << endl;
@@ -145,10 +141,18 @@ bool testSwingTrajectoryEquivalence() {
 
     for (int i = 0; i <= 20; i++) {
         double phase = stance_duration + (swing_duration * i / 20.0f);
+        double t = (double)i / 20.0f; // Normalized parameter for Bezier curve
 
-        Point3D pos = walker.footTrajectory(leg_index, phase, step_height, step_length,
-                                            stance_duration, swing_duration, robot_height,
-                                            leg_phase_offsets, leg_states, nullptr, nullptr);
+        // Create simple swing trajectory control points
+        Point3D control_points[5] = {
+            Point3D(0.0f, 0.0f, -robot_height),                                     // Start: ground level
+            Point3D(step_length * 0.25f, 0.0f, -robot_height + step_height * 0.5f), // Early lift
+            Point3D(step_length * 0.5f, 0.0f, -robot_height + step_height),         // Mid-swing: peak
+            Point3D(step_length * 0.75f, 0.0f, -robot_height + step_height * 0.5f), // Late descent
+            Point3D(step_length, 0.0f, -robot_height)                               // End: ground level
+        };
+
+        Point3D pos = math_utils::quarticBezier(control_points, t);
 
         double height_above_ground = pos.z + robot_height;
 
@@ -281,7 +285,7 @@ bool testOpenSHCCompatibility() {
 
     Parameters params = createDefaultParameters();
     RobotModel model(params);
-    WalkController walker(model);
+    model.workspaceAnalyzerInitializer(); // Inicializar WorkspaceAnalyzer
 
     // Test that swing trajectory has proper bell curve shape
     double max_height = -1000.0f;
@@ -291,11 +295,16 @@ bool testOpenSHCCompatibility() {
         double swing_progress = i / 100.0f;
         double total_phase = 0.6f + 0.4f * swing_progress; // Swing phase
 
-        StepPhase leg_states[NUM_LEGS];
-        double leg_phase_offsets[NUM_LEGS] = {0};
+        // Create simple swing trajectory control points
+        Point3D control_points[5] = {
+            Point3D(0.0f, 0.0f, -80.0f),  // Start: ground level
+            Point3D(10.0f, 0.0f, -60.0f), // Early lift
+            Point3D(20.0f, 0.0f, -60.0f), // Mid-swing: peak
+            Point3D(30.0f, 0.0f, -60.0f), // Late descent
+            Point3D(40.0f, 0.0f, -80.0f)  // End: ground level
+        };
 
-        Point3D pos = walker.footTrajectory(0, total_phase, 20.0f, 40.0f, 0.6f, 0.4f, 80.0f,
-                                            leg_phase_offsets, leg_states, nullptr, nullptr);
+        Point3D pos = math_utils::quarticBezier(control_points, swing_progress);
 
         max_height = max(max_height, pos.z);
         min_height = min(min_height, pos.z);

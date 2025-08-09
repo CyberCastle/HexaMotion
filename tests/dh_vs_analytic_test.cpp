@@ -11,6 +11,7 @@ int main() {
     p.coxa_length = 50;
     p.femur_length = 101;
     p.tibia_length = 208;
+    p.default_height_offset = -208.0; // Set to -tibia_length for explicit configuration
     p.robot_height = 208;
     p.control_frequency = 50;
     p.coxa_angle_limits[0] = -65;
@@ -21,6 +22,7 @@ int main() {
     p.tibia_angle_limits[1] = 45;
 
     RobotModel model(p);
+    model.workspaceAnalyzerInitializer(); // Inicializar WorkspaceAnalyzer
     AnalyticRobotModel analytic_model(p);
 
     std::cout << std::fixed << std::setprecision(6);

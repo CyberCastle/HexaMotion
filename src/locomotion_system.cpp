@@ -3,7 +3,7 @@
 #include "hexamotion_constants.h"
 #include "math_utils.h"
 #include "walk_controller.h"
-#include "workspace_validator.h" // Add unified validator
+#include "workspace_analyzer.h" // Add unified analyzer
 #include <algorithm>
 #include <cmath>
 #include <vector>
@@ -125,23 +125,17 @@ JointAngles LocomotionSystem::calculateInverseKinematics(int leg,
 }
 
 bool LocomotionSystem::isTargetReachable(int leg_index, const Point3D &target) {
-    // Delegate to WorkspaceValidator for consistency
-    // TODO: This creates a temporary validator. For better performance,
-    // consider using a shared validator instance in production code.
-    WorkspaceValidator temp_validator(model);
-    return temp_validator.isReachable(leg_index, target);
+    // Use the WorkspaceAnalyzer from RobotModel for consistency and performance
+    return model.getWorkspaceAnalyzer().isPositionReachable(leg_index, target);
 }
 
 Point3D LocomotionSystem::constrainToWorkspace(int leg_index, const Point3D &target) {
-    // Delegate to WorkspaceValidator for consistency
-    // TODO This creates a temporary validator. For better performance,
-    // consider using a shared validator instance in production code.
-    WorkspaceValidator temp_validator(model);
+    // Use the WorkspaceAnalyzer from RobotModel for consistency and performance
     Point3D dummy_positions[6]; // Empty positions for basic geometric constraint
     for (int i = 0; i < 6; i++) {
         dummy_positions[i] = Point3D(0, 0, 0);
     }
-    return temp_validator.constrainToValidWorkspace(leg_index, target, dummy_positions);
+    return model.getWorkspaceAnalyzer().constrainToValidWorkspace(leg_index, target, dummy_positions);
 }
 
 double LocomotionSystem::getJointLimitProximity(int leg_index, const JointAngles &angles) {
@@ -239,12 +233,14 @@ bool LocomotionSystem::setGaitType(GaitType gait) {
     return result;
 }
 
-// Gait sequence planning - Use WalkController with LegStepper
+// Gait sequence planning - Use WalkController with LegStepper (OpenSHC pattern)
 bool LocomotionSystem::planGaitSequence(double velocity_x, double velocity_y, double angular_velocity) {
-    commanded_linear_velocity_ = velocity_x;
+    // Store persistent velocities (OpenSHC pattern)
+    commanded_linear_velocity_x_ = velocity_x;
+    commanded_linear_velocity_y_ = velocity_y; // Now properly stored!
     commanded_angular_velocity_ = angular_velocity;
 
-    // Configure velocity in ALL leg steppers, not just store the values
+    // Configure velocity in ALL leg steppers (immediate application for runtime changes)
     for (int i = 0; i < NUM_LEGS; i++) {
         auto leg_stepper = walk_ctrl->getLegStepper(i);
         if (leg_stepper) {
@@ -257,16 +253,6 @@ bool LocomotionSystem::planGaitSequence(double velocity_x, double velocity_y, do
     }
 
     return true;
-}
-
-// Foot trajectory calculation
-Point3D LocomotionSystem::calculateFootTrajectory(int leg_index, double phase) {
-    auto leg_stepper = walk_ctrl->getLegStepper(leg_index);
-    if (!leg_stepper)
-        return Point3D(0, 0, 0);
-    // Calculate tip position using modern configuration
-    // Aquí puedes llamar a leg_stepper->getCurrentTipPose() o lógica equivalente
-    return leg_stepper->getCurrentTipPose();
 }
 
 // Forward locomotion control
@@ -365,8 +351,37 @@ bool LocomotionSystem::walkSideways(double velocity, double duration, bool right
 
 // Stop movement while keeping current pose
 bool LocomotionSystem::stopMovement() {
-    // TODO: Delegate to WalkController for movement control
-    // WalkController handles stopping internally
+    if (!walk_ctrl) {
+        last_error = PARAMETER_ERROR;
+        return false;
+    }
+
+    // Zero persistent commanded velocities (OpenSHC pattern: STOP triggered by zero command)
+    commanded_linear_velocity_x_ = 0.0;
+    commanded_linear_velocity_y_ = 0.0;
+    commanded_angular_velocity_ = 0.0;
+
+    // Issue a zero-velocity update to enter WALK_STOPPING (if currently MOVING/STARTING)
+    // Body pose/orientation remain current
+    walk_ctrl->updateWalk(Point3D(0.0, 0.0, 0.0), 0.0, body_position, body_orientation);
+
+    // If after first update we're still not fully stopped, run an additional settling update
+    if (walk_ctrl->getWalkState() != WALK_STOPPED) {
+        walk_ctrl->updateWalk(Point3D(0.0, 0.0, 0.0), 0.0, body_position, body_orientation);
+    }
+
+    // Force legs into stance/force-stop if still not reported stopped to ensure deterministic halt
+    if (walk_ctrl->getWalkState() != WALK_STOPPED) {
+        for (int i = 0; i < NUM_LEGS; ++i) {
+            auto leg_stepper = walk_ctrl->getLegStepper(i);
+            if (leg_stepper) {
+                leg_stepper->setStepState(STEP_FORCE_STOP);
+                leg_stepper->setPhase(0.0);
+            }
+            legs[i].setStepPhase(STANCE_PHASE);
+        }
+    }
+
     return true;
 }
 
@@ -376,14 +391,15 @@ bool LocomotionSystem::executeStartupSequence() {
     bool startup_complete = body_pose_ctrl->executeStartupSequence(legs);
 
     if (startup_complete) {
-        // Initialize walk controller for RUNNING state
+        // Initialize walk controller for RUNNING state (OpenSHC pattern)
         walk_ctrl->init(body_position, body_orientation);
         walk_ctrl->generateWalkspace();
 
-        // Activate gait sequence with stored velocities
-        planGaitSequence(commanded_linear_velocity_, 0.0, commanded_angular_velocity_);
+        // OpenSHC PATTERN: DO NOT apply velocities during startup!
+        // Velocities will be applied in update() method after startup completes
+        // This prevents the velocity_y loss bug that was happening here
 
-        // Initialize leg phases based on gait pattern
+        // Initialize leg phases based on gait pattern (without velocity application)
         for (int i = 0; i < NUM_LEGS; i++) {
             auto leg_stepper = walk_ctrl->getLegStepper(i);
             if (leg_stepper) {
@@ -634,12 +650,16 @@ bool LocomotionSystem::update() {
 
     // Only update leg trajectories if system is in RUNNING state
     if (walk_ctrl && system_state == SYSTEM_RUNNING) {
-        // PASO 1: Update walk controller - calculates ALL Bézier trajectories (OpenSHC pattern)
-        walk_ctrl->updateWalk(Point3D(commanded_linear_velocity_, 0.0, 0.0),
+        // OpenSHC PATTERN: Apply persistent velocities (fixes the velocity_y loss bug)
+        // Use stored velocities that were set during startWalking()
+        Point3D persistent_linear_velocity(commanded_linear_velocity_x_, commanded_linear_velocity_y_, 0.0);
+
+        // STEP 1: Update walk controller - calculates ALL Bézier trajectories (OpenSHC pattern)
+        walk_ctrl->updateWalk(persistent_linear_velocity,
                               commanded_angular_velocity_,
                               body_position, body_orientation);
 
-        // PASO 2: Collect desired positions from Bézier trajectories (= OpenSHC::setDesiredTipPose)
+        // STEP 2: Collect desired positions from Bézier trajectories (= OpenSHC::setDesiredTipPose)
         for (int i = 0; i < NUM_LEGS; i++) {
             auto leg_stepper = walk_ctrl->getLegStepper(i);
             if (leg_stepper) {
@@ -660,10 +680,10 @@ bool LocomotionSystem::update() {
             }
         }
 
-        // PASO 3: Apply IK to ALL legs at once (= OpenSHC::Model::updateModel)
+        // STEP 3: Apply IK to ALL legs at once (= OpenSHC::Model::updateModel)
         applyInverseKinematicsToAllLegs();
 
-        // PASO 4: Publish ALL joint angles to servos (= OpenSHC::publishDesiredJointState)
+        // STEP 4: Publish ALL joint angles to servos (= OpenSHC::publishDesiredJointState)
         publishJointAnglesToServos();
     } else if (system_state == SYSTEM_READY) {
         // OpenSHC: When system is READY (after shutdown), maintain STANCE_PHASE for ALL legs
@@ -1093,8 +1113,9 @@ bool LocomotionSystem::startWalking(GaitType gait_type, double velocity_x, doubl
     }
 
     // Store velocities but don't start gait sequence yet
-    // It will be activated when startup sequence completes
-    commanded_linear_velocity_ = velocity_x;
+    // It will be activated when startup sequence completes (OpenSHC pattern)
+    commanded_linear_velocity_x_ = velocity_x;
+    commanded_linear_velocity_y_ = velocity_y;
     commanded_angular_velocity_ = angular_velocity;
 
     // Execute startup sequence to transition from READY to RUNNING

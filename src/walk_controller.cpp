@@ -6,7 +6,6 @@
 #include "math_utils.h"
 #include "terrain_adaptation.h"
 #include "velocity_limits.h"
-#include "workspace_validator.h" // Use unified validator instead
 #include <algorithm>
 #include <cmath>
 #include <iostream>
@@ -15,12 +14,11 @@
 #include <vector>
 
 WalkController::WalkController(RobotModel &m, Leg legs[NUM_LEGS], const BodyPoseConfiguration &pose_config)
-    : model(m), terrain_adaptation_(m), body_pose_controller_(nullptr),
-      step_clearance_(30.0), step_depth_(10.0),
-      desired_linear_velocity_(0, 0, 0), desired_angular_velocity_(0.0),
+    : model(m), desired_linear_velocity_(0, 0, 0), desired_angular_velocity_(0.0),
       walk_state_(WALK_STOPPED), pose_state_(0),
       regenerate_walkspace_(false), legs_at_correct_phase_(0), legs_completed_first_step_(0),
-      return_to_default_attempted_(false), velocity_limits_(m), legs_array_(legs) {
+      return_to_default_attempted_(false), terrain_adaptation_(m), body_pose_controller_(nullptr),
+      velocity_limits_(m), legs_array_(legs) {
 
     // Initialize leg_steppers_ with references to actual legs from LocomotionSystem
     leg_steppers_.clear();
@@ -30,12 +28,6 @@ WalkController::WalkController(RobotModel &m, Leg legs[NUM_LEGS], const BodyPose
     std::string default_gait_name = model.getParams().gait_type.empty() ? "tripod_gait" : model.getParams().gait_type;
     GaitType default_gait_type = stringToGaitType(default_gait_name);
     setGait(default_gait_type);
-
-    // Initialize workspace validator
-    workspace_validator_ = std::make_unique<WorkspaceValidator>(model);
-
-    // Initialize walkspace analyzer
-    walkspace_analyzer_ = std::make_unique<WalkspaceAnalyzer>(model);
 
     // Create LegStepper objects for each leg
     for (int i = 0; i < NUM_LEGS; i++) {
@@ -52,8 +44,7 @@ WalkController::WalkController(RobotModel &m, Leg legs[NUM_LEGS], const BodyPose
             leg_stance_position.z); // Use standing height for HexaMotion compatibility
 
         // Update terrain adaptation parameters
-        auto stepper = std::make_shared<LegStepper>(i, identity_tip_pose, legs[i], model,
-                                                    walkspace_analyzer_.get(), workspace_validator_.get());
+        auto stepper = std::make_shared<LegStepper>(i, identity_tip_pose, legs[i], model);
         leg_steppers_.push_back(stepper);
     }
 
@@ -66,6 +57,48 @@ WalkController::WalkController(RobotModel &m, Leg legs[NUM_LEGS], const BodyPose
     // Generate initial walkspace
     generateWalkspace();
 }
+
+// ================== Accessor Implementations (moved from header) ==================
+StepCycle WalkController::getStepCycle() const {
+    // Calculate proper step frequency to prevent stride vector bug
+    double time_delta = 1.0 / current_gait_config_.control_frequency;
+    int base_period = current_gait_config_.phase_config.stance_phase + current_gait_config_.phase_config.swing_phase;
+    double calculated_step_frequency = 0.0;
+    if (base_period > 0) {
+        calculated_step_frequency = 1.0 / (base_period * time_delta);
+    }
+    return current_gait_config_.generateStepCycle(calculated_step_frequency);
+}
+
+double WalkController::getTimeDelta() const { return time_delta_; }
+double WalkController::getStepClearance() const { return step_clearance_; }
+double WalkController::getStepDepth() const { return step_depth_; }
+
+Point3D WalkController::getWalkPlane() const {
+    return body_pose_controller_ ? body_pose_controller_->getWalkPlanePose().position : Point3D(0, 0, 0);
+}
+
+Point3D WalkController::getWalkPlaneNormal() const {
+    if (body_pose_controller_) {
+        Pose pose = body_pose_controller_->getWalkPlanePose();
+        Eigen::Vector3d z_axis(0, 0, 1);
+        Eigen::Vector3d normal = pose.rotation * z_axis;
+        return Point3D(normal.x(), normal.y(), normal.z());
+    }
+    return Point3D(0, 0, 1);
+}
+
+double WalkController::getStanceDuration() const {
+    double total_period = current_gait_config_.phase_config.stance_phase + current_gait_config_.phase_config.swing_phase;
+    return total_period > 0 ? static_cast<double>(current_gait_config_.phase_config.stance_phase) / total_period : 0.0;
+}
+
+double WalkController::getSwingDuration() const {
+    double denom = (current_gait_config_.phase_config.stance_phase + current_gait_config_.phase_config.swing_phase);
+    return denom > 0 ? static_cast<double>(current_gait_config_.phase_config.swing_phase) / denom : 0.0;
+}
+
+double WalkController::getCycleFrequency() const { return current_gait_config_.getStepFrequency(); }
 
 // Gait configuration management methods (OpenSHC equivalent)
 bool WalkController::setGaitConfiguration(const GaitConfiguration &gait_config) {
@@ -108,9 +141,6 @@ bool WalkController::setGait(GaitType gait_type) {
 }
 
 void WalkController::applyGaitConfigToLegSteppers(const GaitConfiguration &gait_config) {
-    // Use configured step frequency from gait configuration (OpenSHC pattern)
-    // This ensures consistency with trajectory_tip_position_test and OpenSHC behavior
-    double step_frequency = gait_config.getStepFrequency(); // OpenSHC configured frequency
 
     // Generate StepCycle with configured frequency like OpenSHC
     StepCycle step_cycle = gait_config.generateStepCycle();
@@ -209,14 +239,31 @@ VelocityLimits::LimitValues WalkController::applyVelocityLimits(double vx, doubl
     // Get limits for this bearing
     VelocityLimits::LimitValues limits = velocity_limits_.getLimit(bearing);
 
-    // Apply limits to input velocities
-    VelocityLimits::LimitValues limited_velocities;
-    limited_velocities.linear_x = std::max(-limits.linear_x, std::min(limits.linear_x, vx));
-    limited_velocities.linear_y = std::max(-limits.linear_y, std::min(limits.linear_y, vy));
-    limited_velocities.angular_z = std::max(-limits.angular_z, std::min(limits.angular_z, omega));
-    limited_velocities.acceleration = limits.acceleration;
+    // First, clamp to absolute per-axis limits
+    VelocityLimits::LimitValues clamped;
+    clamped.linear_x = std::max(-limits.linear_x, std::min(limits.linear_x, vx));
+    clamped.linear_y = std::max(-limits.linear_y, std::min(limits.linear_y, vy));
+    clamped.angular_z = std::max(-limits.angular_z, std::min(limits.angular_z, omega));
+    clamped.acceleration = limits.acceleration;
 
-    return limited_velocities;
+    // Then, apply coupling/scaling due to angular demand using VelocityLimits policy
+    // Scale factor is the fraction of angular demand w.r.t available limit (0..1)
+    double angular_demand_pct = 0.0;
+    if (limits.angular_z > 1e-9) {
+        angular_demand_pct = std::abs(clamped.angular_z) / limits.angular_z;
+        angular_demand_pct = std::min(1.0, std::max(0.0, angular_demand_pct));
+    }
+
+    VelocityLimits::LimitValues scaled = velocity_limits_.scaleVelocityLimits(limits, angular_demand_pct);
+
+    // Finally, ensure clamped values respect the scaled limits (coupled reduction of linear speed)
+    VelocityLimits::LimitValues final_vel;
+    final_vel.linear_x = std::max(-scaled.linear_x, std::min(scaled.linear_x, clamped.linear_x));
+    final_vel.linear_y = std::max(-scaled.linear_y, std::min(scaled.linear_y, clamped.linear_y));
+    final_vel.angular_z = clamped.angular_z; // already clamped to base angular limit; scaling adjusts linear components
+    final_vel.acceleration = scaled.acceleration;
+
+    return final_vel;
 }
 
 bool WalkController::validateVelocityCommand(double vx, double vy, double omega) const {
@@ -285,7 +332,7 @@ void WalkController::init(const Eigen::Vector3d &current_body_position, const Ei
             Point3D stance_position(
                 base_pos.x + stance_radius * cos(base_angle),
                 base_pos.y + stance_radius * sin(base_angle),
-                current_body_position.z());
+                model.getDefaultHeightOffset() + model.getParams().standing_height); // Physical reference: z = getDefaultHeightOffset() + standing_height
 
             leg_stepper->setDefaultTipPose(stance_position);
         } // OpenSHC pattern: Initialize current tip pose to default stance position
@@ -320,8 +367,8 @@ void WalkController::init(const Eigen::Vector3d &current_body_position, const Ei
  */
 void WalkController::updateWalk(const Point3D &linear_velocity_input, double angular_velocity_input,
                                 const Eigen::Vector3d &current_body_position, const Eigen::Vector3d &current_body_orientation) {
+
     // OpenSHC: Cache frequently used values to reduce function call overhead
-    const Parameters &params = model.getParams();
     current_body_position_ = current_body_position;
     current_body_orientation_ = current_body_orientation;
 
@@ -483,34 +530,6 @@ void WalkController::updateWalk(const Point3D &linear_velocity_input, double ang
     // OpenSHC: Optimized analysis and odometry updates
     odometry_ideal_ = odometry_ideal_ + calculateOdometry(time_delta_);
 
-    // TODO: Enable this when walkspace analysis is implemented
-    // OpenSHC: Conditional walkspace analysis with optimized stability control
-    // if (walkspace_analyzer_ && walkspace_analyzer_->isAnalysisEnabled()) {
-    //     // Batch update leg positions
-    //     for (int i = 0; i < NUM_LEGS; ++i) {
-    //         current_leg_positions_[i] = legs_array_[i].getCurrentTipPositionGlobal();
-    //     }
-
-    //     const WalkspaceAnalyzer::WalkspaceResult analysis_result =
-    //         walkspace_analyzer_->analyzeWalkspace(current_leg_positions_);
-
-    //     // OpenSHC: Optimized adaptive velocity control
-    //     if (walk_state_ == WALK_MOVING) {
-    //         if (!analysis_result.is_stable) {
-    //             const double stability_factor = math_utils::clamp(analysis_result.stability_margin / 50.0, 0.1, 1.0);
-    //             desired_linear_velocity_ = desired_linear_velocity_ * stability_factor;
-    //             desired_angular_velocity_ *= stability_factor;
-    //         } else {
-    //             const double stability_score = walkspace_analyzer_->getAnalysisInfo().overall_stability_score;
-    //             if (stability_score > 0.8) {
-    //                 const double boost_factor = std::min(1.2, 1.0 + (stability_score - 0.8) * 0.5);
-    //                 desired_linear_velocity_ = desired_linear_velocity_ * boost_factor;
-    //                 desired_angular_velocity_ *= boost_factor;
-    //             }
-    //         }
-    //     }
-    // }
-
     // OpenSHC: Conditional walkspace regeneration
     if (regenerate_walkspace_) {
         generateWalkspace();
@@ -537,7 +556,6 @@ Point3D WalkController::calculateOdometry(double time_period) {
     return rotated_delta;
 }
 
-// TODO: Use defines
 void WalkController::generateWalkspace() {
     // Implement full walkspace calculation like OpenSHC
     walkspace_.clear();
@@ -594,119 +612,10 @@ std::shared_ptr<LegStepper> WalkController::getLegStepper(int leg_index) const {
     return nullptr;
 }
 
-// ===== WALKSPACE ANALYZER CONTROL METHODS (OpenSHC equivalent) =====
-
-void WalkController::enableWalkspaceAnalysis(bool enabled) {
-    if (walkspace_analyzer_) {
-        walkspace_analyzer_->enableAnalysis(enabled);
-    }
-}
-
-bool WalkController::isWalkspaceAnalysisEnabled() const {
-    return walkspace_analyzer_ ? walkspace_analyzer_->isAnalysisEnabled() : false;
-}
-
-const WalkspaceAnalyzer::AnalysisInfo &WalkController::getWalkspaceAnalysisInfo() const {
-    static WalkspaceAnalyzer::AnalysisInfo empty_info;
-    return walkspace_analyzer_ ? walkspace_analyzer_->getAnalysisInfo() : empty_info;
-}
-
-std::string WalkController::getWalkspaceAnalysisInfoString() const {
-    return walkspace_analyzer_ ? walkspace_analyzer_->getAnalysisInfoString() : "WalkspaceAnalyzer not available";
-}
-
-void WalkController::resetWalkspaceAnalysisStats() {
-    if (walkspace_analyzer_) {
-        walkspace_analyzer_->resetAnalysisStats();
-    }
-}
-
-WalkspaceAnalyzer::WalkspaceResult WalkController::analyzeCurrentWalkspace() {
-    if (!walkspace_analyzer_) {
-        return WalkspaceAnalyzer::WalkspaceResult();
-    }
-
-    // Use current leg positions for analysis
-    Point3D current_positions[NUM_LEGS];
-    for (int i = 0; i < NUM_LEGS; i++) {
-        if (i < (int)leg_steppers_.size() && leg_steppers_[i]) {
-            current_positions[i] = leg_steppers_[i]->getCurrentTipPose();
-        } else {
-            current_positions[i] = current_leg_positions_[i];
-        }
-    }
-
-    return walkspace_analyzer_->analyzeWalkspace(current_positions);
-}
-
-bool WalkController::generateWalkspaceMap() {
-    if (!walkspace_analyzer_) {
-        return false;
-    }
-
-    try {
-        walkspace_analyzer_->generateWalkspace();
-        return true;
-    } catch (...) {
-        return false;
-    }
-}
-
-double WalkController::getWalkspaceRadius(double bearing_degrees) const {
-    return walkspace_analyzer_ ? walkspace_analyzer_->getWalkspaceRadius(bearing_degrees) : 0.0;
-}
-
-const std::map<int, double> &WalkController::getCurrentWalkspaceMap() const {
-    static std::map<int, double> empty_map;
-    return walkspace_analyzer_ ? walkspace_analyzer_->getCurrentWalkspaceMap() : empty_map;
-}
-
-bool WalkController::isWalkspaceMapGenerated() const {
-    return walkspace_analyzer_ ? walkspace_analyzer_->isWalkspaceMapGenerated() : false;
-}
-
-double WalkController::getStabilityMargin() const {
-    if (!walkspace_analyzer_) {
-        return 0.0;
-    }
-    const auto &analysis_info = walkspace_analyzer_->getAnalysisInfo();
-    return analysis_info.current_result.stability_margin;
-}
-
-double WalkController::getOverallStabilityScore() const {
-    if (!walkspace_analyzer_) {
-        return 0.0;
-    }
-    const auto &analysis_info = walkspace_analyzer_->getAnalysisInfo();
-    return analysis_info.overall_stability_score;
-}
-
-std::map<int, double> WalkController::getLegReachabilityScores() const {
-    if (!walkspace_analyzer_) {
-        return std::map<int, double>();
-    }
-    const auto &analysis_info = walkspace_analyzer_->getAnalysisInfo();
-    return analysis_info.leg_reachability;
-}
-
-bool WalkController::isCurrentlyStable() const {
-    if (!walkspace_analyzer_) {
-        return false;
-    }
-    const auto &analysis_info = walkspace_analyzer_->getAnalysisInfo();
-    return analysis_info.current_result.is_stable;
-}
-
 double WalkController::calculateStabilityIndex() const {
     // TODO: Simplified stability calculation
     // In a real implementation, this would use IMU and FSR data
-
-    if (!walkspace_analyzer_) {
-        return 0.5f; // Default moderate stability
-    }
-
-    const auto &analysis_info = walkspace_analyzer_->getAnalysisInfo();
-    return analysis_info.overall_stability_score;
+    return 0.5f; // Default moderate stability
 }
 
 bool WalkController::checkTerrainConditions() const {

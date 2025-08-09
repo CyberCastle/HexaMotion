@@ -1,19 +1,19 @@
 #include "cartesian_velocity_controller.h"
 #include "hexamotion_constants.h"
 #include "math_utils.h"
-#include "workspace_validator.h" // Use validator for workspace constraints
+#include "workspace_analyzer.h" // Use analyzer for workspace constraints
 #include <algorithm>
 #include <cmath>
 
 CartesianVelocityController::CartesianVelocityController(const RobotModel &model)
     : model_(model), velocity_control_enabled_(true) {
 
-    // Initialize workspace validator for velocity constraints
+    // Initialize workspace analyzer for velocity constraints
     ValidationConfig config;
     config.enable_collision_checking = false;  // Disable for performance in velocity control
     config.enable_joint_limit_checking = true; // Enable for accurate servo speed calculation
-    workspace_validator_ = std::make_unique<WorkspaceValidator>(
-        const_cast<RobotModel &>(model), config);
+    workspace_analyzer_ = std::make_unique<WorkspaceAnalyzer>(
+        const_cast<RobotModel &>(model), ComputeConfig::medium(), config);
 
     // Initialize with default configurations
     resetToDefaults();
@@ -216,7 +216,7 @@ double CartesianVelocityController::calculateLinearVelocityScale(double velocity
                    (velocity_scaling_.maximum_speed_ratio - velocity_scaling_.minimum_speed_ratio) * velocity_ratio;
 
     return math_utils::clamp<double>(scale, velocity_scaling_.minimum_speed_ratio,
-                              velocity_scaling_.maximum_speed_ratio);
+                                     velocity_scaling_.maximum_speed_ratio);
 }
 
 double CartesianVelocityController::calculateAngularVelocityScale(double angular_velocity) const {
@@ -240,7 +240,7 @@ double CartesianVelocityController::calculateAngularVelocityScale(double angular
     double scale = SERVO_SPEED_DEFAULT + angular_ratio * velocity_scaling_.angular_velocity_scale;
 
     return math_utils::clamp<double>(scale, velocity_scaling_.minimum_speed_ratio,
-                              velocity_scaling_.maximum_speed_ratio);
+                                     velocity_scaling_.maximum_speed_ratio);
 }
 
 double CartesianVelocityController::calculateGaitSpeedAdjustment(GaitType gait) const {
@@ -288,7 +288,7 @@ double CartesianVelocityController::calculateLegSpeedCompensation(int leg_index,
     double max_expected_velocity = 500.0; // mm/s - typical maximum leg velocity
     double velocity_ratio =
         math_utils::clamp<double>(total_leg_velocity / max_expected_velocity, 0.0,
-                           SERVO_SPEED_DEFAULT);
+                                  SERVO_SPEED_DEFAULT);
 
     // Apply compensation: faster legs need higher servo speeds
     double compensation = SERVO_SPEED_DEFAULT + velocity_ratio * 0.5; // Up to 50% speed increase
@@ -299,14 +299,14 @@ double CartesianVelocityController::calculateLegSpeedCompensation(int leg_index,
 double CartesianVelocityController::applyWorkspaceConstraints(int leg_index, int joint_index, double base_speed) const {
     // Use WorkspaceValidator for workspace constraints instead of hardcoded factors
 
-    if (!workspace_validator_) {
+    if (!workspace_analyzer_) {
         return base_speed; // Safety fallback
     }
 
     double constrained_speed = base_speed;
 
     // Get scaling factors instead of hardcoded constants
-    auto scaling_factors = workspace_validator_->getScalingFactors();
+    auto scaling_factors = workspace_analyzer_->getScalingFactors();
 
     // Apply joint-specific constraints using scaling
     switch (joint_index) {

@@ -1,6 +1,6 @@
 #include "admittance_controller.h"
 #include "hexamotion_constants.h"
-#include "workspace_validator.h" // Use unified validator for workspace utilities
+#include "workspace_analyzer.h" // Use unified analyzer for workspace utilities
 
 /**
  * @file admittance_controller.cpp
@@ -23,11 +23,11 @@ AdmittanceController::AdmittanceController(RobotModel &model, IIMUInterface *imu
       load_stiffness_scaler_(1.5f), step_clearance_(40.0f),
       current_time_(0.0) {
 
-    // Initialize workspace validator for position calculations
+    // Initialize workspace analyzer for position calculations
     ValidationConfig validator_config;
     validator_config.enable_collision_checking = false;   // Disable for performance in admittance control
     validator_config.enable_joint_limit_checking = false; // Not needed for stiffness calculations
-    workspace_validator_ = std::make_unique<WorkspaceValidator>(model_, validator_config);
+    workspace_analyzer_ = std::make_unique<WorkspaceAnalyzer>(model_, ComputeConfig::low(), validator_config);
 
     delta_time_ = config_.getDeltaTime();
     selectIntegrationMethod();
@@ -192,13 +192,13 @@ double AdmittanceController::calculateStiffnessScale(int leg_index, StepPhase le
     if (leg_state != SWING_PHASE)
         return 1.0f;
 
-    // Use WorkspaceValidator for default position calculation
-    if (!workspace_validator_) {
+    // Use WorkspaceAnalyzer for default position calculation
+    if (!workspace_analyzer_) {
         return 1.0f; // Safety fallback
     }
 
     // Get workspace bounds for more accurate default position
-    auto bounds = workspace_validator_->getWorkspaceBounds(leg_index);
+    auto bounds = workspace_analyzer_->getWorkspaceBounds(leg_index);
     Point3D default_pos = bounds.center_position; // Use workspace center as reference
 
     double z_diff = abs(leg_position.z - default_pos.z);

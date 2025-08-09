@@ -4,8 +4,7 @@
 #include "../src/gait_config_factory.h"
 #include "../src/leg_stepper.h"
 #include "../src/walk_controller.h"
-#include "../src/walkspace_analyzer.h"
-#include "../src/workspace_validator.h"
+#include "../src/workspace_analyzer.h"
 #include "test_stubs.h"
 #include <algorithm>
 #include <cassert>
@@ -106,11 +105,11 @@ void testTrajectoryGeneration(LegStepper &stepper, const RobotModel &model) {
 
     // Test swing trajectory generation step by step
     std::cout << "  Generating primary swing control nodes..." << std::endl;
-    stepper.generatePrimarySwingControlNodes();
+    stepper.testGeneratePrimarySwingControlNodes();
     std::cout << "  Primary swing nodes generated successfully" << std::endl;
 
     std::cout << "  Generating secondary swing control nodes..." << std::endl;
-    stepper.generateSecondarySwingControlNodes(false);
+    stepper.testGenerateSecondarySwingControlNodes(false);
     std::cout << "  Secondary swing nodes generated successfully" << std::endl;
 
     // Test getting and validating multiple nodes
@@ -146,7 +145,7 @@ void testTrajectoryGeneration(LegStepper &stepper, const RobotModel &model) {
     }
 
     // Test stance trajectory generation
-    stepper.generateStanceControlNodes(1.0);
+    stepper.testGenerateStanceControlNodes(1.0);
 
     // Validate stance nodes
     bool stance_nodes_valid = true;
@@ -181,9 +180,9 @@ void testTipPositionUpdates(LegStepper &stepper, Leg &leg, const RobotModel &mod
 
     // Configure stepper for movement by setting up stride and trajectories
     stepper.updateStride();
-    stepper.generatePrimarySwingControlNodes();
-    stepper.generateSecondarySwingControlNodes(false);
-    stepper.generateStanceControlNodes(1.0);
+    stepper.testGeneratePrimarySwingControlNodes();
+    stepper.testGenerateSecondarySwingControlNodes(false);
+    stepper.testGenerateStanceControlNodes(1.0);
 
     // Set up initial velocity to ensure trajectory generation
     Point3D initial_velocity = Point3D(10.0, 0, 0);
@@ -207,7 +206,7 @@ void testTipPositionUpdates(LegStepper &stepper, Leg &leg, const RobotModel &mod
     stepper.setStepProgress(0.5); // Set progress to 50%
 
     // Generate stance control nodes if not already done
-    stepper.generateStanceControlNodes(1.0);
+    stepper.testGenerateStanceControlNodes(1.0);
 
     Point3D stance_initial = leg.getCurrentTipPositionGlobal();
     stepper.updateTipPositionIterative(15, time_delta, false, false);
@@ -408,8 +407,8 @@ void testSwingHeightCompliance(LegStepper &stepper, Leg &leg, const RobotModel &
     stepper.updateStride();
 
     // Generar nodos de control de swing
-    stepper.generatePrimarySwingControlNodes();
-    stepper.generateSecondarySwingControlNodes(false);
+    stepper.testGeneratePrimarySwingControlNodes();
+    stepper.testGenerateSecondarySwingControlNodes(false);
 
     // Simular diferentes puntos de la trayectoria de swing
     double max_swing_height = initial_z;
@@ -917,6 +916,7 @@ int main() {
     p.coxa_length = 50;
     p.femur_length = 101;
     p.tibia_length = 208;
+    p.default_height_offset = -208.0; // Set to -tibia_length for explicit configuration
     p.robot_height = 208;
     p.standing_height = 150;
     p.control_frequency = 50;
@@ -928,6 +928,7 @@ int main() {
     p.tibia_angle_limits[1] = 45;
 
     RobotModel model(p);
+    model.workspaceAnalyzerInitializer(); // Inicializar WorkspaceAnalyzer
 
     // Create leg objects for testing
     Leg test_legs[NUM_LEGS] = {
@@ -1025,12 +1026,8 @@ int main() {
         // Get leg's identity pose for LegStepper initialization
         Point3D identity_pose = leg.getCurrentTipPositionGlobal();
 
-        // Create required objects for LegStepper
-        WalkspaceAnalyzer walkspace_analyzer(model);
-        WorkspaceValidator workspace_validator(model);
-
         // Create LegStepper
-        LegStepper stepper(leg_index, identity_pose, leg, model, &walkspace_analyzer, &workspace_validator);
+        LegStepper stepper(leg_index, identity_pose, leg, const_cast<RobotModel &>(model));
         stepper.setDefaultTipPose(identity_pose);
 
         // CRITICAL: Configure velocity and stride BEFORE testing trajectory generation
@@ -1065,7 +1062,8 @@ int main() {
             test_params.dynamic_gait.swing_phase = 12;
             test_params.dynamic_gait.frequency = 2.0;
             RobotModel temp_model(test_params);
-            LegStepper temp_stepper(leg_index, identity_pose, leg, temp_model, &walkspace_analyzer, &workspace_validator);
+            temp_model.workspaceAnalyzerInitializer(); // Inicializar WorkspaceAnalyzer
+            LegStepper temp_stepper(leg_index, identity_pose, leg, temp_model);
             temp_stepper.setDefaultTipPose(identity_pose);
 
             for (int i = 0; i < step_cycle.period_; ++i) {
@@ -1079,9 +1077,9 @@ int main() {
             Point3D initial_velocity = Point3D(10.0, 0, 0);
             stepper.setSwingOriginTipVelocity(initial_velocity);
             stepper.updateTipPositionIterative(10, 0.02);
-            stepper.generatePrimarySwingControlNodes();
-            stepper.generateSecondarySwingControlNodes(false);
-            stepper.generateStanceControlNodes(1.0);
+            stepper.testGeneratePrimarySwingControlNodes();
+            stepper.testGenerateSecondarySwingControlNodes(false);
+            stepper.testGenerateStanceControlNodes(1.0);
 
             // Verificar que los nodos no son NaN
             bool nodes_valid = true;
@@ -1139,8 +1137,8 @@ int main() {
             stepper.setStepProgress(0.5);
             stepper.setDesiredVelocity(Point3D(40.0, 0.0, 0.0), 0.0);
             stepper.updateStride();
-            stepper.generatePrimarySwingControlNodes();
-            stepper.generateSecondarySwingControlNodes(false);
+            stepper.testGeneratePrimarySwingControlNodes();
+            stepper.testGenerateSecondarySwingControlNodes(false);
 
             double max_height = results.initial_position.z;
             for (double progress = 0.0; progress <= 1.0; progress += 0.1) {
@@ -1326,15 +1324,11 @@ int main() {
     // Test walk plane pose consistency across multiple leg coordination
     std::vector<double> walk_plane_heights_during_coordination;
 
-    // Create required objects for LegStepper
-    WalkspaceAnalyzer walkspace_analyzer(model);
-    WorkspaceValidator workspace_validator(model);
-
     // Create LegSteppers for all legs (using pointers due to reference members)
     LegStepper *steppers[NUM_LEGS];
     for (int i = 0; i < NUM_LEGS; ++i) {
         Point3D identity_pose = test_legs[i].getCurrentTipPositionGlobal();
-        steppers[i] = new LegStepper(i, identity_pose, test_legs[i], model, &walkspace_analyzer, &workspace_validator);
+        steppers[i] = new LegStepper(i, identity_pose, test_legs[i], const_cast<RobotModel &>(model));
 
         // Set different phase offsets for tripod gait
         double phase_offset = (i % 2 == 0) ? 0.0 : 0.5; // Tripod gait pattern

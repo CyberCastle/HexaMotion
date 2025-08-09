@@ -7,7 +7,7 @@
 #include <vector>
 
 // Forward declaration to avoid circular dependency
-class WorkspaceValidator;
+class WorkspaceAnalyzer;
 
 /**
  * @brief Terrain adaptation system for hexapod locomotion
@@ -27,7 +27,7 @@ class TerrainAdaptation {
      */
     struct ExternalTarget {
         Point3D position;        //< Target tip position
-        double swing_clearance;   //< Height clearance during swing
+        double swing_clearance;  //< Height clearance during swing
         std::string frame_id;    //< Reference frame ID
         unsigned long timestamp; //< Request timestamp
         bool defined;            //< Whether target is valid
@@ -40,9 +40,9 @@ class TerrainAdaptation {
      * @brief Step plane detection structure
      */
     struct StepPlane {
-        Point3D position; //< Step surface position
-        Point3D normal;   //< Step surface normal vector
-        bool valid;       //< Whether detection is valid
+        Point3D position;  //< Step surface position
+        Point3D normal;    //< Step surface normal vector
+        bool valid;        //< Whether detection is valid
         double confidence; //< Detection confidence (0-1)
 
         StepPlane() : position(0, 0, 0), normal(0, 0, 1), valid(false), confidence(0) {}
@@ -55,14 +55,14 @@ class TerrainAdaptation {
         Eigen::Vector3d coeffs; //< Plane coefficients [a,b,c] for ax+by+c=z
         Eigen::Vector3d normal; //< Plane normal vector
         bool valid;             //< Whether estimation is valid
-        double confidence;       //< Estimation confidence (0-1)
+        double confidence;      //< Estimation confidence (0-1)
 
         WalkPlane() : coeffs(0, 0, 0), normal(0, 0, 1), valid(false), confidence(0) {}
     };
 
   private:
     RobotModel &model_;
-    std::unique_ptr<WorkspaceValidator> workspace_validator_; // Workspace validation
+    std::unique_ptr<WorkspaceAnalyzer> workspace_analyzer_; // Workspace analysis and validation
     bool rough_terrain_mode_;
     bool force_normal_touchdown_;
     bool gravity_aligned_tips_;
@@ -224,7 +224,7 @@ class TerrainAdaptation {
      * @return Terrain-adapted trajectory
      */
     Point3D adaptTrajectoryForTerrain(int leg_index, const Point3D &trajectory,
-                                     StepPhase leg_state, double swing_progress);
+                                      StepPhase leg_state, double swing_progress);
 
     /**
      * @brief Check if target position is reachable within terrain constraints

@@ -4,8 +4,7 @@
 #include "../src/gait_config_factory.h"
 #include "../src/leg_stepper.h"
 #include "../src/walk_controller.h"
-#include "../src/walkspace_analyzer.h"
-#include "../src/workspace_validator.h"
+#include "../src/workspace_analyzer.h"
 #include "test_stubs.h"
 #include <algorithm>
 #include <cassert>
@@ -13,10 +12,11 @@
 #include <iostream>
 #include <vector>
 
-// Helper function to check if a position is reachable using OpenSHC-style WorkspaceValidator
+// Helper function to check if a position is reachable using basic kinematic validation
 bool isPositionReachable(const RobotModel &model, int leg_id, const Point3D &position) {
-    WorkspaceValidator temp_validator(model);
-    return temp_validator.isReachable(leg_id, position);
+    // Use basic inverse kinematics validation
+    JointAngles angles = model.inverseKinematicsCurrentGlobalCoordinates(leg_id, JointAngles(0, 0, 0), position);
+    return model.checkJointLimits(leg_id, angles);
 }
 
 void analyzeAllLegsTrajectory(Leg test_legs[NUM_LEGS], LegStepper steppers[NUM_LEGS], const RobotModel &model, const GaitConfiguration &gait_config) {
@@ -447,6 +447,7 @@ int main() {
     p.coxa_length = 50;
     p.femur_length = 101;
     p.tibia_length = 208;
+    p.default_height_offset = -208.0; // Set to -tibia_length for explicit configuration
     p.robot_height = 208;
     p.standing_height = 150;
     p.control_frequency = 50;
@@ -458,8 +459,9 @@ int main() {
     p.tibia_angle_limits[1] = 45;
 
     // Configure gait factors for tripod gait
-    p.gait_factors.tripod_length_factor = 0.4;  // 40% of leg reach for step length
-    p.gait_factors.tripod_height_factor = 0.15; // 15% of standing height for swing
+    // Note: gait_factors not available in current Parameters structure
+    // p.gait_factors.tripod_length_factor = 0.4;  // 40% of leg reach for step length
+    // p.gait_factors.tripod_height_factor = 0.15; // 15% of standing height for swing
 
     // Create tripod gait configuration
     GaitConfiguration tripod_config = createTripodGaitConfig(p);
@@ -471,6 +473,7 @@ int main() {
     std::cout << "  Ratio swing: " << tripod_config.getSwingRatio() << std::endl;
 
     RobotModel model(p);
+    model.workspaceAnalyzerInitializer(); // Inicializar WorkspaceAnalyzer
 
     // Create all 6 legs
     Leg test_legs[NUM_LEGS] = {
@@ -505,18 +508,14 @@ int main() {
                   << (angles.tibia * 180.0 / M_PI) << "°)" << std::endl;
     }
 
-    // Create required objects
-    WalkspaceAnalyzer walkspace_analyzer(model);
-    WorkspaceValidator workspace_validator(model);
-
     // Create LegSteppers for all legs
     LegStepper steppers[NUM_LEGS] = {
-        LegStepper(0, test_legs[0].getCurrentTipPositionGlobal(), test_legs[0], model, &walkspace_analyzer, &workspace_validator),
-        LegStepper(1, test_legs[1].getCurrentTipPositionGlobal(), test_legs[1], model, &walkspace_analyzer, &workspace_validator),
-        LegStepper(2, test_legs[2].getCurrentTipPositionGlobal(), test_legs[2], model, &walkspace_analyzer, &workspace_validator),
-        LegStepper(3, test_legs[3].getCurrentTipPositionGlobal(), test_legs[3], model, &walkspace_analyzer, &workspace_validator),
-        LegStepper(4, test_legs[4].getCurrentTipPositionGlobal(), test_legs[4], model, &walkspace_analyzer, &workspace_validator),
-        LegStepper(5, test_legs[5].getCurrentTipPositionGlobal(), test_legs[5], model, &walkspace_analyzer, &workspace_validator)};
+        LegStepper(0, test_legs[0].getCurrentTipPositionGlobal(), test_legs[0], const_cast<RobotModel &>(model)),
+        LegStepper(1, test_legs[1].getCurrentTipPositionGlobal(), test_legs[1], const_cast<RobotModel &>(model)),
+        LegStepper(2, test_legs[2].getCurrentTipPositionGlobal(), test_legs[2], const_cast<RobotModel &>(model)),
+        LegStepper(3, test_legs[3].getCurrentTipPositionGlobal(), test_legs[3], const_cast<RobotModel &>(model)),
+        LegStepper(4, test_legs[4].getCurrentTipPositionGlobal(), test_legs[4], const_cast<RobotModel &>(model)),
+        LegStepper(5, test_legs[5].getCurrentTipPositionGlobal(), test_legs[5], const_cast<RobotModel &>(model))};
 
     // Configure StepCycle from tripod gait configuration for all steppers
     StepCycle step_cycle = tripod_config.generateStepCycle();
