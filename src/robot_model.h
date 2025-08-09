@@ -146,12 +146,19 @@ struct Parameters {
     // resetting to the default tip pose. This yields smoother, continuous trajectories (OpenSHC-style continuity)
     // at the cost of potential long-term drift. When false (default), an anti-drift policy resets the leg to the
     // calibrated default tip pose at the start of stance for deterministic repeatability.
-    bool preserve_swing_end_pose = false; // false = anti-drift reset (current default), true = continuous stance origin
+    bool preserve_swing_end_pose = true; // false = anti-drift reset (current default), true = continuous stance origin
 
     // Workspace constraint toggle: when true (default) all target and intermediate tip poses are constrained
     // via WorkspaceAnalyzer to remain within geometric reach envelopes. When false, raw trajectories are used
     // (useful for debugging or external safety layers). Disabling can cause IK failures or unrealistic poses.
     bool enable_workspace_constrain = true;
+
+    // === HexaMotion extension (NOT present in original OpenSHC) ===
+    // Optional phase-end snap to reduce residual drift of foot trajectory endpoints when using
+    // derivative (velocity) integration. Set enable_phase_end_snap=false to emulate OpenSHC exactly.
+    bool enable_phase_end_snap = true;        //< Enable snapping foot to frozen target at phase end
+    double phase_end_snap_tolerance_mm = 1.0; //< Distance tolerance (mm) for hard snap
+    double phase_end_snap_alpha = 1.0;        //< Blend factor (1.0 hard snap, <1.0 partial correction)
 };
 
 enum GaitType {

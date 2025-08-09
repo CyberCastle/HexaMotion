@@ -515,8 +515,10 @@ void WalkController::updateWalk(const Point3D &linear_velocity_input, double ang
             if (in_swing && current_state != STEP_SWING) {
                 leg_stepper->setStepState(STEP_SWING);
                 leg_stepper->initializeSwingPeriod(1);
+                leg_stepper->beginSwingPhase(); // OpenSHC alignment: freeze stride/target at phase start
             } else if (!in_swing && current_state != STEP_STANCE) {
                 leg_stepper->setStepState(STEP_STANCE);
+                leg_stepper->beginStancePhase(); // OpenSHC alignment
             }
 
             legs_array_[i].setStepPhase(in_swing ? SWING_PHASE : STANCE_PHASE);
