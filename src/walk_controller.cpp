@@ -197,14 +197,31 @@ VelocityLimits::LimitValues WalkController::applyVelocityLimits(double vx, doubl
     // Get limits for this bearing
     VelocityLimits::LimitValues limits = velocity_limits_.getLimit(bearing);
 
-    // Apply limits to input velocities
-    VelocityLimits::LimitValues limited_velocities;
-    limited_velocities.linear_x = std::max(-limits.linear_x, std::min(limits.linear_x, vx));
-    limited_velocities.linear_y = std::max(-limits.linear_y, std::min(limits.linear_y, vy));
-    limited_velocities.angular_z = std::max(-limits.angular_z, std::min(limits.angular_z, omega));
-    limited_velocities.acceleration = limits.acceleration;
+    // First, clamp to absolute per-axis limits
+    VelocityLimits::LimitValues clamped;
+    clamped.linear_x = std::max(-limits.linear_x, std::min(limits.linear_x, vx));
+    clamped.linear_y = std::max(-limits.linear_y, std::min(limits.linear_y, vy));
+    clamped.angular_z = std::max(-limits.angular_z, std::min(limits.angular_z, omega));
+    clamped.acceleration = limits.acceleration;
 
-    return limited_velocities;
+    // Then, apply coupling/scaling due to angular demand using VelocityLimits policy
+    // Scale factor is the fraction of angular demand w.r.t available limit (0..1)
+    double angular_demand_pct = 0.0;
+    if (limits.angular_z > 1e-9) {
+        angular_demand_pct = std::abs(clamped.angular_z) / limits.angular_z;
+        angular_demand_pct = std::min(1.0, std::max(0.0, angular_demand_pct));
+    }
+
+    VelocityLimits::LimitValues scaled = velocity_limits_.scaleVelocityLimits(limits, angular_demand_pct);
+
+    // Finally, ensure clamped values respect the scaled limits (coupled reduction of linear speed)
+    VelocityLimits::LimitValues final_vel;
+    final_vel.linear_x = std::max(-scaled.linear_x, std::min(scaled.linear_x, clamped.linear_x));
+    final_vel.linear_y = std::max(-scaled.linear_y, std::min(scaled.linear_y, clamped.linear_y));
+    final_vel.angular_z = clamped.angular_z; // already clamped to base angular limit; scaling adjusts linear components
+    final_vel.acceleration = scaled.acceleration;
+
+    return final_vel;
 }
 
 bool WalkController::validateVelocityCommand(double vx, double vy, double omega) const {

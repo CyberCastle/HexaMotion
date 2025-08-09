@@ -141,6 +141,17 @@ struct Parameters {
 
     // Walkspace overlap control (OpenSHC equivalent)
     bool overlapping_walkspaces = false; // Flag denoting if walkspaces are allowed to overlap (default: false, same as OpenSHC)
+
+    // Gait continuity control: when true, preserve the swing end (touchdown) pose as stance origin instead of
+    // resetting to the default tip pose. This yields smoother, continuous trajectories (OpenSHC-style continuity)
+    // at the cost of potential long-term drift. When false (default), an anti-drift policy resets the leg to the
+    // calibrated default tip pose at the start of stance for deterministic repeatability.
+    bool preserve_swing_end_pose = false; // false = anti-drift reset (current default), true = continuous stance origin
+
+    // Workspace constraint toggle: when true (default) all target and intermediate tip poses are constrained
+    // via WorkspaceAnalyzer to remain within geometric reach envelopes. When false, raw trajectories are used
+    // (useful for debugging or external safety layers). Disabling can cause IK failures or unrealistic poses.
+    bool enable_workspace_constrain = true;
 };
 
 enum GaitType {

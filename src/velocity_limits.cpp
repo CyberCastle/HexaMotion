@@ -60,30 +60,9 @@ void VelocityLimits::generateLimits(const GaitConfig &gait_config) {
     // Calculate overshoot compensation using workspace data
     calculateOvershoot(gait_config);
 
-    // For each direction (bearing), calculate velocity and acceleration limits
+    // For each direction (bearing), calculate velocity and acceleration limits using validator constraints
     for (int bearing = 0; bearing < 360; ++bearing) {
-        double walkspace_radius = pimpl_->workspace_config_.walkspace_radius;
-        double step_frequency = gait_config.frequency;
-
-        // Maximum linear speed based on step length and frequency
-        double max_step_length = walkspace_radius * 2.0;                    // Maximum step length
-        double max_linear_speed = (max_step_length * step_frequency) / 2.0; // Average speed
-
-        // Maximum angular speed based on stance radius
-        double stance_radius = walkspace_radius * 0.8; // Effective stance radius
-        double max_angular_speed = max_linear_speed / stance_radius;
-
-        // Acceleration limits based on step timing
-        double time_to_max_stride = gait_config.time_to_max_stride;
-        double max_linear_acceleration = max_linear_speed / time_to_max_stride;
-
-        // Create and assign the limits
-        LimitValues limits;
-        limits.linear_x = max_linear_speed;
-        limits.linear_y = max_linear_speed;
-        limits.angular_z = max_angular_speed;
-        limits.acceleration = max_linear_acceleration;
-        pimpl_->limit_map_.limits[bearing] = limits;
+        pimpl_->limit_map_.limits[bearing] = calculateLimitsForBearing(static_cast<double>(bearing), gait_config);
     }
 }
 
@@ -156,7 +135,8 @@ VelocityLimits::LimitValues VelocityLimits::scaleVelocityLimits(
 
     // Apply angular velocity scaling using scaling factors
     auto scaling_factors = pimpl_->workspace_analyzer_->getScalingFactors();
-    double angular_scale = angular_velocity_percentage * scaling_factors.angular_scale;
+    // Combine external scaling (set via setAngularVelocityScaling) with analyzer-provided scale
+    double angular_scale = angular_velocity_percentage * scaling_factors.angular_scale * pimpl_->angular_velocity_scaling_;
     scaled_limits.angular_z *= angular_scale;
 
     // Scale linear velocities based on angular velocity demand

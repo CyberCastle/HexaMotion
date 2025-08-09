@@ -102,17 +102,17 @@ void LegStepper::setDesiredVelocity(const Point3D &linear_velocity, double angul
 }
 
 void LegStepper::updateStride() {
-    // OpenSHC exact implementation - no modifications
+    // OpenSHC-based implementation (logic adapted with safety validation)
 
     // TODO: Update walk plane and normal from external source (equivalent to walker_->getWalkPlane())
     // These should be set by the higher-level controller
     // walk_plane_ = walker_->getWalkPlane();
     // walk_plane_normal_ = walker_->getWalkPlaneNormal();
 
-    // Linear stride vector (OpenSHC exact)
+    // Linear stride vector (OpenSHC formula)
     Point3D stride_vector_linear(desired_linear_velocity_.x, desired_linear_velocity_.y, 0.0);
 
-    // Angular stride vector (OpenSHC exact implementation)
+    // Angular stride vector (OpenSHC formula)
     Point3D z_unit(0, 0, 1);
     double dot_product = current_tip_pose_.x * z_unit.x + current_tip_pose_.y * z_unit.y + current_tip_pose_.z * z_unit.z;
     Point3D projection_on_z = z_unit * dot_product;
@@ -125,7 +125,7 @@ void LegStepper::updateStride() {
     stride_vector_angular.y = angular_velocity_vector.z * radius.x - angular_velocity_vector.x * radius.z;
     stride_vector_angular.z = angular_velocity_vector.x * radius.y - angular_velocity_vector.y * radius.x;
 
-    // Combination and scaling (OpenSHC exact)
+    // Combination and scaling (OpenSHC formula)
     stride_vector_ = stride_vector_linear + stride_vector_angular;
 
     // Use StepCycle configuration values (OpenSHC equivalent calculation)
@@ -135,7 +135,7 @@ void LegStepper::updateStride() {
     // STEP 3: Apply stride validation and safety constraints
     stride_vector_ = calculateSafeStride(stride_vector_);
 
-    // Swing clearance (OpenSHC exact)
+    // Swing clearance (OpenSHC formula)
     swing_clearance_ = walk_plane_normal_.normalized() * step_clearance_height_;
 }
 
@@ -242,7 +242,9 @@ void LegStepper::generateSecondarySwingControlNodes(bool ground_contact) {
     }
 
     // STEP 4: Validate and fix control nodes to ensure all are reachable
-    validateAndFixControlNodes(swing_2_nodes_);
+    if (robot_model_.getParams().enable_workspace_constrain) {
+        validateAndFixControlNodes(swing_2_nodes_);
+    }
 }
 
 void LegStepper::generateStanceControlNodes(double stride_scaler) {
@@ -262,7 +264,9 @@ void LegStepper::generateStanceControlNodes(double stride_scaler) {
     stance_nodes_[4] = stance_origin_tip_position_ + stance_node_seperation * 4.0;
 
     // STEP 4: Validate and fix control nodes to ensure all are reachable
-    validateAndFixControlNodes(stance_nodes_);
+    if (robot_model_.getParams().enable_workspace_constrain) {
+        validateAndFixControlNodes(stance_nodes_);
+    }
 }
 
 double LegStepper::calculateStanceStrideScaler() {
@@ -322,11 +326,15 @@ void LegStepper::updateTipPositionIterative(int iteration, double time_delta, bo
     // Update stride vector FIRST
     updateStride();
 
-    // Generate default target (OpenSHC exact formula)
+    // Generate default target (OpenSHC-derived formula)
     Point3D raw_target = default_tip_pose_ + stride_vector_ * 0.5;
 
     // STEP 1: Validate and constrain target within workspace (NEW SAFETY CHECK)
-    target_tip_pose_ = calculateSafeTarget(raw_target);
+    if (robot_model_.getParams().enable_workspace_constrain) {
+        target_tip_pose_ = calculateSafeTarget(raw_target);
+    } else {
+        target_tip_pose_ = raw_target; // unconstrained (debug mode)
+    }
 
     if (step_state_ == STEP_SWING) {
         // Initialize swing period on first iteration
@@ -375,8 +383,12 @@ void LegStepper::updateTipPositionIterative(int iteration, double time_delta, bo
         // OpenSHC pattern: Accumulate delta position instead of setting absolute position
         Point3D target_pose = current_tip_pose_ + delta_pos;
 
-        // Apply workspace constraints to ensure position is physically reachable (OpenSHC pattern - NO IK here)
-        current_tip_pose_ = robot_model_.getWorkspaceAnalyzer().constrainToGeometricWorkspace(leg_index_, target_pose);
+        // Apply workspace constraints (extension for safety). Skip if disabled via params.
+        if (robot_model_.getParams().enable_workspace_constrain) {
+            current_tip_pose_ = robot_model_.getWorkspaceAnalyzer().constrainToGeometricWorkspace(leg_index_, target_pose);
+        } else {
+            current_tip_pose_ = target_pose; // unchecked (debug mode)
+        }
 
         // Calculate velocity for this iteration (OpenSHC pattern)
         current_tip_velocity_ = delta_pos / time_delta;
@@ -403,12 +415,20 @@ void LegStepper::updateTipPositionIterative(int iteration, double time_delta, bo
         if (stance_iteration > stance_iterations_)
             stance_iteration = stance_iterations_;
 
-        // Initialize stance origin if needed (OpenSHC: saves initial tip position at beginning of stance)
+        // Initialize stance origin if needed.
+        // OpenSHC behavior: preserve swing touchdown pose as stance origin (continuity, allows mild drift).
+        // Extended (anti-drift) behavior: hard reset to calibrated default to avoid cumulative error.
         if (stance_iteration == 1) {
-            // OpenSHC exact implementation: Reset to default position at stance start
-            // This prevents drift accumulation from Bézier swing trajectories
-            stance_origin_tip_position_ = default_tip_pose_;
-            current_tip_pose_ = default_tip_pose_;
+            const Parameters &params = robot_model_.getParams();
+            if (params.preserve_swing_end_pose) {
+                // Continuity mode: keep the current pose (swing end / touchdown) as stance origin.
+                // Avoid altering current_tip_pose_ to maintain seamless transition.
+                stance_origin_tip_position_ = current_tip_pose_;
+            } else {
+                // Anti-drift mode (default): reset to default calibrated pose for deterministic stance start.
+                stance_origin_tip_position_ = default_tip_pose_;
+                current_tip_pose_ = default_tip_pose_;
+            }
         }
 
         // Generate stance control nodes with calculated stride scaler (OpenSHC approach)
