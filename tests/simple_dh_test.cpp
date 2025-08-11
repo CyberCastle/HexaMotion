@@ -17,7 +17,7 @@ int main() {
     p.tibia_length = 208;
     p.default_height_offset = -208.0; // Set to -tibia_length for explicit configuration
     p.robot_height = 208;
-    p.control_frequency = 50;
+    p.time_delta = 1.0 / 50.0;
     p.coxa_angle_limits[0] = -65;
     p.coxa_angle_limits[1] = 65;
     p.femur_angle_limits[0] = -75;

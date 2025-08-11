@@ -72,7 +72,7 @@ struct Parameters {
     double max_velocity;
     double max_angular_velocity;
     double stability_margin;
-    double control_frequency;
+    // Removed obsolete control_frequency (replaced by unified time_delta)
 
     // Unified global control loop timestep (seconds) following OpenSHC semantics.
     // This value defines the nominal period used by all time-based integrations and

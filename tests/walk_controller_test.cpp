@@ -333,7 +333,7 @@ void testKinematicConsistency(LegStepper &stepper, Leg &leg, const RobotModel &m
 void testTrajectoryStartEnd(LegStepper &stepper, Leg &leg, const RobotModel &model) {
     std::cout << "Testing trajectory start/end positions" << std::endl;
 
-    double time_delta = 1.0 / model.getParams().control_frequency;
+    double time_delta = model.getParams().time_delta;
 
     stepper.setStepState(STEP_STANCE);
     stepper.setPhase(0);
@@ -919,7 +919,7 @@ int main() {
     p.default_height_offset = -208.0; // Set to -tibia_length for explicit configuration
     p.robot_height = 208;
     p.standing_height = 150;
-    p.control_frequency = 50;
+    p.time_delta = 1.0 / 50.0;
     p.coxa_angle_limits[0] = -65;
     p.coxa_angle_limits[1] = 65;
     p.femur_angle_limits[0] = -75;

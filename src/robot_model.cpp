@@ -375,7 +375,7 @@ double RobotModel::normalizeAngle(double angle_rad) const {
 
 bool RobotModel::validate() const {
     return (params.hexagon_radius > 0 && params.coxa_length > 0 && params.femur_length > 0 && params.tibia_length > 0 &&
-            params.robot_height > 0 && params.control_frequency > 0);
+            params.robot_height > 0 && params.time_delta > 0);
 }
 
 std::pair<double, double> RobotModel::calculateHeightRange() const {

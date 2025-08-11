@@ -101,9 +101,21 @@ struct GaitConfiguration {
         StepCycle step_cycle;
         int base_step_period = phase_config.stance_phase + phase_config.swing_phase;
 
-        // Use externally provided time_delta_ (global Parameters::time_delta) when available
-        // time_delta_ must be provided; fallback to default 50Hz only if omitted
-        double time_delta = (time_delta_ > 0.0) ? time_delta_ : (1.0 / DEFAULT_CONTROL_FREQUENCY);
+        // time_delta_ (Parameters::time_delta) must be explicitly provided (>0). No default/fallback frequency.
+        // If invalid (<=0) an empty StepCycle is returned to signal configuration error.
+        double time_delta = time_delta_;
+        if (time_delta <= 0.0) {
+            // Defensive: avoid division by zero; mark invalid cycle
+            step_cycle.period_ = 0;
+            step_cycle.frequency_ = 0.0;
+            step_cycle.stance_period_ = 0;
+            step_cycle.swing_period_ = 0;
+            step_cycle.stance_start_ = 0;
+            step_cycle.stance_end_ = 0;
+            step_cycle.swing_start_ = 0;
+            step_cycle.swing_end_ = 0;
+            return step_cycle;
+        }
         double swing_ratio = double(phase_config.swing_phase) / double(base_step_period);
 
         // Use configured step_frequency by default, or override if provided
