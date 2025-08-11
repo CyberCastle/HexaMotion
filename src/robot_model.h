@@ -76,9 +76,9 @@ struct Parameters {
 
     // Unified global control loop timestep (seconds) following OpenSHC semantics.
     // This value defines the nominal period used by all time-based integrations and
-    // gait timing calculations. Actual measured cycle time may deviate slightly; that
-    // deviation is recorded separately (e.g., LocomotionSystem::measured_time_delta_)
-    // for diagnostics but does not alter deterministic gait iteration logic.
+    // gait timing calculations. This repository now removes per-cycle measured dt usage
+    // inside LocomotionSystem for simplicity; optional pacing/jitter instrumentation can
+    // be implemented externally without altering deterministic gait iteration logic.
     double time_delta = 0.02;                         // Default 50 Hz loop
     double default_servo_speed = SERVO_SPEED_DEFAULT; //< Default servo movement speed (0.1-3.0, where 1.0 is normal speed)
     // Enable kinematic integration of body translation & yaw (simulation/testing)
