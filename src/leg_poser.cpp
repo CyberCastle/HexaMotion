@@ -68,7 +68,7 @@ bool LegPoser::stepToPosition(const Pose &target_tip_pose, const Pose &target_po
     master_iteration_count_++;
 
     // OpenSHC exact timing calculation
-    double time_delta = 1.0 / robot_model_.getParams().control_frequency;
+    double time_delta = robot_model_.getTimeDelta();
     int num_iterations = std::max(1, static_cast<int>(std::round(time_to_step / time_delta)));
     double delta_t = 1.0 / num_iterations;
 

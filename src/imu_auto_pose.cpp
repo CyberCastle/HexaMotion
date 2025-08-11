@@ -55,19 +55,19 @@ void IMUAutoPose::setIMUPoseParams(const IMUPoseParams &params) {
     params_ = params;
 }
 
-void IMUAutoPose::update(double dt) {
+void IMUAutoPose::update(double time_delta) {
     if (!imu_ || current_mode_ == AUTO_POSE_OFF) {
         current_state_.pose_active = false;
         return;
     }
 
-    // Check update timing - skip timing check if dt is provided (for testing)
+    // Check update timing - skip timing check if time_delta is provided (for testing)
     // HARDWARE CONSIDERATION: Real systems need robust timing to handle:
     // - Variable processing delays in main loop
     // - IMU data rate mismatches (sensor vs control frequency)
     // - Recovery from missed updates due to system overload
     unsigned long current_time = millis();
-    if (dt <= 0.0f && current_time - last_update_time_ < update_interval_) {
+    if (time_delta <= 0.0f && current_time - last_update_time_ < update_interval_) {
         return;
     }
     last_update_time_ = current_time;

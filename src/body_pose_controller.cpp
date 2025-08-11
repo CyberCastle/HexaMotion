@@ -844,7 +844,7 @@ void BodyPoseController::updateWalkPlanePose(Leg legs[NUM_LEGS]) {
         walk_plane_pose_.rotation = bezier_rotation;
 
         // Advance time for next iteration
-        walk_plane_bezier_time += 1.0 / model.getParams().control_frequency;
+        walk_plane_bezier_time += model.getTimeDelta();
     }
 }
 

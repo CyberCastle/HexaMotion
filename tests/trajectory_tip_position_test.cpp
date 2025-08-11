@@ -37,7 +37,7 @@ void debugTipPositionGeneration(LegStepper &stepper, Leg &leg, const RobotModel 
     leg.setJointAngles(traditional_angles); // Reset to same starting point
     JointAngles current_angles = leg.getJointAngles();
     Point3D current_pos = leg.getCurrentTipPositionGlobal();
-    JointAngles new_angles = model.applyAdvancedIK(leg.getLegId(), current_pos, initial_position, current_angles, 0.02);
+    JointAngles new_angles = model.applyAdvancedIK(leg.getLegId(), current_pos, initial_position, current_angles, model.getTimeDelta());
     leg.setJointAngles(new_angles);
     Point3D delta_actual_pos = leg.getCurrentTipPositionGlobal();
     double delta_ik_error = (delta_actual_pos - initial_position).norm();
@@ -96,7 +96,7 @@ void debugTipPositionGeneration(LegStepper &stepper, Leg &leg, const RobotModel 
 
     // Configure iteration count using OpenSHC-compatible calculation
     // OpenSHC formula: swing_iterations = int((swing_period/period) / (frequency * time_delta))
-    double time_delta = 0.02; // OpenSHC standard: 50Hz control loop (0.02s per iteration)
+    double time_delta = model.getTimeDelta(); // unified global timestep
 
     // Use the SAME StepCycle values that the LegStepper uses (not gait_config values)
     double period = step_cycle.period_;               // Use normalized period from StepCycle
@@ -349,7 +349,7 @@ void debugTipPositionGeneration(LegStepper &stepper, Leg &leg, const RobotModel 
         // Test both IK methods on extreme positions
         JointAngles current_angles = leg.getJointAngles();
         Point3D current_pos = leg.getCurrentTipPositionGlobal();
-        JointAngles new_angles = model.applyAdvancedIK(leg.getLegId(), current_pos, pos, current_angles, 0.02);
+        JointAngles new_angles = model.applyAdvancedIK(leg.getLegId(), current_pos, pos, current_angles, model.getTimeDelta());
         leg.setJointAngles(new_angles);
         JointAngles angles = leg.getJointAngles();
         bool valid = model.checkJointLimits(stepper.getLegIndex(), angles);
@@ -412,7 +412,7 @@ void debugTipPositionGeneration(LegStepper &stepper, Leg &leg, const RobotModel 
     // Store initial joint angles for comparison
     JointAngles temp_angles = leg.getJointAngles();
     Point3D temp_pos = leg.getCurrentTipPositionGlobal();
-    JointAngles updated_angles = model.applyAdvancedIK(leg.getLegId(), temp_pos, initial_position, temp_angles, 0.02);
+    JointAngles updated_angles = model.applyAdvancedIK(leg.getLegId(), temp_pos, initial_position, temp_angles, model.getTimeDelta());
     leg.setJointAngles(updated_angles);
     JointAngles initial_stance_angles = leg.getJointAngles();
     Point3D previous_stance_pos = initial_position;
@@ -484,7 +484,7 @@ void debugTipPositionGeneration(LegStepper &stepper, Leg &leg, const RobotModel 
     Point3D final_stance_position = stepper.getCurrentTipPose();
     JointAngles temp_angles2 = leg.getJointAngles();
     Point3D temp_pos2 = leg.getCurrentTipPositionGlobal();
-    JointAngles final_updated_angles = model.applyAdvancedIK(leg.getLegId(), temp_pos2, final_stance_position, temp_angles2, 0.02);
+    JointAngles final_updated_angles = model.applyAdvancedIK(leg.getLegId(), temp_pos2, final_stance_position, temp_angles2, model.getTimeDelta());
     leg.setJointAngles(final_updated_angles);
     JointAngles final_stance_angles = leg.getJointAngles();
 

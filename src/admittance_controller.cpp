@@ -232,12 +232,12 @@ Point3D AdmittanceController::orientationError(const Point3D &target) {
     return target - current;
 }
 
-bool AdmittanceController::maintainOrientation(const Point3D &target, Point3D &current, double dt) {
+bool AdmittanceController::maintainOrientation(const Point3D &target, Point3D &current, double time_delta) {
     if (!imu_)
         return false;
 
     Point3D err = orientationError(target);
-    current = current + err * (dt * WORKSPACE_SCALING_FACTOR);
+    current = current + err * (time_delta * WORKSPACE_SCALING_FACTOR);
     return true;
 }
 

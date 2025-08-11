@@ -57,7 +57,6 @@ LegStepper::LegStepper(int leg_index, const Point3D &identity_tip_pose, Leg &leg
 
     // Initialize gait configuration parameters (not part of StepCycle)
     swing_width_ = 5.0;            // Default swing width (will be overridden by gait configuration)
-    control_frequency_ = 50.0;     // Default control frequency (will be overridden by gait configuration)
     step_clearance_height_ = 20.0; // Default step clearance height in mm (will be overridden by gait configuration)
 
     // Initialize swing state management
@@ -90,7 +89,7 @@ LegStepper::LegStepper(int leg_index, const Point3D &identity_tip_pose, Leg &leg
     // Initialize velocity tracking
     previous_tip_pose_ = identity_tip_pose_;
     has_previous_position_ = false;
-    time_step_ = 1.0 / control_frequency_; // Default time step based on control frequency
+    time_step_ = params.time_delta; // Unified time step
 }
 
 void LegStepper::setDesiredVelocity(const Point3D &linear_velocity, double angular_velocity) {
@@ -176,6 +175,8 @@ void LegStepper::beginStancePhase() {
 }
 
 void LegStepper::calculateSwingTiming(double time_delta) {
+    // Override provided time_delta with unified global value to ensure consistency
+    time_delta = robot_model_.getParams().time_delta;
     // OpenSHC EXACT timing calculation using StepCycle values
     // Follow OpenSHC formula exactly: (double(step.swing_period_) / step.period_) / (step.frequency_ * time_delta)
 
@@ -228,7 +229,7 @@ void LegStepper::generatePrimarySwingControlNodes() {
     mid_tip_position.y += positive_y_axis ? mid_lateral_shift : -mid_lateral_shift;
 
     // OpenSHC exact formula: walker_->getTimeDelta() / swing_delta_t_
-    double time_delta = 1.0 / control_frequency_; // Use configured control frequency from GaitConfiguration
+    double time_delta = robot_model_.getParams().time_delta; // Unified global time delta
     Point3D stance_node_seperation = swing_origin_tip_velocity_ * 0.25 * (time_delta / swing_delta_t_);
 
     // Control nodes for primary swing quartic bezier curves
@@ -252,7 +253,7 @@ void LegStepper::generateSecondarySwingControlNodes(bool ground_contact) {
     // Follow OpenSHC exact implementation for maximum precision
 
     // Calculate final tip velocity for stance transition (OpenSHC formula)
-    double time_delta = 1.0 / control_frequency_; // Use configured control frequency from GaitConfiguration
+    double time_delta = robot_model_.getParams().time_delta; // Unified global time delta
     Point3D final_tip_velocity = stride_vector_ * (-1.0) * (stance_delta_t_ / time_delta);
     Point3D stance_node_seperation = final_tip_velocity * 0.25 * (time_delta / swing_delta_t_);
 
@@ -340,7 +341,7 @@ void LegStepper::updateTipPositionIterative(int iteration, double time_delta, bo
 
     // Calculate swing timing if not already done
     if (swing_delta_t_ <= 0.0) {
-        calculateSwingTiming(time_delta);
+        calculateSwingTiming(robot_model_.getParams().time_delta);
     }
 
     // Update current iteration and step progress

@@ -83,9 +83,8 @@ struct GaitConfiguration {
     double stance_span_modifier = 0.0; // Modificador de span lateral de apoyo (OpenSHC compatible)
 
     // OpenSHC trajectory parameters
-    double swing_width;       //< Lateral shift at mid-swing position in mm (OpenSHC mid_lateral_shift)
-    double control_frequency; //< Control loop frequency in Hz (defines time_delta)
-    double step_frequency;    //< Step frequency in Hz (OpenSHC default: 1.0 Hz)
+    double swing_width;    //< Lateral shift at mid-swing position in mm (OpenSHC mid_lateral_shift)
+    double step_frequency; //< Step frequency in Hz (OpenSHC default: 1.0 Hz)
 
     // Gait performance parameters
     double max_velocity;         //< Maximum walking velocity in mm/s
@@ -98,10 +97,13 @@ struct GaitConfiguration {
     std::vector<std::string> step_order; //< Order of leg movements in the gait
 
     // Methods to generate StepCycle for this gait (OpenSHC-style normalization)
-    StepCycle generateStepCycle(double override_step_frequency = -1.0) const {
+    StepCycle generateStepCycle(double override_step_frequency = -1.0, double time_delta_ = -1.0) const {
         StepCycle step_cycle;
         int base_step_period = phase_config.stance_phase + phase_config.swing_phase;
-        double time_delta = 1.0 / control_frequency;
+
+        // Use externally provided time_delta_ (global Parameters::time_delta) when available
+        // time_delta_ must be provided; fallback to default 50Hz only if omitted
+        double time_delta = (time_delta_ > 0.0) ? time_delta_ : (1.0 / DEFAULT_CONTROL_FREQUENCY);
         double swing_ratio = double(phase_config.swing_phase) / double(base_step_period);
 
         // Use configured step_frequency by default, or override if provided

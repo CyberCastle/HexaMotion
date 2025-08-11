@@ -73,6 +73,13 @@ struct Parameters {
     double max_angular_velocity;
     double stability_margin;
     double control_frequency;
+
+    // Unified global control loop timestep (seconds) following OpenSHC semantics.
+    // This value defines the nominal period used by all time-based integrations and
+    // gait timing calculations. Actual measured cycle time may deviate slightly; that
+    // deviation is recorded separately (e.g., LocomotionSystem::measured_time_delta_)
+    // for diagnostics but does not alter deterministic gait iteration logic.
+    double time_delta = 0.02;                         // Default 50 Hz loop
     double default_servo_speed = SERVO_SPEED_DEFAULT; //< Default servo movement speed (0.1-3.0, where 1.0 is normal speed)
     // Enable kinematic integration of body translation & yaw (simulation/testing)
     bool enable_body_translation = false; //< When true, LocomotionSystem::update() integrates body_position & yaw from commanded velocities
@@ -110,38 +117,6 @@ struct Parameters {
         double lp_alpha = 0.10f;
         double max_tilt_deg = 12.0f;
     } body_comp;
-
-    /**
-     * @brief Dynamic gait timing configuration (OpenSHC equivalent)
-     * Controls the calculation of swing and stance iterations based on frequency and time_delta
-     */
-    struct DynamicGaitConfig {
-        // Phase timing parameters (equivalent to OpenSHC's gait.yaml)
-        double stance_phase = 2.0; // Stance phase duration (OpenSHC default: 2.0)
-        double swing_phase = 2.0;  // Swing phase duration (OpenSHC default: 2.0)
-        double phase_offset = 2.0; // Phase offset between legs (OpenSHC default: 2.0)
-
-        // Frequency and timing parameters
-        double frequency = 1.0;   // Control frequency (Hz, OpenSHC default: 1.0)
-        double time_delta = 0.01; // Time step (seconds, OpenSHC default: 0.01)
-
-        // Dynamic iteration calculation parameters
-        bool enable_dynamic_iterations = true; // Enable OpenSHC-style dynamic iteration calculation
-        double swing_period_factor = 1.0;      // Swing period scaling factor
-        double stance_period_factor = 1.0;     // Stance period scaling factor
-
-        // Iteration limits for safety
-        uint16_t min_swing_iterations = 5;    // Minimum swing iterations
-        uint16_t max_swing_iterations = 100;  // Maximum swing iterations
-        uint16_t min_stance_iterations = 5;   // Minimum stance iterations
-        uint16_t max_stance_iterations = 100; // Maximum stance iterations
-
-        // Duty factor calculation (OpenSHC equivalent)
-        double duty_factor = 0.5; // Duty factor (0.5 = 50% stance, 50% swing)
-
-        // Step period calculation
-        double step_period = 4.0; // Total step period (stance + swing)
-    } dynamic_gait;
 
     // Tipo de gait seleccionado (OpenSHC compatible)
     std::string gait_type;
@@ -602,6 +577,7 @@ class RobotModel {
      */
     std::pair<double, double> calculateHeightRange() const;
     const Parameters &getParams() const { return params; }
+    double getTimeDelta() const { return params.time_delta; }
 
     /**
      * @brief Get the default height offset when all joint angles are 0°
@@ -736,7 +712,7 @@ class RobotModel {
      * @return Updated joint angles after advanced IK
      */
     JointAngles applyAdvancedIK(int leg, const Point3D &current_tip_pose, const Point3D &desired_tip_pose,
-                                const JointAngles &current_angles, double time_delta = 0.02) const;
+                                const JointAngles &current_angles, double time_delta) const;
 
     /**
      * @brief Joint limit cost function and gradient calculation

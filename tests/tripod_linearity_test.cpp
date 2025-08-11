@@ -110,7 +110,7 @@ int main() {
     StepCycle sc = leg_stepper0->getStepCycle();
 
     // Derive iteration counts exactly like other tests
-    double time_delta = 1.0 / params.control_frequency; // expected 0.02
+    double time_delta = params.time_delta; // unified global timestep
     int swing_iterations = int((double(sc.swing_period_) / sc.period_) / (sc.frequency_ * time_delta));
     if (swing_iterations % 2 != 0)
         swing_iterations++;

@@ -233,7 +233,7 @@ int main() {
     }
 
     StepCycle actual_step_cycle = first_leg_stepper->getStepCycle();
-    double time_delta = 0.02; // 50Hz control loop (mismo que trajectory_tip_position_test)
+    double time_delta = sys.getRobotModel().getTimeDelta(); // unified global timestep
 
     // Usar EXACTAMENTE la misma fórmula que trajectory_tip_position_test
     int swing_iterations_per_cycle = (int)((double(actual_step_cycle.swing_period_) / actual_step_cycle.period_) / (actual_step_cycle.frequency_ * time_delta));

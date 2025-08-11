@@ -11,7 +11,7 @@ BodyPose::BodyPose()
     initialize();
 }
 
-BodyPose::BodyPose(const BodyPoseConfig& config)
+BodyPose::BodyPose(const BodyPoseConfig &config)
     : pose_config_(config), current_mode_(BODY_POSE_MANUAL), reset_mode_(BODY_POSE_RESET_NONE),
       auto_posing_state_(BODY_POSING_COMPLETE), interpolation_speed_(0.1), smooth_transitions_(true),
       trajectory_in_progress_(false), trajectory_progress_(0.0), trajectory_step_count_(0),
@@ -27,13 +27,13 @@ void BodyPose::initialize() {
     resetAllPosing();
 }
 
-void BodyPose::setCurrentPose(const BodyPoseState& pose) {
+void BodyPose::setCurrentPose(const BodyPoseState &pose) {
     if (validatePoseState(pose)) {
         current_pose_ = pose;
     }
 }
 
-void BodyPose::setTargetPose(const BodyPoseState& pose) {
+void BodyPose::setTargetPose(const BodyPoseState &pose) {
     if (validatePoseState(pose)) {
         target_pose_ = pose;
         if (smooth_transitions_) {
@@ -44,7 +44,7 @@ void BodyPose::setTargetPose(const BodyPoseState& pose) {
     }
 }
 
-void BodyPose::setPose(const Point3D& position, const Eigen::Vector3d& euler_angles) {
+void BodyPose::setPose(const Point3D &position, const Eigen::Vector3d &euler_angles) {
     BodyPoseState new_pose;
     new_pose.position = position;
     new_pose.euler_angles = euler_angles;
@@ -59,7 +59,7 @@ void BodyPose::setPose(const Point3D& position, const Eigen::Vector3d& euler_ang
     setCurrentPose(new_pose);
 }
 
-void BodyPose::setPoseQuaternion(const Point3D& position, const Eigen::Vector4d& quaternion) {
+void BodyPose::setPoseQuaternion(const Point3D &position, const Eigen::Vector4d &quaternion) {
     BodyPoseState new_pose;
     new_pose.position = position;
     new_pose.quaternion = quaternion;
@@ -81,12 +81,12 @@ void BodyPose::setResetMode(BodyPoseResetMode mode) {
     reset_mode_ = mode;
 }
 
-void BodyPose::setManualPoseInput(const Eigen::Vector3d& translation, const Eigen::Vector3d& rotation) {
+void BodyPose::setManualPoseInput(const Eigen::Vector3d &translation, const Eigen::Vector3d &rotation) {
     translation_velocity_input_ = translation;
     rotation_velocity_input_ = rotation;
 }
 
-void BodyPose::getManualPoseInput(Eigen::Vector3d& translation, Eigen::Vector3d& rotation) const {
+void BodyPose::getManualPoseInput(Eigen::Vector3d &translation, Eigen::Vector3d &rotation) const {
     translation = translation_velocity_input_;
     rotation = rotation_velocity_input_;
 }
@@ -101,12 +101,12 @@ void BodyPose::resetAllPosing() {
     trajectory_step_count_ = 0;
 }
 
-void BodyPose::updatePoseInterpolation(double dt) {
+void BodyPose::updatePoseInterpolation(double time_delta) {
     if (!trajectory_in_progress_ || !smooth_transitions_) {
         return;
     }
 
-    trajectory_progress_ += interpolation_speed_ * dt;
+    trajectory_progress_ += interpolation_speed_ * time_delta;
     trajectory_step_count_++;
 
     if (trajectory_progress_ >= 1.0) {
@@ -116,17 +116,17 @@ void BodyPose::updatePoseInterpolation(double dt) {
     } else {
         // Interpolate position
         current_pose_.position = current_pose_.position * (1.0 - trajectory_progress_) +
-                                target_pose_.position * trajectory_progress_;
+                                 target_pose_.position * trajectory_progress_;
 
         // Interpolate orientation using quaternion slerp
         Eigen::Quaterniond start_quat(current_pose_.quaternion(0), current_pose_.quaternion(1),
-                                     current_pose_.quaternion(2), current_pose_.quaternion(3));
+                                      current_pose_.quaternion(2), current_pose_.quaternion(3));
         Eigen::Quaterniond end_quat(target_pose_.quaternion(0), target_pose_.quaternion(1),
-                                   target_pose_.quaternion(2), target_pose_.quaternion(3));
+                                    target_pose_.quaternion(2), target_pose_.quaternion(3));
 
         Eigen::Quaterniond interpolated_quat = start_quat.slerp(trajectory_progress_, end_quat);
         current_pose_.quaternion = Eigen::Vector4d(interpolated_quat.w(), interpolated_quat.x(),
-                                                  interpolated_quat.y(), interpolated_quat.z());
+                                                   interpolated_quat.y(), interpolated_quat.z());
 
         // Update Euler angles from interpolated quaternion
         Eigen::Vector3d euler = interpolated_quat.toRotationMatrix().eulerAngles(0, 1, 2);
@@ -145,26 +145,26 @@ void BodyPose::setSmoothTransitions(bool enable, double speed) {
     interpolation_speed_ = std::max(0.01, std::min(1.0, speed));
 }
 
-void BodyPose::setPoseConfig(const BodyPoseConfig& config) {
+void BodyPose::setPoseConfig(const BodyPoseConfig &config) {
     pose_config_ = config;
 }
 
-void BodyPose::setPoseLimits(const BodyPoseLimits& limits) {
+void BodyPose::setPoseLimits(const BodyPoseLimits &limits) {
     pose_limits_ = limits;
 }
 
 Pose BodyPose::toPose() const {
     Eigen::Quaterniond quat(current_pose_.quaternion(0), current_pose_.quaternion(1),
-                           current_pose_.quaternion(2), current_pose_.quaternion(3));
+                            current_pose_.quaternion(2), current_pose_.quaternion(3));
     return Pose(current_pose_.position, quat);
 }
 
-BodyPose BodyPose::fromPose(const Pose& pose) {
+BodyPose BodyPose::fromPose(const Pose &pose) {
     BodyPose body_pose;
     BodyPoseState state;
     state.position = pose.position;
     state.quaternion = Eigen::Vector4d(pose.rotation.w(), pose.rotation.x(),
-                                      pose.rotation.y(), pose.rotation.z());
+                                       pose.rotation.y(), pose.rotation.z());
     state.use_quaternion = true;
 
     Eigen::Vector3d euler = pose.rotation.toRotationMatrix().eulerAngles(0, 1, 2);
@@ -174,7 +174,7 @@ BodyPose BodyPose::fromPose(const Pose& pose) {
     return body_pose;
 }
 
-bool BodyPose::checkPoseLimits(const BodyPoseState& pose) const {
+bool BodyPose::checkPoseLimits(const BodyPoseState &pose) const {
     // Check translation limits
     if (std::abs(pose.position.x) > pose_limits_.translation_limits.x ||
         std::abs(pose.position.y) > pose_limits_.translation_limits.y ||
@@ -197,7 +197,7 @@ bool BodyPose::checkPoseLimits(const BodyPoseState& pose) const {
     return true;
 }
 
-void BodyPose::constrainPose(BodyPoseState& pose) const {
+void BodyPose::constrainPose(BodyPoseState &pose) const {
     // Constrain translation
     pose.position.x = std::max(-pose_limits_.translation_limits.x,
                                std::min(pose_limits_.translation_limits.x, pose.position.x));
@@ -208,15 +208,15 @@ void BodyPose::constrainPose(BodyPoseState& pose) const {
 
     // Constrain rotation
     pose.euler_angles.x() = std::max(-pose_limits_.rotation_limits.x(),
-                                    std::min(pose_limits_.rotation_limits.x(), pose.euler_angles.x()));
+                                     std::min(pose_limits_.rotation_limits.x(), pose.euler_angles.x()));
     pose.euler_angles.y() = std::max(-pose_limits_.rotation_limits.y(),
-                                    std::min(pose_limits_.rotation_limits.y(), pose.euler_angles.y()));
+                                     std::min(pose_limits_.rotation_limits.y(), pose.euler_angles.y()));
     pose.euler_angles.z() = std::max(-pose_limits_.rotation_limits.z(),
-                                    std::min(pose_limits_.rotation_limits.z(), pose.euler_angles.z()));
+                                     std::min(pose_limits_.rotation_limits.z(), pose.euler_angles.z()));
 
     // Constrain height
     pose.height = std::max(pose_limits_.height_min,
-                          std::min(pose_limits_.height_max, pose.height));
+                           std::min(pose_limits_.height_max, pose.height));
 }
 
 void BodyPose::setAutoPosingState(BodyPosingState state) {
@@ -239,29 +239,30 @@ void BodyPose::setNormaliser(int normaliser) {
     normaliser_ = normaliser;
 }
 
-void BodyPose::setRotationAbsementError(const Eigen::Vector3d& error) {
+void BodyPose::setRotationAbsementError(const Eigen::Vector3d &error) {
     rotation_absement_error_ = error;
 }
 
-void BodyPose::setRotationPositionError(const Eigen::Vector3d& error) {
+void BodyPose::setRotationPositionError(const Eigen::Vector3d &error) {
     rotation_position_error_ = error;
 }
 
-void BodyPose::setRotationVelocityError(const Eigen::Vector3d& error) {
+void BodyPose::setRotationVelocityError(const Eigen::Vector3d &error) {
     rotation_velocity_error_ = error;
 }
 
+// TODO: Harcoded values
 void BodyPose::initializePoseLimits() {
     // Default limits based on robot characteristics
-    pose_limits_.translation_limits = Point3D(0.1, 0.1, 0.05);  // ±10cm X/Y, ±5cm Z
-    pose_limits_.rotation_limits = Eigen::Vector3d(0.3, 0.3, 0.5);  // ±17° roll/pitch, ±29° yaw
-    pose_limits_.height_min = 80.0;   // 80mm minimum height
-    pose_limits_.height_max = 150.0;  // 150mm maximum height
-    pose_limits_.max_translation_velocity = 100.0;  // 100mm/s
-    pose_limits_.max_rotation_velocity = 0.5;     // 0.5 rad/s
+    pose_limits_.translation_limits = Point3D(0.1, 0.1, 0.05);     // ±10cm X/Y, ±5cm Z
+    pose_limits_.rotation_limits = Eigen::Vector3d(0.3, 0.3, 0.5); // ±17° roll/pitch, ±29° yaw
+    pose_limits_.height_min = 80.0;                                // 80mm minimum height
+    pose_limits_.height_max = 150.0;                               // 150mm maximum height
+    pose_limits_.max_translation_velocity = 100.0;                 // 100mm/s
+    pose_limits_.max_rotation_velocity = 0.5;                      // 0.5 rad/s
 }
 
-bool BodyPose::validatePoseState(const BodyPoseState& pose) const {
+bool BodyPose::validatePoseState(const BodyPoseState &pose) const {
     // Check for NaN values
     if (std::isnan(pose.position.x) || std::isnan(pose.position.y) || std::isnan(pose.position.z) ||
         std::isnan(pose.euler_angles.x()) || std::isnan(pose.euler_angles.y()) || std::isnan(pose.euler_angles.z()) ||

@@ -120,8 +120,6 @@ class LegStepper {
     // Gait configuration parameters (not part of StepCycle)
     void setSwingWidth(double swing_width) { swing_width_ = swing_width; }
     double getSwingWidth() const { return swing_width_; }
-    void setControlFrequency(double control_frequency) { control_frequency_ = control_frequency; }
-    double getControlFrequency() const { return control_frequency_; }
     void setStepClearanceHeight(double step_clearance_height) { step_clearance_height_ = step_clearance_height; }
     double getStepClearanceHeight() const { return step_clearance_height_; }
 
@@ -210,7 +208,6 @@ class LegStepper {
 
     // Gait configuration parameters (not part of StepCycle)
     double swing_width_;           // Lateral shift at mid-swing (OpenSHC mid_lateral_shift)
-    double control_frequency_;     // Control loop frequency (equivalent to OpenSHC walker_->getTimeDelta())
     double step_clearance_height_; // Step clearance height (equivalent to OpenSHC walker_->getStepClearance())
 
     // Swing state management (OpenSHC style)

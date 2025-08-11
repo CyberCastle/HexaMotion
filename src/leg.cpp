@@ -102,7 +102,9 @@ bool Leg::applyAdvancedIK(const Point3D &target_position) {
     Point3D reachable_target = model_.makeReachable(leg_id_, target_position);
 
     // Use advanced IK implementation
-    JointAngles new_angles = model_.applyAdvancedIK(leg_id_, current_position, reachable_target, joint_angles_);
+    // Use unified global time delta from model parameters for velocity estimation
+    double time_delta = model_.getTimeDelta();
+    JointAngles new_angles = model_.applyAdvancedIK(leg_id_, current_position, reachable_target, joint_angles_, time_delta);
 
     // Validate limits before updating member variables
     if (!model_.checkJointLimits(leg_id_, new_angles)) {

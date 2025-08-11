@@ -225,9 +225,9 @@ class BodyPose {
 
     /**
      * @brief Update pose interpolation (call at regular intervals)
-     * @param dt Delta time in seconds
+     * @param time_delta Delta time in seconds
      */
-    void updatePoseInterpolation(double dt);
+    void updatePoseInterpolation(double time_delta);
 
     /**
      * @brief Check if trajectory interpolation is in progress

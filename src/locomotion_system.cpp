@@ -16,7 +16,7 @@ LocomotionSystem::LocomotionSystem(const Parameters &params)
     : params(params), imu_interface(nullptr), fsr_interface(nullptr), servo_interface(nullptr),
       body_position(0.0f, 0.0f, params.standing_height), body_orientation(0.0f, 0.0f, 0.0f),
       legs{Leg(0, model), Leg(1, model), Leg(2, model), Leg(3, model), Leg(4, model), Leg(5, model)},
-      system_enabled(false), last_update_time(0), dt(0.02f),
+      system_enabled(false), last_update_time(0), time_delta_(params.time_delta), measured_time_delta_(params.time_delta),
       velocity_controller(nullptr), last_error(NO_ERROR),
       model(params), body_pose_ctrl(nullptr), walk_ctrl(nullptr), admittance_ctrl(nullptr),
       system_state(SYSTEM_UNKNOWN), startup_in_progress(false), shutdown_in_progress(false) {
@@ -324,7 +324,7 @@ bool LocomotionSystem::executeShutdownSequence() {
             leg_stepper->setPhase(0.0); // Force to stance position
 
             // Immediately update tip position to identity (stance) position
-            leg_stepper->updateTipPositionIterative(0, 0.02, false, false);
+            leg_stepper->updateTipPositionIterative(0, time_delta_, false, false);
 
             // Get the forced stance position and apply to leg
             legs[i].setStepPhase(STANCE_PHASE);
@@ -533,8 +533,12 @@ void LocomotionSystem::resetSmoothMovement() {
  */
 bool LocomotionSystem::update() {
     unsigned long current_time = millis();
-    dt = (current_time - last_update_time) / 1000.0f;
+    measured_time_delta_ = (current_time - last_update_time) / 1000.0f;
     last_update_time = current_time;
+
+    // For deterministic gait & IK behaviors we use the configured nominal time_delta_
+    // (OpenSHC style). Measured jitter is available via measured_time_delta_ if future
+    // adaptive compensation is needed.
 
     // Update sensors in parallel for optimal performance
     if (!updateSensorsParallel()) {
@@ -553,9 +557,9 @@ bool LocomotionSystem::update() {
         // Optional kinematic integration of body pose (test / simulation)
         if (params.enable_body_translation) {
             // Integrate translation (mm) and yaw (degrees) from commanded velocities
-            body_position[0] += commanded_linear_velocity_x_ * dt; // mm/s * s
-            body_position[1] += commanded_linear_velocity_y_ * dt;
-            body_orientation[2] += commanded_angular_velocity_ * dt; // deg/s * s
+            body_position[0] += commanded_linear_velocity_x_ * time_delta_; // mm/s * s
+            body_position[1] += commanded_linear_velocity_y_ * time_delta_;
+            body_orientation[2] += commanded_angular_velocity_ * time_delta_; // deg/s * s
             // Wrap yaw to [-180,180]
             if (body_orientation[2] > 180.0)
                 body_orientation[2] -= 360.0;
@@ -846,8 +850,8 @@ void LocomotionSystem::compensateForSlope() {
     }
 
     // Adjust body orientation
-    body_orientation[0] += roll_compensation * dt;
-    body_orientation[1] += pitch_compensation * dt;
+    body_orientation[0] += roll_compensation * time_delta_;
+    body_orientation[1] += pitch_compensation * time_delta_;
 
     // Clamp compensation
     body_orientation[0] = constrainAngle(body_orientation[0], -15.0f, 15.0f);
@@ -1098,7 +1102,7 @@ void LocomotionSystem::applyInverseKinematicsToAllLegs() {
             current_tip_position, // current tip pose
             desired_tip_position, // desired tip pose (from Bézier)
             current_angles,       // current joint angles
-            dt                    // time delta
+            time_delta_           // unified time delta
         );
 
         // Update joint angles in Leg object

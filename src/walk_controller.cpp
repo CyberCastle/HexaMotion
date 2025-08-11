@@ -51,8 +51,8 @@ WalkController::WalkController(RobotModel &m, Leg legs[NUM_LEGS], const BodyPose
     // Initialize terrain adaptation
     terrain_adaptation_.initialize();
 
-    // Set initial time delta
-    time_delta_ = 1.0 / model.getParams().control_frequency;
+    // Set initial time delta from unified global parameter
+    time_delta_ = model.getParams().time_delta;
 
     // Generate initial walkspace
     generateWalkspace();
@@ -61,13 +61,13 @@ WalkController::WalkController(RobotModel &m, Leg legs[NUM_LEGS], const BodyPose
 // ================== Accessor Implementations (moved from header) ==================
 StepCycle WalkController::getStepCycle() const {
     // Calculate proper step frequency to prevent stride vector bug
-    double time_delta = 1.0 / current_gait_config_.control_frequency;
+    double time_delta = model.getParams().time_delta; // unified
     int base_period = current_gait_config_.phase_config.stance_phase + current_gait_config_.phase_config.swing_phase;
     double calculated_step_frequency = 0.0;
     if (base_period > 0) {
         calculated_step_frequency = 1.0 / (base_period * time_delta);
     }
-    return current_gait_config_.generateStepCycle(calculated_step_frequency);
+    return current_gait_config_.generateStepCycle(calculated_step_frequency, time_delta);
 }
 
 double WalkController::getTimeDelta() const { return time_delta_; }
@@ -143,7 +143,7 @@ bool WalkController::setGait(GaitType gait_type) {
 void WalkController::applyGaitConfigToLegSteppers(const GaitConfiguration &gait_config) {
 
     // Generate StepCycle with configured frequency like OpenSHC
-    StepCycle step_cycle = gait_config.generateStepCycle();
+    StepCycle step_cycle = gait_config.generateStepCycle(-1.0, model.getParams().time_delta);
 
     // Apply StepCycle and gait configuration to each LegStepper
     for (int i = 0; i < NUM_LEGS && i < static_cast<int>(leg_steppers_.size()); i++) {
@@ -156,7 +156,6 @@ void WalkController::applyGaitConfigToLegSteppers(const GaitConfiguration &gait_
 
         // Set gait-specific parameters (not part of StepCycle)
         leg_stepper->setSwingWidth(gait_config.swing_width);
-        leg_stepper->setControlFrequency(gait_config.control_frequency);
         leg_stepper->setStepClearanceHeight(gait_config.swing_height);
 
         // Calculate phase offset using OpenSHC formula
@@ -491,7 +490,7 @@ void WalkController::updateWalk(const Point3D &linear_velocity_input, double ang
 
     if (is_active_walking) {
         // Use configured step frequency from gait configuration (OpenSHC pattern)
-        step_cycle = current_gait_config_.generateStepCycle();
+        step_cycle = current_gait_config_.generateStepCycle(-1.0, model.getParams().time_delta);
         global_phase_ = (global_phase_ + 1) % step_cycle.period_;
         step_cycle_calculated = true;
     }

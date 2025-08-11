@@ -48,7 +48,10 @@ class LocomotionSystem {
     // Control variables
     bool system_enabled;
     unsigned long last_update_time;
-    double dt; // Delta time since last update (seconds)
+    // Nominal control loop time step (seconds). Uses params.time_delta for deterministic logic.
+    double time_delta_;
+    // Measured real elapsed time of last cycle (seconds) for diagnostics/monitoring.
+    double measured_time_delta_;
 
     // Velocity control
     CartesianVelocityController *velocity_controller;

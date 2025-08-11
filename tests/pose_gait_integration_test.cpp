@@ -300,7 +300,7 @@ int main() {
     assert(sys.walkForward(100.0));
 
     const double distance = 10.0; // mm
-    double dt = 1.0 / p.control_frequency;
+    double dt = p.time_delta;     // unified global timestep
     int cycles = static_cast<int>(distance / (100.0 * dt));
 
     std::vector<StepPhase> prev_phase(NUM_LEGS);
