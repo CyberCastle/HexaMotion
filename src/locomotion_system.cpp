@@ -293,6 +293,10 @@ bool LocomotionSystem::executeStartupSequence() {
         }
 
         system_state = SYSTEM_RUNNING;
+
+        // Clear flag here instead of requiring external code to modify private member
+        // (Original usage example required caller to manually clear startup_in_progress)
+        startup_in_progress = false;
     }
 
     return startup_complete;
@@ -332,6 +336,8 @@ bool LocomotionSystem::executeShutdownSequence() {
 
     if (shutdown_complete) {
         system_state = SYSTEM_READY;
+        // Clear internal flag upon completion to simplify caller logic
+        shutdown_in_progress = false;
     }
 
     return shutdown_complete;
@@ -530,6 +536,19 @@ bool LocomotionSystem::update() {
 
     // Only update leg trajectories if system is in RUNNING state
     if (walk_ctrl && system_state == SYSTEM_RUNNING) {
+        // Optional kinematic integration of body pose (test / simulation)
+        if (params.enable_body_translation) {
+            // Integrate translation (mm) and yaw (degrees) from commanded velocities
+            body_position[0] += commanded_linear_velocity_x_ * dt; // mm/s * s
+            body_position[1] += commanded_linear_velocity_y_ * dt;
+            body_orientation[2] += commanded_angular_velocity_ * dt; // deg/s * s
+            // Wrap yaw to [-180,180]
+            if (body_orientation[2] > 180.0)
+                body_orientation[2] -= 360.0;
+            else if (body_orientation[2] < -180.0)
+                body_orientation[2] += 360.0;
+        }
+
         // STEP 1: Update walk controller (it performs its own limiting & ramping via VelocityLimits)
         Point3D applied_linear_velocity(commanded_linear_velocity_x_, commanded_linear_velocity_y_, 0.0);
         walk_ctrl->updateWalk(applied_linear_velocity,

@@ -66,6 +66,8 @@ struct Parameters {
     double stability_margin;
     double control_frequency;
     double default_servo_speed = SERVO_SPEED_DEFAULT; //< Default servo movement speed (0.1-3.0, where 1.0 is normal speed)
+    // Enable kinematic integration of body translation & yaw (simulation/testing)
+    bool enable_body_translation = false; //< When true, LocomotionSystem::update() integrates body_position & yaw from commanded velocities
 
     /**
      * @brief Smooth trajectory configuration for pose updates.
