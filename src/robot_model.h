@@ -61,6 +61,14 @@ struct Parameters {
     double fsr_liftoff_threshold;
     double fsr_max_pressure;
 
+    // FSR contact filtering thresholds (used in LocomotionSystem::updateLegStates)
+    // contact_threshold: promedio histórico mínimo para considerar contacto (hysteresis enter)
+    // release_threshold: promedio histórico máximo para considerar liberación (hysteresis exit)
+    // min_pressure: presión mínima para validar contacto físico y descartar falsos positivos
+    double contact_threshold = 0.7; //< Average contact value (0-1) to switch to STANCE
+    double release_threshold = 0.3; //< Average contact value (0-1) to switch to SWING
+    double min_pressure = 10.0;     //< Minimum raw pressure to trust a reported contact
+
     double max_velocity;
     double max_angular_velocity;
     double stability_margin;
@@ -146,9 +154,25 @@ struct Parameters {
 
     // Gait continuity control: when true, preserve the swing end (touchdown) pose as stance origin instead of
     // resetting to the default tip pose. This yields smoother, continuous trajectories (OpenSHC-style continuity)
-    // at the cost of potential long-term drift. When false (default), an anti-drift policy resets the leg to the
+    // at the cost of potential long-term drift. When false, an anti-drift policy resets (or blends toward) the
     // calibrated default tip pose at the start of stance for deterministic repeatability.
-    bool preserve_swing_end_pose = true; // false = anti-drift reset (current default), true = continuous stance origin
+    // NOTE: Actual default here is 'true' (continuity). Comment previously stated the opposite; corrected for coherence.
+    bool preserve_swing_end_pose = true; // true = continuity (default), false = anti-drift (uses hybrid reset logic below)
+
+    // --- Hybrid anti-drift (applies only when preserve_swing_end_pose == false) ---
+    // If the touchdown pose is close enough to default (distance <= drift_soft_threshold_mm) we blend partially
+    // toward default instead of hard snapping to remove micro-drift without visual discontinuity. If distance
+    // exceeds drift_hard_threshold_mm we force a hard reset to default. Distances in millimeters.
+    double drift_soft_threshold_mm = 2.0; //< Within this distance: apply soft blend instead of hard reset
+    double drift_hard_threshold_mm = 8.0; //< Beyond this distance: force hard reset (snap)
+    double drift_soft_blend_alpha = 0.5;  //< Blend factor (0..1) for soft correction (0.5 = halfway to default)
+
+#ifdef TESTING_ENABLED
+    double drift_metrics_ema_alpha = 0.1;        //< Exponential moving average smoothing factor (0..1) for drift magnitude
+    double drift_metrics_cap_mm = 500.0;         //< Cap for reported accumulated drift norm to avoid unbounded growth
+    bool report_planar_vs_vertical_drift = true; //< When true, separate planar (XY) vs vertical (Z) drift in reports
+    bool debug_fsr_transitions = false;          //< Log phase transitions driven by FSR contact
+#endif
 
     // Workspace constraint toggle: when true (default) all target and intermediate tip poses are constrained
     // via WorkspaceAnalyzer to remain within geometric reach envelopes. When false, raw trajectories are used

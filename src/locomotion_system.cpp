@@ -23,6 +23,14 @@ LocomotionSystem::LocomotionSystem(const Parameters &params)
 
     // Initialize sensor log timestamp to avoid static local in updateSensorsParallel
     last_sensor_log_time = 0;
+
+    // Initialize last logged phases for FSR debug debouncing (testing only)
+#ifdef TESTING_ENABLED
+    for (int i = 0; i < NUM_LEGS; ++i) {
+        last_logged_leg_phase_[i] = SWING_PHASE; // arbitrary default
+    }
+    last_logged_initialized_ = true;
+#endif
 }
 
 // Destructor
@@ -534,6 +542,12 @@ bool LocomotionSystem::update() {
         return false;
     }
 
+    // Update FSR contact history early (for swing adaptation inside LegStepper) WITHOUT final phase assignment
+    // Phase (STANCE/SWING) will be finalized after walk controller updates trajectories.
+    if (params.use_fsr_contact) {
+        updateLegStates(); // early call: updates in_contact_ & histories; phase may be overwritten later
+    }
+
     // Only update leg trajectories if system is in RUNNING state
     if (walk_ctrl && system_state == SYSTEM_RUNNING) {
         // Optional kinematic integration of body pose (test / simulation)
@@ -559,13 +573,7 @@ bool LocomotionSystem::update() {
         for (int i = 0; i < NUM_LEGS; i++) {
             auto leg_stepper = walk_ctrl->getLegStepper(i);
             if (leg_stepper) {
-                // Update leg step phase
-                auto step_state = leg_stepper->getStepState();
-                if (step_state == STEP_STANCE || step_state == STEP_FORCE_STANCE) {
-                    legs[i].setStepPhase(STANCE_PHASE);
-                } else {
-                    legs[i].setStepPhase(SWING_PHASE);
-                }
+                // Do not set StepPhase here; defer to updateLegStates() after considering FSR contact
 
                 // OpenSHC pattern: Use Bézier-calculated position for BOTH swing AND stance phases
                 // The LegStepper.updateTipPositionIterative() correctly handles both phases:
@@ -575,6 +583,9 @@ bool LocomotionSystem::update() {
                 legs[i].setDesiredTipPosition(desired_tip_position);
             }
         }
+
+        // STEP 2b: Finalize leg phases (FSR or pure kinematic) after trajectories computed
+        updateLegStates();
 
         // STEP 3: Apply IK to ALL legs at once (= OpenSHC::Model::updateModel)
         applyInverseKinematicsToAllLegs();
@@ -668,61 +679,83 @@ bool LocomotionSystem::handleError(ErrorCode error) {
 }
 
 void LocomotionSystem::updateLegStates() {
-    // Si no se usa FSR/contacto, alternar solo por fase de marcha
-    if (!params.use_fsr_contact) {
+    // Two-stage logic:
+    // 1. Update contact histories if FSR available
+    // 2. Decide final STANCE/SWING phase using (a) filtered contact + hysteresis or (b) kinematic StepState
+
+    bool fsr_enabled = params.use_fsr_contact && fsr_interface;
+
+    if (fsr_enabled) {
         for (int i = 0; i < NUM_LEGS; ++i) {
-            // Use leg stepper to determine phase
-            auto leg_stepper = walk_ctrl->getLegStepper(i);
-            if (leg_stepper) {
-                double phase = static_cast<double>(leg_stepper->getPhase()) /
-                               static_cast<double>(walk_ctrl->getStepCycle().period_);
-                if (legs[i].shouldBeInStance(phase, walk_ctrl->getStanceDuration())) {
-                    legs[i].setStepPhase(STANCE_PHASE);
-                } else {
-                    legs[i].setStepPhase(SWING_PHASE);
-                }
-            }
+            FSRData fsr = fsr_interface->readFSR(i);
+            legs[i].updateFSRHistory(fsr.in_contact, fsr.pressure);
         }
-        return;
     }
 
-    if (!fsr_interface)
-        return;
-
-    // Iterate over each leg and filter FSR contact
     for (int i = 0; i < NUM_LEGS; ++i) {
-        FSRData fsr = fsr_interface->readFSR(i);
+        auto leg_stepper = walk_ctrl ? walk_ctrl->getLegStepper(i) : nullptr;
 
-        // Update FSR contact history using Leg class methods
-        legs[i].updateFSRHistory(fsr.in_contact, fsr.pressure);
+        if (fsr_enabled) {
+            bool filtered_contact = legs[i].getFilteredContactState(params.contact_threshold, params.release_threshold);
+            StepPhase current_state = legs[i].getStepPhase();
 
-        // Get filtered contact state using Leg class methods
-        bool filtered_contact = legs[i].getFilteredContactState(0.7f, 0.3f);
+            // Hysteresis transitions with optional debug logging
+            if (current_state == SWING_PHASE && filtered_contact) {
+                legs[i].setStepPhase(STANCE_PHASE);
 
-        StepPhase current_state = legs[i].getStepPhase();
-
-        // State transition logic with hysteresis
-        if (current_state == SWING_PHASE && filtered_contact) {
-            legs[i].setStepPhase(STANCE_PHASE);
-        } else if (current_state == STANCE_PHASE && !filtered_contact) {
-            legs[i].setStepPhase(SWING_PHASE);
-        }
-        // Otherwise maintain current state
-
-        // Additional validation: Don't allow contact during planned swing phase
-        // Only validate during active movement (non-zero gait phase progression)
-        // Check if leg should be in swing based on gait phase
-        auto leg_stepper = walk_ctrl->getLegStepper(i);
-        if (leg_stepper) {
-            double phase = static_cast<double>(leg_stepper->getPhase()) /
-                           static_cast<double>(walk_ctrl->getStepCycle().period_);
-            bool should_be_swinging = legs[i].shouldBeInSwing(phase, walk_ctrl->getStanceDuration());
-
-            if (should_be_swinging && legs[i].getStepPhase() == STANCE_PHASE) {
-                // Only override if pressure is very low (potential sensor error)
-                if (fsr.pressure < 10.0f) { // Low pressure threshold
-                    legs[i].setStepPhase(SWING_PHASE);
+#ifdef TESTING_ENABLED
+                if (params.debug_fsr_transitions) {
+#ifdef TESTING_ENABLED
+                    if (!last_logged_initialized_ || last_logged_leg_phase_[i] != STANCE_PHASE) {
+                        std::cout << "[FSR] leg=" << i << " SWING->STANCE filtered_contact=1 avg>=contact_th pressure="
+                                  << legs[i].getContactForce() << std::endl;
+                        last_logged_leg_phase_[i] = STANCE_PHASE;
+                    }
+#endif
                 }
+#endif
+
+            } else if (current_state == STANCE_PHASE && !filtered_contact) {
+                legs[i].setStepPhase(SWING_PHASE);
+
+#ifdef TESTING_ENABLED
+                if (params.debug_fsr_transitions) {
+#ifdef TESTING_ENABLED
+                    if (!last_logged_initialized_ || last_logged_leg_phase_[i] != SWING_PHASE) {
+                        std::cout << "[FSR] leg=" << i << " STANCE->SWING filtered_contact=0 avg<release_th pressure="
+                                  << legs[i].getContactForce() << std::endl;
+                        last_logged_leg_phase_[i] = SWING_PHASE;
+                    }
+#endif
+                }
+#endif
+            }
+
+            // Safety: if kinematic expectation strongly indicates swing but we have low pressure (likely false contact), revert
+            if (leg_stepper) {
+                double phase_fraction = static_cast<double>(leg_stepper->getPhase()) /
+                                        static_cast<double>(walk_ctrl->getStepCycle().period_);
+                bool should_be_swing = legs[i].shouldBeInSwing(phase_fraction, walk_ctrl->getStanceDuration());
+                if (should_be_swing && legs[i].getStepPhase() == STANCE_PHASE && legs[i].getContactForce() < params.min_pressure) {
+                    legs[i].setStepPhase(SWING_PHASE);
+
+#ifdef TESTING_ENABLED
+                    if (params.debug_fsr_transitions) {
+                        // Revert implies we force SWING; guard against duplicate logs
+                        if (!last_logged_initialized_ || last_logged_leg_phase_[i] != SWING_PHASE) {
+                            std::cout << "[FSR] leg=" << i << " REVERT STANCE->SWING low_pressure=" << legs[i].getContactForce()
+                                      << " < min_pressure phase_guard" << std::endl;
+                            last_logged_leg_phase_[i] = SWING_PHASE;
+                        }
+                    }
+#endif
+                }
+            }
+        } else {
+            // No FSR: derive directly from LegStepper StepState (more direct than approximate phase math)
+            if (leg_stepper) {
+                StepState ss = leg_stepper->getStepState();
+                legs[i].setStepPhase((ss == STEP_SWING) ? SWING_PHASE : STANCE_PHASE);
             }
         }
     }

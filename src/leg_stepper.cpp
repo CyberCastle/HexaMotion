@@ -392,8 +392,9 @@ void LegStepper::updateTipPositionIterative(int iteration, double time_delta, bo
         }
 
         if (!nodes_generated_) {
+            // Generate initial swing control nodes (primary + secondary without contact)
             generatePrimarySwingControlNodes();
-            generateSecondarySwingControlNodes(false); // ground_contact = false for now
+            generateSecondarySwingControlNodes(false);
             nodes_generated_ = true;
         }
 
@@ -409,6 +410,12 @@ void LegStepper::updateTipPositionIterative(int iteration, double time_delta, bo
         Point3D delta_pos;
         double time_input = 0.0;
 
+        // Detect ground contact via FSR (if enabled) for adaptive touchdown (OpenSHC style)
+        bool ground_contact = false;
+        if (robot_model_.getParams().use_fsr_contact) {
+            ground_contact = leg_.isInContact();
+        }
+
         if (first_half) {
             // OpenSHC exact calculation: swing_delta_t_ * iteration (1-based)
             time_input = swing_delta_t_ * swing_iteration;
@@ -418,6 +425,9 @@ void LegStepper::updateTipPositionIterative(int iteration, double time_delta, bo
         } else {
             // OpenSHC exact calculation: swing_delta_t_ * (iteration - swing_iterations / 2)
             time_input = swing_delta_t_ * (swing_iteration - swing_iterations_ / 2);
+
+            // Regenerate secondary swing nodes continuously in second half to allow early flattening when contact detected
+            generateSecondarySwingControlNodes(ground_contact);
 
             // OpenSHC pattern: Use quarticBezierDot for velocity-based calculation
             delta_pos = math_utils::quarticBezierDot(swing_2_nodes_, time_input) * swing_delta_t_;
@@ -433,6 +443,17 @@ void LegStepper::updateTipPositionIterative(int iteration, double time_delta, bo
 
         // Calculate velocity for this iteration (OpenSHC pattern)
         current_tip_velocity_ = delta_pos / time_delta;
+
+        // Improvement 2: Early swing termination when contact detected in second half of swing
+        if (!first_half && robot_model_.getParams().use_fsr_contact && ground_contact) {
+            // Transition immediately to stance on next update
+            step_state_ = STEP_STANCE;
+            // Reset swing-related flags so a fresh stance origin is established
+            swing_initialized_ = false;
+            nodes_generated_ = false; // force regeneration when next swing starts
+            // Force stance iteration start by resetting current_iteration_ to swing_iterations_
+            current_iteration_ = swing_iterations_; // so next call maps to stance_iteration==1
+        }
 
     } else if (step_state_ == STEP_STANCE) {
         // Handle stance period - OpenSHC EXACT implementation
@@ -456,19 +477,64 @@ void LegStepper::updateTipPositionIterative(int iteration, double time_delta, bo
         if (stance_iteration > stance_iterations_)
             stance_iteration = stance_iterations_;
 
-        // Initialize stance origin if needed.
-        // OpenSHC behavior: preserve swing touchdown pose as stance origin (continuity, allows mild drift).
-        // Extended (anti-drift) behavior: hard reset to calibrated default to avoid cumulative error.
+        // Initialize stance origin if needed (hybrid anti-drift extension).
         if (stance_iteration == 1) {
             const Parameters &params = robot_model_.getParams();
+            Point3D touchdown_offset = current_tip_pose_ - default_tip_pose_;
+            double offset_norm = std::sqrt(touchdown_offset.x * touchdown_offset.x +
+                                           touchdown_offset.y * touchdown_offset.y +
+                                           touchdown_offset.z * touchdown_offset.z);
+
+#ifdef TESTING_ENABLED
+            last_touchdown_offset_norm_ = offset_norm;
+            accumulated_drift_vector_ = accumulated_drift_vector_ + touchdown_offset;
+            accumulated_drift_norm_ = std::sqrt(accumulated_drift_vector_.x * accumulated_drift_vector_.x +
+                                                accumulated_drift_vector_.y * accumulated_drift_vector_.y +
+                                                accumulated_drift_vector_.z * accumulated_drift_vector_.z);
+            planar_drift_norm_ = std::sqrt(accumulated_drift_vector_.x * accumulated_drift_vector_.x +
+                                           accumulated_drift_vector_.y * accumulated_drift_vector_.y);
+            vertical_drift_ = accumulated_drift_vector_.z;
+            double alpha = std::clamp(params.drift_metrics_ema_alpha, 0.0, 1.0);
+            if (alpha > 0.0) {
+                drift_ema_norm_ = (1.0 - alpha) * drift_ema_norm_ + alpha * offset_norm;
+            } else {
+                drift_ema_norm_ = offset_norm;
+            }
+            if (accumulated_drift_norm_ > params.drift_metrics_cap_mm) {
+                double scale = params.drift_metrics_cap_mm / accumulated_drift_norm_;
+                accumulated_drift_vector_.x *= scale;
+                accumulated_drift_vector_.y *= scale;
+                accumulated_drift_vector_.z *= scale;
+                accumulated_drift_norm_ = params.drift_metrics_cap_mm;
+                planar_drift_norm_ = std::sqrt(accumulated_drift_vector_.x * accumulated_drift_vector_.x +
+                                               accumulated_drift_vector_.y * accumulated_drift_vector_.y);
+                vertical_drift_ = accumulated_drift_vector_.z;
+            }
+            // Drift debug logging removed (debug_drift parameter eliminated)
+#endif // TESTING_ENABLED
+
             if (params.preserve_swing_end_pose) {
-                // Continuity mode: keep the current pose (swing end / touchdown) as stance origin.
-                // Avoid altering current_tip_pose_ to maintain seamless transition.
+                // Continuity mode: keep touchdown pose as stance origin
                 stance_origin_tip_position_ = current_tip_pose_;
             } else {
-                // Anti-drift mode (default): reset to default calibrated pose for deterministic stance start.
-                stance_origin_tip_position_ = default_tip_pose_;
-                current_tip_pose_ = default_tip_pose_;
+                // Anti-drift hybrid:
+                // If small offset -> soft blend toward default.
+                // If large offset -> hard reset.
+                bool hard_reset = offset_norm > params.drift_hard_threshold_mm;
+                bool soft_reset = !hard_reset && offset_norm > params.drift_soft_threshold_mm;
+                if (hard_reset) {
+                    current_tip_pose_ = default_tip_pose_;
+                    stance_origin_tip_position_ = default_tip_pose_;
+                } else if (soft_reset) {
+                    double alpha = std::clamp(params.drift_soft_blend_alpha, 0.0, 1.0);
+                    current_tip_pose_ = Point3D{current_tip_pose_.x + (default_tip_pose_.x - current_tip_pose_.x) * alpha,
+                                                current_tip_pose_.y + (default_tip_pose_.y - current_tip_pose_.y) * alpha,
+                                                current_tip_pose_.z + (default_tip_pose_.z - current_tip_pose_.z) * alpha};
+                    stance_origin_tip_position_ = current_tip_pose_;
+                } else {
+                    // Offset already within soft threshold: leave as-is for seamless continuity but count as corrected
+                    stance_origin_tip_position_ = current_tip_pose_;
+                }
             }
         }
 

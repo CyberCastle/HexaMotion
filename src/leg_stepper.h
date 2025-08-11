@@ -65,6 +65,16 @@ class LegStepper {
     Point3D getStrideVector() const { return stride_vector_; }
     double getStepProgress() const { return step_progress_; }
 
+#ifdef TESTING_ENABLED
+    // Drift metrics (updated at start of stance) - only available in testing builds
+    double getLastTouchdownOffsetNorm() const { return last_touchdown_offset_norm_; }
+    double getAccumulatedDriftNorm() const { return accumulated_drift_norm_; }
+    Point3D getAccumulatedDriftVector() const { return accumulated_drift_vector_; }
+    double getDriftEMANorm() const { return drift_ema_norm_; }
+    double getPlanarDriftNorm() const { return planar_drift_norm_; }
+    double getVerticalDrift() const { return vertical_drift_; }
+#endif
+
     // Debug getters for velocity troubleshooting
     Point3D getDesiredLinearVelocity() const { return desired_linear_velocity_; }
     double getDesiredAngularVelocity() const { return desired_angular_velocity_; }
@@ -234,6 +244,17 @@ class LegStepper {
     Point3D previous_tip_pose_;
     bool has_previous_position_;
     double time_step_;
+
+#ifdef TESTING_ENABLED
+    // --- Drift tracking (hybrid anti-drift support) --- (testing builds only)
+    double last_touchdown_offset_norm_ = 0.0;             //< Distance between touchdown pose and default at stance start
+    Point3D accumulated_drift_vector_ = Point3D(0, 0, 0); //< Cumulative vector of (touchdown - default) over cycles
+    double accumulated_drift_norm_ = 0.0;                 //< Norm of cumulative drift vector
+    double drift_ema_norm_ = 0.0;                         //< Exponential moving average of offset norm
+    double planar_drift_norm_ = 0.0;                      //< Norm of cumulative planar (XY) drift
+    double vertical_drift_ = 0.0;                         //< Cumulative vertical (Z) component drift
+    int last_drift_mode_code_ = -1;                       //< -1 unset, 0 continuity,1 hard_reset,2 soft_blend,3 within_soft_threshold
+#endif
 };
 
 #endif // LEG_STEPPER_H

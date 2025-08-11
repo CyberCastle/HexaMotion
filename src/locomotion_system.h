@@ -63,6 +63,14 @@ class LocomotionSystem {
     // Last log time for sensor update profiling
     unsigned long last_sensor_log_time;
 
+    // --- Debug / instrumentation helpers ---
+    // Track last phase we logged for each leg to debounce repetitive FSR transition spam when other
+    // subsystems (e.g., WalkController) overwrite phases each cycle. Only used when debug_fsr_transitions is true.
+#ifdef TESTING_ENABLED
+    StepPhase last_logged_leg_phase_[NUM_LEGS];
+    bool last_logged_initialized_ = false;
+#endif
+
     // System state management
     SystemState system_state;
     bool startup_in_progress;

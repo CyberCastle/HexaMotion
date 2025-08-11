@@ -35,16 +35,29 @@
 #include <cassert>
 #include <chrono>
 #include <cmath>
+#include <cstring>
 #include <fstream>
 #include <iomanip>
 #include <iostream>
 #include <thread>
 #include <vector>
 
-// Test configuration
-constexpr double TEST_VELOCITY = 40.0;   // mm/s, moderate speed for clear observation
-constexpr int VISUALIZATION_STEPS = 150; // Steps to run the visualization
-constexpr int ANGLE_HISTORY_SIZE = 200;  // Number of angle measurements to store
+// Test configuration (synchronized with tripod_walk_visualization_test where applicable)
+constexpr double TEST_VELOCITY = 100.0;        // mm/s forward velocity (matches tripod test)
+constexpr double TEST_ANGULAR_VELOCITY = 0.25; // rad/s angular component (added for richer motion)
+constexpr int VISUALIZATION_STEPS = 150;       // Steps to run the visualization
+constexpr int ANGLE_HISTORY_SIZE = 200;        // Number of angle measurements to store
+
+// CLI flags
+static const char *FLAG_ENABLE_FSR = "--fsr";                      // Enable FSR-based contact adaptation
+static const char *FLAG_CONTACT_THRESHOLD = "--contact-th=";       // Override contact threshold
+static const char *FLAG_RELEASE_THRESHOLD = "--release-th=";       // Override release threshold
+static const char *FLAG_MIN_PRESSURE = "--min-pressure=";          // Override minimum pressure
+static const char *FLAG_PRESERVE_SWING = "--preserve-swing";       // Preserve swing end pose as stance origin
+static const char *FLAG_NO_PRESERVE_SWING = "--no-preserve-swing"; // Reset stance origin each stance
+static const char *FLAG_HELP = "--help";                           // Help flag
+static const char *FLAG_DEBUG_FSR = "--debug-fsr";                 // Enable FSR phase transition logging
+static const char *FLAG_DRIFT_METRICS = "--drift-metrics";         // Enable drift metrics accumulation & summary
 
 /**
  * @brief Custom IMU interface for visualization that provides stable orientation data
@@ -436,11 +449,92 @@ static void printTestHeader() {
               << std::endl;
 }
 
-int main() {
+// Simple helper to parse double values from prefixed flags
+static bool parseFlagValue(const std::string &arg, const char *prefix, double &out_val) {
+    size_t len = std::strlen(prefix);
+    if (arg.rfind(prefix, 0) == 0) {
+        try {
+            out_val = std::stod(arg.substr(len));
+            return true;
+        } catch (...) {
+            return false;
+        }
+    }
+    return false;
+}
+
+static void printHelp() {
+    std::cout << "Usage: virtual_hardware_sim_test [options]\n"
+              << "Options:\n"
+              << "  " << FLAG_ENABLE_FSR << "            Enable FSR contact adaptation logic\n"
+              << "  " << FLAG_CONTACT_THRESHOLD << "X   Set contact threshold (default 0.7)\n"
+              << "  " << FLAG_RELEASE_THRESHOLD << "X   Set release threshold (default 0.3)\n"
+              << "  " << FLAG_MIN_PRESSURE << "X       Set min pressure to trust contact (default 10.0)\n"
+              << "  " << FLAG_PRESERVE_SWING << "          Preserve swing touchdown as stance origin (continuous)\n"
+              << "  " << FLAG_NO_PRESERVE_SWING << "      Reset stance origin each cycle (anti-drift)\n"
+              << "  " << FLAG_DEBUG_FSR << "            Log FSR phase transitions\n"
+              << "  " << FLAG_DRIFT_METRICS << "       Accumulate & report drift metrics\n"
+              << "  " << FLAG_HELP << "                 Show this help message\n"
+              << std::endl;
+}
+
+int main(int argc, char **argv) {
     printTestHeader();
 
     // 1. Initialize the system with custom visualization interfaces
     Parameters params = createDefaultParameters();
+    bool enable_fsr = true;
+    bool debug_fsr = false;
+    bool preserve_flag_set = false;
+    bool drift_metrics = false; // still controls printing summary, metrics always collected in TESTING builds
+
+    // Parse CLI flags
+    for (int i = 1; i < argc; ++i) {
+        std::string arg(argv[i]);
+        if (arg == FLAG_HELP) {
+            printHelp();
+            return 0;
+        } else if (arg == FLAG_ENABLE_FSR) {
+            enable_fsr = true;
+        } else if (arg == "--debug-drift") { /* deprecated flag ignored */
+        } else if (arg == FLAG_DEBUG_FSR) {
+            debug_fsr = true;
+        } else if (arg == FLAG_DRIFT_METRICS) {
+            drift_metrics = true; // only affects final report visibility
+        } else if (arg == FLAG_PRESERVE_SWING) {
+            params.preserve_swing_end_pose = true;
+            preserve_flag_set = true;
+        } else if (arg == FLAG_NO_PRESERVE_SWING) {
+            params.preserve_swing_end_pose = false;
+            preserve_flag_set = true;
+        } else if (!parseFlagValue(arg, FLAG_CONTACT_THRESHOLD, params.contact_threshold) &&
+                   !parseFlagValue(arg, FLAG_RELEASE_THRESHOLD, params.release_threshold) &&
+                   !parseFlagValue(arg, FLAG_MIN_PRESSURE, params.min_pressure)) {
+            std::cout << "Unknown argument: " << arg << " (ignored)" << std::endl;
+        }
+    }
+
+    if (enable_fsr) {
+        params.use_fsr_contact = true;
+        // If default thresholds were not overridden they remain at struct defaults
+        std::cout << "[FSR] Enabled with thresholds: contact=" << params.contact_threshold
+                  << " release=" << params.release_threshold
+                  << " min_pressure=" << params.min_pressure << std::endl;
+    } else {
+        std::cout << "[FSR] Disabled (use " << FLAG_ENABLE_FSR << " to enable)." << std::endl;
+    }
+    params.debug_fsr_transitions = debug_fsr;
+    // enable_drift_metrics removed; metrics gathered unconditionally under TESTING_ENABLED
+    if (preserve_flag_set) {
+        std::cout << "[Gait Continuity] preserve_swing_end_pose=" << (params.preserve_swing_end_pose ? "true" : "false")
+                  /* drift debug removed */
+                  << " debug_fsr=" << (params.debug_fsr_transitions ? "on" : "off") << std::endl;
+    } else {
+        std::cout << "[Gait Continuity] Using default preserve_swing_end_pose=" << (params.preserve_swing_end_pose ? "true" : "false")
+                  /* drift debug removed */
+                  << " debug_fsr=" << (params.debug_fsr_transitions ? "on" : "off")
+                  << " (override with " << FLAG_PRESERVE_SWING << " or " << FLAG_NO_PRESERVE_SWING << ")" << std::endl;
+    }
     LocomotionSystem sys(params);
 
     VisualizationIMU imu;
@@ -471,6 +565,10 @@ int main() {
         return 1;
     }
     sys.walkForward(TEST_VELOCITY);
+    // Add angular component similar to tripod visualization test
+    if (TEST_ANGULAR_VELOCITY != 0.0) {
+        sys.turnInPlace(TEST_ANGULAR_VELOCITY); // persistent angular velocity (combined with forward)
+    }
     if (!sys.startWalking()) {
         std::cerr << "ERROR: Failed to start walking (startup sequence)." << std::endl;
         return 1;
@@ -505,6 +603,25 @@ int main() {
 
         // Simulate terrain variations
         imu.simulateTerrainTilt(step);
+
+        // FSR contact simulation (if enabled): mimic liftoff first half swing, touchdown second half
+        if (enable_fsr) {
+            WalkController *wc = sys.getWalkController();
+            if (wc) {
+                for (int leg = 0; leg < NUM_LEGS; ++leg) {
+                    auto stepper = wc->getLegStepper(leg);
+                    if (stepper) {
+                        if (stepper->getStepState() == STEP_SWING) {
+                            double swing_prog = stepper->getStepProgress();
+                            bool contact = (swing_prog >= 0.55); // touchdown slightly after mid-swing
+                            fsr.simulateGaitContact(leg, contact);
+                        } else {
+                            fsr.simulateGaitContact(leg, true); // stance = contact
+                        }
+                    }
+                }
+            }
+        }
 
         // Update the locomotion system
         if (!sys.update()) {
@@ -583,6 +700,30 @@ int main() {
     std::cout << "\n🎉 SERVO ANGLE VISUALIZATION TEST PASSED! 🎉" << std::endl;
     std::cout << "The HexaMotion system generated " << servos.getAngleHistorySize()
               << " servo angle commands during " << VISUALIZATION_STEPS << " simulation steps." << std::endl;
+
+    if (drift_metrics) {
+        std::cout << "\n=== DRIFT METRICS SUMMARY ===" << std::endl;
+        WalkController *wc = sys.getWalkController();
+        if (wc) {
+            for (int leg = 0; leg < NUM_LEGS; ++leg) {
+                auto stepper = wc->getLegStepper(leg);
+                if (stepper) {
+                    auto vec = stepper->getAccumulatedDriftVector();
+                    std::cout << "Leg " << leg
+                              << ": last_offset_mm=" << stepper->getLastTouchdownOffsetNorm()
+                              << " acc_mm=" << stepper->getAccumulatedDriftNorm()
+                              << " ema_mm=" << stepper->getDriftEMANorm();
+                    if (params.report_planar_vs_vertical_drift) {
+                        std::cout << " planar_mm=" << stepper->getPlanarDriftNorm()
+                                  << " z_mm=" << stepper->getVerticalDrift();
+                    }
+                    std::cout << " vec=(" << vec.x << "," << vec.y << "," << vec.z << ")" << std::endl;
+                }
+            }
+        } else {
+            std::cout << "WalkController not available for drift metrics." << std::endl;
+        }
+    }
 
     return 0;
 }
