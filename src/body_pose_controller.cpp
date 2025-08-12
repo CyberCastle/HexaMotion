@@ -265,9 +265,8 @@ bool BodyPoseController::setBodyPoseSmooth(const Eigen::Vector3d &position, cons
 
     // If not already in progress, initialize trajectory from current servo positions
     if (!trajectory_in_progress) {
-        if (!initializeTrajectoryFromCurrent(position, orientation, legs, servos)) {
-            return false;
-        }
+
+        initializeTrajectoryFromCurrent(position, orientation, legs, servos);
         trajectory_in_progress = true;
         trajectory_progress = 0.0;
         trajectory_step_count = 0;
@@ -915,17 +914,6 @@ double BodyPoseController::calculateWalkPlaneHeight(Leg legs[NUM_LEGS]) const {
 
     // Fallback: use current walk plane height minus body clearance
     return walk_plane_pose_.position.z - body_pose_config.body_clearance;
-}
-
-void BodyPoseController::applyWalkPlanePoseToBodyPosition(Eigen::Vector3d &position) const {
-    if (!walk_plane_pose_enabled) {
-        return;
-    }
-
-    // Apply walk plane pose to maintain body clearance
-    position.x() = walk_plane_pose_.position.x;
-    position.y() = walk_plane_pose_.position.y;
-    position.z() = walk_plane_pose_.position.z;
 }
 
 Pose BodyPoseController::getWalkPlanePose() const {

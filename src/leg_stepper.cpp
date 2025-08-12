@@ -495,9 +495,9 @@ void LegStepper::updateTipPositionIterative(int iteration, double time_delta, bo
             planar_drift_norm_ = std::sqrt(accumulated_drift_vector_.x * accumulated_drift_vector_.x +
                                            accumulated_drift_vector_.y * accumulated_drift_vector_.y);
             vertical_drift_ = accumulated_drift_vector_.z;
-            double alpha = math_utils::clamp(params.drift_metrics_ema_alpha, 0.0, 1.0);
-            if (alpha > 0.0) {
-                drift_ema_norm_ = (1.0 - alpha) * drift_ema_norm_ + alpha * offset_norm;
+            double metrics_alpha = math_utils::clamp(params.drift_metrics_ema_alpha, 0.0, 1.0);
+            if (metrics_alpha > 0.0) {
+                drift_ema_norm_ = (1.0 - metrics_alpha) * drift_ema_norm_ + metrics_alpha * offset_norm;
             } else {
                 drift_ema_norm_ = offset_norm;
             }
@@ -527,10 +527,10 @@ void LegStepper::updateTipPositionIterative(int iteration, double time_delta, bo
                     current_tip_pose_ = default_tip_pose_;
                     stance_origin_tip_position_ = default_tip_pose_;
                 } else if (soft_reset) {
-                    double alpha = math_utils::clamp(params.drift_soft_blend_alpha, 0.0, 1.0);
-                    current_tip_pose_ = Point3D{current_tip_pose_.x + (default_tip_pose_.x - current_tip_pose_.x) * alpha,
-                                                current_tip_pose_.y + (default_tip_pose_.y - current_tip_pose_.y) * alpha,
-                                                current_tip_pose_.z + (default_tip_pose_.z - current_tip_pose_.z) * alpha};
+                    double soft_alpha = math_utils::clamp(params.drift_soft_blend_alpha, 0.0, 1.0);
+                    current_tip_pose_ = Point3D{current_tip_pose_.x + (default_tip_pose_.x - current_tip_pose_.x) * soft_alpha,
+                                                current_tip_pose_.y + (default_tip_pose_.y - current_tip_pose_.y) * soft_alpha,
+                                                current_tip_pose_.z + (default_tip_pose_.z - current_tip_pose_.z) * soft_alpha};
                     stance_origin_tip_position_ = current_tip_pose_;
                 } else {
                     // Offset already within soft threshold: leave as-is for seamless continuity but count as corrected

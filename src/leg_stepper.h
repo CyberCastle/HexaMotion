@@ -250,7 +250,6 @@ class LegStepper {
     double drift_ema_norm_ = 0.0;                         //< Exponential moving average of offset norm
     double planar_drift_norm_ = 0.0;                      //< Norm of cumulative planar (XY) drift
     double vertical_drift_ = 0.0;                         //< Cumulative vertical (Z) component drift
-    int last_drift_mode_code_ = -1;                       //< -1 unset, 0 continuity,1 hard_reset,2 soft_blend,3 within_soft_threshold
 #endif
 };
 

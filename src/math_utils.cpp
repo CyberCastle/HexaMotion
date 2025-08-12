@@ -54,13 +54,13 @@ double distance(const Point3D &p1, const Point3D &p2) {
 }
 
 bool isPointReachable(const Point3D &point, double max_reach) {
-    double distance = sqrt(point.x * point.x + point.y * point.y + point.z * point.z);
-    return distance <= max_reach;
+    double dist_to_origin = sqrt(point.x * point.x + point.y * point.y + point.z * point.z);
+    return dist_to_origin <= max_reach;
 }
 
 bool isPointReachable(const Point3D &point, double min_reach, double max_reach) {
-    double distance = sqrt(point.x * point.x + point.y * point.y + point.z * point.z);
-    return distance >= min_reach && distance <= max_reach;
+    double dist_to_origin = sqrt(point.x * point.x + point.y * point.y + point.z * point.z);
+    return dist_to_origin >= min_reach && dist_to_origin <= max_reach;
 }
 
 Eigen::Vector4d quaternionMultiply(const Eigen::Vector4d &q1, const Eigen::Vector4d &q2) {

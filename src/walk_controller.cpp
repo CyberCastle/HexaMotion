@@ -14,11 +14,12 @@
 #include <vector>
 
 WalkController::WalkController(RobotModel &m, Leg legs[NUM_LEGS], const BodyPoseConfiguration &pose_config)
-    : model(m), desired_linear_velocity_(0, 0, 0), desired_angular_velocity_(0.0),
-      walk_state_(WALK_STOPPED), pose_state_(0),
-      regenerate_walkspace_(false), legs_at_correct_phase_(0), legs_completed_first_step_(0),
-      return_to_default_attempted_(false), terrain_adaptation_(m), body_pose_controller_(nullptr),
-      velocity_limits_(m), legs_array_(legs) {
+    : model(m), time_delta_(0.0), step_clearance_(0.0), step_depth_(0.0), desired_linear_velocity_(0, 0, 0), desired_angular_velocity_(0.0),
+      walk_state_(WALK_STOPPED), walkspace_(), odometry_ideal_(), pose_state_(0),
+      current_body_position_(Eigen::Vector3d::Zero()), current_body_orientation_(Eigen::Vector3d::Zero()),
+      regenerate_walkspace_(false), legs_at_correct_phase_(0), legs_completed_first_step_(0), return_to_default_attempted_(false),
+      leg_steppers_(), current_gait_config_(), gait_selection_config_(), terrain_adaptation_(m), body_pose_controller_(nullptr),
+      velocity_limits_(m), current_velocity_limits_(), current_velocities_(), current_leg_positions_{Point3D(), Point3D(), Point3D(), Point3D(), Point3D(), Point3D()}, legs_array_(legs), global_phase_(0) {
 
     // Initialize leg_steppers_ with references to actual legs from LocomotionSystem
     leg_steppers_.clear();
@@ -386,7 +387,7 @@ void WalkController::updateWalk(const Point3D &linear_velocity_input, double ang
 
     // OpenSHC: Optimized velocity limiting calculation
     Point3D new_linear_velocity, limited_linear_velocity;
-    double new_angular_velocity, limited_angular_velocity;
+    double limited_angular_velocity;
 
     if (walk_state_ != WALK_STOPPING && has_velocity_command) {
         // Calculate bearing once for velocity limits
@@ -400,7 +401,7 @@ void WalkController::updateWalk(const Point3D &linear_velocity_input, double ang
         const double scale_factor = (input_magnitude > limits.linear_x && input_magnitude > 0.0) ? limits.linear_x / input_magnitude : 1.0;
 
         new_linear_velocity = linear_velocity_input * scale_factor;
-        new_angular_velocity = math_utils::clamp(angular_velocity_input, -limits.angular_z, limits.angular_z);
+        double new_angular_velocity = math_utils::clamp(angular_velocity_input, -limits.angular_z, limits.angular_z);
 
         // OpenSHC: Optimized acceleration limiting
         const Point3D linear_diff = new_linear_velocity - desired_linear_velocity_;

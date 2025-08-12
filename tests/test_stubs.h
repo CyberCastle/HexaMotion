@@ -305,6 +305,8 @@ inline Parameters createDefaultParameters() {
     params.fsr_max_pressure = 10.0;
     params.preserve_swing_end_pose = false;
     params.use_fsr_contact = false;
+    params.preserve_swing_end_pose = false; // Default to false for testing
+
     // Disable smooth trajectory features for unit tests
     params.smooth_trajectory.use_current_servo_positions = false;
     params.smooth_trajectory.enable_pose_interpolation = false;

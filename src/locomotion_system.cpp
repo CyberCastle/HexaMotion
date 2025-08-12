@@ -767,14 +767,6 @@ bool LocomotionSystem::validateParameters() {
     return model.validate();
 }
 
-void LocomotionSystem::adaptGaitToTerrain() {
-    // Delegate to WalkController for gait adaptation
-    if (walk_ctrl) {
-        // WalkController handles terrain adaptation internally
-        // This method is kept for backward compatibility but delegates to WalkController
-    }
-}
-
 bool LocomotionSystem::setParameters(const Parameters &new_params) {
     // Validate new parameters
     if (new_params.hexagon_radius <= 0 || new_params.coxa_length <= 0 ||
@@ -785,67 +777,6 @@ bool LocomotionSystem::setParameters(const Parameters &new_params) {
 
     params = new_params;
     return validateParameters();
-}
-
-void LocomotionSystem::compensateForSlope() {
-    if (!imu_interface)
-        return;
-
-    IMUData imu_data = imu_interface->readIMU();
-    if (!imu_data.is_valid)
-        return;
-
-    double roll_compensation, pitch_compensation;
-
-    // Enhanced slope compensation using absolute positioning data
-    if (imu_data.has_absolute_capability && imu_data.absolute_data.absolute_orientation_valid) {
-        // Use absolute orientation for more precise compensation
-        roll_compensation = -imu_data.absolute_data.absolute_roll * 0.6f; // Enhanced compensation
-        pitch_compensation = -imu_data.absolute_data.absolute_pitch * 0.6f;
-
-        // Additional quaternion-based compensation for complex terrain
-        if (imu_data.absolute_data.quaternion_valid) {
-            // Extract more sophisticated orientation information from quaternion
-            double qw = imu_data.absolute_data.quaternion_w;
-            double qx = imu_data.absolute_data.quaternion_x;
-            double qy = imu_data.absolute_data.quaternion_y;
-            double qz = imu_data.absolute_data.quaternion_z;
-
-            // Calculate terrain-aligned compensation using quaternion
-            double quat_roll = atan2(2.0f * (qw * qx + qy * qz), 1.0f - 2.0f * (qx * qx + qy * qy)) * RADIANS_TO_DEGREES_FACTOR;
-            double quat_pitch = asin(2.0f * (qw * qy - qz * qx)) * RADIANS_TO_DEGREES_FACTOR;
-
-            // Blend quaternion and Euler compensations for robustness
-            roll_compensation = 0.7f * roll_compensation + 0.3f * (-quat_roll * 0.6f);
-            pitch_compensation = 0.7f * pitch_compensation + 0.3f * (-quat_pitch * 0.6f);
-        }
-
-        // Dynamic adjustment based on linear acceleration
-        if (imu_data.absolute_data.linear_acceleration_valid) {
-            double lateral_accel = sqrt(
-                imu_data.absolute_data.linear_accel_x * imu_data.absolute_data.linear_accel_x +
-                imu_data.absolute_data.linear_accel_y * imu_data.absolute_data.linear_accel_y);
-
-            // Reduce compensation during high lateral acceleration
-            if (lateral_accel > 1.5f) {
-                double dynamic_factor = math_utils::clamp<double>(1.0 - (lateral_accel - 1.5) / 3.0, 0.4, 1.0);
-                roll_compensation *= dynamic_factor;
-                pitch_compensation *= dynamic_factor;
-            }
-        }
-    } else {
-        // Fallback to basic IMU compensation
-        roll_compensation = -imu_data.roll * 0.5f; // Compensation factor
-        pitch_compensation = -imu_data.pitch * 0.5f;
-    }
-
-    // Adjust body orientation
-    body_orientation[0] += roll_compensation * params.time_delta;
-    body_orientation[1] += pitch_compensation * params.time_delta;
-
-    // Clamp compensation
-    body_orientation[0] = constrainAngle(body_orientation[0], -15.0f, 15.0f);
-    body_orientation[1] = constrainAngle(body_orientation[1], -15.0f, 15.0f);
 }
 
 double LocomotionSystem::calculateDynamicStabilityIndex() {

@@ -259,9 +259,7 @@ class LocomotionSystem {
     bool validateParameters();
     bool checkJointLimits(int leg_index, const JointAngles &angles);
 
-    // Adaptive control
-    void adaptGaitToTerrain();
-    void compensateForSlope();
+    // (Removed unused adaptive control helpers flagged by static analysis)
 };
 
 #include "math_utils.h"

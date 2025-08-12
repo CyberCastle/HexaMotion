@@ -327,7 +327,6 @@ class BodyPoseController {
     // Walk plane pose helper methods
     Point3D calculateWalkPlaneNormal(Leg legs[NUM_LEGS]) const;
     double calculateWalkPlaneHeight(Leg legs[NUM_LEGS]) const;
-    void applyWalkPlanePoseToBodyPosition(Eigen::Vector3d &position) const;
 
     // Tripod gait leg groupings (OpenSHC compatible)
     // Group A: AR (0), CR (2), BL (4) - Anterior Right, Center Right, Back Left
