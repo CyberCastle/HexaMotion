@@ -174,6 +174,8 @@ class LegStepper {
     int leg_index_;
     Leg &leg_;
     RobotModel &robot_model_;
+    // Cached immutable reference to RobotModel parameters to avoid repeated lookups
+    const Parameters &params_;
     Point3D identity_tip_pose_;
     Point3D default_tip_pose_;
     Point3D origin_tip_pose_;
@@ -190,6 +192,12 @@ class LegStepper {
     Point3D swing_origin_tip_position_;
     Point3D swing_origin_tip_velocity_;
     Point3D stance_origin_tip_position_;
+    // Tangential stance mode cached values (Option B)
+    Point3D stance_tangent_origin_tip_position_; //< Original touchdown pose (for z preservation)
+    Point3D stance_tangent_leg_base_;            //< Cached leg base at stance start
+    double stance_tangent_radius_ = 0.0;         //< Constant planar radius in stance
+    double stance_tangent_height_ = 0.0;         //< Constant height (z) in stance
+    bool stance_tangent_initialized_ = false;    //< Initialization flag per stance phase
 
     // Phase and state management
     bool at_correct_phase_;

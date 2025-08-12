@@ -62,9 +62,9 @@ struct Parameters {
     double fsr_max_pressure;
 
     // FSR contact filtering thresholds (used in LocomotionSystem::updateLegStates)
-    // contact_threshold: promedio histórico mínimo para considerar contacto (hysteresis enter)
-    // release_threshold: promedio histórico máximo para considerar liberación (hysteresis exit)
-    // min_pressure: presión mínima para validar contacto físico y descartar falsos positivos
+    // contact_threshold: minimum historical rolling average to consider contact (hysteresis enter)
+    // release_threshold: maximum historical rolling average to consider release (hysteresis exit)
+    // min_pressure: minimum pressure to validate physical contact and reject false positives
     double contact_threshold = 0.7; //< Average contact value (0-1) to switch to STANCE
     double release_threshold = 0.3; //< Average contact value (0-1) to switch to SWING
     double min_pressure = 10.0;     //< Minimum raw pressure to trust a reported contact
@@ -160,6 +160,14 @@ struct Parameters {
     bool enable_phase_end_snap = true;        //< Enable snapping foot to frozen target at phase end
     double phase_end_snap_tolerance_mm = 1.0; //< Distance tolerance (mm) for hard snap
     double phase_end_snap_alpha = 1.0;        //< Blend factor (1.0 hard snap, <1.0 partial correction)
+
+    // --- Tangential stance mode ---
+    // When enabled, the STANCE phase constrains foot motion to pure tangential travel
+    // around the leg base at constant planar radius and constant height. The femur/tibia
+    // joint angles remain effectively frozen; only the coxa rotates. This diverges from
+    // vanilla OpenSHC which integrates full Bezier-derived velocity (allowing radial
+    // drift and vertical micro-adjustments). Use to stabilize stance joint posture.
+    bool enable_tangential_stance_mode = true; //< default on for experimentation
 };
 
 enum GaitType {
