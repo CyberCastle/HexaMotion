@@ -866,7 +866,8 @@ bool LocomotionSystem::updateSensorsParallel() {
 
     // Start parallel sensor updates
     // FSR: AdvancedAnalog DMA for simultaneous ADC reading
-    if (fsr_interface) {
+    // Only update if FSR usage is enabled in parameters to avoid blocking latency otherwise
+    if (fsr_interface && params.use_fsr_contact) {
         fsr_updated = fsr_interface->update();
     }
 
@@ -876,7 +877,7 @@ bool LocomotionSystem::updateSensorsParallel() {
     }
 
     // Validate both sensors updated successfully
-    if (fsr_interface && !fsr_updated) {
+    if (fsr_interface && params.use_fsr_contact && !fsr_updated) {
         last_error = FSR_ERROR;
         return false;
     }
