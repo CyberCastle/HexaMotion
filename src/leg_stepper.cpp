@@ -582,8 +582,6 @@ void LegStepper::updateTipPositionIterative(int iteration, double time_delta, bo
             double total_planar_displacement = (planar_stride_norm * stride_scaler);
             double per_iteration = (stance_iterations_ > 0) ? total_planar_displacement / double(stance_iterations_) : 0.0;
 
-            Point3D delta_planar = tangent_dir * per_iteration; // incremental planar advancement
-
             // Current planar vector from leg base preserving radius
             Point3D base_to_tip_planar(current_tip_pose_.x - stance_tangent_leg_base_.x,
                                        current_tip_pose_.y - stance_tangent_leg_base_.y,
