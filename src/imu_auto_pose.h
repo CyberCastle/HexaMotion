@@ -83,10 +83,6 @@ class IMUAutoPose {
     Point3D orientation_filter_;
     double filter_alpha_;
 
-    // Auto-pose timing
-    unsigned long last_update_time_;
-    double update_interval_;
-
     // Adaptive control
     double terrain_roughness_estimate_;
     bool walking_detected_;
@@ -128,9 +124,8 @@ class IMUAutoPose {
 
     /**
      * @brief Update auto-pose control (call regularly)
-     * @param dt Delta time since last update
      */
-    void update(double time_delta);
+    void update();
 
     /**
      * @brief Get current auto-pose state

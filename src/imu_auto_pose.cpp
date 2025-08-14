@@ -8,13 +8,9 @@
 #include <algorithm>
 #include <cmath>
 
-IMUAutoPose::IMUAutoPose(RobotModel &model, IIMUInterface *imu, ManualBodyPoseController &body_pose_controller,
-                         ComputeConfig config)
+IMUAutoPose::IMUAutoPose(RobotModel &model, IIMUInterface *imu, ManualBodyPoseController &body_pose_controller, ComputeConfig config)
     : model_(model), imu_(imu), body_pose_controller_(body_pose_controller), config_(config),
-      current_mode_(AUTO_POSE_OFF), filter_alpha_(0.1f), last_update_time_(0),
-      terrain_roughness_estimate_(0.0f), walking_detected_(false) {
-
-    update_interval_ = config_.getDeltaTime() * 1000.0f; // Convert to milliseconds
+      current_mode_(AUTO_POSE_OFF), filter_alpha_(0.1f), terrain_roughness_estimate_(0.0f), walking_detected_(false) {
 }
 
 void IMUAutoPose::initialize() {
@@ -55,22 +51,11 @@ void IMUAutoPose::setIMUPoseParams(const IMUPoseParams &params) {
     params_ = params;
 }
 
-void IMUAutoPose::update(double time_delta) {
+void IMUAutoPose::update() {
     if (!imu_ || current_mode_ == AUTO_POSE_OFF) {
         current_state_.pose_active = false;
         return;
     }
-
-    // Check update timing - skip timing check if time_delta is provided (for testing)
-    // HARDWARE CONSIDERATION: Real systems need robust timing to handle:
-    // - Variable processing delays in main loop
-    // - IMU data rate mismatches (sensor vs control frequency)
-    // - Recovery from missed updates due to system overload
-    unsigned long current_time = millis();
-    if (time_delta <= 0.0f && current_time - last_update_time_ < update_interval_) {
-        return;
-    }
-    last_update_time_ = current_time;
 
     // Update IMU data and filters
     updateIMUData();

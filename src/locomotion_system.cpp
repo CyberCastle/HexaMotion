@@ -875,31 +875,6 @@ bool LocomotionSystem::updateSensorsParallel() {
         imu_updated = imu_interface->update();
     }
 
-    // Performance monitoring
-#ifdef ARDUINO
-    unsigned long update_time = micros() - start_time;
-#else
-    auto end_time = std::chrono::high_resolution_clock::now();
-    unsigned long update_time = std::chrono::duration_cast<std::chrono::microseconds>(end_time - start_time).count();
-#endif
-
-#if defined(ENABLE_LOG) && defined(ARDUINO)
-    // Log every 5 seconds without static local variable
-    if (millis() - last_sensor_log_time > 5000) {
-        last_sensor_log_time = millis();
-        // Log update timing for performance analysis
-        Serial.print("Parallel sensor update time: ");
-        Serial.print(update_time);
-        Serial.print("µs, FSR: ");
-        Serial.print(fsr_updated ? "OK" : "FAIL");
-        Serial.print(", IMU: ");
-        Serial.println(imu_updated ? "OK" : "FAIL");
-    }
-#else
-    // Suppress unused variable warning when logging is disabled
-    (void)update_time;
-#endif
-
     // Validate both sensors updated successfully
     if (fsr_interface && !fsr_updated) {
         last_error = FSR_ERROR;
