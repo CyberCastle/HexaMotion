@@ -858,11 +858,6 @@ double LocomotionSystem::calculateDynamicStabilityIndex() {
 bool LocomotionSystem::updateSensorsParallel() {
     bool fsr_updated = false;
     bool imu_updated = false;
-#ifdef ARDUINO
-    unsigned long start_time = micros();
-#else
-    auto start_time = std::chrono::high_resolution_clock::now();
-#endif
 
     // Start parallel sensor updates
     // FSR: AdvancedAnalog DMA for simultaneous ADC reading
