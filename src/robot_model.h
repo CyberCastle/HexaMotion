@@ -493,6 +493,40 @@ class IServoInterface {
     virtual bool isJointMoving(int leg_index, int joint_index) = 0;
     /** Enable or disable torque on a joint. */
     virtual bool enableTorque(int leg_index, int joint_index, bool enable) = 0;
+
+    /**
+     * Batch command to set all joints' angles and speeds in one call.
+     * Implementations may use a bus-level synchronous write to reduce latency and jitter.
+     * Default returns false to indicate not supported.
+     *
+     * @param angles_deg Degrees, indexed [leg][joint] (coxa=0,femur=1,tibia=2)
+     * @param speeds Speed multipliers or driver-native speed values [leg][joint]
+     * @return true if batch command was sent, false to fallback to per-joint commands
+     */
+    virtual bool syncSetAllJointAnglesAndSpeeds(const double angles_deg[NUM_LEGS][DOF_PER_LEG],
+                                                const double speeds[NUM_LEGS][DOF_PER_LEG]) {
+        (void)angles_deg;
+        (void)speeds;
+        return false;
+    }
+
+    /**
+     * @brief Refresh a small slice of servo health state without blocking the hot path.
+     * @details Implementations should poll at most @p max_per_cycle servos per call and update
+     *          an internal cache of fault/blocking flags. No heavy I/O should be performed
+     *          elsewhere in the publish loop.
+     * @param max_per_cycle Maximum number of servos to poll in this invocation.
+     */
+    virtual void refreshHealthSlice(uint8_t max_per_cycle) {}
+
+    /**
+     * @brief Get cached blocking/fault state for a joint without performing I/O.
+     * @param leg_index Leg index (0..NUM_LEGS-1).
+     * @param joint_index Joint index within leg (0..DOF_PER_LEG-1).
+     * @return true if the cached state marks this joint as blocked/faulted; false otherwise.
+     * @note Default implementation returns false (unknown/no cache).
+     */
+    virtual bool isBlockedCached(int leg_index, int joint_index) const { return false; }
 };
 
 class RobotModel {

@@ -1003,9 +1003,36 @@ void LocomotionSystem::applyInverseKinematicsToAllLegs() {
 }
 
 void LocomotionSystem::publishJointAnglesToServos() {
-    // Following OpenSHC::publishDesiredJointState() pattern exactly
-    // Send ALL computed joint angles to servos at once
 
+    // Refresh a small slice of health state per tick (non-blocking cache) if supported
+    if (servo_interface) {
+        servo_interface->refreshHealthSlice(3); // ~3 servos/tick => full scan ~6 ticks
+    }
+
+    // Prefer a single synchronous write when supported by the driver to remove per-joint bus latency
+    if (servo_interface) {
+        double angles_deg[NUM_LEGS][DOF_PER_LEG];
+        double speeds[NUM_LEGS][DOF_PER_LEG];
+
+        for (int i = 0; i < NUM_LEGS; ++i) {
+            JointAngles a = legs[i].getJointAngles();
+            // Convert to output degrees with sign
+            angles_deg[i][0] = a.coxa * params.angle_sign_coxa * RADIANS_TO_DEGREES_FACTOR;
+            angles_deg[i][1] = a.femur * params.angle_sign_femur * RADIANS_TO_DEGREES_FACTOR;
+            angles_deg[i][2] = a.tibia * params.angle_sign_tibia * RADIANS_TO_DEGREES_FACTOR;
+
+            // Per-joint speeds
+            speeds[i][0] = velocity_controller ? velocity_controller->getServoSpeed(i, 0) : params.default_servo_speed;
+            speeds[i][1] = velocity_controller ? velocity_controller->getServoSpeed(i, 1) : params.default_servo_speed;
+            speeds[i][2] = velocity_controller ? velocity_controller->getServoSpeed(i, 2) : params.default_servo_speed;
+        }
+
+        if (servo_interface->syncSetAllJointAnglesAndSpeeds(angles_deg, speeds)) {
+            return; // done
+        }
+    }
+
+    // Fallback: per-leg commands
     for (int i = 0; i < NUM_LEGS; i++) {
         JointAngles angles = legs[i].getJointAngles();
 
