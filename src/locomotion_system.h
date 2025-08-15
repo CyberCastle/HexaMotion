@@ -83,6 +83,9 @@ class LocomotionSystem {
     void applyInverseKinematicsToAllLegs();
     void publishJointAnglesToServos();
 
+    // Runtime-only switch to gate coxa servo output during tests
+    bool coxa_movement_enabled_ = true;
+
   public:
     /**
      * @brief Construct a locomotion system with the given parameters.
@@ -210,6 +213,12 @@ class LocomotionSystem {
 
     /** Update FSR and IMU sensors in parallel for optimal performance. */
     bool updateSensorsParallel();
+
+    /** Enable/disable coxa joint movement globally */
+    void setCoxaMovementEnabled(bool enabled) { coxa_movement_enabled_ = enabled; }
+
+    /** Query coxa joint movement state. */
+    bool isCoxaMovementEnabled() const { return coxa_movement_enabled_; }
 
     // Getters
     const Parameters &getParameters() const { return params; }
