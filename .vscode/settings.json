@@ -79,6 +79,8 @@
         "map": "cpp",
         "__tree": "cpp",
         "hash_map": "cpp",
-        "set": "cpp"
+        "set": "cpp",
+        "__availability": "cpp",
+        "semaphore": "cpp"
     }
 }

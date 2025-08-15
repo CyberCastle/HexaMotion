@@ -42,7 +42,29 @@ struct StandingPoseJoints {
  */
 struct BodyPoseConfiguration {
     Parameters params;
-    BodyPoseConfiguration(const Parameters &p) : params(p) {}
+    BodyPoseConfiguration(const Parameters &p) : params(p) {
+
+        // Sensible defaults to silence static analysis uninit warnings
+        auto_pose_type = "none";
+        start_up_sequence = false;
+        time_to_start = 0.0;
+        body_clearance = params.standing_height; // default clearance
+        swing_height = params.standing_height * BODY_POSE_DEFAULT_SWING_HEIGHT_FACTOR;
+        max_translation = {0.0, 0.0, 0.0};
+        max_rotation = {0.0, 0.0, 0.0};
+        max_translation_velocity = 0.0;
+        max_rotation_velocity = 0.0;
+        gravity_aligned_tips = false;
+        force_symmetric_pose = false;
+        leg_manipulation_mode = "none";
+        // Zero initialize stance & pose arrays
+        for (auto &ls : leg_stance_positions) {
+            ls = {0.0, 0.0, 0.0};
+        }
+        for (auto &sj : standing_pose_joints) {
+            sj = {0.0, 0.0, 0.0};
+        }
+    }
     // OpenSHC equivalent stance positions
     std::array<LegStancePosition, NUM_LEGS> leg_stance_positions;
 

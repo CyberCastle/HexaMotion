@@ -472,7 +472,7 @@ void initializeRobotParameters() {
     // Control parameters
     robot_params.max_velocity = 100.0f;         // mm/s
     robot_params.max_angular_velocity = 45.0f;  // degrees/s
-    robot_params.control_frequency = 50.0f;     // Hz
+    robot_params.time_delta = 1.0f / 50.0f;     // 50 Hz loop (seconds)
 }
 
 void loop() {

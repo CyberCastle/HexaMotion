@@ -94,8 +94,7 @@
 #define DEFAULT_MAX_ANGULAR_VELOCITY 90.0 // Default maximum angular velocity (degrees/s)
 
 // Control system defaults
-#define DEFAULT_CONTROL_FREQUENCY 50.0 // Default control frequency (Hz)
-#define DEFAULT_STEP_FREQUENCY 1.0     // Default step frequency (Hz)
+#define DEFAULT_STEP_FREQUENCY 1.0 // Default step frequency (Hz)
 
 // ========================================================================
 // GAIT CONFIGURATION CONSTANTS (OpenSHC equivalent)

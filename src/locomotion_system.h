@@ -47,8 +47,6 @@ class LocomotionSystem {
 
     // Control variables
     bool system_enabled;
-    unsigned long last_update_time;
-    double dt; // Delta time since last update (seconds)
 
     // Velocity control
     CartesianVelocityController *velocity_controller;
@@ -60,8 +58,14 @@ class LocomotionSystem {
     BodyPoseController *body_pose_ctrl;
     WalkController *walk_ctrl;
     AdmittanceController *admittance_ctrl;
-    // Last log time for sensor update profiling
-    unsigned long last_sensor_log_time;
+
+    // --- Debug / instrumentation helpers ---
+    // Track last phase we logged for each leg to debounce repetitive FSR transition spam when other
+    // subsystems (e.g., WalkController) overwrite phases each cycle. Only used when debug_fsr_transitions is true.
+#ifdef TESTING_ENABLED
+    StepPhase last_logged_leg_phase_[NUM_LEGS];
+    bool last_logged_initialized_ = false;
+#endif
 
     // System state management
     SystemState system_state;
@@ -78,6 +82,9 @@ class LocomotionSystem {
     // OpenSHC-style IK batch processing functions
     void applyInverseKinematicsToAllLegs();
     void publishJointAnglesToServos();
+
+    // Runtime-only switch to gate coxa servo output during tests
+    bool coxa_movement_enabled_ = true;
 
   public:
     /**
@@ -207,6 +214,12 @@ class LocomotionSystem {
     /** Update FSR and IMU sensors in parallel for optimal performance. */
     bool updateSensorsParallel();
 
+    /** Enable/disable coxa joint movement globally */
+    void setCoxaMovementEnabled(bool enabled) { coxa_movement_enabled_ = enabled; }
+
+    /** Query coxa joint movement state. */
+    bool isCoxaMovementEnabled() const { return coxa_movement_enabled_; }
+
     // Getters
     const Parameters &getParameters() const { return params; }
     RobotModel &getRobotModel() { return model; }
@@ -253,9 +266,7 @@ class LocomotionSystem {
     bool validateParameters();
     bool checkJointLimits(int leg_index, const JointAngles &angles);
 
-    // Adaptive control
-    void adaptGaitToTerrain();
-    void compensateForSlope();
+    // (Removed unused adaptive control helpers flagged by static analysis)
 };
 
 #include "math_utils.h"

@@ -33,6 +33,11 @@ WorkspaceAnalyzer::WorkspaceAnalyzer(const RobotModel &model, ComputeConfig conf
     for (int i = 0; i < NUM_LEGS; i++) {
         leg_workspace_generated_[i] = false;
     }
+
+    // Zero initialize leg_workspace_ bounds structure array
+    for (int i = 0; i < NUM_LEGS; ++i) {
+        leg_workspace_[i] = {0.0, 0.0, 0.0, 0.0, false, 0.0, 0.0, Point3D(0, 0, 0)};
+    }
 }
 
 void WorkspaceAnalyzer::initialize() {
@@ -307,8 +312,9 @@ bool WorkspaceAnalyzer::isPositionReachable(int leg_index, const Point3D &positi
 // COLLISION DETECTION AND AVOIDANCE
 // ========================================================================
 
-double WorkspaceAnalyzer::checkCollisionRisk(int leg_index, const Point3D &target_position,
+double WorkspaceAnalyzer::checkCollisionRisk(int leg_index, const Point3D &target,
                                              const Point3D current_leg_positions[NUM_LEGS]) const {
+    const Point3D &target_position = target; // alias for clarity
     // Get adjacent leg indices
     int left_adjacent = (leg_index + NUM_LEGS - 1) % NUM_LEGS;
     int right_adjacent = (leg_index + 1) % NUM_LEGS;
@@ -335,9 +341,9 @@ double WorkspaceAnalyzer::checkCollisionRisk(int leg_index, const Point3D &targe
     return math_utils::clamp<double>(max_risk, 0.0, 1.0);
 }
 
-Point3D WorkspaceAnalyzer::constrainToValidWorkspace(int leg_index, const Point3D &target_position,
+Point3D WorkspaceAnalyzer::constrainToValidWorkspace(int leg_index, const Point3D &target,
                                                      const Point3D current_leg_positions[NUM_LEGS]) const {
-    Point3D constrained = target_position;
+    Point3D constrained = target;
 
     // Step 1: Constrain to geometric workspace
     constrained = constrainToGeometricWorkspace(leg_index, constrained);
@@ -625,12 +631,12 @@ Point3D WorkspaceAnalyzer::getLegBase(int leg_index) const {
     return model_.getLegBasePosition(leg_index);
 }
 
-double WorkspaceAnalyzer::getDistanceFromBase(int leg_index, const Point3D &target_position) const {
+double WorkspaceAnalyzer::getDistanceFromBase(int leg_index, const Point3D &target) const {
     Point3D leg_base = getLegBase(leg_index);
-    return math_utils::distance3D(leg_base, target_position);
+    return math_utils::distance3D(leg_base, target);
 }
 
-bool WorkspaceAnalyzer::checkJointLimits(int leg_index, const Point3D &target_position) const {
+bool WorkspaceAnalyzer::checkJointLimits(int leg_index, const Point3D &target) const {
     if (leg_index < 0 || leg_index >= NUM_LEGS) {
         return false;
     }
@@ -639,7 +645,7 @@ bool WorkspaceAnalyzer::checkJointLimits(int leg_index, const Point3D &target_po
     try {
         // For validation, use zero angles as starting point
         JointAngles zero_angles(0, 0, 0);
-        JointAngles angles = model_.inverseKinematicsCurrentGlobalCoordinates(leg_index, zero_angles, target_position);
+        JointAngles angles = model_.inverseKinematicsCurrentGlobalCoordinates(leg_index, zero_angles, target);
 
         // Use the limits from configuration parameters
         const Parameters &params = model_.getParams();
@@ -658,9 +664,9 @@ bool WorkspaceAnalyzer::checkJointLimits(int leg_index, const Point3D &target_po
     }
 }
 
-Point3D WorkspaceAnalyzer::constrainToGeometricWorkspace(int leg_index, const Point3D &target_position) const {
+Point3D WorkspaceAnalyzer::constrainToGeometricWorkspace(int leg_index, const Point3D &target) const {
     if (leg_index < 0 || leg_index >= NUM_LEGS) {
-        return target_position;
+        return target;
     }
 
     const Parameters &params = model_.getParams();
@@ -674,18 +680,18 @@ Point3D WorkspaceAnalyzer::constrainToGeometricWorkspace(int leg_index, const Po
     max_reach = std::min(max_reach, physical_max_reach);
 
     // Calculate distance from base
-    double distance = getDistanceFromBase(leg_index, target_position);
+    double distance = getDistanceFromBase(leg_index, target);
 
     if (distance <= max_reach) {
-        return target_position; // Already within bounds
+        return target; // Already within bounds
     }
 
     // Constrain to max reach
     double scale = max_reach / distance;
-    Point3D constrained = target_position;
-    constrained.x = leg_base.x + (target_position.x - leg_base.x) * scale;
-    constrained.y = leg_base.y + (target_position.y - leg_base.y) * scale;
-    constrained.z = leg_base.z + (target_position.z - leg_base.z) * scale;
+    Point3D constrained = target;
+    constrained.x = leg_base.x + (target.x - leg_base.x) * scale;
+    constrained.y = leg_base.y + (target.y - leg_base.y) * scale;
+    constrained.z = leg_base.z + (target.z - leg_base.z) * scale;
 
     return constrained;
 }

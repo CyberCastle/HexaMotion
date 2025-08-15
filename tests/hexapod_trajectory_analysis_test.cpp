@@ -94,7 +94,7 @@ LegAnalysisResult analyzeLegTrajectory(int leg_id, LegStepper &stepper, Leg &leg
     leg.setJointAngles(traditional_angles);
     JointAngles current_angles = leg.getJointAngles();
     Point3D current_pos = leg.getCurrentTipPositionGlobal();
-    JointAngles new_angles = model.applyAdvancedIK(leg.getLegId(), current_pos, initial_position, current_angles, 0.02);
+    JointAngles new_angles = model.applyAdvancedIK(leg.getLegId(), current_pos, initial_position, current_angles, model.getTimeDelta());
     leg.setJointAngles(new_angles);
     Point3D delta_actual_pos = leg.getCurrentTipPositionGlobal();
     double delta_ik_error = (delta_actual_pos - initial_position).norm();
@@ -119,7 +119,7 @@ LegAnalysisResult analyzeLegTrajectory(int leg_id, LegStepper &stepper, Leg &leg
 
     // Calculate timing parameters
     StepCycle step_cycle = stepper.getStepCycle();
-    double time_delta = 0.02;
+    double time_delta = model.getTimeDelta();
     double period = step_cycle.period_;
     double swing_period = step_cycle.swing_period_;
     double stance_period = step_cycle.stance_period_;
@@ -169,7 +169,7 @@ LegAnalysisResult analyzeLegTrajectory(int leg_id, LegStepper &stepper, Leg &leg
     // Store initial stance joint angles
     JointAngles temp_angles = leg.getJointAngles();
     Point3D temp_pos = leg.getCurrentTipPositionGlobal();
-    JointAngles updated_angles = model.applyAdvancedIK(leg.getLegId(), temp_pos, initial_position, temp_angles, 0.02);
+    JointAngles updated_angles = model.applyAdvancedIK(leg.getLegId(), temp_pos, initial_position, temp_angles, model.getTimeDelta());
     leg.setJointAngles(updated_angles);
     JointAngles initial_stance_angles = leg.getJointAngles();
 
@@ -184,7 +184,7 @@ LegAnalysisResult analyzeLegTrajectory(int leg_id, LegStepper &stepper, Leg &leg
     // Apply IK for final stance analysis
     JointAngles temp_angles2 = leg.getJointAngles();
     Point3D temp_pos2 = leg.getCurrentTipPositionGlobal();
-    JointAngles final_updated_angles = model.applyAdvancedIK(leg.getLegId(), temp_pos2, final_stance_position, temp_angles2, 0.02);
+    JointAngles final_updated_angles = model.applyAdvancedIK(leg.getLegId(), temp_pos2, final_stance_position, temp_angles2, model.getTimeDelta());
     leg.setJointAngles(final_updated_angles);
     JointAngles final_stance_angles = leg.getJointAngles();
 
@@ -214,7 +214,7 @@ LegAnalysisResult analyzeLegTrajectory(int leg_id, LegStepper &stepper, Leg &leg
 
         JointAngles current_angles = leg.getJointAngles();
         Point3D current_pos = leg.getCurrentTipPositionGlobal();
-        JointAngles new_angles = model.applyAdvancedIK(leg.getLegId(), current_pos, pos, current_angles, 0.02);
+        JointAngles new_angles = model.applyAdvancedIK(leg.getLegId(), current_pos, pos, current_angles, model.getTimeDelta());
         leg.setJointAngles(new_angles);
         JointAngles angles = leg.getJointAngles();
 
@@ -396,7 +396,7 @@ void printDetailedLegTrajectory(int leg_id, LegStepper &stepper, Leg &leg, const
 
     // Calculate timing parameters
     StepCycle step_cycle = stepper.getStepCycle();
-    double time_delta = 0.02;
+    double time_delta = model.getTimeDelta();
     double period = step_cycle.period_;
     double swing_period = step_cycle.swing_period_;
     double stance_period = step_cycle.stance_period_;
@@ -546,7 +546,7 @@ int main() {
     p.default_height_offset = -208.0; // Set to -tibia_length for explicit configuration
     p.robot_height = 208;
     p.standing_height = 150;
-    p.control_frequency = 50;
+    p.time_delta = 1.0 / 50.0;
     p.coxa_angle_limits[0] = -65;
     p.coxa_angle_limits[1] = 65;
     p.femur_angle_limits[0] = -75;

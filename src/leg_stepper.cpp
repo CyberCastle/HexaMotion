@@ -10,10 +10,11 @@ LegStepper::LegStepper(int leg_index, const Point3D &identity_tip_pose, Leg &leg
     : leg_index_(leg_index),
       leg_(leg),
       robot_model_(robot_model),
+      params_(robot_model.getParams()),
       identity_tip_pose_(identity_tip_pose) {
 
     // Validate physical reference height (z = getDefaultHeightOffset() when all angles are 0°)
-    const Parameters &params = robot_model_.getParams();
+    const Parameters &params = params_; // alias for readability in constructor
     double physical_reference_height = robot_model_.getDefaultHeightOffset();
     double expected_z_range_min = physical_reference_height - params.standing_height;
     double expected_z_range_max = physical_reference_height + params.standing_height;
@@ -57,7 +58,6 @@ LegStepper::LegStepper(int leg_index, const Point3D &identity_tip_pose, Leg &leg
 
     // Initialize gait configuration parameters (not part of StepCycle)
     swing_width_ = 5.0;            // Default swing width (will be overridden by gait configuration)
-    control_frequency_ = 50.0;     // Default control frequency (will be overridden by gait configuration)
     step_clearance_height_ = 20.0; // Default step clearance height in mm (will be overridden by gait configuration)
 
     // Initialize swing state management
@@ -90,7 +90,7 @@ LegStepper::LegStepper(int leg_index, const Point3D &identity_tip_pose, Leg &leg
     // Initialize velocity tracking
     previous_tip_pose_ = identity_tip_pose_;
     has_previous_position_ = false;
-    time_step_ = 1.0 / control_frequency_; // Default time step based on control frequency
+    time_step_ = params.time_delta; // Unified time step
 }
 
 void LegStepper::setDesiredVelocity(const Point3D &linear_velocity, double angular_velocity) {
@@ -176,6 +176,8 @@ void LegStepper::beginStancePhase() {
 }
 
 void LegStepper::calculateSwingTiming(double time_delta) {
+    // Override provided time_delta with unified global value to ensure consistency
+    time_delta = params_.time_delta;
     // OpenSHC EXACT timing calculation using StepCycle values
     // Follow OpenSHC formula exactly: (double(step.swing_period_) / step.period_) / (step.frequency_ * time_delta)
 
@@ -228,7 +230,7 @@ void LegStepper::generatePrimarySwingControlNodes() {
     mid_tip_position.y += positive_y_axis ? mid_lateral_shift : -mid_lateral_shift;
 
     // OpenSHC exact formula: walker_->getTimeDelta() / swing_delta_t_
-    double time_delta = 1.0 / control_frequency_; // Use configured control frequency from GaitConfiguration
+    double time_delta = params_.time_delta; // Unified global time delta
     Point3D stance_node_seperation = swing_origin_tip_velocity_ * 0.25 * (time_delta / swing_delta_t_);
 
     // Control nodes for primary swing quartic bezier curves
@@ -252,7 +254,7 @@ void LegStepper::generateSecondarySwingControlNodes(bool ground_contact) {
     // Follow OpenSHC exact implementation for maximum precision
 
     // Calculate final tip velocity for stance transition (OpenSHC formula)
-    double time_delta = 1.0 / control_frequency_; // Use configured control frequency from GaitConfiguration
+    double time_delta = params_.time_delta; // Unified global time delta
     Point3D final_tip_velocity = stride_vector_ * (-1.0) * (stance_delta_t_ / time_delta);
     Point3D stance_node_seperation = final_tip_velocity * 0.25 * (time_delta / swing_delta_t_);
 
@@ -278,7 +280,7 @@ void LegStepper::generateSecondarySwingControlNodes(bool ground_contact) {
     }
 
     // STEP 4: Validate and fix control nodes to ensure all are reachable
-    if (robot_model_.getParams().enable_workspace_constrain) {
+    if (params_.enable_workspace_constrain) {
         validateAndFixControlNodes(swing_2_nodes_);
     }
 }
@@ -300,7 +302,7 @@ void LegStepper::generateStanceControlNodes(double stride_scaler) {
     stance_nodes_[4] = stance_origin_tip_position_ + stance_node_seperation * 4.0;
 
     // STEP 4: Validate and fix control nodes to ensure all are reachable
-    if (robot_model_.getParams().enable_workspace_constrain) {
+    if (params_.enable_workspace_constrain) {
         validateAndFixControlNodes(stance_nodes_);
     }
 }
@@ -321,7 +323,7 @@ double LegStepper::calculateStanceStrideScaler() {
     // OpenSHC formula: stride_scaler = modified_stance_period / normal_stance_period
     double stride_scaler = double(modified_stance_period) / double(stance_iterations_);
 
-    // Ensure reasonable bounds
+    // Ensure reasonable bounds (base OpenSHC-inspired limits)
     stride_scaler = std::max(0.1, std::min(2.0, stride_scaler));
 
     return stride_scaler;
@@ -329,6 +331,9 @@ double LegStepper::calculateStanceStrideScaler() {
 
 void LegStepper::updateTipPositionIterative(int iteration, double time_delta, bool rough_terrain_mode, bool force_normal_touchdown) {
     // OpenSHC-style iterative update - This is the MAIN method following OpenSHC philosophy
+
+    // Single cached reference to parameters (avoid repeated getParams() bindings further below)
+    const Parameters &params = params_;
 
     // OpenSHC: Handle FORCE_STOP state
     if (step_state_ == STEP_FORCE_STOP) {
@@ -340,7 +345,7 @@ void LegStepper::updateTipPositionIterative(int iteration, double time_delta, bo
 
     // Calculate swing timing if not already done
     if (swing_delta_t_ <= 0.0) {
-        calculateSwingTiming(time_delta);
+        calculateSwingTiming(params.time_delta);
     }
 
     // Update current iteration and step progress
@@ -368,7 +373,7 @@ void LegStepper::updateTipPositionIterative(int iteration, double time_delta, bo
 
     // STEP 1: Validate and constrain target within workspace (NEW SAFETY CHECK)
     if (!target_frozen_) {
-        if (robot_model_.getParams().enable_workspace_constrain) {
+        if (params_.enable_workspace_constrain) {
             target_tip_pose_ = calculateSafeTarget(raw_target);
         } else {
             target_tip_pose_ = raw_target; // unconstrained (debug mode)
@@ -392,8 +397,9 @@ void LegStepper::updateTipPositionIterative(int iteration, double time_delta, bo
         }
 
         if (!nodes_generated_) {
+            // Generate initial swing control nodes (primary + secondary without contact)
             generatePrimarySwingControlNodes();
-            generateSecondarySwingControlNodes(false); // ground_contact = false for now
+            generateSecondarySwingControlNodes(false);
             nodes_generated_ = true;
         }
 
@@ -409,6 +415,12 @@ void LegStepper::updateTipPositionIterative(int iteration, double time_delta, bo
         Point3D delta_pos;
         double time_input = 0.0;
 
+        // Detect ground contact via FSR (if enabled) for adaptive touchdown (OpenSHC style)
+        bool ground_contact = false;
+        if (params_.use_fsr_contact) {
+            ground_contact = leg_.isInContact();
+        }
+
         if (first_half) {
             // OpenSHC exact calculation: swing_delta_t_ * iteration (1-based)
             time_input = swing_delta_t_ * swing_iteration;
@@ -419,13 +431,16 @@ void LegStepper::updateTipPositionIterative(int iteration, double time_delta, bo
             // OpenSHC exact calculation: swing_delta_t_ * (iteration - swing_iterations / 2)
             time_input = swing_delta_t_ * (swing_iteration - swing_iterations_ / 2);
 
+            // Regenerate secondary swing nodes continuously in second half to allow early flattening when contact detected
+            generateSecondarySwingControlNodes(ground_contact);
+
             // OpenSHC pattern: Use quarticBezierDot for velocity-based calculation
             delta_pos = math_utils::quarticBezierDot(swing_2_nodes_, time_input) * swing_delta_t_;
         }
         // Update current tip pose based on calculated delta position
         // OpenSHC pattern: accumulate delta position to current tip pose
         Point3D next_pose = current_tip_pose_ + delta_pos;
-        if (robot_model_.getParams().enable_workspace_constrain) {
+        if (params_.enable_workspace_constrain) {
             current_tip_pose_ = robot_model_.getWorkspaceAnalyzer().constrainToGeometricWorkspace(leg_index_, next_pose);
         } else {
             current_tip_pose_ = next_pose;
@@ -434,63 +449,215 @@ void LegStepper::updateTipPositionIterative(int iteration, double time_delta, bo
         // Calculate velocity for this iteration (OpenSHC pattern)
         current_tip_velocity_ = delta_pos / time_delta;
 
-    } else if (step_state_ == STEP_STANCE) {
-        // Handle stance period - OpenSHC EXACT implementation
-
-        // Calculate stance iteration using OpenSHC approach
-        // In OpenSHC: iteration = mod(phase_ + (step.period_ - modified_stance_start), step.period_) + 1;
-        // For our simplified test case, we need to map the global iteration to stance-specific iteration
-
-        int stance_iteration;
-        if (iteration <= swing_iterations_) {
-            // We're still in swing, this shouldn't happen
-            stance_iteration = 1;
-        } else {
-            // Map global iteration to stance iteration (1-based)
-            stance_iteration = iteration - swing_iterations_;
+        // Improvement 2: Early swing termination when contact detected in second half of swing
+        if (!first_half && params_.use_fsr_contact && ground_contact) {
+            // Transition immediately to stance on next update
+            step_state_ = STEP_STANCE;
+            // Reset swing-related flags so a fresh stance origin is established
+            swing_initialized_ = false;
+            nodes_generated_ = false; // force regeneration when next swing starts
+            // Force stance iteration start by resetting current_iteration_ to swing_iterations_
+            current_iteration_ = swing_iterations_; // so next call maps to stance_iteration==1
         }
 
-        // Ensure valid stance iteration range
-        if (stance_iteration <= 0)
-            stance_iteration = 1;
-        if (stance_iteration > stance_iterations_)
-            stance_iteration = stance_iterations_;
+    } else if (step_state_ == STEP_STANCE) {
+        // STANCE period handling.
+        // Baseline (OpenSHC): integrate derivative of stance quartic Bezier to obtain velocity-controlled
+        // displacement (delta accumulation) along the ground. HexaMotion Option B (tangential stance mode)
+        // purposely diverges: it suppresses radial & vertical drift and constrains motion to a pure
+        // planar tangential arc (constant radius & height) so only the coxa rotates while femur/tibia
+        // remain almost static. This stabilizes joint posture at the cost of not reproducing the exact
+        // Bezier-derived ground velocity profile. Disabling enable_tangential_stance_mode restores the
+        // OpenSHC-equivalent derivative integration path.
+        //
+        // Stance iteration mapping: we convert the running iteration counter into a 1-based local index
+        // inside [1..stance_iterations_]. A prior bug compared against swing_iterations_ (often equal),
+        // freezing stance_iteration at 1 and eliminating displacement. The direct modulo mapping below
+        // fixes that and is used by both modes (tangential or original).
+        int stance_iteration = (iteration % std::max(1, stance_iterations_)) + 1; // 1..stance_iterations_
 
-        // Initialize stance origin if needed.
-        // OpenSHC behavior: preserve swing touchdown pose as stance origin (continuity, allows mild drift).
-        // Extended (anti-drift) behavior: hard reset to calibrated default to avoid cumulative error.
+        // Defensive clamp (in case stance_iterations_ changes dynamically)
+        if (stance_iteration > stance_iterations_) {
+            stance_iteration = stance_iterations_;
+        }
+
+        // Initialize stance origin if needed (hybrid anti-drift extension).
         if (stance_iteration == 1) {
-            const Parameters &params = robot_model_.getParams();
+            Point3D touchdown_offset = current_tip_pose_ - default_tip_pose_;
+            double offset_norm = std::sqrt(touchdown_offset.x * touchdown_offset.x +
+                                           touchdown_offset.y * touchdown_offset.y +
+                                           touchdown_offset.z * touchdown_offset.z);
+
+#ifdef TESTING_ENABLED
+            last_touchdown_offset_norm_ = offset_norm;
+            accumulated_drift_vector_ = accumulated_drift_vector_ + touchdown_offset;
+            accumulated_drift_norm_ = std::sqrt(accumulated_drift_vector_.x * accumulated_drift_vector_.x +
+                                                accumulated_drift_vector_.y * accumulated_drift_vector_.y +
+                                                accumulated_drift_vector_.z * accumulated_drift_vector_.z);
+            planar_drift_norm_ = std::sqrt(accumulated_drift_vector_.x * accumulated_drift_vector_.x +
+                                           accumulated_drift_vector_.y * accumulated_drift_vector_.y);
+            vertical_drift_ = accumulated_drift_vector_.z;
+            double metrics_alpha = math_utils::clamp(params.drift_metrics_ema_alpha, 0.0, 1.0);
+            if (metrics_alpha > 0.0) {
+                drift_ema_norm_ = (1.0 - metrics_alpha) * drift_ema_norm_ + metrics_alpha * offset_norm;
+            } else {
+                drift_ema_norm_ = offset_norm;
+            }
+            if (accumulated_drift_norm_ > params.drift_metrics_cap_mm) {
+                double scale = params.drift_metrics_cap_mm / accumulated_drift_norm_;
+                accumulated_drift_vector_.x *= scale;
+                accumulated_drift_vector_.y *= scale;
+                accumulated_drift_vector_.z *= scale;
+                accumulated_drift_norm_ = params.drift_metrics_cap_mm;
+                planar_drift_norm_ = std::sqrt(accumulated_drift_vector_.x * accumulated_drift_vector_.x +
+                                               accumulated_drift_vector_.y * accumulated_drift_vector_.y);
+                vertical_drift_ = accumulated_drift_vector_.z;
+            }
+            // Drift debug logging removed (debug_drift parameter eliminated)
+#endif // TESTING_ENABLED
+
             if (params.preserve_swing_end_pose) {
-                // Continuity mode: keep the current pose (swing end / touchdown) as stance origin.
-                // Avoid altering current_tip_pose_ to maintain seamless transition.
+                // Continuity mode: keep touchdown pose as stance origin
                 stance_origin_tip_position_ = current_tip_pose_;
             } else {
-                // Anti-drift mode (default): reset to default calibrated pose for deterministic stance start.
-                stance_origin_tip_position_ = default_tip_pose_;
-                current_tip_pose_ = default_tip_pose_;
+                // Anti-drift hybrid:
+                // If small offset -> soft blend toward default.
+                // If large offset -> hard reset.
+                bool hard_reset = offset_norm > params.drift_hard_threshold_mm;
+                bool soft_reset = !hard_reset && offset_norm > params.drift_soft_threshold_mm;
+                if (hard_reset) {
+                    current_tip_pose_ = default_tip_pose_;
+                    stance_origin_tip_position_ = default_tip_pose_;
+                } else if (soft_reset) {
+                    double soft_alpha = math_utils::clamp(params.drift_soft_blend_alpha, 0.0, 1.0);
+                    current_tip_pose_ = Point3D{current_tip_pose_.x + (default_tip_pose_.x - current_tip_pose_.x) * soft_alpha,
+                                                current_tip_pose_.y + (default_tip_pose_.y - current_tip_pose_.y) * soft_alpha,
+                                                current_tip_pose_.z + (default_tip_pose_.z - current_tip_pose_.z) * soft_alpha};
+                    stance_origin_tip_position_ = current_tip_pose_;
+                } else {
+                    // Offset already within soft threshold: leave as-is for seamless continuity but count as corrected
+                    stance_origin_tip_position_ = current_tip_pose_;
+                }
             }
         }
 
-        // Generate stance control nodes with calculated stride scaler (OpenSHC approach)
-        double stride_scaler = calculateStanceStrideScaler();
-        generateStanceControlNodes(stride_scaler);
+        // Initialize tangential stance mode state at first stance iteration
+        if (stance_iteration == 1) {
+            stance_tangent_initialized_ = false; // reset every new stance phase
+        }
 
-        // OpenSHC EXACT approach: Use derivative of bezier curve for velocity control
-        // "Uses derivative of bezier curve to ensure correct velocity along ground, this means the position may not
-        // reach the target but this is less important than ensuring correct velocity according to stride vector"
+        if (params.enable_tangential_stance_mode) {
+            // --- Pure tangential motion ---
+            // We ignore Bezier stance nodes for positional integration and instead
+            // move the tip along the arc defined by the commanded stride direction,
+            // preserving its planar radius (distance from leg base) and its height.
+            // Femur/tibia remain nearly constant; only yaw (coxa) changes.
 
-        // OpenSHC exact calculation: iteration * stance_delta_t_ (1-based iteration)
-        double time_input = stance_iteration * stance_delta_t_;
+            // One-time capture at stance start
+            if (!stance_tangent_initialized_) {
+                stance_tangent_origin_tip_position_ = current_tip_pose_;
+                stance_tangent_leg_base_ = robot_model_.getLegBasePosition(leg_index_);
+                Point3D planar_vec = Point3D(current_tip_pose_.x - stance_tangent_leg_base_.x,
+                                             current_tip_pose_.y - stance_tangent_leg_base_.y,
+                                             0.0);
+                stance_tangent_radius_ = planar_vec.norm();
+                stance_tangent_height_ = current_tip_pose_.z; // lock vertical level
+                stance_tangent_initialized_ = true;
+            }
 
-        // OpenSHC uses quarticBezierDot (derivative) + delta accumulation, NOT absolute position
-        Point3D delta_pos = math_utils::quarticBezierDot(stance_nodes_, time_input) * stance_delta_t_;
-        current_tip_pose_ += delta_pos; // OpenSHC accumulation
-        current_tip_velocity_ = delta_pos / time_delta;
+            // Use frozen (or active) stride to define tangential direction
+            Point3D active_stride = stride_frozen_ ? frozen_stride_vector_total_ : stride_vector_;
+            Point3D planar_stride(active_stride.x, active_stride.y, 0.0);
+            double planar_stride_norm = planar_stride.norm();
+
+            // If stride direction degenerates, fall back to zero movement
+            Point3D tangent_dir(0, 0, 0);
+            if (planar_stride_norm > 1e-9) {
+                tangent_dir = planar_stride / planar_stride_norm; // unit along stride direction in plane
+            }
+
+            // Desired tangential displacement magnitude this iteration based on uniform distribution
+            // We re-use OpenSHC derivative magnitude approximation via stride scaler for velocity scale.
+            double stride_scaler = calculateStanceStrideScaler();
+            double total_planar_displacement = (planar_stride_norm * stride_scaler);
+            double per_iteration = (stance_iterations_ > 0) ? total_planar_displacement / double(stance_iterations_) : 0.0;
+
+            // Current planar vector from leg base preserving radius
+            Point3D base_to_tip_planar(current_tip_pose_.x - stance_tangent_leg_base_.x,
+                                       current_tip_pose_.y - stance_tangent_leg_base_.y,
+                                       0.0);
+            double base_to_tip_norm = base_to_tip_planar.norm();
+            if (base_to_tip_norm < 1e-9) {
+                // Edge case: foot exactly at base projection; fabricate a perpendicular vector
+                base_to_tip_planar = Point3D(stance_tangent_radius_, 0.0, 0.0);
+                base_to_tip_norm = stance_tangent_radius_;
+            }
+
+            // Advance along tangent direction by rotating the base_to_tip vector minimally.
+            // Approximate new planar position: origin_at_base + normalized(base_to_tip) * radius + delta tangential projected.
+            // To keep exact radius, project the tentative displacement onto tangent direction orthogonal to radial vector.
+            Point3D radial_dir = base_to_tip_planar / base_to_tip_norm; // unit radial
+            // Tangent direction should be orthogonal to radial_dir; adjust if needed.
+            double dot_rt = radial_dir.x * tangent_dir.x + radial_dir.y * tangent_dir.y;
+            Point3D ortho_tangent = tangent_dir - radial_dir * dot_rt; // remove radial component
+            double ortho_norm = std::sqrt(ortho_tangent.x * ortho_tangent.x + ortho_tangent.y * ortho_tangent.y);
+            if (ortho_norm > 1e-9) {
+                ortho_tangent = ortho_tangent / ortho_norm;
+            } else {
+                // If tangent aligns with radial (rare), build a perpendicular
+                ortho_tangent = Point3D(-radial_dir.y, radial_dir.x, 0.0);
+            }
+            Point3D delta_tangent = ortho_tangent * per_iteration; // purely tangential, magnitude per_iteration
+
+            // Compute new planar position: rotate radial vector by small angle ≈ delta_tangent / radius
+            double effective_radius = (stance_tangent_radius_ > 1e-6) ? stance_tangent_radius_ : base_to_tip_norm;
+            Point3D new_planar_pos;
+            if (effective_radius > 1e-6) {
+                // Incremental rotation approximation
+                new_planar_pos = Point3D(stance_tangent_leg_base_.x + radial_dir.x * effective_radius + delta_tangent.x,
+                                         stance_tangent_leg_base_.y + radial_dir.y * effective_radius + delta_tangent.y,
+                                         stance_tangent_height_);
+                // Reproject to exact radius to correct numerical drift
+                Point3D adj_vec(new_planar_pos.x - stance_tangent_leg_base_.x,
+                                new_planar_pos.y - stance_tangent_leg_base_.y,
+                                0.0);
+                double adj_norm = std::sqrt(adj_vec.x * adj_vec.x + adj_vec.y * adj_vec.y);
+                if (adj_norm > 1e-9) {
+                    double scale = effective_radius / adj_norm;
+                    adj_vec.x *= scale;
+                    adj_vec.y *= scale;
+                } else {
+                    adj_vec = radial_dir * effective_radius; // fallback
+                }
+                new_planar_pos.x = stance_tangent_leg_base_.x + adj_vec.x;
+                new_planar_pos.y = stance_tangent_leg_base_.y + adj_vec.y;
+            } else {
+                // No meaningful radius: just stay put horizontally
+                new_planar_pos = Point3D(current_tip_pose_.x, current_tip_pose_.y, stance_tangent_height_);
+            }
+
+            Point3D next_pose = new_planar_pos; // Z locked
+            if (params_.enable_workspace_constrain) {
+                current_tip_pose_ = robot_model_.getWorkspaceAnalyzer().constrainToGeometricWorkspace(leg_index_, next_pose);
+                // Maintain locked height after constraint (best effort)
+                current_tip_pose_.z = stance_tangent_height_;
+            } else {
+                current_tip_pose_ = next_pose;
+            }
+
+            current_tip_velocity_ = Point3D(delta_tangent.x, delta_tangent.y, 0.0) / time_delta;
+        } else {
+            // Fallback: original OpenSHC stance integration
+            double stride_scaler = calculateStanceStrideScaler();
+            generateStanceControlNodes(stride_scaler);
+            double time_input = stance_iteration * stance_delta_t_;
+            Point3D delta_pos = math_utils::quarticBezierDot(stance_nodes_, time_input) * stance_delta_t_;
+            current_tip_pose_ += delta_pos;
+            current_tip_velocity_ = delta_pos / time_delta;
+        }
     }
 
     // Optional phase-end snap to frozen target (enhancement; documented difference from vanilla OpenSHC)
-    const Parameters &params = robot_model_.getParams();
     if (params.enable_phase_end_snap && target_frozen_) {
         bool at_end = (step_progress_ >= 0.999);
         if (at_end) {

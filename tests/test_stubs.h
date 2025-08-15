@@ -299,10 +299,14 @@ inline Parameters createDefaultParameters() {
     params.max_velocity = 100.0;
     params.max_angular_velocity = 45.0;
     params.stability_margin = 0.02;
-    params.control_frequency = 50.0;
+    params.time_delta = 1.0 / 50.0;
     params.fsr_touchdown_threshold = 0.1;
     params.fsr_liftoff_threshold = 0.05;
     params.fsr_max_pressure = 10.0;
+    params.preserve_swing_end_pose = false;
+    params.use_fsr_contact = false;
+    params.preserve_swing_end_pose = false; // Default to false for testing
+
     // Disable smooth trajectory features for unit tests
     params.smooth_trajectory.use_current_servo_positions = false;
     params.smooth_trajectory.enable_pose_interpolation = false;

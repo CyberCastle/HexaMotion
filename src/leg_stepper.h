@@ -65,6 +65,16 @@ class LegStepper {
     Point3D getStrideVector() const { return stride_vector_; }
     double getStepProgress() const { return step_progress_; }
 
+#ifdef TESTING_ENABLED
+    // Drift metrics (updated at start of stance) - only available in testing builds
+    double getLastTouchdownOffsetNorm() const { return last_touchdown_offset_norm_; }
+    double getAccumulatedDriftNorm() const { return accumulated_drift_norm_; }
+    Point3D getAccumulatedDriftVector() const { return accumulated_drift_vector_; }
+    double getDriftEMANorm() const { return drift_ema_norm_; }
+    double getPlanarDriftNorm() const { return planar_drift_norm_; }
+    double getVerticalDrift() const { return vertical_drift_; }
+#endif
+
     // Debug getters for velocity troubleshooting
     Point3D getDesiredLinearVelocity() const { return desired_linear_velocity_; }
     double getDesiredAngularVelocity() const { return desired_angular_velocity_; }
@@ -110,8 +120,6 @@ class LegStepper {
     // Gait configuration parameters (not part of StepCycle)
     void setSwingWidth(double swing_width) { swing_width_ = swing_width; }
     double getSwingWidth() const { return swing_width_; }
-    void setControlFrequency(double control_frequency) { control_frequency_ = control_frequency; }
-    double getControlFrequency() const { return control_frequency_; }
     void setStepClearanceHeight(double step_clearance_height) { step_clearance_height_ = step_clearance_height; }
     double getStepClearanceHeight() const { return step_clearance_height_; }
 
@@ -166,6 +174,8 @@ class LegStepper {
     int leg_index_;
     Leg &leg_;
     RobotModel &robot_model_;
+    // Cached immutable reference to RobotModel parameters to avoid repeated lookups
+    const Parameters &params_;
     Point3D identity_tip_pose_;
     Point3D default_tip_pose_;
     Point3D origin_tip_pose_;
@@ -182,6 +192,12 @@ class LegStepper {
     Point3D swing_origin_tip_position_;
     Point3D swing_origin_tip_velocity_;
     Point3D stance_origin_tip_position_;
+    // Tangential stance mode cached values (Option B)
+    Point3D stance_tangent_origin_tip_position_; //< Original touchdown pose (for z preservation)
+    Point3D stance_tangent_leg_base_;            //< Cached leg base at stance start
+    double stance_tangent_radius_ = 0.0;         //< Constant planar radius in stance
+    double stance_tangent_height_ = 0.0;         //< Constant height (z) in stance
+    bool stance_tangent_initialized_ = false;    //< Initialization flag per stance phase
 
     // Phase and state management
     bool at_correct_phase_;
@@ -200,7 +216,6 @@ class LegStepper {
 
     // Gait configuration parameters (not part of StepCycle)
     double swing_width_;           // Lateral shift at mid-swing (OpenSHC mid_lateral_shift)
-    double control_frequency_;     // Control loop frequency (equivalent to OpenSHC walker_->getTimeDelta())
     double step_clearance_height_; // Step clearance height (equivalent to OpenSHC walker_->getStepClearance())
 
     // Swing state management (OpenSHC style)
@@ -234,6 +249,16 @@ class LegStepper {
     Point3D previous_tip_pose_;
     bool has_previous_position_;
     double time_step_;
+
+#ifdef TESTING_ENABLED
+    // --- Drift tracking (hybrid anti-drift support) --- (testing builds only)
+    double last_touchdown_offset_norm_ = 0.0;             //< Distance between touchdown pose and default at stance start
+    Point3D accumulated_drift_vector_ = Point3D(0, 0, 0); //< Cumulative vector of (touchdown - default) over cycles
+    double accumulated_drift_norm_ = 0.0;                 //< Norm of cumulative drift vector
+    double drift_ema_norm_ = 0.0;                         //< Exponential moving average of offset norm
+    double planar_drift_norm_ = 0.0;                      //< Norm of cumulative planar (XY) drift
+    double vertical_drift_ = 0.0;                         //< Cumulative vertical (Z) component drift
+#endif
 };
 
 #endif // LEG_STEPPER_H

@@ -61,11 +61,28 @@ struct Parameters {
     double fsr_liftoff_threshold;
     double fsr_max_pressure;
 
+    // FSR contact filtering thresholds (used in LocomotionSystem::updateLegStates)
+    // contact_threshold: minimum historical rolling average to consider contact (hysteresis enter)
+    // release_threshold: maximum historical rolling average to consider release (hysteresis exit)
+    // min_pressure: minimum pressure to validate physical contact and reject false positives
+    double contact_threshold = 0.7; //< Average contact value (0-1) to switch to STANCE
+    double release_threshold = 0.3; //< Average contact value (0-1) to switch to SWING
+    double min_pressure = 10.0;     //< Minimum raw pressure to trust a reported contact
+
     double max_velocity;
     double max_angular_velocity;
     double stability_margin;
-    double control_frequency;
+    // Removed obsolete control_frequency (replaced by unified time_delta)
+
+    // Unified global control loop timestep (seconds) following OpenSHC semantics.
+    // This value defines the nominal period used by all time-based integrations and
+    // gait timing calculations. This repository now removes per-cycle measured dt usage
+    // inside LocomotionSystem for simplicity; optional pacing/jitter instrumentation can
+    // be implemented externally without altering deterministic gait iteration logic.
+    double time_delta = 0.02;                         // Default 50 Hz loop
     double default_servo_speed = SERVO_SPEED_DEFAULT; //< Default servo movement speed (0.1-3.0, where 1.0 is normal speed)
+    // Enable kinematic integration of body translation & yaw (simulation/testing)
+    bool enable_body_translation = false; //< When true, LocomotionSystem::update() integrates body_position & yaw from commanded velocities
 
     /**
      * @brief Smooth trajectory configuration for pose updates.
@@ -101,38 +118,6 @@ struct Parameters {
         double max_tilt_deg = 12.0f;
     } body_comp;
 
-    /**
-     * @brief Dynamic gait timing configuration (OpenSHC equivalent)
-     * Controls the calculation of swing and stance iterations based on frequency and time_delta
-     */
-    struct DynamicGaitConfig {
-        // Phase timing parameters (equivalent to OpenSHC's gait.yaml)
-        double stance_phase = 2.0; // Stance phase duration (OpenSHC default: 2.0)
-        double swing_phase = 2.0;  // Swing phase duration (OpenSHC default: 2.0)
-        double phase_offset = 2.0; // Phase offset between legs (OpenSHC default: 2.0)
-
-        // Frequency and timing parameters
-        double frequency = 1.0;   // Control frequency (Hz, OpenSHC default: 1.0)
-        double time_delta = 0.01; // Time step (seconds, OpenSHC default: 0.01)
-
-        // Dynamic iteration calculation parameters
-        bool enable_dynamic_iterations = true; // Enable OpenSHC-style dynamic iteration calculation
-        double swing_period_factor = 1.0;      // Swing period scaling factor
-        double stance_period_factor = 1.0;     // Stance period scaling factor
-
-        // Iteration limits for safety
-        uint16_t min_swing_iterations = 5;    // Minimum swing iterations
-        uint16_t max_swing_iterations = 100;  // Maximum swing iterations
-        uint16_t min_stance_iterations = 5;   // Minimum stance iterations
-        uint16_t max_stance_iterations = 100; // Maximum stance iterations
-
-        // Duty factor calculation (OpenSHC equivalent)
-        double duty_factor = 0.5; // Duty factor (0.5 = 50% stance, 50% swing)
-
-        // Step period calculation
-        double step_period = 4.0; // Total step period (stance + swing)
-    } dynamic_gait;
-
     // Tipo de gait seleccionado (OpenSHC compatible)
     std::string gait_type;
 
@@ -144,9 +129,25 @@ struct Parameters {
 
     // Gait continuity control: when true, preserve the swing end (touchdown) pose as stance origin instead of
     // resetting to the default tip pose. This yields smoother, continuous trajectories (OpenSHC-style continuity)
-    // at the cost of potential long-term drift. When false (default), an anti-drift policy resets the leg to the
+    // at the cost of potential long-term drift. When false, an anti-drift policy resets (or blends toward) the
     // calibrated default tip pose at the start of stance for deterministic repeatability.
-    bool preserve_swing_end_pose = true; // false = anti-drift reset (current default), true = continuous stance origin
+    // NOTE: Actual default here is 'true' (continuity). Comment previously stated the opposite; corrected for coherence.
+    bool preserve_swing_end_pose = true; // true = continuity (default), false = anti-drift (uses hybrid reset logic below)
+
+    // --- Hybrid anti-drift (applies only when preserve_swing_end_pose == false) ---
+    // If the touchdown pose is close enough to default (distance <= drift_soft_threshold_mm) we blend partially
+    // toward default instead of hard snapping to remove micro-drift without visual discontinuity. If distance
+    // exceeds drift_hard_threshold_mm we force a hard reset to default. Distances in millimeters.
+    double drift_soft_threshold_mm = 2.0; //< Within this distance: apply soft blend instead of hard reset
+    double drift_hard_threshold_mm = 8.0; //< Beyond this distance: force hard reset (snap)
+    double drift_soft_blend_alpha = 0.5;  //< Blend factor (0..1) for soft correction (0.5 = halfway to default)
+
+#ifdef TESTING_ENABLED
+    double drift_metrics_ema_alpha = 0.1;        //< Exponential moving average smoothing factor (0..1) for drift magnitude
+    double drift_metrics_cap_mm = 500.0;         //< Cap for reported accumulated drift norm to avoid unbounded growth
+    bool report_planar_vs_vertical_drift = true; //< When true, separate planar (XY) vs vertical (Z) drift in reports
+    bool debug_fsr_transitions = false;          //< Log phase transitions driven by FSR contact
+#endif
 
     // Workspace constraint toggle: when true (default) all target and intermediate tip poses are constrained
     // via WorkspaceAnalyzer to remain within geometric reach envelopes. When false, raw trajectories are used
@@ -159,6 +160,14 @@ struct Parameters {
     bool enable_phase_end_snap = true;        //< Enable snapping foot to frozen target at phase end
     double phase_end_snap_tolerance_mm = 1.0; //< Distance tolerance (mm) for hard snap
     double phase_end_snap_alpha = 1.0;        //< Blend factor (1.0 hard snap, <1.0 partial correction)
+
+    // --- Tangential stance mode ---
+    // When enabled, the STANCE phase constrains foot motion to pure tangential travel
+    // around the leg base at constant planar radius and constant height. The femur/tibia
+    // joint angles remain effectively frozen; only the coxa rotates. This diverges from
+    // vanilla OpenSHC which integrates full Bezier-derived velocity (allowing radial
+    // drift and vertical micro-adjustments). Use to stabilize stance joint posture.
+    bool enable_tangential_stance_mode = true; //< default on for experimentation
 };
 
 enum GaitType {
@@ -484,6 +493,40 @@ class IServoInterface {
     virtual bool isJointMoving(int leg_index, int joint_index) = 0;
     /** Enable or disable torque on a joint. */
     virtual bool enableTorque(int leg_index, int joint_index, bool enable) = 0;
+
+    /**
+     * Batch command to set all joints' angles and speeds in one call.
+     * Implementations may use a bus-level synchronous write to reduce latency and jitter.
+     * Default returns false to indicate not supported.
+     *
+     * @param angles_deg Degrees, indexed [leg][joint] (coxa=0,femur=1,tibia=2)
+     * @param speeds Speed multipliers or driver-native speed values [leg][joint]
+     * @return true if batch command was sent, false to fallback to per-joint commands
+     */
+    virtual bool syncSetAllJointAnglesAndSpeeds(const double angles_deg[NUM_LEGS][DOF_PER_LEG],
+                                                const double speeds[NUM_LEGS][DOF_PER_LEG]) {
+        (void)angles_deg;
+        (void)speeds;
+        return false;
+    }
+
+    /**
+     * @brief Refresh a small slice of servo health state without blocking the hot path.
+     * @details Implementations should poll at most @p max_per_cycle servos per call and update
+     *          an internal cache of fault/blocking flags. No heavy I/O should be performed
+     *          elsewhere in the publish loop.
+     * @param max_per_cycle Maximum number of servos to poll in this invocation.
+     */
+    virtual void refreshHealthSlice(uint8_t max_per_cycle) {}
+
+    /**
+     * @brief Get cached blocking/fault state for a joint without performing I/O.
+     * @param leg_index Leg index (0..NUM_LEGS-1).
+     * @param joint_index Joint index within leg (0..DOF_PER_LEG-1).
+     * @return true if the cached state marks this joint as blocked/faulted; false otherwise.
+     * @note Default implementation returns false (unknown/no cache).
+     */
+    virtual bool isBlockedCached(int leg_index, int joint_index) const { return false; }
 };
 
 class RobotModel {
@@ -576,6 +619,7 @@ class RobotModel {
      */
     std::pair<double, double> calculateHeightRange() const;
     const Parameters &getParams() const { return params; }
+    double getTimeDelta() const { return params.time_delta; }
 
     /**
      * @brief Get the default height offset when all joint angles are 0°
@@ -710,7 +754,7 @@ class RobotModel {
      * @return Updated joint angles after advanced IK
      */
     JointAngles applyAdvancedIK(int leg, const Point3D &current_tip_pose, const Point3D &desired_tip_pose,
-                                const JointAngles &current_angles, double time_delta = 0.02) const;
+                                const JointAngles &current_angles, double time_delta) const;
 
     /**
      * @brief Joint limit cost function and gradient calculation

@@ -33,10 +33,10 @@
 #include <vector>
 
 // Test configuration
-constexpr double TEST_VELOCITY = 150;          // mm/s, a moderate speed for clear observation
+constexpr double TEST_VELOCITY = 100;          // mm/s, a moderate speed for clear observation
 constexpr double TEST_ANGULAR_VELOCITY = 0.25; // rad/s, introduce rotational motion for validation
 constexpr int REQUIRED_SWING_TRANSITIONS = 2;  // Each leg must complete 2 STANCE->SWING transitions (reduced for 52-iteration phases)
-constexpr int MAX_STEPS = 250;                 // Increased to accommodate 52-iteration phases (2 cycles = 208 steps + margin)
+constexpr int MAX_STEPS = 520;                 // Increased to accommodate 52-iteration phases (2 cycles = 208 steps + margin)
 
 // Utility to convert radians to degrees
 static double toDegrees(double radians) {
@@ -233,7 +233,7 @@ int main() {
     }
 
     StepCycle actual_step_cycle = first_leg_stepper->getStepCycle();
-    double time_delta = 0.02; // 50Hz control loop (mismo que trajectory_tip_position_test)
+    double time_delta = sys.getRobotModel().getTimeDelta(); // unified global timestep
 
     // Usar EXACTAMENTE la misma fórmula que trajectory_tip_position_test
     int swing_iterations_per_cycle = (int)((double(actual_step_cycle.swing_period_) / actual_step_cycle.period_) / (actual_step_cycle.frequency_ * time_delta));

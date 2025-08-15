@@ -23,7 +23,7 @@ void analyzeAllLegsTrajectory(Leg test_legs[NUM_LEGS], LegStepper steppers[NUM_L
     std::cout << "\n=== TRAJECTORY ANALYSIS FOR ALL 6 LEGS (Gait: " << gait_config.gait_name << ") ===" << std::endl;
 
     // Calculate timing parameters using OpenSHC-compatible calculation
-    double time_delta = 0.02; // Standard 50Hz control loop
+    double time_delta = model.getTimeDelta(); // unified global timestep
     double period = 1.0;
     double swing_period = period * gait_config.getSwingRatio();
     double stance_period = period * gait_config.getStanceRatio();
@@ -90,7 +90,7 @@ void analyzeAllLegsTrajectory(Leg test_legs[NUM_LEGS], LegStepper steppers[NUM_L
         test_legs[leg_id].setJointAngles(traditional_angles);
         JointAngles current_angles = test_legs[leg_id].getJointAngles();
         Point3D current_pos = test_legs[leg_id].getCurrentTipPositionGlobal();
-        JointAngles delta_angles = model.applyAdvancedIK(leg_id, current_pos, initial_positions[leg_id], current_angles, 0.02);
+        JointAngles delta_angles = model.applyAdvancedIK(leg_id, current_pos, initial_positions[leg_id], current_angles, model.getTimeDelta());
         test_legs[leg_id].setJointAngles(delta_angles);
         Point3D delta_pos = test_legs[leg_id].getCurrentTipPositionGlobal();
         double delta_error = (delta_pos - initial_positions[leg_id]).norm();
@@ -450,7 +450,7 @@ int main() {
     p.default_height_offset = -208.0; // Set to -tibia_length for explicit configuration
     p.robot_height = 208;
     p.standing_height = 150;
-    p.control_frequency = 50;
+    p.time_delta = 1.0 / 50.0;
     p.coxa_angle_limits[0] = -65;
     p.coxa_angle_limits[1] = 65;
     p.femur_angle_limits[0] = -75;
@@ -572,7 +572,7 @@ int main() {
     steppers[test_leg].setStepProgress(0.0);
 
     // Calculate swing iterations like in analyzeAllLegsTrajectory
-    double time_delta = 0.02;
+    double time_delta = model.getTimeDelta();
     double period = 1.0;
     double swing_period = period * tripod_config.getSwingRatio();
     int swing_iterations = (int)((swing_period / period) / (tripod_config.getStepFrequency() * time_delta));
@@ -702,7 +702,7 @@ int main() {
     steppers[1].setStepState(STEP_SWING);
 
     for (int i = 1; i <= 10; i++) {
-        steppers[1].updateTipPositionIterative(i, 0.02, false, false);
+        steppers[1].updateTipPositionIterative(i, model.getTimeDelta(), false, false);
         original_trajectory_leg1.push_back(steppers[1].getCurrentTipPose());
     }
 
@@ -715,7 +715,7 @@ int main() {
     // Calculate trajectory from modified position
     std::vector<Point3D> modified_trajectory_leg1;
     for (int i = 1; i <= 10; i++) {
-        steppers[1].updateTipPositionIterative(i, 0.02, false, false);
+        steppers[1].updateTipPositionIterative(i, model.getTimeDelta(), false, false);
         modified_trajectory_leg1.push_back(steppers[1].getCurrentTipPose());
     }
 
