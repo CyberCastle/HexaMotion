@@ -58,8 +58,6 @@ class LocomotionSystem {
     BodyPoseController *body_pose_ctrl;
     WalkController *walk_ctrl;
     AdmittanceController *admittance_ctrl;
-    // Last log time for sensor update profiling
-    unsigned long last_sensor_log_time;
 
     // --- Debug / instrumentation helpers ---
     // Track last phase we logged for each leg to debounce repetitive FSR transition spam when other

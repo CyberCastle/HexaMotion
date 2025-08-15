@@ -20,9 +20,6 @@ LocomotionSystem::LocomotionSystem(const Parameters &params)
       model(params), body_pose_ctrl(nullptr), walk_ctrl(nullptr), admittance_ctrl(nullptr),
       system_state(SYSTEM_UNKNOWN), startup_in_progress(false), shutdown_in_progress(false) {
 
-    // Initialize sensor log timestamp to avoid static local in updateSensorsParallel
-    last_sensor_log_time = 0;
-
     // Initialize last logged phases for FSR debug debouncing (testing only)
 #ifdef TESTING_ENABLED
     for (int i = 0; i < NUM_LEGS; ++i) {
