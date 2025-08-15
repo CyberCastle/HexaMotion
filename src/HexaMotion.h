@@ -2,7 +2,6 @@
 #define HEXAMOTION_H
 
 #include "admittance_controller.h"
-#include "body_pose.h"
 #include "body_pose_config.h"
 #include "body_pose_config_factory.h"
 #include "body_pose_controller.h"

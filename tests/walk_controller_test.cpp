@@ -171,7 +171,7 @@ void testTipPositionUpdates(LegStepper &stepper, Leg &leg, const RobotModel &mod
     Point3D initial_position = leg.getCurrentTipPositionGlobal();
 
     // Test tip position update with different parameters
-    double time_delta = 0.02; // 50Hz control frequency
+    double time_delta = model.getTimeDelta(); // unified global timestep
 
     // Set stepper to swing state and advance phase to ensure position changes
     stepper.setStepState(STEP_SWING);
@@ -333,7 +333,7 @@ void testKinematicConsistency(LegStepper &stepper, Leg &leg, const RobotModel &m
 void testTrajectoryStartEnd(LegStepper &stepper, Leg &leg, const RobotModel &model) {
     std::cout << "Testing trajectory start/end positions" << std::endl;
 
-    double time_delta = 1.0 / model.getParams().control_frequency;
+    double time_delta = model.getParams().time_delta;
 
     stepper.setStepState(STEP_STANCE);
     stepper.setPhase(0);
@@ -919,7 +919,7 @@ int main() {
     p.default_height_offset = -208.0; // Set to -tibia_length for explicit configuration
     p.robot_height = 208;
     p.standing_height = 150;
-    p.control_frequency = 50;
+    p.time_delta = 1.0 / 50.0;
     p.coxa_angle_limits[0] = -65;
     p.coxa_angle_limits[1] = 65;
     p.femur_angle_limits[0] = -75;
@@ -1037,8 +1037,7 @@ int main() {
         stepper.updateStride();
 
         // Configure StepCycle and timing parameters
-        stepper.setStepClearanceHeight(25.0); // Set swing height
-        stepper.setControlFrequency(50.0);    // Set control frequency from parameters
+        stepper.setStepClearanceHeight(25.0); // Set swing height (control frequency implicit via global time_delta)
 
         // Run tests silently and collect results
         try {
@@ -1058,9 +1057,6 @@ int main() {
             step_cycle.stance_end_ = 25;
 
             Parameters test_params = model.getParams();
-            test_params.dynamic_gait.stance_phase = 13;
-            test_params.dynamic_gait.swing_phase = 12;
-            test_params.dynamic_gait.frequency = 2.0;
             RobotModel temp_model(test_params);
             temp_model.workspaceAnalyzerInitializer(); // Inicializar WorkspaceAnalyzer
             LegStepper temp_stepper(leg_index, identity_pose, leg, temp_model);
@@ -1076,7 +1072,7 @@ int main() {
             stepper.updateStride();
             Point3D initial_velocity = Point3D(10.0, 0, 0);
             stepper.setSwingOriginTipVelocity(initial_velocity);
-            stepper.updateTipPositionIterative(10, 0.02);
+            stepper.updateTipPositionIterative(10, model.getTimeDelta());
             stepper.testGeneratePrimarySwingControlNodes();
             stepper.testGenerateSecondarySwingControlNodes(false);
             stepper.testGenerateStanceControlNodes(1.0);
@@ -1094,17 +1090,17 @@ int main() {
 
             // Test 4: Tip Position Updates
             Point3D pre_update_pos = leg.getCurrentTipPositionGlobal();
-            stepper.updateTipPositionIterative(1, 0.02, false, false);
+            stepper.updateTipPositionIterative(1, model.getTimeDelta(), false, false);
             Point3D post_update_pos = leg.getCurrentTipPositionGlobal();
             results.tip_position_updates_passed = true;
 
             // Test 5: Trajectory Start/End
             stepper.setStepState(STEP_STANCE);
             stepper.setPhase(0);
-            stepper.updateTipPositionIterative(0, 0.02);
+            stepper.updateTipPositionIterative(0, model.getTimeDelta());
             Point3D start_pos = leg.getCurrentTipPositionGlobal();
             stepper.setStepState(STEP_SWING);
-            stepper.updateTipPositionIterative(100, 0.02);
+            stepper.updateTipPositionIterative(100, model.getTimeDelta());
             Point3D end_pos = leg.getCurrentTipPositionGlobal();
             results.trajectory_start_end_passed = (!std::isnan(start_pos.x) && !std::isnan(end_pos.x));
 
@@ -1143,7 +1139,7 @@ int main() {
             double max_height = results.initial_position.z;
             for (double progress = 0.0; progress <= 1.0; progress += 0.1) {
                 stepper.setStepProgress(progress);
-                stepper.updateTipPositionIterative(static_cast<int>(progress * 100), 0.02, false, false);
+                stepper.updateTipPositionIterative(static_cast<int>(progress * 100), model.getTimeDelta(), false, false);
                 Point3D current_pos = leg.getCurrentTipPositionGlobal();
                 if (current_pos.z > max_height) {
                     max_height = current_pos.z;

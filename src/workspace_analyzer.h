@@ -238,7 +238,7 @@ class WorkspaceAnalyzer {
      * @param current_leg_positions Current positions of all legs
      * @return Risk factor (0.0 = no risk, 1.0 = high risk)
      */
-    double checkCollisionRisk(int leg_index, const Point3D &target_position,
+    double checkCollisionRisk(int leg_index, const Point3D &target,
                               const Point3D current_leg_positions[NUM_LEGS]) const;
 
     /**

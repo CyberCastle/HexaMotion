@@ -19,7 +19,7 @@ int main() {
     p.tibia_length = 208;
     p.default_height_offset = -208.0; // Set to -tibia_length for explicit configuration
     p.robot_height = 208;
-    p.control_frequency = 50;
+    p.time_delta = 1.0 / 50.0;
     p.coxa_angle_limits[0] = -65;
     p.coxa_angle_limits[1] = 65;
     p.femur_angle_limits[0] = -75;
@@ -48,6 +48,8 @@ int main() {
         JointAngles(math_utils::degreesToRadians(10.0), math_utils::degreesToRadians(-20.0), math_utils::degreesToRadians(15.0)),
         JointAngles(0.0, math_utils::degreesToRadians(-30.0), math_utils::degreesToRadians(30.0))};
 
+    double time_delta = model.getTimeDelta();
+
     for (int config = 0; config < 4; ++config) {
         std::cout << "\n  Configuration " << config + 1 << ":" << std::endl;
 
@@ -61,7 +63,7 @@ int main() {
             JointAngles standard_ik_angles = model.inverseKinematicsCurrentGlobalCoordinates(leg, reference_angles, reference_position);
 
             // Step 3: Advanced IK to recover angles
-            JointAngles advanced_ik_angles = model.applyAdvancedIK(leg, reference_position, reference_position, reference_angles);
+            JointAngles advanced_ik_angles = model.applyAdvancedIK(leg, reference_position, reference_position, reference_angles, time_delta);
 
             // Step 4: FK validation for both methods
             Point3D standard_fk_position = model.forwardKinematicsGlobalCoordinates(leg, standard_ik_angles);
@@ -114,7 +116,7 @@ int main() {
                                          pow(target_position.z - standard_achieved.z, 2));
 
             // Test advanced IK
-            JointAngles advanced_result = model.applyAdvancedIK(leg, start_position, target_position, start_angles);
+            JointAngles advanced_result = model.applyAdvancedIK(leg, start_position, target_position, start_angles, time_delta);
             Point3D advanced_achieved = model.forwardKinematicsGlobalCoordinates(leg, advanced_result);
             double advanced_error = sqrt(pow(target_position.x - advanced_achieved.x, 2) +
                                          pow(target_position.y - advanced_achieved.y, 2) +

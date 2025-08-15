@@ -246,7 +246,7 @@ int main() {
     p.default_height_offset = -208.0; // Set to -tibia_length for explicit configuration
     p.robot_height = 208;
     p.standing_height = 150; // Initial standing height
-    p.control_frequency = 50;
+    p.time_delta = 1.0 / 50.0;
     p.coxa_angle_limits[0] = -65;
     p.coxa_angle_limits[1] = 65;
     p.femur_angle_limits[0] = -75;
@@ -275,16 +275,16 @@ int main() {
     int startup_iterations = 0;
 
     // Calculate expected iterations based on system parameters
-    // For tripod gait: 2 groups × step_time × control_frequency + safety margin
+    // For tripod gait: 2 groups × step_time / time_delta + safety margin
     double time_to_start = pose_config.time_to_start; // Default: 6.0 seconds
     double step_time = 1.0 / DEFAULT_STEP_FREQUENCY;  // Default: 1.0 second per step
-    int expected_iterations_per_group = static_cast<int>(std::ceil(step_time * p.control_frequency));
+    int expected_iterations_per_group = static_cast<int>(std::ceil(step_time / p.time_delta));
     int expected_total_iterations = expected_iterations_per_group * 2;     // 2 tripod groups
     int safety_margin = static_cast<int>(expected_total_iterations * 0.5); // 50% safety margin
     int max_startup_iterations = expected_total_iterations + safety_margin;
 
-    printf("Startup calculation: step_time=%.1fs, control_freq=%.0fHz\n",
-           step_time, p.control_frequency);
+    printf("Startup calculation: step_time=%.1fs, control_freq≈%.0fHz\n",
+           step_time, 1.0 / p.time_delta);
     printf("Expected iterations: %d per group × 2 groups = %d total (+ %d safety margin = %d max)\n",
            expected_iterations_per_group, expected_total_iterations, safety_margin, max_startup_iterations);
 
@@ -300,7 +300,7 @@ int main() {
     assert(sys.walkForward(100.0));
 
     const double distance = 10.0; // mm
-    double dt = 1.0 / p.control_frequency;
+    double dt = p.time_delta;     // unified global timestep
     int cycles = static_cast<int>(distance / (100.0 * dt));
 
     std::vector<StepPhase> prev_phase(NUM_LEGS);
@@ -332,7 +332,7 @@ int main() {
     addResult(rep, step >= cycles, "Gait execution timeout", sys);
 
     sys.planGaitSequence(0.0, 0.0, 0.0);
-    for (int i = 0; i < p.control_frequency; ++i)
+    for (int i = 0; i < static_cast<int>(std::round(1.0 / p.time_delta)); ++i)
         sys.update();
 
     addResult(rep, std::abs(sys.getBodyPosition().z() + 150.0) <= 2.0,

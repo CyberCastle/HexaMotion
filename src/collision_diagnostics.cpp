@@ -108,7 +108,7 @@ class CollisionDiagnostics {
     }
 
   private:
-    static constexpr int NUM_LEGS_COUNT = 6;
+    // (Removed unused NUM_LEGS_COUNT constant flagged by static analysis)
 };
 
 // Example usage function

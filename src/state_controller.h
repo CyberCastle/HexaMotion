@@ -3,11 +3,11 @@
 
 class LocomotionSystem;
 
+#include "admittance_controller.h"
+#include "body_pose_controller.h"
+#include "locomotion_system.h"
 #include "robot_model.h"
 #include "walk_controller.h"
-#include "admittance_controller.h"
-#include "locomotion_system.h"
-#include "body_pose_controller.h"
 #include <Arduino.h>
 #include <ArduinoEigen.h>
 #include <memory>
@@ -105,15 +105,15 @@ enum SequenceType {
 // State machine configuration parameters.
 //
 struct StateMachineConfig {
-    bool enable_startup_sequence = true;    //< Enable multi-step startup sequence
-    bool enable_direct_startup = false;     //< Allow direct startup without sequences
+    bool enable_startup_sequence = true;     //< Enable multi-step startup sequence
+    bool enable_direct_startup = false;      //< Allow direct startup without sequences
     double transition_timeout = 10.0f;       //< Maximum time for state transitions (seconds)
     double pack_unpack_time = 2.0f;          //< Time for pack/unpack sequences (seconds)
-    bool enable_auto_posing = false;        //< Enable automatic body posing
-    bool enable_manual_posing = true;       //< Enable manual body posing
-    bool enable_cruise_control = true;      //< Enable cruise control mode
+    bool enable_auto_posing = false;         //< Enable automatic body posing
+    bool enable_manual_posing = true;        //< Enable manual body posing
+    bool enable_cruise_control = true;       //< Enable cruise control mode
     double cruise_control_time_limit = 0.0f; //< Time limit for cruise control (0 = unlimited)
-    int max_manual_legs = 2;                //< Maximum number of manually controlled legs
+    int max_manual_legs = 2;                 //< Maximum number of manually controlled legs
 };
 
 /**
@@ -147,9 +147,9 @@ class StateController {
     /**
      * @brief Main update loop for the state machine.
      * This should be called regularly from the main control loop.
-     * @param dt Delta time since last update (seconds)
+     * @param time_delta Delta time since last update (seconds)
      */
-    void update(double dt);
+    void update(double time_delta);
 
     // ==============================
     // STATE ACCESSORS
@@ -462,7 +462,7 @@ class StateController {
 
     // Timing
     unsigned long last_update_time_;
-    double dt_;
+    double time_delta_; // Measured time delta for diagnostics (nominal params.time_delta otherwise)
 
     // Error handling
     bool has_error_;

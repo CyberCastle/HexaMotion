@@ -120,8 +120,6 @@ class LegStepper {
     // Gait configuration parameters (not part of StepCycle)
     void setSwingWidth(double swing_width) { swing_width_ = swing_width; }
     double getSwingWidth() const { return swing_width_; }
-    void setControlFrequency(double control_frequency) { control_frequency_ = control_frequency; }
-    double getControlFrequency() const { return control_frequency_; }
     void setStepClearanceHeight(double step_clearance_height) { step_clearance_height_ = step_clearance_height; }
     double getStepClearanceHeight() const { return step_clearance_height_; }
 
@@ -176,6 +174,8 @@ class LegStepper {
     int leg_index_;
     Leg &leg_;
     RobotModel &robot_model_;
+    // Cached immutable reference to RobotModel parameters to avoid repeated lookups
+    const Parameters &params_;
     Point3D identity_tip_pose_;
     Point3D default_tip_pose_;
     Point3D origin_tip_pose_;
@@ -192,6 +192,12 @@ class LegStepper {
     Point3D swing_origin_tip_position_;
     Point3D swing_origin_tip_velocity_;
     Point3D stance_origin_tip_position_;
+    // Tangential stance mode cached values (Option B)
+    Point3D stance_tangent_origin_tip_position_; //< Original touchdown pose (for z preservation)
+    Point3D stance_tangent_leg_base_;            //< Cached leg base at stance start
+    double stance_tangent_radius_ = 0.0;         //< Constant planar radius in stance
+    double stance_tangent_height_ = 0.0;         //< Constant height (z) in stance
+    bool stance_tangent_initialized_ = false;    //< Initialization flag per stance phase
 
     // Phase and state management
     bool at_correct_phase_;
@@ -210,7 +216,6 @@ class LegStepper {
 
     // Gait configuration parameters (not part of StepCycle)
     double swing_width_;           // Lateral shift at mid-swing (OpenSHC mid_lateral_shift)
-    double control_frequency_;     // Control loop frequency (equivalent to OpenSHC walker_->getTimeDelta())
     double step_clearance_height_; // Step clearance height (equivalent to OpenSHC walker_->getStepClearance())
 
     // Swing state management (OpenSHC style)
@@ -253,7 +258,6 @@ class LegStepper {
     double drift_ema_norm_ = 0.0;                         //< Exponential moving average of offset norm
     double planar_drift_norm_ = 0.0;                      //< Norm of cumulative planar (XY) drift
     double vertical_drift_ = 0.0;                         //< Cumulative vertical (Z) component drift
-    int last_drift_mode_code_ = -1;                       //< -1 unset, 0 continuity,1 hard_reset,2 soft_blend,3 within_soft_threshold
 #endif
 };
 

@@ -189,10 +189,10 @@ class AdmittanceController {
      * @brief Maintain body orientation using a simple admittance filter.
      * @param target Desired orientation in degrees.
      * @param current Current orientation, updated in place.
-     * @param dt      Time step in seconds.
+     * @param time_delta      Time step in seconds.
      * @return True if the operation succeeded.
      */
-    bool maintainOrientation(const Point3D &target, Point3D &current, double dt);
+    bool maintainOrientation(const Point3D &target, Point3D &current, double time_delta);
 
     /**
      * @brief Check static stability from FSR readings.

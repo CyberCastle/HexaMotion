@@ -110,10 +110,6 @@ class WalkController {
 
     // Modifiers
     void setPoseState(int state) { pose_state_ = state; }
-    void setLinearSpeedLimitMap(const std::map<int, double> &limit_map) { max_linear_speed_ = limit_map; }
-    void setAngularSpeedLimitMap(const std::map<int, double> &limit_map) { max_angular_speed_ = limit_map; }
-    void setLinearAccelerationLimitMap(const std::map<int, double> &limit_map) { max_linear_acceleration_ = limit_map; }
-    void setAngularAccelerationLimitMap(const std::map<int, double> &limit_map) { max_angular_acceleration_ = limit_map; }
     void setRegenerateWalkspace() { regenerate_walkspace_ = true; }
 
     // Velocity limiting methods
@@ -231,21 +227,12 @@ class WalkController {
     double desired_angular_velocity_;
     WalkState walk_state_;
     std::map<int, double> walkspace_;
-    // Walk plane functionality moved to BodyPoseController
-    // Point3D walk_plane_;
-    // Point3D walk_plane_normal_;
     Point3D odometry_ideal_;
     int pose_state_;
 
     // Current robot pose (provided by BodyPoseController)
     Eigen::Vector3d current_body_position_;
     Eigen::Vector3d current_body_orientation_;
-
-    // Velocity limits
-    std::map<int, double> max_linear_speed_;
-    std::map<int, double> max_angular_speed_;
-    std::map<int, double> max_linear_acceleration_;
-    std::map<int, double> max_angular_acceleration_;
 
     // State tracking
     bool regenerate_walkspace_;

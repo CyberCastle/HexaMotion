@@ -14,7 +14,7 @@ int main() {
     p.default_height_offset = -208.0; // Set to -tibia_length for explicit configuration
     p.robot_height = 208;
     p.height_offset = 0;
-    p.control_frequency = 50;
+    p.time_delta = 1.0 / 50.0;
 
     RobotModel model(p);
     model.workspaceAnalyzerInitializer(); // Inicializar WorkspaceAnalyzer

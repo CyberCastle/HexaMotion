@@ -1,9 +1,9 @@
 #ifndef IMU_AUTO_POSE_H
 #define IMU_AUTO_POSE_H
 
-#include "robot_model.h"
 #include "manual_body_pose_controller.h"
 #include "precision_config.h"
+#include "robot_model.h"
 
 /**
  * @brief IMU-integrated auto-posing system equivalent to OpenSHC
@@ -31,11 +31,11 @@ class IMUAutoPose {
      * @brief IMU pose control parameters
      */
     struct IMUPoseParams {
-        double orientation_gain;    //< Orientation correction gain
-        double inclination_gain;    //< Inclination compensation gain
-        double response_speed;      //< Response speed (0-1)
-        double deadzone_degrees;    //< Deadzone for small tilts
-        double stabilization_gain;  //< Stabilization gain for rough terrain
+        double orientation_gain;   //< Orientation correction gain
+        double inclination_gain;   //< Inclination compensation gain
+        double response_speed;     //< Response speed (0-1)
+        double deadzone_degrees;   //< Deadzone for small tilts
+        double stabilization_gain; //< Stabilization gain for rough terrain
         bool gravity_compensation; //< Enable gravity compensation
         bool adaptive_gains;       //< Use adaptive gain adjustment
         bool use_absolute_data;    //< Use IMU's absolute positioning if available
@@ -57,7 +57,7 @@ class IMUAutoPose {
         Point3D orientation_error;  //< Current orientation error
         Point3D correction_pose;    //< Calculated correction pose
         bool pose_active;           //< Whether auto-pose is active
-        double confidence;           //< Pose correction confidence (0-1)
+        double confidence;          //< Pose correction confidence (0-1)
         bool using_absolute_data;   //< Whether using IMU's absolute positioning
         uint8_t calibration_status; //< IMU calibration status (0-3)
         IMUMode active_mode;        //< Current IMU operation mode
@@ -82,10 +82,6 @@ class IMUAutoPose {
     Point3D gravity_filter_;
     Point3D orientation_filter_;
     double filter_alpha_;
-
-    // Auto-pose timing
-    unsigned long last_update_time_;
-    double update_interval_;
 
     // Adaptive control
     double terrain_roughness_estimate_;
@@ -128,9 +124,8 @@ class IMUAutoPose {
 
     /**
      * @brief Update auto-pose control (call regularly)
-     * @param dt Delta time since last update
      */
-    void update(double dt);
+    void update();
 
     /**
      * @brief Get current auto-pose state

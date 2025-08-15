@@ -16,13 +16,9 @@ LocomotionSystem::LocomotionSystem(const Parameters &params)
     : params(params), imu_interface(nullptr), fsr_interface(nullptr), servo_interface(nullptr),
       body_position(0.0f, 0.0f, params.standing_height), body_orientation(0.0f, 0.0f, 0.0f),
       legs{Leg(0, model), Leg(1, model), Leg(2, model), Leg(3, model), Leg(4, model), Leg(5, model)},
-      system_enabled(false), last_update_time(0), dt(0.02f),
-      velocity_controller(nullptr), last_error(NO_ERROR),
+      system_enabled(false), velocity_controller(nullptr), last_error(NO_ERROR),
       model(params), body_pose_ctrl(nullptr), walk_ctrl(nullptr), admittance_ctrl(nullptr),
       system_state(SYSTEM_UNKNOWN), startup_in_progress(false), shutdown_in_progress(false) {
-
-    // Initialize sensor log timestamp to avoid static local in updateSensorsParallel
-    last_sensor_log_time = 0;
 
     // Initialize last logged phases for FSR debug debouncing (testing only)
 #ifdef TESTING_ENABLED
@@ -92,8 +88,6 @@ bool LocomotionSystem::initialize(IIMUInterface *imu, IFSRInterface *fsr, IServo
     }
 
     system_enabled = true;
-    last_update_time = millis();
-
     return true;
 }
 
@@ -192,11 +186,6 @@ bool LocomotionSystem::setLegJointAngles(int leg, const JointAngles &q) {
     clamped_angles.femur = math_utils::clamp(q.femur, params.femur_angle_limits[0], params.femur_angle_limits[1]);
     clamped_angles.tibia = math_utils::clamp(q.tibia, params.tibia_angle_limits[0], params.tibia_angle_limits[1]);
 
-    // TODO: Disable leg posers temporarily to avoid conflicts
-    // Update both joint angles and leg positions in a single atomic operation
-    // legs[leg].setJointAngles(clamped_angles); // Update leg object
-    // legs[leg].updateTipPosition();            // Update leg position based on new angles
-
     // Use velocity controller to get appropriate servo speeds
     double coxa_speed = velocity_controller ? velocity_controller->getServoSpeed(leg, 0) : params.default_servo_speed;
     double femur_speed = velocity_controller ? velocity_controller->getServoSpeed(leg, 1) : params.default_servo_speed;
@@ -206,7 +195,19 @@ bool LocomotionSystem::setLegJointAngles(int leg, const JointAngles &q) {
     double servo_coxa = clamped_angles.coxa * params.angle_sign_coxa * RADIANS_TO_DEGREES_FACTOR;
     double servo_femur = clamped_angles.femur * params.angle_sign_femur * RADIANS_TO_DEGREES_FACTOR;
     double servo_tibia = clamped_angles.tibia * params.angle_sign_tibia * RADIANS_TO_DEGREES_FACTOR;
-    servo_interface->setJointAngleAndSpeed(leg, 0, servo_coxa, coxa_speed);
+
+    // Enable coxa movement based for test mode
+    // This allows us to gate coxa servo output during test
+    // If coxa movement is disabled, freeze coxa at 0º angle
+    if (coxa_movement_enabled_) {
+        // Normal behavior: command coxa as computed
+        servo_interface->setJointAngleAndSpeed(leg, 0, servo_coxa, coxa_speed);
+    } else {
+        // Test mode: freeze coxa at 0º angle
+        servo_interface->setJointAngleAndSpeed(leg, 0, 0, coxa_speed);
+    }
+
+    // Apply the computed angles to the servos
     servo_interface->setJointAngleAndSpeed(leg, 1, servo_femur, femur_speed);
     servo_interface->setJointAngleAndSpeed(leg, 2, servo_tibia, tibia_speed);
     return true;
@@ -324,7 +325,7 @@ bool LocomotionSystem::executeShutdownSequence() {
             leg_stepper->setPhase(0.0); // Force to stance position
 
             // Immediately update tip position to identity (stance) position
-            leg_stepper->updateTipPositionIterative(0, 0.02, false, false);
+            leg_stepper->updateTipPositionIterative(0, params.time_delta, false, false);
 
             // Get the forced stance position and apply to leg
             legs[i].setStepPhase(STANCE_PHASE);
@@ -532,9 +533,6 @@ void LocomotionSystem::resetSmoothMovement() {
  * }
  */
 bool LocomotionSystem::update() {
-    unsigned long current_time = millis();
-    dt = (current_time - last_update_time) / 1000.0f;
-    last_update_time = current_time;
 
     // Update sensors in parallel for optimal performance
     if (!updateSensorsParallel()) {
@@ -553,9 +551,9 @@ bool LocomotionSystem::update() {
         // Optional kinematic integration of body pose (test / simulation)
         if (params.enable_body_translation) {
             // Integrate translation (mm) and yaw (degrees) from commanded velocities
-            body_position[0] += commanded_linear_velocity_x_ * dt; // mm/s * s
-            body_position[1] += commanded_linear_velocity_y_ * dt;
-            body_orientation[2] += commanded_angular_velocity_ * dt; // deg/s * s
+            body_position[0] += commanded_linear_velocity_x_ * params.time_delta; // mm/s * s
+            body_position[1] += commanded_linear_velocity_y_ * params.time_delta;
+            body_orientation[2] += commanded_angular_velocity_ * params.time_delta; // deg/s * s
             // Wrap yaw to [-180,180]
             if (body_orientation[2] > 180.0)
                 body_orientation[2] -= 360.0;
@@ -773,14 +771,6 @@ bool LocomotionSystem::validateParameters() {
     return model.validate();
 }
 
-void LocomotionSystem::adaptGaitToTerrain() {
-    // Delegate to WalkController for gait adaptation
-    if (walk_ctrl) {
-        // WalkController handles terrain adaptation internally
-        // This method is kept for backward compatibility but delegates to WalkController
-    }
-}
-
 bool LocomotionSystem::setParameters(const Parameters &new_params) {
     // Validate new parameters
     if (new_params.hexagon_radius <= 0 || new_params.coxa_length <= 0 ||
@@ -791,67 +781,6 @@ bool LocomotionSystem::setParameters(const Parameters &new_params) {
 
     params = new_params;
     return validateParameters();
-}
-
-void LocomotionSystem::compensateForSlope() {
-    if (!imu_interface)
-        return;
-
-    IMUData imu_data = imu_interface->readIMU();
-    if (!imu_data.is_valid)
-        return;
-
-    double roll_compensation, pitch_compensation;
-
-    // Enhanced slope compensation using absolute positioning data
-    if (imu_data.has_absolute_capability && imu_data.absolute_data.absolute_orientation_valid) {
-        // Use absolute orientation for more precise compensation
-        roll_compensation = -imu_data.absolute_data.absolute_roll * 0.6f; // Enhanced compensation
-        pitch_compensation = -imu_data.absolute_data.absolute_pitch * 0.6f;
-
-        // Additional quaternion-based compensation for complex terrain
-        if (imu_data.absolute_data.quaternion_valid) {
-            // Extract more sophisticated orientation information from quaternion
-            double qw = imu_data.absolute_data.quaternion_w;
-            double qx = imu_data.absolute_data.quaternion_x;
-            double qy = imu_data.absolute_data.quaternion_y;
-            double qz = imu_data.absolute_data.quaternion_z;
-
-            // Calculate terrain-aligned compensation using quaternion
-            double quat_roll = atan2(2.0f * (qw * qx + qy * qz), 1.0f - 2.0f * (qx * qx + qy * qy)) * RADIANS_TO_DEGREES_FACTOR;
-            double quat_pitch = asin(2.0f * (qw * qy - qz * qx)) * RADIANS_TO_DEGREES_FACTOR;
-
-            // Blend quaternion and Euler compensations for robustness
-            roll_compensation = 0.7f * roll_compensation + 0.3f * (-quat_roll * 0.6f);
-            pitch_compensation = 0.7f * pitch_compensation + 0.3f * (-quat_pitch * 0.6f);
-        }
-
-        // Dynamic adjustment based on linear acceleration
-        if (imu_data.absolute_data.linear_acceleration_valid) {
-            double lateral_accel = sqrt(
-                imu_data.absolute_data.linear_accel_x * imu_data.absolute_data.linear_accel_x +
-                imu_data.absolute_data.linear_accel_y * imu_data.absolute_data.linear_accel_y);
-
-            // Reduce compensation during high lateral acceleration
-            if (lateral_accel > 1.5f) {
-                double dynamic_factor = math_utils::clamp<double>(1.0 - (lateral_accel - 1.5) / 3.0, 0.4, 1.0);
-                roll_compensation *= dynamic_factor;
-                pitch_compensation *= dynamic_factor;
-            }
-        }
-    } else {
-        // Fallback to basic IMU compensation
-        roll_compensation = -imu_data.roll * 0.5f; // Compensation factor
-        pitch_compensation = -imu_data.pitch * 0.5f;
-    }
-
-    // Adjust body orientation
-    body_orientation[0] += roll_compensation * dt;
-    body_orientation[1] += pitch_compensation * dt;
-
-    // Clamp compensation
-    body_orientation[0] = constrainAngle(body_orientation[0], -15.0f, 15.0f);
-    body_orientation[1] = constrainAngle(body_orientation[1], -15.0f, 15.0f);
 }
 
 double LocomotionSystem::calculateDynamicStabilityIndex() {
@@ -933,15 +862,11 @@ double LocomotionSystem::calculateDynamicStabilityIndex() {
 bool LocomotionSystem::updateSensorsParallel() {
     bool fsr_updated = false;
     bool imu_updated = false;
-#ifdef ARDUINO
-    unsigned long start_time = micros();
-#else
-    auto start_time = std::chrono::high_resolution_clock::now();
-#endif
 
     // Start parallel sensor updates
     // FSR: AdvancedAnalog DMA for simultaneous ADC reading
-    if (fsr_interface) {
+    // Only update if FSR usage is enabled in parameters to avoid blocking latency otherwise
+    if (fsr_interface && params.use_fsr_contact) {
         fsr_updated = fsr_interface->update();
     }
 
@@ -950,33 +875,8 @@ bool LocomotionSystem::updateSensorsParallel() {
         imu_updated = imu_interface->update();
     }
 
-    // Performance monitoring
-#ifdef ARDUINO
-    unsigned long update_time = micros() - start_time;
-#else
-    auto end_time = std::chrono::high_resolution_clock::now();
-    unsigned long update_time = std::chrono::duration_cast<std::chrono::microseconds>(end_time - start_time).count();
-#endif
-
-#if defined(ENABLE_LOG) && defined(ARDUINO)
-    // Log every 5 seconds without static local variable
-    if (millis() - last_sensor_log_time > 5000) {
-        last_sensor_log_time = millis();
-        // Log update timing for performance analysis
-        Serial.print("Parallel sensor update time: ");
-        Serial.print(update_time);
-        Serial.print("µs, FSR: ");
-        Serial.print(fsr_updated ? "OK" : "FAIL");
-        Serial.print(", IMU: ");
-        Serial.println(imu_updated ? "OK" : "FAIL");
-    }
-#else
-    // Suppress unused variable warning when logging is disabled
-    (void)update_time;
-#endif
-
     // Validate both sensors updated successfully
-    if (fsr_interface && !fsr_updated) {
+    if (fsr_interface && params.use_fsr_contact && !fsr_updated) {
         last_error = FSR_ERROR;
         return false;
     }
@@ -1098,7 +998,7 @@ void LocomotionSystem::applyInverseKinematicsToAllLegs() {
             current_tip_position, // current tip pose
             desired_tip_position, // desired tip pose (from Bézier)
             current_angles,       // current joint angles
-            dt                    // time delta
+            params.time_delta     // unified time delta
         );
 
         // Update joint angles in Leg object
@@ -1110,9 +1010,36 @@ void LocomotionSystem::applyInverseKinematicsToAllLegs() {
 }
 
 void LocomotionSystem::publishJointAnglesToServos() {
-    // Following OpenSHC::publishDesiredJointState() pattern exactly
-    // Send ALL computed joint angles to servos at once
 
+    // Refresh a small slice of health state per tick (non-blocking cache) if supported
+    if (servo_interface) {
+        servo_interface->refreshHealthSlice(3); // ~3 servos/tick => full scan ~6 ticks
+    }
+
+    // Prefer a single synchronous write when supported by the driver to remove per-joint bus latency
+    if (servo_interface) {
+        double angles_deg[NUM_LEGS][DOF_PER_LEG];
+        double speeds[NUM_LEGS][DOF_PER_LEG];
+
+        for (int i = 0; i < NUM_LEGS; ++i) {
+            JointAngles a = legs[i].getJointAngles();
+            // Convert to output degrees with sign
+            angles_deg[i][0] = a.coxa * params.angle_sign_coxa * RADIANS_TO_DEGREES_FACTOR;
+            angles_deg[i][1] = a.femur * params.angle_sign_femur * RADIANS_TO_DEGREES_FACTOR;
+            angles_deg[i][2] = a.tibia * params.angle_sign_tibia * RADIANS_TO_DEGREES_FACTOR;
+
+            // Per-joint speeds
+            speeds[i][0] = velocity_controller ? velocity_controller->getServoSpeed(i, 0) : params.default_servo_speed;
+            speeds[i][1] = velocity_controller ? velocity_controller->getServoSpeed(i, 1) : params.default_servo_speed;
+            speeds[i][2] = velocity_controller ? velocity_controller->getServoSpeed(i, 2) : params.default_servo_speed;
+        }
+
+        if (servo_interface->syncSetAllJointAnglesAndSpeeds(angles_deg, speeds)) {
+            return; // done
+        }
+    }
+
+    // Fallback: per-leg commands
     for (int i = 0; i < NUM_LEGS; i++) {
         JointAngles angles = legs[i].getJointAngles();
 

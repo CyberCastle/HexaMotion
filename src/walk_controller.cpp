@@ -14,11 +14,12 @@
 #include <vector>
 
 WalkController::WalkController(RobotModel &m, Leg legs[NUM_LEGS], const BodyPoseConfiguration &pose_config)
-    : model(m), desired_linear_velocity_(0, 0, 0), desired_angular_velocity_(0.0),
-      walk_state_(WALK_STOPPED), pose_state_(0),
-      regenerate_walkspace_(false), legs_at_correct_phase_(0), legs_completed_first_step_(0),
-      return_to_default_attempted_(false), terrain_adaptation_(m), body_pose_controller_(nullptr),
-      velocity_limits_(m), legs_array_(legs) {
+    : model(m), time_delta_(0.0), step_clearance_(0.0), step_depth_(0.0), desired_linear_velocity_(0, 0, 0), desired_angular_velocity_(0.0),
+      walk_state_(WALK_STOPPED), walkspace_(), odometry_ideal_(), pose_state_(0),
+      current_body_position_(Eigen::Vector3d::Zero()), current_body_orientation_(Eigen::Vector3d::Zero()),
+      regenerate_walkspace_(false), legs_at_correct_phase_(0), legs_completed_first_step_(0), return_to_default_attempted_(false),
+      leg_steppers_(), current_gait_config_(), gait_selection_config_(), terrain_adaptation_(m), body_pose_controller_(nullptr),
+      velocity_limits_(m), current_velocity_limits_(), current_velocities_(), current_leg_positions_{Point3D(), Point3D(), Point3D(), Point3D(), Point3D(), Point3D()}, legs_array_(legs), global_phase_(0) {
 
     // Initialize leg_steppers_ with references to actual legs from LocomotionSystem
     leg_steppers_.clear();
@@ -51,8 +52,8 @@ WalkController::WalkController(RobotModel &m, Leg legs[NUM_LEGS], const BodyPose
     // Initialize terrain adaptation
     terrain_adaptation_.initialize();
 
-    // Set initial time delta
-    time_delta_ = 1.0 / model.getParams().control_frequency;
+    // Set initial time delta from unified global parameter
+    time_delta_ = model.getParams().time_delta;
 
     // Generate initial walkspace
     generateWalkspace();
@@ -61,13 +62,13 @@ WalkController::WalkController(RobotModel &m, Leg legs[NUM_LEGS], const BodyPose
 // ================== Accessor Implementations (moved from header) ==================
 StepCycle WalkController::getStepCycle() const {
     // Calculate proper step frequency to prevent stride vector bug
-    double time_delta = 1.0 / current_gait_config_.control_frequency;
+    double time_delta = model.getParams().time_delta; // unified
     int base_period = current_gait_config_.phase_config.stance_phase + current_gait_config_.phase_config.swing_phase;
     double calculated_step_frequency = 0.0;
     if (base_period > 0) {
         calculated_step_frequency = 1.0 / (base_period * time_delta);
     }
-    return current_gait_config_.generateStepCycle(calculated_step_frequency);
+    return current_gait_config_.generateStepCycle(calculated_step_frequency, time_delta);
 }
 
 double WalkController::getTimeDelta() const { return time_delta_; }
@@ -143,7 +144,7 @@ bool WalkController::setGait(GaitType gait_type) {
 void WalkController::applyGaitConfigToLegSteppers(const GaitConfiguration &gait_config) {
 
     // Generate StepCycle with configured frequency like OpenSHC
-    StepCycle step_cycle = gait_config.generateStepCycle();
+    StepCycle step_cycle = gait_config.generateStepCycle(-1.0, model.getParams().time_delta);
 
     // Apply StepCycle and gait configuration to each LegStepper
     for (int i = 0; i < NUM_LEGS && i < static_cast<int>(leg_steppers_.size()); i++) {
@@ -156,7 +157,6 @@ void WalkController::applyGaitConfigToLegSteppers(const GaitConfiguration &gait_
 
         // Set gait-specific parameters (not part of StepCycle)
         leg_stepper->setSwingWidth(gait_config.swing_width);
-        leg_stepper->setControlFrequency(gait_config.control_frequency);
         leg_stepper->setStepClearanceHeight(gait_config.swing_height);
 
         // Calculate phase offset using OpenSHC formula
@@ -387,7 +387,7 @@ void WalkController::updateWalk(const Point3D &linear_velocity_input, double ang
 
     // OpenSHC: Optimized velocity limiting calculation
     Point3D new_linear_velocity, limited_linear_velocity;
-    double new_angular_velocity, limited_angular_velocity;
+    double limited_angular_velocity;
 
     if (walk_state_ != WALK_STOPPING && has_velocity_command) {
         // Calculate bearing once for velocity limits
@@ -401,7 +401,7 @@ void WalkController::updateWalk(const Point3D &linear_velocity_input, double ang
         const double scale_factor = (input_magnitude > limits.linear_x && input_magnitude > 0.0) ? limits.linear_x / input_magnitude : 1.0;
 
         new_linear_velocity = linear_velocity_input * scale_factor;
-        new_angular_velocity = math_utils::clamp(angular_velocity_input, -limits.angular_z, limits.angular_z);
+        double new_angular_velocity = math_utils::clamp(angular_velocity_input, -limits.angular_z, limits.angular_z);
 
         // OpenSHC: Optimized acceleration limiting
         const Point3D linear_diff = new_linear_velocity - desired_linear_velocity_;
@@ -491,7 +491,7 @@ void WalkController::updateWalk(const Point3D &linear_velocity_input, double ang
 
     if (is_active_walking) {
         // Use configured step frequency from gait configuration (OpenSHC pattern)
-        step_cycle = current_gait_config_.generateStepCycle();
+        step_cycle = current_gait_config_.generateStepCycle(-1.0, model.getParams().time_delta);
         global_phase_ = (global_phase_ + 1) % step_cycle.period_;
         step_cycle_calculated = true;
     }
