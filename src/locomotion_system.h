@@ -78,6 +78,9 @@ class LocomotionSystem {
     bool startup_in_progress;
     bool shutdown_in_progress;
 
+    // Indicates we can resume walking without running the full body startup sequence
+    bool resume_from_stop_ = false;
+
     // Último comando de velocidad deseado (OpenSHC-style persistent velocities)
     double commanded_linear_velocity_x_ = 0.0; // X component
     double commanded_linear_velocity_y_ = 0.0; // Y component

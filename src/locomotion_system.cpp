@@ -933,6 +933,29 @@ bool LocomotionSystem::startWalking() {
         return false;
     }
     // Assumes gait already selected via setGaitType() and velocities set via walkForward/back/sideways/turn methods
+    if (resume_from_stop_) {
+        // Fast resume: skip body pose startup; re-init walk controller for current pose
+        walk_ctrl->init(body_position, body_orientation);
+        walk_ctrl->generateWalkspace();
+
+        // Sync leg steppers and phases to current grounded foot poses to avoid pre-walk drop
+        for (int i = 0; i < NUM_LEGS; i++) {
+            auto leg_stepper = walk_ctrl->getLegStepper(i);
+            if (leg_stepper) {
+                Point3D current_pose = legs[i].getCurrentTipPositionGlobal();
+                leg_stepper->setCurrentTipPose(current_pose);
+                leg_stepper->setStepState(STEP_FORCE_STANCE);
+            }
+            legs[i].setStepPhase(STANCE_PHASE);
+        }
+
+        system_state = SYSTEM_RUNNING;
+        resume_from_stop_ = false;
+        startup_in_progress = false;
+        return true;
+    }
+
+    // Normal path: run startup sequence next loop
     startup_in_progress = true;
     system_state = SYSTEM_READY;
     return true;
@@ -967,9 +990,43 @@ bool LocomotionSystem::stopWalking(StopMode mode) {
                 leg_stepper->setPhase(0.0);
                 leg_stepper->updateTipPositionIterative(0, params.time_delta, false, false);
             } else { // STOP_SOFT
-                // Soft stop: preserve phase, just force stance
+                // Soft stop: preserve XY but ensure Z is on stance plane
                 leg_stepper->setStepState(STEP_FORCE_STANCE);
-                leg_stepper->updateTipPositionIterative(leg_stepper->getCurrentIteration(), params.time_delta, false, false);
+
+                // 1) Capture current (possibly airborne) tip pose
+                Point3D current_pose = leg_stepper->getCurrentTipPose();
+
+                // 2) Query identity stance Z by temporarily sampling phase=0
+                double saved_phase = leg_stepper->getPhase();
+                int saved_iter = leg_stepper->getCurrentIteration();
+
+                leg_stepper->setPhase(0.0);
+                leg_stepper->updateTipPositionIterative(0, params.time_delta, false, false);
+                Point3D identity_pose = leg_stepper->getCurrentTipPose();
+
+                // 3) Restore phase/iteration continuity for internal state
+                leg_stepper->setPhase(saved_phase);
+                leg_stepper->updateTipPositionIterative(saved_iter, params.time_delta, false, false);
+
+                // 4) Build target stance pose: keep XY, drop to stance Z
+                Point3D projected_pose(current_pose.x, current_pose.y, identity_pose.z);
+
+                // Write projected pose into the stepper's current tip pose so downstream reads are consistent
+                // Note: LegStepper doesn't expose a direct setter; we push via the Leg object below.
+                // The READY state will freeze advancement until the next start.
+
+                // Use projected pose as the stance target for this leg
+                legs[i].setStepPhase(STANCE_PHASE);
+                legs[i].setCurrentTipPositionGlobal(projected_pose);
+
+                // Apply IK and servo commands for the projected stance pose, then continue to next leg
+                if (legs[i].applyAdvancedIK(projected_pose)) {
+                    JointAngles target_angles = legs[i].getJointAngles();
+                    setLegJointAngles(i, target_angles);
+                }
+
+                // Continue to next leg – skip default stance application below for STOP_SOFT
+                continue;
             }
 
             // Apply stance to leg and servos
@@ -988,6 +1045,7 @@ bool LocomotionSystem::stopWalking(StopMode mode) {
     // Transition to READY so update() no longer advances walking
     shutdown_in_progress = false;
     system_state = SYSTEM_READY;
+    resume_from_stop_ = true; // mark for fast resume without dropping legs again
     return true;
 }
 
