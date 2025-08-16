@@ -17,6 +17,12 @@ class WalkController;
 // Main locomotion system class
 class LocomotionSystem {
   public:
+    // Stop behavior options for stopWalking()
+    enum StopMode {
+        STOP_UNIFORM, // Force identical stance (phase reset, identity pose) for all legs
+        STOP_SOFT     // Force stance without phase reset to preserve continuity
+    };
+
     // Error control
     enum ErrorCode {
         NO_ERROR = 0,
@@ -171,8 +177,9 @@ class LocomotionSystem {
     // OpenSHC-style walking control
     /** Start walking (startup sequence only). Gait and velocities must have been set beforehand. */
     bool startWalking();
-    /** Stop walking and return to standing pose (triggers shutdown sequence) */
-    bool stopWalking();
+
+    /** Stop walking and keep all feet on ground without shutdown; behavior selectable */
+    bool stopWalking(StopMode mode = STOP_UNIFORM);
 
     // Stability analysis
     /** Verify that current pose maintains stability margin. */

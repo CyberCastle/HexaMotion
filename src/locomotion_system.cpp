@@ -938,8 +938,8 @@ bool LocomotionSystem::startWalking() {
     return true;
 }
 
-// Stop walking and return to standing pose
-bool LocomotionSystem::stopWalking() {
+// Stop walking without shutdown; ensure all feet on ground. Mode controls stance behavior.
+bool LocomotionSystem::stopWalking(StopMode mode) {
     if (!walk_ctrl) {
         last_error = PARAMETER_ERROR;
         return false;
@@ -948,31 +948,45 @@ bool LocomotionSystem::stopWalking() {
         last_error = STATE_ERROR;
         return false;
     }
+
     // Zero velocities
     commanded_linear_velocity_x_ = 0.0;
     commanded_linear_velocity_y_ = 0.0;
     commanded_angular_velocity_ = 0.0;
 
-    // Apply stop update(s)
+    // Notify planner that velocity is zero
     walk_ctrl->updateWalk(Point3D(0.0, 0.0, 0.0), 0.0, body_position, body_orientation);
-    if (walk_ctrl->getWalkState() != WALK_STOPPED) {
-        walk_ctrl->updateWalk(Point3D(0.0, 0.0, 0.0), 0.0, body_position, body_orientation);
-    }
 
-    if (walk_ctrl->getWalkState() != WALK_STOPPED) {
-        for (int i = 0; i < NUM_LEGS; ++i) {
-            auto leg_stepper = walk_ctrl->getLegStepper(i);
-            if (leg_stepper) {
+    // Place all feet on ground according to requested mode
+    for (int i = 0; i < NUM_LEGS; ++i) {
+        auto leg_stepper = walk_ctrl->getLegStepper(i);
+        if (leg_stepper) {
+            if (mode == STOP_UNIFORM) {
+                // Uniform stop: identical stance for all legs
                 leg_stepper->setStepState(STEP_FORCE_STOP);
                 leg_stepper->setPhase(0.0);
+                leg_stepper->updateTipPositionIterative(0, params.time_delta, false, false);
+            } else { // STOP_SOFT
+                // Soft stop: preserve phase, just force stance
+                leg_stepper->setStepState(STEP_FORCE_STANCE);
+                leg_stepper->updateTipPositionIterative(leg_stepper->getCurrentIteration(), params.time_delta, false, false);
             }
+
+            // Apply stance to leg and servos
+            legs[i].setStepPhase(STANCE_PHASE);
+            Point3D stance_position = leg_stepper->getCurrentTipPose();
+            legs[i].setCurrentTipPositionGlobal(stance_position);
+            if (legs[i].applyAdvancedIK(stance_position)) {
+                JointAngles target_angles = legs[i].getJointAngles();
+                setLegJointAngles(i, target_angles);
+            }
+        } else {
             legs[i].setStepPhase(STANCE_PHASE);
         }
     }
 
-    // Trigger shutdown sequence to return to standing pose
-    shutdown_in_progress = true;
-    system_state = SYSTEM_RUNNING;
+    // Remain in RUNNING state; do not engage shutdown
+    shutdown_in_progress = false;
     return true;
 }
 

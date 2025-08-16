@@ -827,7 +827,7 @@ void StateController::updateVelocityControl() {
     } else {
         // Stop movement when all velocities are near zero using new API
         if (locomotion_system_.getSystemState() == SYSTEM_RUNNING) {
-            locomotion_system_.stopWalking();
+            locomotion_system_.stopWalking(LocomotionSystem::STOP_UNIFORM);
         } else {
             // Zero velocities (was previously handled in stopMovement)
             locomotion_system_.planGaitSequence(0.0, 0.0, 0.0);
