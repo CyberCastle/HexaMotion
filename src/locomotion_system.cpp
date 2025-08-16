@@ -985,8 +985,9 @@ bool LocomotionSystem::stopWalking(StopMode mode) {
         }
     }
 
-    // Remain in RUNNING state; do not engage shutdown
+    // Transition to READY so update() no longer advances walking
     shutdown_in_progress = false;
+    system_state = SYSTEM_READY;
     return true;
 }
 
