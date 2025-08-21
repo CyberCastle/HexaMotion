@@ -1096,8 +1096,15 @@ void LocomotionSystem::publishJointAnglesToServos() {
 
         for (int i = 0; i < NUM_LEGS; ++i) {
             JointAngles a = legs[i].getJointAngles();
+
             // Convert to output degrees with sign
-            angles_deg[i][0] = a.coxa * params.angle_sign_coxa * RADIANS_TO_DEGREES_FACTOR;
+            // Respect runtime coxa gating in the fast sync path as well
+            if (coxa_movement_enabled_) {
+                angles_deg[i][0] = a.coxa * params.angle_sign_coxa * RADIANS_TO_DEGREES_FACTOR;
+            } else {
+                angles_deg[i][0] = 0.0; // freeze coxa at 0° when disabled (same behavior as per-leg path)
+            }
+
             angles_deg[i][1] = a.femur * params.angle_sign_femur * RADIANS_TO_DEGREES_FACTOR;
             angles_deg[i][2] = a.tibia * params.angle_sign_tibia * RADIANS_TO_DEGREES_FACTOR;
 
