@@ -1,6 +1,7 @@
 #ifndef LEG_POSER_H
 #define LEG_POSER_H
 
+#include "hexamotion_constants.h"
 #include "leg.h"
 #include "robot_model.h"
 #include <memory>
@@ -144,9 +145,6 @@ class LegPoser {
     bool leg_completed_step_ = false; //< Flag denoting if leg has completed its required step in a sequence
 
     double physical_reference_height_; //< Physical reference height (z = getDefaultHeightOffset() when all angles are 0°)
-
-    // Constants
-    static constexpr double TIP_TOLERANCE = 0.01; // m
 };
 
 #endif // LEG_POSER_H

@@ -198,6 +198,10 @@
 #define POSITION_TOLERANCE 1.0 // Position tolerance (mm)
 #define VELOCITY_THRESHOLD 1.0 // Minimum velocity to consider as moving (mm/s)
 
+// Tip position tolerance for determining if a leg tip is at target
+// HexaMotion uses millimeters
+#define TIP_TOLERANCE 5.0 // mm
+
 // ========================================================================
 // AUTO-POSE CONSTANTS (OpenSHC equivalent)
 // ========================================================================
