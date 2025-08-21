@@ -486,6 +486,23 @@ class IServoInterface {
      */
     virtual bool setJointAngleAndSpeed(int leg_index, int joint_index, double angle, double speed) = 0;
 
+    /**
+     * Extended joint motion command including acceleration (jerk-limited motion planners support).
+     * Implementations that do not natively support acceleration can ignore the parameter and
+     * fallback to setJointAngleAndSpeed(). Default implementation delegates to that legacy method.
+     * @param leg_index Index of the leg (0-5)
+     * @param joint_index Joint index within leg (0-2)
+     * @param angle Target angular position in degrees
+     * @param speed Target (approximate) velocity or driver speed parameter
+     * @param acceleration Optional acceleration limit (driver units or deg/s^2). May be ignored.
+     * @return true if command accepted
+     */
+    virtual bool setJointAngleSpeedAccel(int leg_index, int joint_index,
+                                         double angle, double speed, double acceleration) {
+        (void)acceleration; // default: unused
+        return setJointAngleAndSpeed(leg_index, joint_index, angle, speed);
+    }
+
     /** Retrieve the current joint angle. */
     virtual double getJointAngle(int leg_index, int joint_index) = 0;
 
