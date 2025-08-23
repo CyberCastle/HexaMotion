@@ -56,6 +56,19 @@ class LegPoser {
     inline Pose getAutoPose() const { return auto_pose_; }
     inline bool getLegCompletedStep() const { return leg_completed_step_; }
 
+    // Progress (0.0 - 1.0) of current stepping maneuver
+    double getCurrentStepProgress() const {
+        if (current_num_iterations_ <= 1) {
+            return leg_completed_step_ ? 1.0 : 0.0;
+        }
+        double prog = static_cast<double>(master_iteration_count_ - 1) / static_cast<double>(current_num_iterations_);
+        if (prog < 0.0)
+            prog = 0.0;
+        if (prog > 1.0)
+            prog = 1.0;
+        return prog;
+    }
+
     // Modifiers
     inline void setCurrentTipPose(const RobotModel &model, const Pose &current) {
         leg_.setCurrentTipPositionGlobal(current.position);
@@ -136,6 +149,7 @@ class LegPoser {
     Pose auto_pose_;                 //< Leg specific auto pose
     bool first_iteration_ = true;    //< Flag denoting if an iterating function is on it's first iteration
     int master_iteration_count_ = 0; //< Master iteration count used in generating time input for bezier curves
+    int current_num_iterations_ = 0; //< Total iterations for current step (for progress reporting)
 
     Pose origin_tip_pose_;           //< Origin tip pose used in bezier curve equations
     Pose current_tip_pose_;          //< Current tip pose

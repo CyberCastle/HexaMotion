@@ -194,7 +194,16 @@ int main() {
 
     // First loop: Execute startup sequence with its own update cycles
     int startup_sequence_attempts = 0;
-    const int MAX_STARTUP_SEQUENCE_ATTEMPTS = 100;
+    // Dynamic expected iterations for two-phase startup (horizontal + vertical)
+    const Parameters &startup_params = sys.getParameters();
+    double time_delta_startup = startup_params.time_delta;
+    double step_frequency_startup = DEFAULT_STEP_FREQUENCY; // matches controller use
+    int horiz_iters = std::max(1, (int)std::round((1.0 / step_frequency_startup) / time_delta_startup));
+    int vert_iters = std::max(1, (int)std::round((3.0 / step_frequency_startup) / time_delta_startup));
+    int expected_total_iters = horiz_iters + vert_iters;
+    const int MAX_STARTUP_SEQUENCE_ATTEMPTS = expected_total_iters + 100; // margin
+    std::cout << "Estimated startup iterations (horizontal=" << horiz_iters << ", vertical=" << vert_iters
+              << ", total=" << expected_total_iters << ")  Max attempts=" << MAX_STARTUP_SEQUENCE_ATTEMPTS << std::endl;
 
     while (sys.isStartupInProgress() && startup_sequence_attempts < MAX_STARTUP_SEQUENCE_ATTEMPTS) {
         if (sys.executeStartupSequence()) {
@@ -204,8 +213,9 @@ int main() {
 
         startup_sequence_attempts++;
 
-        if (startup_sequence_attempts % 10 == 0) {
-            std::cout << "Startup sequence attempt " << startup_sequence_attempts << "... (coordinated tripod movement)" << std::endl;
+        if (startup_sequence_attempts % 25 == 0) {
+            std::cout << "Startup attempt " << startup_sequence_attempts
+                      << "  Progress=" << sys.getStartupProgressPercent() << "%" << std::endl;
         }
     }
 

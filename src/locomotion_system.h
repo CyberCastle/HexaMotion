@@ -154,6 +154,14 @@ class LocomotionSystem {
     bool isShutdownInProgress() const { return shutdown_in_progress; }
     /** Get current system state */
     SystemState getSystemState() const { return system_state; }
+    /** Get startup progress percent (0-100). Returns 100 if startup already completed or controller missing. */
+    int getStartupProgressPercent() const {
+        if (!body_pose_ctrl)
+            return 100;
+        if (!startup_in_progress)
+            return 100;
+        return body_pose_ctrl->getStartupProgressPercent();
+    }
 
     // Locomotion control
     /** Start walking forward indefinitely. */
