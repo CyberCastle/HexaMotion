@@ -1,6 +1,7 @@
 #include "body_pose_controller.h"
 #include "body_pose_config_factory.h"
 #include "hexamotion_constants.h"
+#include "leg_poser.h"
 #include "math_utils.h"
 #include <algorithm>
 #include <cmath>
@@ -31,7 +32,7 @@ BodyPoseController::BodyPoseController(RobotModel &m, const BodyPoseConfiguratio
     : model(m), body_pose_config(config), auto_pose_enabled(false), current_gait_type_(TRIPOD_GAIT),
       trajectory_in_progress(false), trajectory_progress(0.0), trajectory_step_count(0),
       step_to_new_stance_current_group(0), step_to_new_stance_sequence_generated(false),
-      direct_startup_sequence_initialized(false), shutdown_sequence_initialized(false),
+      shutdown_sequence_initialized(false),
       // OpenSHC state variables initialization
       executing_transition_(false), transition_step_(0), transition_step_count_(0),
       set_target_(false), proximity_alert_(false), horizontal_transition_complete_(false),
@@ -541,73 +542,146 @@ bool BodyPoseController::stepToNewStance(Leg legs[NUM_LEGS], double step_height,
 
 // Execute startup sequence (READY -> RUNNING transition)
 bool BodyPoseController::executeStartupSequence(Leg legs[NUM_LEGS]) {
-    // OpenSHC uses directStartup for ALL gaits during startup sequence
-    // stepToNewStance is only used for stance transitions during gait execution, NOT startup
-    // This fixes the discontinuity issue where legs jump from current pose to standing pose
+    // OpenSHC logic replication: transition sequence with alternating horizontal and vertical
+    // steps to reach standing pose. Intermediate targets are generated on first run and reused.
 
-    // Initialize LegPosers if not already done
     if (!getLegPoser(0)) {
         initializeLegPosers(legs);
     }
 
-    // OpenSHC Architecture: All gaits use directStartup() for READY->RUNNING transition
-    // The tripod coordination happens during gait execution, not during startup
-    return executeDirectStartup(legs);
-}
+    // First execution initialization
+    if (first_sequence_execution_) {
+        // Phase 0: store initial positions (implicit first target)
+        // Phase 1 (horizontal): move XY towards standing target preserving current Z
+        // Phase 2 (vertical): adjust Z down/up to standing
 
-// Execute direct startup sequence (simultaneous leg coordination - OpenSHC equivalent)
-bool BodyPoseController::executeDirectStartup(Leg legs[NUM_LEGS]) {
-    // OpenSHC directStartup() implementation adapted for HexaMotion
-    // This method moves all legs simultaneously using time_to_start parameter
+        // Build final standing targets
+        for (int i = 0; i < NUM_LEGS; ++i) {
+            const auto &standing_joints = body_pose_config.standing_pose_joints[i];
+            JointAngles sj;
+            sj.coxa = standing_joints.coxa;
+            sj.femur = standing_joints.femur;
+            sj.tibia = standing_joints.tibia;
+            Point3D standing_pos = model.forwardKinematicsGlobalCoordinates(i, sj);
+            startup_final_targets_[i] = standing_pos;
 
-    double time_to_start = body_pose_config.time_to_start;
-    bool all_legs_complete = true;
+            // Horizontal: keep initial Z, take standing XY
+            Point3D init_pos = legs[i].getCurrentTipPositionGlobal();
+            Point3D horiz = standing_pos;
+            horiz.z = init_pos.z; // mantener z
+            startup_horizontal_targets_[i] = horiz;
+        }
+        transition_step_ = 0;       // 0 = horizontal, 1 = vertical
+        transition_step_count_ = 2; // Two total phases
+        set_target_ = true;
+        proximity_alert_ = false;
+        horizontal_transition_complete_ = false;
+        vertical_transition_complete_ = false;
+        executing_transition_ = true;
+        first_sequence_execution_ = false; // After setup
+    }
 
-    // Initialize sequence targets if not done
-    if (!direct_startup_sequence_initialized) {
-        for (int i = 0; i < NUM_LEGS; i++) {
-            if (leg_posers_[i]) {
-                // Use current leg positions as targets (OpenSHC approach)
-                // This maintains continuity instead of forcing a jump to static standing poses
-                // The gait controller will handle setting proper targets during execution
-                Point3D current_position = legs[i].getCurrentTipPositionGlobal();
+    // Timings similar to OpenSHC constants
+    double step_frequency = DEFAULT_STEP_FREQUENCY;     // TODO map from params
+    double horiz_time = 1.0 / step_frequency;           // Normalized horizontal transition time
+    double vert_time = 3.0 / step_frequency;            // Normalized vertical transition time
+    double lift_height = body_pose_config.swing_height; // Use swing height for horizontal phase
 
-                // Set current position as target to maintain stance during startup
-                leg_posers_[i]->get()->setTargetPosition(current_position);
-                leg_posers_[i]->get()->resetStepToPosition();
+    bool sequence_complete = false;
+
+    // Horizontal phase (XY toward target)
+    if (transition_step_ == 0) {
+        bool all_complete = true;
+        for (int i = 0; i < NUM_LEGS; ++i) {
+            if (!leg_posers_[i])
+                continue;
+            LegPoser *lp = leg_posers_[i]->get();
+            if (set_target_) {
+                lp->setTargetPosition(startup_horizontal_targets_[i]);
+                lp->resetStepToPosition();
             }
+            bool done = lp->stepToPosition(lp->getTargetPosition(), lift_height, horiz_time);
+            legs[i].setCurrentTipPositionGlobal(lp->getCurrentPosition());
+            JointAngles ca = legs[i].getJointAngles();
+            legs[i].setJointAngles(model.inverseKinematicsCurrentGlobalCoordinates(i, ca, legs[i].getCurrentTipPositionGlobal()));
+            all_complete = all_complete && done;
         }
-        direct_startup_sequence_initialized = true;
-    }
-
-    // Execute transition for all legs simultaneously (OpenSHC approach)
-    for (int i = 0; i < NUM_LEGS; i++) {
-        if (!leg_posers_[i]) {
-            continue;
-        }
-
-        LegPoser *leg_poser = leg_posers_[i]->get();
-
-        // Use stepToPosition with zero step height for direct movement (like OpenSHC transitionConfiguration)
-        bool leg_complete = leg_poser->stepToPosition(leg_poser->getTargetPosition(), 0.0, time_to_start);
-
-        // Update leg state with current poser position
-        legs[i].setCurrentTipPositionGlobal(leg_poser->getCurrentPosition());
-        JointAngles current_angles = legs[i].getJointAngles();
-        legs[i].setJointAngles(model.inverseKinematicsCurrentGlobalCoordinates(i, current_angles, legs[i].getCurrentTipPositionGlobal()));
-
-        if (!leg_complete) {
-            all_legs_complete = false;
+        set_target_ = false;
+        if (all_complete) {
+            horizontal_transition_complete_ = true;
+            set_target_ = true; // prepare vertical phase
+            transition_step_ = 1;
         }
     }
+    // Vertical phase (Z adjustment)
+    else if (transition_step_ == 1) {
+        bool all_complete = true;
+        for (int i = 0; i < NUM_LEGS; ++i) {
+            if (!leg_posers_[i])
+                continue;
+            LegPoser *lp = leg_posers_[i]->get();
+            if (set_target_) {
+                lp->setTargetPosition(startup_final_targets_[i]);
+                lp->resetStepToPosition();
+            }
+            // Vertical: adjust Z without additional lift
+            bool done = lp->stepToPosition(lp->getTargetPosition(), 0.0, vert_time);
+            legs[i].setCurrentTipPositionGlobal(lp->getCurrentPosition());
+            JointAngles ca = legs[i].getJointAngles();
+            legs[i].setJointAngles(model.inverseKinematicsCurrentGlobalCoordinates(i, ca, legs[i].getCurrentTipPositionGlobal()));
+            all_complete = all_complete && done;
+        }
+        set_target_ = false;
+        if (all_complete) {
+            vertical_transition_complete_ = true;
+            sequence_complete = true;
+        }
+    }
 
-    // Reset state when sequence completes
-    if (all_legs_complete) {
-        direct_startup_sequence_initialized = false;
+    if (sequence_complete) {
+        executing_transition_ = false;
+        transition_step_ = transition_step_count_;
+        // Ensure exact final standing pose
+        for (int i = 0; i < NUM_LEGS; ++i) {
+            const auto &standing_joints = body_pose_config.standing_pose_joints[i];
+            JointAngles sj;
+            sj.coxa = standing_joints.coxa;
+            sj.femur = standing_joints.femur;
+            sj.tibia = standing_joints.tibia;
+            legs[i].setJointAngles(sj);
+            Point3D pos = model.forwardKinematicsGlobalCoordinates(i, sj);
+            legs[i].setCurrentTipPositionGlobal(pos);
+        }
         return true;
     }
 
-    return false;
+    return false; // still in progress
+}
+
+int BodyPoseController::getStartupProgressPercent() const {
+    if (transition_step_count_ == 0)
+        return 0;
+    if (transition_step_ >= transition_step_count_)
+        return 100;
+    double phase_fraction = (transition_step_ == 0 ? 0.0 : 0.5);
+    double leg_avg = 0.0;
+    int counted = 0;
+    for (int i = 0; i < NUM_LEGS; ++i) {
+        if (leg_posers_[i]) {
+            // LegPoserImpl expected to expose underlying LegPoser via get()
+            leg_avg += leg_posers_[i]->get()->getCurrentStepProgress();
+            counted++;
+        }
+    }
+    if (counted > 0)
+        leg_avg /= counted;
+    double phase_progress = leg_avg * 0.5; // each phase worth 50%
+    int percent = static_cast<int>((phase_fraction + phase_progress) * 100.0 + 0.5);
+    if (percent > 99 && transition_step_ < transition_step_count_)
+        percent = 99;
+    if (percent < 0)
+        percent = 0;
+    return percent;
 }
 
 // Execute shutdown sequence (RUNNING -> READY transition - OpenSHC equivalent)

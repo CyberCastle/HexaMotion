@@ -304,7 +304,6 @@ bool LocomotionSystem::executeStartupSequence() {
         system_state = SYSTEM_RUNNING;
 
         // Clear flag here instead of requiring external code to modify private member
-        // (Original usage example required caller to manually clear startup_in_progress)
         startup_in_progress = false;
     }
 
@@ -345,8 +344,14 @@ bool LocomotionSystem::executeShutdownSequence() {
 
     if (shutdown_complete) {
         system_state = SYSTEM_READY;
+
         // Clear internal flag upon completion to simplify caller logic
         shutdown_in_progress = false;
+
+        // Reset body pose controller sequence states so next startup re-learns transition
+        if (body_pose_ctrl) {
+            body_pose_ctrl->resetSequenceStates();
+        }
     }
 
     return shutdown_complete;

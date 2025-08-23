@@ -137,14 +137,6 @@ class BodyPoseController {
     bool executeStartupSequence(Leg legs[NUM_LEGS]);
 
     /**
-     * @brief Execute direct startup sequence with simultaneous leg coordination (OpenSHC equivalent)
-     * Uses time_to_start parameter directly as total sequence time
-     * @param legs Array of Leg objects to update
-     * @return true if sequence is complete, false if still in progress
-     */
-    bool executeDirectStartup(Leg legs[NUM_LEGS]);
-
-    /**
      * @brief Execute shutdown sequence (RUNNING -> READY transition)
      * @param legs Array of Leg objects to update
      * @return true if sequence is complete, false if still in progress
@@ -225,9 +217,30 @@ class BodyPoseController {
     void resetSequenceStates() {
         step_to_new_stance_current_group = 0;
         step_to_new_stance_sequence_generated = false;
-        direct_startup_sequence_initialized = false;
         shutdown_sequence_initialized = false;
+
+        // Extended: also reset OpenSHC-style startup transition state
+        first_sequence_execution_ = true;
+        executing_transition_ = false;
+        transition_step_ = 0;
+        transition_step_count_ = 0;
+        horizontal_transition_complete_ = false;
+        vertical_transition_complete_ = false;
+        set_target_ = false;
+        proximity_alert_ = false;
+        legs_completed_step_ = 0;
+        current_group_ = 0;
+        pack_step_ = 0;
     }
+
+    // Explicit public reset for startup learning cycle
+    void resetStartupSequence() { first_sequence_execution_ = true; }
+
+    // Accessor for current startup phase (0=horizontal,1=vertical,2=complete)
+    int getStartupPhase() const { return transition_step_; }
+
+    // Return startup sequence progress (0-100). Implemented in cpp to avoid incomplete type access.
+    int getStartupProgressPercent() const;
 
     // Compatibility methods for existing tests
     const BodyPoseConfiguration &getBodyPoseConfig() const { return body_pose_config; }
@@ -292,9 +305,6 @@ class BodyPoseController {
     int step_to_new_stance_current_group;
     bool step_to_new_stance_sequence_generated;
 
-    // executeDirectStartup state variables (moved from static to class level)
-    bool direct_startup_sequence_initialized;
-
     // executeShutdownSequence state variables (moved from static to class level)
     bool shutdown_sequence_initialized;
 
@@ -311,6 +321,10 @@ class BodyPoseController {
     int legs_completed_step_;             //< Number of legs having completed required step in sequence
     int current_group_;                   //< Current leg group executing stepping maneuver
     int pack_step_;                       //< Current step in pack/unpack sequence
+
+    // Startup sequence (OpenSHC-style) targets
+    Point3D startup_horizontal_targets_[NUM_LEGS]; //< Intermediate horizontal (XY only) targets preserving initial Z
+    Point3D startup_final_targets_[NUM_LEGS];      //< Final standing pose targets (full XYZ)
 
     // OpenSHC walk plane pose system with Bézier curves
     Pose walk_plane_pose_;              //< Current walk plane pose for body clearance maintenance

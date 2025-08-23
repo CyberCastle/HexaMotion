@@ -577,13 +577,25 @@ int main(int argc, char **argv) {
     // 4. Execute startup sequence
     std::cout << "Executing startup sequence..." << std::endl;
     int startup_attempts = 0;
-    const int MAX_STARTUP_ATTEMPTS = 50;
+    // Estimate iterations for two-phase startup matching BodyPoseController timing
+    const Parameters &startup_params = sys.getParameters();
+    double time_delta_startup = startup_params.time_delta;
+    double step_frequency_startup = DEFAULT_STEP_FREQUENCY;
+    int horiz_iters = std::max(1, (int)std::round((1.0 / step_frequency_startup) / time_delta_startup));
+    int vert_iters = std::max(1, (int)std::round((3.0 / step_frequency_startup) / time_delta_startup));
+    int expected_total_iters = horiz_iters + vert_iters;
+    const int MAX_STARTUP_ATTEMPTS = expected_total_iters + 80; // margin
+    std::cout << "Estimated startup iterations (horizontal=" << horiz_iters << ", vertical=" << vert_iters
+              << ", total=" << expected_total_iters << ")  Max attempts=" << MAX_STARTUP_ATTEMPTS << std::endl;
 
     while (sys.isStartupInProgress() && startup_attempts < MAX_STARTUP_ATTEMPTS) {
         servos.updateStep(startup_attempts);
         if (sys.executeStartupSequence()) {
             std::cout << "✅ Startup sequence completed after " << startup_attempts << " attempts." << std::endl;
             break;
+        }
+        if (startup_attempts % 25 == 0) {
+            std::cout << "Startup attempt " << startup_attempts << " Progress=" << sys.getStartupProgressPercent() << "%" << std::endl;
         }
         startup_attempts++;
     }
