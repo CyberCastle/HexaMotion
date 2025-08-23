@@ -43,37 +43,47 @@ int main() {
     // Custom servo capturing acceleration
     class CaptureServo : public IServoInterface {
       public:
-        struct Cmd {
-            int leg;
-            int joint;
-            double angle;
-            double speed;
-            double accel;
+        struct BatchCmd {
+            double angles_deg[NUM_LEGS][DOF_PER_LEG];
+            double speeds[NUM_LEGS][DOF_PER_LEG];
+            double accels[NUM_LEGS][DOF_PER_LEG];
             int iter;
         };
-        std::vector<Cmd> cmds;
-        double last_angles[NUM_LEGS][3]{};
+        std::vector<BatchCmd> batch_cmds;
+        double last_angles[NUM_LEGS][DOF_PER_LEG]{}; // degrees
         bool initialize() override { return true; }
         bool hasBlockingStatusFlags(int, int) override { return false; }
         bool setJointAngleAndSpeed(int leg, int joint, double angle, double speed) override {
-            return setJointAngleSpeedAccel(leg, joint, angle, speed, 0.0);
+            // Fallback path (should be rare if batch supported). Accel unknown -> 0.
+            last_angles[leg][joint] = angle;
+            return true;
         }
         bool setJointAngleSpeedAccel(int leg, int joint, double angle, double speed, double accel) override {
-            Cmd c{leg, joint, angle, speed, accel, current_iter_};
-            cmds.push_back(c);
+            // Per-joint fallback capture (legacy). Update last angle only.
+            (void)speed;
+            (void)accel;
             last_angles[leg][joint] = angle;
+            return true;
+        }
+        bool syncSetAllJointAnglesSpeedsAccels(const double a[NUM_LEGS][DOF_PER_LEG],
+                                               const double s[NUM_LEGS][DOF_PER_LEG],
+                                               const double ac[NUM_LEGS][DOF_PER_LEG]) override {
+            BatchCmd bc{};
+            bc.iter = current_iter_;
+            for (int l = 0; l < NUM_LEGS; ++l) {
+                for (int j = 0; j < DOF_PER_LEG; ++j) {
+                    bc.angles_deg[l][j] = a[l][j];
+                    bc.speeds[l][j] = s[l][j];
+                    bc.accels[l][j] = ac[l][j];
+                    last_angles[l][j] = a[l][j];
+                }
+            }
+            batch_cmds.push_back(bc);
             return true;
         }
         double getJointAngle(int leg, int joint) override { return last_angles[leg][joint]; }
         bool isJointMoving(int, int) override { return true; }
         bool enableTorque(int, int, bool) override { return true; }
-        bool syncSetAllJointAnglesAndSpeeds(const double a[NUM_LEGS][DOF_PER_LEG], const double s[NUM_LEGS][DOF_PER_LEG]) override {
-            // emulate batch path (no accel)
-            for (int l = 0; l < NUM_LEGS; ++l)
-                for (int j = 0; j < DOF_PER_LEG; ++j)
-                    setJointAngleSpeedAccel(l, j, a[l][j], s[l][j], 0.0);
-            return true;
-        }
         void nextIter(int i) { current_iter_ = i; }
 
       private:
@@ -201,11 +211,14 @@ int main() {
 
         // Log servo commands for detailed analysis (only first few and last few iterations)
         if (iter < 3 || iter > MAX_ITERS - 5) {
-            for (const auto &c : servo.cmds) {
-                if (c.iter == iter) {
-                    std::cout << "  Servo[" << c.leg << "," << c.joint << "]: "
-                              << std::setprecision(2) << c.angle << "° speed="
-                              << std::setprecision(3) << c.speed << " accel=" << c.accel << std::endl;
+            for (const auto &bc : servo.batch_cmds) {
+                if (bc.iter == iter) {
+                    std::cout << "  BatchCmd iter=" << bc.iter << " :";
+                    // Show first leg summary
+                    std::cout << " L0 (" << std::setprecision(2) << bc.angles_deg[0][0] << "° v=" << bc.speeds[0][0]
+                              << " a=" << bc.accels[0][0] << ", " << bc.angles_deg[0][1] << "° v=" << bc.speeds[0][1]
+                              << " a=" << bc.accels[0][1] << ", " << bc.angles_deg[0][2] << "° v=" << bc.speeds[0][2]
+                              << " a=" << bc.accels[0][2] << ")" << std::endl;
                 }
             }
         }
@@ -227,12 +240,20 @@ int main() {
     // Calculate and show servo command statistics
     double total_speed = 0.0, max_speed = 0.0, total_accel = 0.0, max_accel = 0.0;
     int cmd_count = 0;
-    for (const auto &c : servo.cmds) {
-        total_speed += c.speed;
-        total_accel += c.accel;
-        max_speed = std::max(max_speed, c.speed);
-        max_accel = std::max(max_accel, c.accel);
-        cmd_count++;
+    for (const auto &bc : servo.batch_cmds) {
+        for (int l = 0; l < NUM_LEGS; ++l) {
+            for (int j = 0; j < DOF_PER_LEG; ++j) {
+                double sp = bc.speeds[l][j];
+                double ac = bc.accels[l][j];
+                total_speed += sp;
+                total_accel += ac;
+                if (sp > max_speed)
+                    max_speed = sp;
+                if (ac > max_accel)
+                    max_accel = ac;
+                cmd_count++;
+            }
+        }
     }
 
     if (cmd_count > 0) {

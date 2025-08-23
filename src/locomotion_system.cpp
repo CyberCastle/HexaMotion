@@ -1284,8 +1284,8 @@ bool LocomotionSystem::stepInitialStandingPose() {
 
     // Prefer batch interface supporting acceleration if available
     bool batch_ok = false;
-    if (servo_interface->syncSetAllJointAnglesAndSpeeds(angles_deg, speeds)) {
-        batch_ok = true; // acceleration not supported in batch path
+    if (servo_interface->syncSetAllJointAnglesSpeedsAccels(angles_deg, speeds, accels)) {
+        batch_ok = true; // full accel-capable batch path
     }
     if (!batch_ok) {
         // Fallback: per-joint

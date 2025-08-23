@@ -544,6 +544,30 @@ class IServoInterface {
     }
 
     /**
+     * Batch command to set all joints' angles, speeds and accelerations.
+     * This extends syncSetAllJointAnglesAndSpeeds by adding an acceleration parameter
+     * (for jerk-limited or S-curve motion planners). Implementations that do not
+     * natively support acceleration limits may ignore the parameter and delegate to
+     * syncSetAllJointAnglesAndSpeeds(), mirroring the behaviour of
+     * setJointAngleSpeedAccel which falls back to setJointAngleAndSpeed.
+     *
+     * Default implementation: delegates to syncSetAllJointAnglesAndSpeeds() and ignores
+     * acceleration values, returning its result. Override for bus-level optimized
+     * synchronous write including acceleration control.
+     *
+     * @param angles_deg Target joint angles in degrees [leg][joint].
+     * @param speeds Target joint speeds or driver-native speed values [leg][joint].
+     * @param accelerations Target joint accelerations (driver units or deg/s^2) [leg][joint].
+     * @return true if batch command was sent, false otherwise (caller may fallback to per-joint calls).
+     */
+    virtual bool syncSetAllJointAnglesSpeedsAccels(const double angles_deg[NUM_LEGS][DOF_PER_LEG],
+                                                   const double speeds[NUM_LEGS][DOF_PER_LEG],
+                                                   const double accelerations[NUM_LEGS][DOF_PER_LEG]) {
+        (void)accelerations; // default: unused (fallback)
+        return syncSetAllJointAnglesAndSpeeds(angles_deg, speeds);
+    }
+
+    /**
      * @brief Refresh a small slice of servo health state without blocking the hot path.
      * @details Implementations should poll at most @p max_per_cycle servos per call and update
      *          an internal cache of fault/blocking flags. No heavy I/O should be performed
