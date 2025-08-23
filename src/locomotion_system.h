@@ -200,6 +200,18 @@ class LocomotionSystem {
     /** Set robot to standing pose */
     bool setStandingPose();
 
+    /**
+     * @brief Begin non-blocking jerk-limited transition to standing pose (profiles created in BodyPoseController).
+     * @return true if started or already complete.
+     */
+    bool establishInitialStandingPose();
+
+    /** Advance one iteration of the initial standing pose transition; sends servo commands for current S-curve sample. */
+    bool stepInitialStandingPose();
+
+    /** Query if initial standing pose transition is active. */
+    bool isInitialStandingPoseActive() const { return body_pose_ctrl && body_pose_ctrl->isInitialStandingPoseActive(); }
+
     /** Set body pose with position and orientation */
     bool setBodyPose(const Eigen::Vector3d &position, const Eigen::Vector3d &orientation);
 
@@ -269,6 +281,10 @@ class LocomotionSystem {
 
     // Getter for WalkController
     WalkController *getWalkController() { return walk_ctrl; }
+
+    /** Direct access to BodyPoseController (tests & advanced instrumentation) */
+    BodyPoseController *getBodyPoseController() { return body_pose_ctrl; }
+    const BodyPoseController *getBodyPoseController() const { return body_pose_ctrl; }
 
   private:
     // Helper methods

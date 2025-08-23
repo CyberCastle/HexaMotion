@@ -546,6 +546,14 @@ bool LocomotionSystem::update() {
         updateLegStates(); // early call: updates in_contact_ & histories; phase may be overwritten later
     }
 
+    // Handle initial standing pose transition (non-blocking) prior to normal running
+    // During initial standing S-curve we temporarily keep system_state as SYSTEM_READY until finished
+    if (body_pose_ctrl && body_pose_ctrl->isInitialStandingPoseActive()) {
+        if (!stepInitialStandingPose()) {
+            return false; // error already set
+        }
+    }
+
     // Only update leg trajectories if system is in RUNNING state
     if (walk_ctrl && system_state == SYSTEM_RUNNING) {
         // Optional kinematic integration of body pose (test / simulation)
@@ -1130,4 +1138,121 @@ void LocomotionSystem::publishJointAnglesToServos() {
             // Continue processing other legs instead of failing completely
         }
     }
+}
+
+// =====================================================================================
+// INITIAL STANDING POSE ESTABLISHMENT (jerk-limited smooth transition)
+// =====================================================================================
+bool LocomotionSystem::establishInitialStandingPose() {
+    if (!servo_interface || !body_pose_ctrl) {
+        last_error = SERVO_ERROR;
+        return false;
+    }
+    if (body_pose_ctrl->isInitialStandingPoseActive()) {
+        // Already in progress; just step
+        return stepInitialStandingPose();
+    }
+    // Initialize controller-side profiles using current leg joint angles
+    if (!body_pose_ctrl->beginInitialStandingPoseTransition(legs)) {
+        return false; // no change
+    }
+    startup_in_progress = true;
+    system_state = SYSTEM_READY; // use READY as transitional state for startup S-curve
+    return stepInitialStandingPose();
+}
+
+bool LocomotionSystem::stepInitialStandingPose() {
+    if (!servo_interface || !body_pose_ctrl) {
+        last_error = SERVO_ERROR;
+        return false;
+    }
+    if (!body_pose_ctrl->isInitialStandingPoseActive()) {
+        return true; // nothing to do
+    }
+
+    // Use internal parameter set time delta
+    double dt = params.time_delta; // time step seconds
+
+    // Allocate temporary buffers for positions, velocities, accelerations per joint
+    double positions[NUM_LEGS][3];
+    double velocities[NUM_LEGS][3];
+    double accelerations[NUM_LEGS][3];
+
+    if (!body_pose_ctrl->stepInitialStandingPoseTransition(legs, dt, positions, velocities, accelerations)) {
+        // stepping failed
+        last_error = STATE_ERROR;
+        return false;
+    }
+
+    // Map radian joint state to servo commands each iteration
+    // Determine speed multipliers based on normalized velocity relative to heuristic vmax per joint (derived same way as in controller begin)
+    // We recompute heuristic vmax in degrees/s to convert to speed multiplier (0..1), then send acceleration when available.
+    double angles_deg[NUM_LEGS][3];
+    double speeds[NUM_LEGS][3];
+    double accels[NUM_LEGS][3];
+
+    // Heuristic max velocity (degrees/s) consistent with earlier logic
+    double vmax_deg = params.default_servo_speed; // heuristic max speed (deg/s) for normalization
+    double amax_deg = vmax_deg * 4.0;
+
+    for (int i = 0; i < NUM_LEGS; ++i) {
+        for (int j = 0; j < 3; ++j) {
+            double pos_rad = positions[i][j];
+            double vel_rad = velocities[i][j];
+            double acc_rad = accelerations[i][j];
+            // Convert to degrees for servo interface, applying sign per joint
+            double sign = 1.0;
+            if (j == 0)
+                sign = params.angle_sign_coxa;
+            else if (j == 1)
+                sign = params.angle_sign_femur;
+            else
+                sign = params.angle_sign_tibia;
+            angles_deg[i][j] = pos_rad * sign * RADIANS_TO_DEGREES_FACTOR;
+            // Velocity degrees/s magnitude mapping -> speed multiplier (clamped 0..1)
+            double vel_deg = vel_rad * RADIANS_TO_DEGREES_FACTOR;
+            double speed_mult = vmax_deg > 1e-6 ? fabs(vel_deg) / vmax_deg : 0.0;
+            if (speed_mult < 0.01)
+                speed_mult = 0.01; // avoid zero speed stall
+            if (speed_mult > 1.0)
+                speed_mult = 1.0;
+            speeds[i][j] = speed_mult;
+            double acc_deg = acc_rad * RADIANS_TO_DEGREES_FACTOR;
+            double accel_mult = amax_deg > 1e-6 ? fabs(acc_deg) / amax_deg : 0.0;
+            if (accel_mult < 0.05)
+                accel_mult = 0.05;
+            if (accel_mult > 1.0)
+                accel_mult = 1.0;
+            accels[i][j] = accel_mult;
+        }
+        if (!coxa_movement_enabled_) {
+            // Freeze coxa if disabled
+            angles_deg[i][0] = 0.0;
+            speeds[i][0] = 0.0;
+            accels[i][0] = 0.0;
+        }
+    }
+
+    // Prefer batch interface supporting acceleration if available
+    bool batch_ok = false;
+    if (servo_interface->syncSetAllJointAnglesAndSpeeds(angles_deg, speeds)) {
+        batch_ok = true; // acceleration not supported in batch path
+    }
+    if (!batch_ok) {
+        // Fallback: per-joint
+        for (int i = 0; i < NUM_LEGS; ++i) {
+            for (int j = 0; j < 3; ++j) {
+                servo_interface->setJointAngleSpeedAccel(i, j, angles_deg[i][j], speeds[i][j], accels[i][j]);
+            }
+        }
+    }
+
+    // If finished, finalize state and compute body position
+    if (!body_pose_ctrl->isInitialStandingPoseActive()) {
+        body_position = body_pose_ctrl->calculateBodyPosition(legs);
+        system_state = SYSTEM_READY;
+        startup_in_progress = false;
+        shutdown_in_progress = false;
+    }
+    return true;
 }
