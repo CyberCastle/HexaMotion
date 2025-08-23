@@ -30,6 +30,10 @@ int main() {
     Parameters params = createDefaultParameters();
     // Use deterministic time step
     params.time_delta = 0.02; // 50 Hz
+    // Segment masses from AGENTS.md (convert g -> kg)
+    params.coxa_mass = 54.0 / 1000.0;   // 54 g
+    params.femur_mass = 150.0 / 1000.0; // 150 g
+    params.tibia_mass = 200.0 / 1000.0; // 200 g
 
     BodyPoseConfiguration pose_cfg = getDefaultBodyPoseConfig(params);
 

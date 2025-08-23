@@ -168,6 +168,22 @@ struct Parameters {
     // vanilla OpenSHC which integrates full Bezier-derived velocity (allowing radial
     // drift and vertical micro-adjustments). Use to stabilize stance joint posture.
     bool enable_tangential_stance_mode = true; //< default on for experimentation
+
+    // --- Segment mass properties (optional) ---
+    // When > 0 they are used for relative torque computation in startup normalization.
+    // Units: kilograms (or any consistent unit; only ratios are used).
+    double coxa_mass = 0.0;  //< Coxa mass (0 => use lengths only)
+    double femur_mass = 0.0; //< Femur mass (0 => use lengths only)
+    double tibia_mass = 0.0; //< Tibia mass (0 => use lengths only)
+
+    // --- Startup (initial standing) normalization configuration ---
+    struct StartupNormalizationConfig {
+        bool enable_torque_balanced = true; //< Enable torque/energy balanced scaling in LIFT phase
+        double alpha = 0.6;                 //< Exponent smoothing factor for weight factors (0.5-0.8 recommended)
+        double speed_deadband = 0.05;       //< Minimum non-zero normalized speed after scaling
+        double accel_deadband = 0.05;       //< Minimum non-zero normalized acceleration after scaling
+        double tibia_speed_cap = 0.85;      //< Optional ceiling for tibia speed after scaling
+    } startup_norm;
 };
 
 enum GaitType {
