@@ -121,8 +121,8 @@ static void printTestHeader() {
               << std::setw(6) << "BL"
               << std::setw(6) << "AL"
               << std::setw(12) << "Phases"
-              << "Transitions" << std::endl;
-    std::cout << "       (Coxa angles in degrees)" << std::endl;
+              << "Transitions + Metrics" << std::endl;
+    std::cout << "       (Coxa angles in degrees)                                    R(S/W)=Radio Stance/Swing  Sym=Simetría(sum,diff)" << std::endl;
     std::cout << "-------------------------------------------------------------------------------------------------------" << std::endl;
 }
 
@@ -179,32 +179,41 @@ static void printCoxaStates(const LocomotionSystem &sys, int step, const int tra
         std::cout << LEG_NAMES[i] << ":" << transition_counts[i] << " ";
     }
 
+    // Añadir métricas adicionales en la misma línea
+    // Radios promedio de las patas en stance/swing
+    double avg_radius_stance = 0, avg_radius_swing = 0;
+    int stance_count = 0, swing_count = 0;
+    for (int i = 0; i < NUM_LEGS; ++i) {
+        StepPhase phase = sys.getLeg(i).getStepPhase();
+        if (phase == STANCE_PHASE) {
+            avg_radius_stance += radius_mm[i];
+            stance_count++;
+        } else {
+            avg_radius_swing += radius_mm[i];
+            swing_count++;
+        }
+    }
+    if (stance_count > 0)
+        avg_radius_stance /= stance_count;
+    if (swing_count > 0)
+        avg_radius_swing /= swing_count;
+
+    // Métricas de simetría por pares opuestos (0,3) (1,4) (2,5)
+    auto pairMetrics = [&](int a, int b) {
+        double sum = coxa_deg[a] + coxa_deg[b]; // si se espera signo opuesto, sum ~ 0
+        double diff = coxa_deg[a] - coxa_deg[b];
+        return std::make_pair(sum, diff);
+    };
+    auto p03 = pairMetrics(0, 3);
+    auto p14 = pairMetrics(1, 4);
+    auto p25 = pairMetrics(2, 5);
+
+    std::cout << " R(S/W):" << std::fixed << std::setprecision(0) << avg_radius_stance << "/" << avg_radius_swing
+              << " Sym03:" << std::setprecision(1) << p03.first << "," << p03.second
+              << " 14:" << p14.first << "," << p14.second
+              << " 25:" << p25.first << "," << p25.second;
+
     std::cout << std::endl;
-
-    // Línea diagnóstica: radios y arco (mm) desde inicio de stance
-    // std::cout << "         R:";
-    // for (int i = 0; i < NUM_LEGS; ++i) {
-    //     std::cout << std::setw(5) << std::fixed << std::setprecision(0) << radius_mm[i];
-    // }
-    // std::cout << "  Arc:";
-    // for (int i = 0; i < NUM_LEGS; ++i) {
-    //     std::cout << std::setw(6) << std::fixed << std::setprecision(1) << arc_mm[i];
-    // }
-
-    // // Métricas de simetría por pares opuestos (0,3) (1,4) (2,5)
-    // auto pairMetrics = [&](int a, int b) {
-    //     double sum = coxa_deg[a] + coxa_deg[b]; // si se espera signo opuesto, sum ~ 0
-    //     double diff = coxa_deg[a] - coxa_deg[b];
-    //     return std::make_pair(sum, diff);
-    // };
-    // auto p03 = pairMetrics(0, 3);
-    // auto p14 = pairMetrics(1, 4);
-    // auto p25 = pairMetrics(2, 5);
-    // std::cout << "  Pairs(sum,diff): "
-    //           << "03(" << std::setprecision(1) << p03.first << "," << p03.second << ") "
-    //           << "14(" << p14.first << "," << p14.second << ") "
-    //           << "25(" << p25.first << "," << p25.second << ")";
-    // std::cout << std::endl;
 }
 
 /**
