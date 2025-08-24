@@ -34,7 +34,6 @@
 // Parámetros por defecto (pueden sobre-escribirse por CLI)
 // --------------------------------------------------------------------------------------
 static double g_test_velocity = 100.0;            // mm/s
-static double g_test_angular_velocity = 0.25;     // rad/s
 static int g_required_swing_transitions = 5;      // Transiciones STANCE->SWING por pata
 static int g_max_steps = 1200;                    // Límite de seguridad
 static bool g_show_only_phase_transitions = true; // Modo compacto por defecto
@@ -68,9 +67,6 @@ static void parseArgs(int argc, char **argv) {
         } else if (a == "--velocity") {
             needVal("--velocity");
             g_test_velocity = std::atof(argv[++i]);
-        } else if (a == "--ang-vel") {
-            needVal("--ang-vel");
-            g_test_angular_velocity = std::atof(argv[++i]);
         } else if (a == "--max-steps") {
             needVal("--max-steps");
             g_max_steps = std::atoi(argv[++i]);
@@ -110,8 +106,6 @@ static void printTestHeader() {
     std::cout << "Objetivo: " << g_required_swing_transitions << " transiciones STANCE->SWING por pata." << std::endl;
     std::cout << "Duración estimada (aprox): ~" << (g_required_swing_transitions * 104) << " pasos (solo referencia)." << std::endl;
     std::cout << "Velocidad: " << g_test_velocity << " mm/s" << std::endl;
-    std::cout << "Velocidad angular: " << g_test_angular_velocity << " rad/s" << std::endl
-              << std::endl;
 
     std::cout << std::left << std::setw(8) << "Step"
               << std::setw(6) << "AR"
