@@ -451,6 +451,11 @@ void WalkController::updateWalk(const Point3D &linear_velocity_input, double ang
                 leg_stepper->setAtCorrectPhase(false);
                 leg_stepper->setCompletedFirstStep(false);
                 leg_stepper->setStepState(STEP_STANCE);
+
+                // Initialize per-leg phase using offset like OpenSHC (convert phase_offset fraction to iterations)
+                StepCycle tmp_cycle = current_gait_config_.generateStepCycle(-1.0, model.getParams().time_delta);
+                int offset_iters = static_cast<int>(leg_stepper->getPhaseOffset() * tmp_cycle.period_);
+                leg_stepper->setPhase(offset_iters % tmp_cycle.period_);
             }
             return;
         }
@@ -505,24 +510,16 @@ void WalkController::updateWalk(const Point3D &linear_velocity_input, double ang
         leg_stepper->setDesiredVelocity(desired_linear_velocity_, desired_angular_velocity_);
 
         if (is_active_walking && step_cycle_calculated) {
-            // OpenSHC: Optimized phase calculation
-            const int phase_offset_iterations = static_cast<int>(leg_stepper->getPhaseOffset() * step_cycle.period_);
-            const int leg_phase = (global_phase_ + phase_offset_iterations) % step_cycle.period_;
-            const bool in_swing = (leg_phase >= step_cycle.stance_period_);
-
-            // Update states only when necessary
-            const StepState current_state = leg_stepper->getStepState();
-            if (in_swing && current_state != STEP_SWING) {
-                leg_stepper->setStepState(STEP_SWING);
-                leg_stepper->initializeSwingPeriod(1);
-                leg_stepper->beginSwingPhase(); // OpenSHC alignment: freeze stride/target at phase start
-            } else if (!in_swing && current_state != STEP_STANCE) {
-                leg_stepper->setStepState(STEP_STANCE);
-                leg_stepper->beginStancePhase(); // OpenSHC alignment
-            }
-
+            // Advance per-leg phase by 1 (keeping global coordination for gait duration)
+            int current_phase = leg_stepper->getPhase();
+            current_phase = (current_phase + 1) % step_cycle.period_;
+            leg_stepper->setPhase(current_phase);
+            // Let leg stepper derive state from its own phase
+            leg_stepper->updateStepStateFromPhase();
+            bool in_swing = (leg_stepper->getStepState() == STEP_SWING);
             legs_array_[i].setStepPhase(in_swing ? SWING_PHASE : STANCE_PHASE);
-            leg_stepper->updateTipPositionIterative(global_phase_, time_delta_, false, false);
+            // Local phase-based tip update
+            leg_stepper->updateTipPosition(time_delta_, false, false);
         } else {
             // Force stance for non-active states
             legs_array_[i].setStepPhase(STANCE_PHASE);

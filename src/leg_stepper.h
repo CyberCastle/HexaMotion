@@ -128,6 +128,13 @@ class LegStepper {
     void calculateSwingTiming(double time_delta);
     void updateStride();
     void updateTipPositionIterative(int iteration, double time_delta, bool rough_terrain_mode = false, bool force_normal_touchdown = false);
+
+    // New phase-local update (replaces external iteration passing). Uses internal phase_ set by controller.
+    void updateTipPosition(double time_delta, bool rough_terrain_mode = false, bool force_normal_touchdown = false);
+
+    // Update step state from current phase (STANCE/SWING determination) – mirrors OpenSHC style.
+    void updateStepStateFromPhase();
+
     // Freeze stride & target (OpenSHC philosophical alignment) called on state transitions
     void beginSwingPhase();
     void beginStancePhase();
