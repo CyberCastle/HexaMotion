@@ -246,7 +246,6 @@ void LegStepper::generatePrimarySwingControlNodes() {
     // Set to default tip position so max swing height and transition to 2nd swing curve occurs at default tip position
     swing_1_nodes_[4] = mid_tip_position;
 
-    // STEP 4: Validate and fix control nodes to ensure all are reachable
     validateAndFixControlNodes(swing_1_nodes_);
 }
 
@@ -279,29 +278,30 @@ void LegStepper::generateSecondarySwingControlNodes(bool ground_contact) {
         swing_2_nodes_[4] = current_tip_pose_ + stance_node_seperation * 4.0;
     }
 
-    // STEP 4: Validate and fix control nodes to ensure all are reachable
     if (params_.enable_workspace_constrain) {
         validateAndFixControlNodes(swing_2_nodes_);
     }
 }
 
 void LegStepper::generateStanceControlNodes(double stride_scaler) {
-    // OpenSHC exact implementation
-    Point3D stance_node_seperation = stride_vector_ * stride_scaler * (-0.25);
+    // OpenSHC-based stance control node generation - direct implementation
 
-    // Control nodes for stance quartic bezier curve
+    // Calculate stance node separation vector (OpenSHC formula)
+    Point3D stride_vector_to_use = stride_frozen_ ? frozen_stride_vector_total_ : stride_vector_;
+    Point3D stance_node_separation = stride_vector_to_use * (-stride_scaler * 0.25);
+
+    // Control nodes for stance quartic bezier curve (OpenSHC formula)
     // Set as initial tip position
-    stance_nodes_[0] = stance_origin_tip_position_ + stance_node_seperation * 0.0;
+    stance_nodes_[0] = stance_origin_tip_position_ + stance_node_separation * 0.0;
     // Set for constant velocity in stance period
-    stance_nodes_[1] = stance_origin_tip_position_ + stance_node_seperation * 1.0;
+    stance_nodes_[1] = stance_origin_tip_position_ + stance_node_separation * 1.0;
     // Set for constant velocity in stance period
-    stance_nodes_[2] = stance_origin_tip_position_ + stance_node_seperation * 2.0;
+    stance_nodes_[2] = stance_origin_tip_position_ + stance_node_separation * 2.0;
     // Set for constant velocity in stance period
-    stance_nodes_[3] = stance_origin_tip_position_ + stance_node_seperation * 3.0;
+    stance_nodes_[3] = stance_origin_tip_position_ + stance_node_separation * 3.0;
     // Set as target tip position
-    stance_nodes_[4] = stance_origin_tip_position_ + stance_node_seperation * 4.0;
+    stance_nodes_[4] = stance_origin_tip_position_ + stance_node_separation * 4.0;
 
-    // STEP 4: Validate and fix control nodes to ensure all are reachable
     if (params_.enable_workspace_constrain) {
         validateAndFixControlNodes(stance_nodes_);
     }
