@@ -342,6 +342,17 @@ int main(int argc, char **argv) {
         std::cout << "✅ SINCRONIZACIÓN CONFIRMADA: Usando 52 iteraciones por fase" << std::endl;
     }
 
+    // DEBUG: Mostrar offset multipliers del tripod gait
+    std::cout << "\n=== DEBUG: Tripod Gait Offset Multipliers ===" << std::endl;
+    auto gait_config = sys.getWalkController()->getCurrentGaitConfig();
+    const char *leg_names[] = {"AR", "BR", "CR", "CL", "BL", "AL"};
+    std::cout << "Offset multipliers:" << std::endl;
+    for (int i = 0; i < 6; i++) {
+        int offset = gait_config.offsets.getForLegIndex(i);
+        std::cout << "  " << leg_names[i] << ": " << offset << std::endl;
+    }
+    std::cout << std::endl;
+
     int step = 0;
     int transition_counts[NUM_LEGS] = {0};
     StepPhase previous_phases[NUM_LEGS];
