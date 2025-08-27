@@ -64,12 +64,19 @@ struct BodyPoseConfiguration {
         for (auto &sj : standing_pose_joints) {
             sj = {0.0, 0.0, 0.0};
         }
+        standing_horizontal_reach = 0.0;
     }
     // OpenSHC equivalent stance positions
     std::array<LegStancePosition, NUM_LEGS> leg_stance_positions;
 
     // OpenSHC equivalent standing pose (configured, not calculated)
     std::array<StandingPoseJoints, NUM_LEGS> standing_pose_joints;
+
+    // Horizontal reach (from body center to foot) contribution beyond hexagon radius
+    // computed from the configured standing pose joints (coxa pivot projection):
+    // standing_horizontal_reach = coxa_length + femur_length * cos(femur_angle_standing)
+    // (tibia vertical => no horizontal component). Used for stance & walkspace sizing.
+    double standing_horizontal_reach;
 
     // OpenSHC equivalent pose controller parameters
     std::string auto_pose_type; //< String denoting the default auto posing cycle type

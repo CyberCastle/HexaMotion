@@ -348,7 +348,7 @@ void LegStepper::updateTipPositionIterative(int iteration, double time_delta, bo
         calculateSwingTiming(params.time_delta);
     }
 
-    // Update current iteration and step progress
+    // Update current iteration (global style)
     current_iteration_ = iteration;
 
     if (step_state_ == STEP_SWING) {
@@ -364,19 +364,17 @@ void LegStepper::updateTipPositionIterative(int iteration, double time_delta, bo
         step_progress_ = std::min(1.0, step_progress_);
     }
 
-    // Update stride vector FIRST (freezes on phase entry)
+    // Update stride (will freeze on first iteration of the phase)
     updateStride();
 
-    // Use frozen stride to compute a stable mid-stride target (prevents target migration)
+    // Mid-stride target from default pose using frozen stride for stability
     Point3D active_stride = stride_frozen_ ? frozen_stride_vector_total_ : stride_vector_;
     Point3D raw_target = default_tip_pose_ + active_stride * 0.5;
-
-    // STEP 1: Validate and constrain target within workspace (NEW SAFETY CHECK)
     if (!target_frozen_) {
         if (params_.enable_workspace_constrain) {
             target_tip_pose_ = calculateSafeTarget(raw_target);
         } else {
-            target_tip_pose_ = raw_target; // unconstrained (debug mode)
+            target_tip_pose_ = raw_target;
         }
         frozen_target_tip_pose_ = target_tip_pose_;
         target_frozen_ = true;
@@ -678,6 +676,36 @@ void LegStepper::updateTipPositionIterative(int iteration, double time_delta, bo
     }
     previous_tip_pose_ = current_tip_pose_;
     has_previous_position_ = true;
+}
+
+// Update using internal phase_ (phase_ already incremented externally or will be incremented after call)
+void LegStepper::updateTipPosition(double time_delta, bool rough_terrain_mode, bool force_normal_touchdown) {
+    // Derive iteration number for legacy code path from internal phase_.
+    // NOTE: We reuse existing logic by calling updateTipPositionIterative with 'phase_' so we do not duplicate the long body.
+    updateTipPositionIterative(phase_, time_delta, rough_terrain_mode, force_normal_touchdown);
+}
+
+void LegStepper::updateStepStateFromPhase() {
+    // Determine state directly from phase_ relative to configured step_cycle_.
+    // step_cycle_ may have been set from gait configuration.
+    int swing_start_iter = step_cycle_.stance_period_; // stance first, then swing
+    int swing_end_iter = step_cycle_.period_;          // end exclusive conceptually
+    int local = phase_ % step_cycle_.period_;
+    bool in_swing = (local >= swing_start_iter);
+    if (step_state_ == STEP_FORCE_STOP)
+        return;
+    if (in_swing) {
+        if (step_state_ != STEP_SWING) {
+            setStepState(STEP_SWING);
+            initializeSwingPeriod(1);
+            beginSwingPhase();
+        }
+    } else {
+        if (step_state_ != STEP_STANCE && step_state_ != STEP_FORCE_STANCE) {
+            setStepState(STEP_STANCE);
+            beginStancePhase();
+        }
+    }
 }
 
 // ========================================================================
