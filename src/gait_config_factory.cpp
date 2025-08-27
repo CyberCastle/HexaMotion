@@ -30,6 +30,7 @@ LegOffsetMultipliers computeBalancedTripodOffsets() {
         int index;    // Original leg index in internal ordering
         double angle; // Normalized (0..2π) absolute base orientation angle
     };
+
     std::vector<LegAngle> legs;           // Container to hold all leg-angle pairs for sorting
     legs.reserve(NUM_LEGS);               // Reserve exact capacity (6) to avoid reallocations
     for (int i = 0; i < NUM_LEGS; ++i) {  // Iterate over each leg index
