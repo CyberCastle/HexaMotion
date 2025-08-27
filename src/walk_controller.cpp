@@ -21,6 +21,8 @@ WalkController::WalkController(RobotModel &m, Leg legs[NUM_LEGS], const BodyPose
       leg_steppers_(), current_gait_config_(), gait_selection_config_(), terrain_adaptation_(m), body_pose_controller_(nullptr),
       velocity_limits_(m), current_velocity_limits_(), current_velocities_(), current_leg_positions_{Point3D(), Point3D(), Point3D(), Point3D(), Point3D(), Point3D()}, legs_array_(legs), global_phase_(0) {
 
+    standing_horizontal_reach_ = pose_config.standing_horizontal_reach; // cache from configuration
+
     // Initialize leg_steppers_ with references to actual legs from LocomotionSystem
     leg_steppers_.clear();
 
@@ -326,8 +328,9 @@ void WalkController::init(const Eigen::Vector3d &current_body_position, const Ei
             double base_angle = model.getLegBaseAngleOffset(leg_index);
 
             // OpenSHC style: Use conservative stance radius based on leg geometry
-            double leg_reach = model.getLegReach();                          // Use RobotModel method instead of manual calculation
-            double stance_radius = leg_reach * DEFAULT_STANCE_RADIUS_FACTOR; // Use defined constant
+            // Use standing-pose horizontal reach (height-aware) for stance radius
+            double leg_reach = standing_horizontal_reach_;
+            double stance_radius = leg_reach; // Height-aware conservative reach
 
             Point3D stance_position(
                 base_pos.x + stance_radius * cos(base_angle),
@@ -560,8 +563,9 @@ void WalkController::generateWalkspace() {
     walkspace_.clear();
 
     // Get robot parameters for workspace calculation
-    double leg_reach = model.getLegReach();                       // Use RobotModel method
-    double safe_reach = leg_reach * DEFAULT_STANCE_RADIUS_FACTOR; // Use defined constant
+    // Use height-aware horizontal reach from standing pose for walkspace generation
+    double leg_reach = standing_horizontal_reach_;
+    double safe_reach = leg_reach; // Height-aware conservative reach
 
     // Calculate workspace for each bearing angle
     for (int bearing = 0; bearing <= 360; bearing += 10) {

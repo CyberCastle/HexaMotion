@@ -218,6 +218,7 @@ class WalkController {
 
   private:
     RobotModel &model;
+    double standing_horizontal_reach_;
 
     // OpenSHC architecture components
     double time_delta_;

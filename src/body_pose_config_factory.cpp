@@ -209,6 +209,12 @@ BodyPoseConfiguration createPoseConfiguration(const Parameters &params, const st
     config.leg_stance_positions = getDefaultStandPositions(params);
     config.standing_pose_joints = getDefaultStandingPoseJoints(params);
 
+    // Derive standing horizontal reach from standing pose joints (use leg 0 as representative; all symmetric)
+    const StandingPoseJoints &sj0 = config.standing_pose_joints[0];
+
+    // Horizontal component: coxa_length + femur_length * cos(femur_angle)
+    config.standing_horizontal_reach = params.coxa_length + params.femur_length * std::cos(sj0.femur);
+
     // OpenSHC equivalent pose controller parameters
     config.auto_pose_type = "auto";
     config.start_up_sequence = false; // Match OpenSHC default.yaml
