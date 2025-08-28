@@ -743,7 +743,8 @@ Point3D LegStepper::validateAndLimitVelocities(const Point3D &linear_velocity, d
 }
 
 Point3D LegStepper::calculateSafeStride(const Point3D &desired_stride) const {
-    // STEP 3: Adjust stride to respect workspace limits
+
+    // Adjust stride to respect workspace limits
     Point3D safe_stride = desired_stride;
 
     // Calculate potential target position from this stride
@@ -751,6 +752,7 @@ Point3D LegStepper::calculateSafeStride(const Point3D &desired_stride) const {
 
     // Check if this target would be reachable
     if (!validateTargetTipPose(potential_target)) {
+
         // Calculate maximum safe stride in this direction
         Point3D stride_direction = desired_stride;
         double stride_magnitude = std::sqrt(stride_direction.x * stride_direction.x +
