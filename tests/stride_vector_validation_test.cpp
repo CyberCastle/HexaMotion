@@ -541,7 +541,7 @@ int main() {
         // --- Nueva prueba de frame/centro: sólo si hay componente angular (para observar bias) ---
         if (std::fabs(tc.angular_velocity) > 1e-9) {
             // Shift artificial (desplaza el centro real).
-            Point3D shiftA(40.0, -25.0, 0.0);
+            Point3D shiftA(25.0, -25.0, 0.0);
             std::cout << "\n  [FrameTestSuite] Caso: " << tc.name << " (con shiftA)" << std::endl;
             bool frame_ok = validateFrameCenterAssumption(tc, model, params, shiftA, 1e-9);
             if (!frame_ok)

@@ -148,7 +148,7 @@ void LegStepper::updateStride() {
     double on_ground_ratio = double(step_cycle_.stance_period_) / double(step_cycle_.period_);
     stride_vector_ = stride_vector_ * (on_ground_ratio / step_cycle_.frequency_);
 
-    // STEP 3: Apply stride validation and safety constraints
+    // Apply stride validation and safety constraints
     stride_vector_ = calculateSafeStride(stride_vector_);
 
     // Freeze stride if not yet frozen for current phase
