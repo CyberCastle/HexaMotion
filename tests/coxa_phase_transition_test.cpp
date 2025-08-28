@@ -37,6 +37,14 @@ static double g_test_velocity = 100.0;            // mm/s
 static int g_required_swing_transitions = 5;      // Transiciones STANCE->SWING por pata
 static int g_max_steps = 1200;                    // Límite de seguridad
 static bool g_show_only_phase_transitions = true; // Modo compacto por defecto
+static double g_sym_threshold_stance_deg = 3.0;   // |sum(delta)| máximo permitido en STANCE
+static double g_sym_threshold_swing_deg = 4.0;    // |sum(delta)| máximo permitido en SWING (más tolerancia)
+
+// Acumuladores globales de métricas (máximos absolutos observados)
+static double g_max_abs_sum_stance_pair[3] = {0, 0, 0}; // pares (0,3) (1,4) (2,5)
+static double g_max_abs_sum_swing_pair[3] = {0, 0, 0};
+static int g_sym_violations_stance = 0;
+static int g_sym_violations_swing = 0;
 
 static void printHelpAndExit() {
     std::cout << "Uso: ./coxa_phase_transition_test [opciones]\n"
@@ -74,6 +82,12 @@ static void parseArgs(int argc, char **argv) {
             g_show_only_phase_transitions = false;
         } else if (a == "--phases-only") {
             g_show_only_phase_transitions = true;
+        } else if (a == "--sym-thr-stance") {
+            needVal("--sym-thr-stance");
+            g_sym_threshold_stance_deg = std::atof(argv[++i]);
+        } else if (a == "--sym-thr-swing") {
+            needVal("--sym-thr-swing");
+            g_sym_threshold_swing_deg = std::atof(argv[++i]);
         } else {
             std::cerr << "Argumento desconocido: " << a << std::endl;
             printHelpAndExit();
@@ -132,20 +146,25 @@ static void printTestHeader() {
 static void printCoxaStates(const LocomotionSystem &sys, int step, const int transition_counts[NUM_LEGS],
                             const int leg_phase_iterations[NUM_LEGS], int swing_iterations_per_cycle,
                             int stance_iterations_per_cycle,
-                            const double stance_start_coxa_rad[NUM_LEGS]) {
+                            const double stance_start_coxa_rad[NUM_LEGS],
+                            const double initial_coxa_rad[NUM_LEGS]) {
 
     std::cout << std::left << std::setw(8) << step;
 
     // Imprimir ángulos de coxa para cada pata
     const char *LEG_NAMES[NUM_LEGS] = {"AR", "BR", "CR", "CL", "BL", "AL"};
-    double coxa_deg[NUM_LEGS];
+    double coxa_deg[NUM_LEGS];               // Absolute coxa angle (deg)
+    double coxa_delta_initial_deg[NUM_LEGS]; // Delta from initial baseline (deg)
+    double coxa_delta_stance_deg[NUM_LEGS];  // Delta from stance start (deg)
     double arc_mm[NUM_LEGS];
     double radius_mm[NUM_LEGS];
     for (int i = 0; i < NUM_LEGS; ++i) {
         const Leg &leg = sys.getLeg(i);
         JointAngles angles = leg.getJointAngles();
-        double coxa_angle = angles.coxa; // rad
+        double coxa_angle = angles.coxa; // rad absolute
         coxa_deg[i] = toDegrees(coxa_angle);
+        coxa_delta_initial_deg[i] = toDegrees(coxa_angle - initial_coxa_rad[i]);
+        coxa_delta_stance_deg[i] = toDegrees(coxa_angle - stance_start_coxa_rad[i]);
         // Radio planar desde la base de la pierna al pie actual (para estimar arco tangencial teórico)
         Point3D base = leg.getBasePosition();
         Point3D tip = leg.getCurrentTipPositionGlobal();
@@ -193,19 +212,109 @@ static void printCoxaStates(const LocomotionSystem &sys, int step, const int tra
         avg_radius_swing /= swing_count;
 
     // Métricas de simetría por pares opuestos (0,3) (1,4) (2,5)
-    auto pairMetrics = [&](int a, int b) {
-        double sum = coxa_deg[a] + coxa_deg[b]; // si se espera signo opuesto, sum ~ 0
+    // Nota: Las métricas originales usaban ángulos absolutos; como las coxas opuestas NO tienen offsets que sumen 0
+    // la suma absoluta no es un indicador válido de simetría. Ahora añadimos métricas basadas en deltas respecto
+    // al ángulo inicial (baseline) y solo las mostramos cuando AMBAS patas están en la misma fase STANCE.
+    auto pairMetricsAbs = [&](int a, int b) {
+        double sum = coxa_deg[a] + coxa_deg[b];
         double diff = coxa_deg[a] - coxa_deg[b];
         return std::make_pair(sum, diff);
     };
-    auto p03 = pairMetrics(0, 3);
-    auto p14 = pairMetrics(1, 4);
-    auto p25 = pairMetrics(2, 5);
+    auto pairMetricsDelta = [&](int a, int b) {
+        double sum = coxa_delta_initial_deg[a] + coxa_delta_initial_deg[b];
+        double diff = coxa_delta_initial_deg[a] - coxa_delta_initial_deg[b];
+        return std::make_pair(sum, diff);
+    };
+
+    auto p03_abs = pairMetricsAbs(0, 3);
+    auto p14_abs = pairMetricsAbs(1, 4);
+    auto p25_abs = pairMetricsAbs(2, 5);
+
+    // Delta (baseline) metrics – stance y swing se evalúan por separado
+    auto bothStance = [&](int a, int b) {
+        return sys.getLeg(a).getStepPhase() == STANCE_PHASE && sys.getLeg(b).getStepPhase() == STANCE_PHASE;
+    };
+    auto bothSwing = [&](int a, int b) {
+        return sys.getLeg(a).getStepPhase() == SWING_PHASE && sys.getLeg(b).getStepPhase() == SWING_PHASE;
+    };
+    std::string p03_delta_str = "--";
+    std::string p14_delta_str = "--";
+    std::string p25_delta_str = "--";
+    std::string p03_delta_swing_str = "--";
+    std::string p14_delta_swing_str = "--";
+    std::string p25_delta_swing_str = "--";
+    if (bothStance(0, 3)) {
+        auto m = pairMetricsDelta(0, 3);
+        std::ostringstream oss;
+        oss << std::fixed << std::setprecision(1) << m.first << "," << m.second;
+        p03_delta_str = oss.str();
+        double abs_sum = std::fabs(m.first);
+        g_max_abs_sum_stance_pair[0] = std::max(g_max_abs_sum_stance_pair[0], abs_sum);
+        if (abs_sum > g_sym_threshold_stance_deg)
+            g_sym_violations_stance++;
+    }
+    if (bothStance(1, 4)) {
+        auto m = pairMetricsDelta(1, 4);
+        std::ostringstream oss;
+        oss << std::fixed << std::setprecision(1) << m.first << "," << m.second;
+        p14_delta_str = oss.str();
+        double abs_sum = std::fabs(m.first);
+        g_max_abs_sum_stance_pair[1] = std::max(g_max_abs_sum_stance_pair[1], abs_sum);
+        if (abs_sum > g_sym_threshold_stance_deg)
+            g_sym_violations_stance++;
+    }
+    if (bothStance(2, 5)) {
+        auto m = pairMetricsDelta(2, 5);
+        std::ostringstream oss;
+        oss << std::fixed << std::setprecision(1) << m.first << "," << m.second;
+        p25_delta_str = oss.str();
+        double abs_sum = std::fabs(m.first);
+        g_max_abs_sum_stance_pair[2] = std::max(g_max_abs_sum_stance_pair[2], abs_sum);
+        if (abs_sum > g_sym_threshold_stance_deg)
+            g_sym_violations_stance++;
+    }
+    // Swing symmetry tracking
+    if (bothSwing(0, 3)) {
+        auto m = pairMetricsDelta(0, 3);
+        std::ostringstream oss;
+        oss << std::fixed << std::setprecision(1) << m.first << "," << m.second;
+        p03_delta_swing_str = oss.str();
+        double abs_sum = std::fabs(m.first);
+        g_max_abs_sum_swing_pair[0] = std::max(g_max_abs_sum_swing_pair[0], abs_sum);
+        if (abs_sum > g_sym_threshold_swing_deg)
+            g_sym_violations_swing++;
+    }
+    if (bothSwing(1, 4)) {
+        auto m = pairMetricsDelta(1, 4);
+        std::ostringstream oss;
+        oss << std::fixed << std::setprecision(1) << m.first << "," << m.second;
+        p14_delta_swing_str = oss.str();
+        double abs_sum = std::fabs(m.first);
+        g_max_abs_sum_swing_pair[1] = std::max(g_max_abs_sum_swing_pair[1], abs_sum);
+        if (abs_sum > g_sym_threshold_swing_deg)
+            g_sym_violations_swing++;
+    }
+    if (bothSwing(2, 5)) {
+        auto m = pairMetricsDelta(2, 5);
+        std::ostringstream oss;
+        oss << std::fixed << std::setprecision(1) << m.first << "," << m.second;
+        p25_delta_swing_str = oss.str();
+        double abs_sum = std::fabs(m.first);
+        g_max_abs_sum_swing_pair[2] = std::max(g_max_abs_sum_swing_pair[2], abs_sum);
+        if (abs_sum > g_sym_threshold_swing_deg)
+            g_sym_violations_swing++;
+    }
 
     std::cout << " R(S/W):" << std::fixed << std::setprecision(0) << avg_radius_stance << "/" << avg_radius_swing
-              << " Sym03:" << std::setprecision(1) << p03.first << "," << p03.second
-              << " 14:" << p14.first << "," << p14.second
-              << " 25:" << p25.first << "," << p25.second;
+              << " AbsSym03:" << std::setprecision(1) << p03_abs.first << "," << p03_abs.second
+              << " 14:" << p14_abs.first << "," << p14_abs.second
+              << " 25:" << p25_abs.first << "," << p25_abs.second
+              << " dSym03:" << p03_delta_str
+              << " d14:" << p14_delta_str
+              << " d25:" << p25_delta_str
+              << " dSymW03:" << p03_delta_swing_str
+              << " dW14:" << p14_delta_swing_str
+              << " dW25:" << p25_delta_swing_str;
 
     std::cout << std::endl;
 }
@@ -374,7 +483,13 @@ int main(int argc, char **argv) {
         stance_start_coxa_rad[i] = sys.getLeg(i).getJointAngles().coxa;
     }
 
-    printCoxaStates(sys, step, transition_counts, leg_phase_iterations, swing_iterations_per_cycle, stance_iterations_per_cycle, stance_start_coxa_rad);
+    // Capturar baseline inicial de coxas (para simetría por delta)
+    double initial_coxa_rad[NUM_LEGS];
+    for (int i = 0; i < NUM_LEGS; ++i) {
+        initial_coxa_rad[i] = sys.getLeg(i).getJointAngles().coxa;
+    }
+
+    printCoxaStates(sys, step, transition_counts, leg_phase_iterations, swing_iterations_per_cycle, stance_iterations_per_cycle, stance_start_coxa_rad, initial_coxa_rad);
 
     while (step < g_max_steps) {
         // Actualizar sistema
@@ -420,10 +535,10 @@ int main(int argc, char **argv) {
 
         if (g_show_only_phase_transitions) {
             if (phase_transition_occurred) {
-                printCoxaStates(sys, step, transition_counts, leg_phase_iterations, swing_iterations_per_cycle, stance_iterations_per_cycle, stance_start_coxa_rad);
+                printCoxaStates(sys, step, transition_counts, leg_phase_iterations, swing_iterations_per_cycle, stance_iterations_per_cycle, stance_start_coxa_rad, initial_coxa_rad);
             }
         } else {
-            printCoxaStates(sys, step, transition_counts, leg_phase_iterations, swing_iterations_per_cycle, stance_iterations_per_cycle, stance_start_coxa_rad);
+            printCoxaStates(sys, step, transition_counts, leg_phase_iterations, swing_iterations_per_cycle, stance_iterations_per_cycle, stance_start_coxa_rad, initial_coxa_rad);
         }
 
         // Verificar completación
@@ -474,7 +589,24 @@ int main(int argc, char **argv) {
     }
 
     bool success = allLegsCompletedTransitions(transition_counts);
-    std::cout << "\nResultado: " << (success ? "ÉXITO" : "PARCIAL") << std::endl;
+
+    // Evaluar simetría global PASS/FAIL
+    bool symmetry_ok = (g_sym_violations_stance == 0 && g_sym_violations_swing == 0);
+    if (!symmetry_ok) {
+        std::cout << "\n[SIMETRIA] Violaciones detectadas:" << std::endl;
+        if (g_sym_violations_stance)
+            std::cout << "  STANCE: violaciones=" << g_sym_violations_stance << " (max abs sum pares: ["
+                      << g_max_abs_sum_stance_pair[0] << ", " << g_max_abs_sum_stance_pair[1] << ", " << g_max_abs_sum_stance_pair[2] << "]) threshold=" << g_sym_threshold_stance_deg << "°" << std::endl;
+        if (g_sym_violations_swing)
+            std::cout << "  SWING: violaciones=" << g_sym_violations_swing << " (max abs sum pares: ["
+                      << g_max_abs_sum_swing_pair[0] << ", " << g_max_abs_sum_swing_pair[1] << ", " << g_max_abs_sum_swing_pair[2] << "]) threshold=" << g_sym_threshold_swing_deg << "°" << std::endl;
+    } else {
+        std::cout << "\n[SIMETRIA] PASS: STANCE max=[" << g_max_abs_sum_stance_pair[0] << ", " << g_max_abs_sum_stance_pair[1] << ", " << g_max_abs_sum_stance_pair[2]
+                  << "] SWING max=[" << g_max_abs_sum_swing_pair[0] << ", " << g_max_abs_sum_swing_pair[1] << ", " << g_max_abs_sum_swing_pair[2]
+                  << "]" << std::endl;
+    }
+    success = success && symmetry_ok;
+    std::cout << "\nResultado: " << (success ? "ÉXITO" : "FALLO") << std::endl;
     std::cout << "Test finalizado." << std::endl;
 
     return success ? 0 : 1;

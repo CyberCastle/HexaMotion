@@ -93,8 +93,13 @@ static bool validateAllLegs(const StrideTestCase &tc, RobotModel &model, const P
         stepper.setWalkPlane(analytic_identity);
         stepper.setWalkPlaneNormal(Point3D(0, 0, 1));
         stepper.updateStride();
-
+        // Ya no existen getters de instrumentación de capas (raw/arc_pre/post).
+        // Obtenemos directamente el stride final calculado (tras validaciones de seguridad si aplicaran).
         Point3D got = stepper.getStrideVector();
+
+        // Nota: La versión actual de LegStepper::updateStride implementa directamente la fórmula combinada
+        // (v + ω×r) * (stance_ratio / frequency) sin etapas intermedias expuestas públicamente; por ello
+        // se elimina el análisis de E0/E1/E2 y sólo se compara contra el modelo OpenSHC esperado.
 
         // Recalcular expected stride usando analytic_identity como radio planar
         StrideTestCase local_tc = tc;
@@ -230,6 +235,135 @@ static bool validateAllLegs(const StrideTestCase &tc, RobotModel &model, const P
         all_ok = false;
 
     return all_ok;
+}
+
+// ---------------------------------------------------------------------------
+// Nueva validación: demuestra que el algoritmo actual asume rotación alrededor
+// del ORIGEN global en lugar del verdadero centro geométrico del cuerpo.
+// Idea: se traslada todo el hexágono por un vector 'shift'. Si la rotación
+// estuviera correctamente centrada, el stride angular esperado (ω×r_rel) NO
+// cambiaría al añadir un shift constante al centro (porque r_rel = p_i - centro).
+// Sin embargo, el código actual usa directamente (x,y) absolutos => aparece un
+// sesgo constante bias = ω × shift que se suma a TODAS las patas.
+// Verificamos:
+//  1) got_stride - expected_center_stride es igual (≈) para todas las patas.
+//  2) Ese vector común coincide con bias = ω×shift * (stance_ratio/frequency).
+//  3) Tras sustraer bias, cada pata satisface la fórmula centrada correcta.
+// Esto confirma: "el stride actual es consistente internamente, pero se asume
+// un centro y un frame homogéneo que no se respeta aguas abajo".
+// ---------------------------------------------------------------------------
+static bool validateFrameCenterAssumption(const StrideTestCase &baseTc, RobotModel &model, const Parameters &params, const Point3D &shift, double tol) {
+    std::cout << "\n  [FrameTest] Shift aplicado = (" << shift.x << ", " << shift.y << ") mm" << std::endl;
+
+    // Prepara legs
+    std::vector<std::unique_ptr<Leg>> legs;
+    legs.reserve(NUM_LEGS);
+    for (int i = 0; i < NUM_LEGS; ++i) {
+        legs.emplace_back(std::make_unique<Leg>(i, model));
+    }
+
+    double r = params.hexagon_radius + params.coxa_length + params.femur_length; // radio analítico
+    double z0 = params.default_height_offset;
+    double period = baseTc.stance_period + baseTc.swing_period;
+    double stance_ratio = (period > 0.0) ? (double)baseTc.stance_period / period : 0.0;
+    double scale = (stance_ratio / baseTc.frequency); // factor temporal común
+
+    // Centro geométrico desplazado (ideal)
+    Point3D center = Point3D(shift.x, shift.y, z0);
+    // Sesgo teórico inducido por usar origen global incorrecto
+    // ω×shift (ω sobre k̂) => (-ω*shift.y, ω*shift.x, 0)
+    Point3D bias(-baseTc.angular_velocity * shift.y, baseTc.angular_velocity * shift.x, 0.0);
+    bias = bias * scale; // escalado por tiempo en apoyo
+
+    std::vector<Point3D> diffs;
+    diffs.reserve(NUM_LEGS);
+    bool all_ok = true;
+
+    for (int i = 0; i < NUM_LEGS; ++i) {
+        double theta = BASE_THETA_OFFSETS[i];
+        Point3D identity_unshifted(r * std::cos(theta), r * std::sin(theta), z0);
+        Point3D identity_shifted(identity_unshifted.x + shift.x, identity_unshifted.y + shift.y, z0);
+
+        // Construir test case local para ambos
+        StrideTestCase tcUn = baseTc;
+        tcUn.identity_tip = identity_unshifted;
+        StrideTestCase tcSh = baseTc;
+        tcSh.identity_tip = identity_shifted;
+
+        // Stepper unshifted
+        LegStepper stepperUn(i, identity_unshifted, *legs[i], model);
+        StepCycle cycle{};
+        cycle.frequency_ = baseTc.frequency;
+        cycle.period_ = baseTc.stance_period + baseTc.swing_period;
+        cycle.stance_period_ = baseTc.stance_period;
+        cycle.swing_period_ = baseTc.swing_period;
+        cycle.stance_start_ = 0;
+        cycle.stance_end_ = baseTc.stance_period;
+        cycle.swing_start_ = baseTc.stance_period;
+        cycle.swing_end_ = cycle.period_;
+        stepperUn.setStepCycle(cycle);
+        stepperUn.setDesiredVelocity(baseTc.linear_velocity, baseTc.angular_velocity);
+        stepperUn.setWalkPlane(identity_unshifted);
+        stepperUn.setWalkPlaneNormal(Point3D(0, 0, 1));
+        stepperUn.updateStride();
+        Point3D strideUn = stepperUn.getStrideVector();
+
+        // Stepper shifted
+        LegStepper stepperSh(i, identity_shifted, *legs[i], model);
+        stepperSh.setStepCycle(cycle);
+        stepperSh.setDesiredVelocity(baseTc.linear_velocity, baseTc.angular_velocity);
+        stepperSh.setWalkPlane(identity_shifted);
+        stepperSh.setWalkPlaneNormal(Point3D(0, 0, 1));
+        stepperSh.updateStride();
+        Point3D strideSh = stepperSh.getStrideVector();
+
+        Point3D diff = strideSh - strideUn; // debería ser igual a bias
+        diffs.push_back(diff);
+        Point3D residual = diff - bias; // cerca de cero
+        double diff_err = std::sqrt((diff.x - bias.x) * (diff.x - bias.x) + (diff.y - bias.y) * (diff.y - bias.y));
+        double residual_norm = std::sqrt(residual.x * residual.x + residual.y * residual.y + residual.z * residual.z);
+        double bias_mag = std::sqrt(bias.x * bias.x + bias.y * bias.y);
+        bool pass_local = (diff_err <= tol * std::max(1.0, bias_mag) && residual_norm <= tol * std::max(1.0, bias_mag));
+        if (!pass_local)
+            all_ok = false;
+        std::cout << "    Leg " << i << " diff=(" << diff.x << "," << diff.y << ") bias=(" << bias.x << "," << bias.y << ") residual=(" << residual.x << "," << residual.y << ")" << (pass_local ? " ✓" : " ❌") << std::endl;
+    }
+
+    // Verificar que todos los diffs son (casi) iguales entre sí (consistencia interna)
+    double uniform_err_max = 0.0;
+    Point3D ref = diffs[0];
+    for (size_t i = 1; i < diffs.size(); ++i) {
+        Point3D d = diffs[i] - ref;
+        double dn = std::sqrt(d.x * d.x + d.y * d.y + d.z * d.z);
+        uniform_err_max = std::max(uniform_err_max, dn);
+    }
+    bool uniform_ok = uniform_err_max <= tol * 1e3; // tolerancia relajada (el algoritmo puede recortar stride)
+    if (!uniform_ok) {
+        std::cout << "    ⚠️  Uniformidad NO estricta: uniform_err_max=" << uniform_err_max << std::endl;
+        all_ok = false;
+    }
+
+    double bias_mag = std::sqrt(bias.x * bias.x + bias.y * bias.y);
+    Point3D diff_meas = ref;
+    double diff_mag = std::sqrt(diff_meas.x * diff_meas.x + diff_meas.y * diff_meas.y);
+    double dot = diff_meas.x * bias.x + diff_meas.y * bias.y;
+    double dir_cos = (bias_mag > 1e-12 && diff_mag > 1e-12) ? dot / (bias_mag * diff_mag) : 1.0;
+    double angle_deg = std::acos(std::max(-1.0, std::min(1.0, dir_cos))) * 180.0 / M_PI;
+    double mag_ratio = (bias_mag > 1e-12) ? diff_mag / bias_mag : 0.0;
+    bool bias_detected = (diff_mag > tol * 100.0); // el medido debe ser significativo
+    bool direction_ok = angle_deg <= 15.0;         // alineación direccional razonable
+    std::cout << "    Bias teórico=(" << bias.x << "," << bias.y << ") mag=" << bias_mag
+              << " | diff_medido=(" << diff_meas.x << "," << diff_meas.y << ") mag=" << diff_mag
+              << " angle_diff_deg=" << angle_deg << " mag_ratio=" << mag_ratio << std::endl;
+
+    if (uniform_ok && bias_detected && direction_ok) {
+        std::cout << "    ✓ Confirmado: stride interno consistente + dependencia del origen (diff uniforme alineado a ω×shift)." << std::endl;
+        return true;
+    } else {
+        std::cout << "    ❌ No se confirma completamente (uniform_ok=" << uniform_ok
+                  << ", bias_detected=" << bias_detected << ", direction_ok=" << direction_ok << ")" << std::endl;
+        return false;
+    }
 }
 
 // Calcula el stride vector esperado usando la fórmula OpenSHC (idéntica a walk_controller.cpp de OpenSHC).
@@ -401,6 +535,17 @@ int main() {
         bool radial_ok = validateAllLegs(tc, model, params, TOL);
         if (!radial_ok) {
             all_passed = false;
+        }
+        // Nota: Los errores de simetría ya reflejan que la desviación proviene de E0 en la mayoría de casos.
+
+        // --- Nueva prueba de frame/centro: sólo si hay componente angular (para observar bias) ---
+        if (std::fabs(tc.angular_velocity) > 1e-9) {
+            // Shift artificial (desplaza el centro real).
+            Point3D shiftA(40.0, -25.0, 0.0);
+            std::cout << "\n  [FrameTestSuite] Caso: " << tc.name << " (con shiftA)" << std::endl;
+            bool frame_ok = validateFrameCenterAssumption(tc, model, params, shiftA, 1e-9);
+            if (!frame_ok)
+                all_passed = false;
         }
     }
 
