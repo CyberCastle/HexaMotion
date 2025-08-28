@@ -45,7 +45,7 @@ static Point3D computeExpectedOpenSHCStride(const StrideTestCase &tc);
 
 // Ejecuta la misma lógica de validación sobre las 6 patas usando la posición por defecto de cada una.
 static bool validateAllLegs(const StrideTestCase &tc, RobotModel &model, const Parameters &params, double tol) {
-    std::cout << "  [SubTest] Validación radial en las 6 coxas (analítico vs DH)" << std::endl;
+    std::cout << "  [SubTest] Validación radial y simetría hexagonal (6 coxas)" << std::endl;
     bool all_ok = true;
     // Construir objetos Leg (uno por índice)
     std::vector<std::unique_ptr<Leg>> legs;
@@ -59,6 +59,11 @@ static bool validateAllLegs(const StrideTestCase &tc, RobotModel &model, const P
     double z0 = params.default_height_offset;
 
     // Para cada leg, construir identidad analítica: (r cos(theta_i), r sin(theta_i), z0) usando BASE_THETA_OFFSETS
+    // Almacenes para simetría tangencial (se llenan dentro del loop)
+    std::vector<Point3D> angular_components(NUM_LEGS, Point3D(0, 0, 0));
+    std::vector<double> angular_mags(NUM_LEGS, 0.0);
+    std::vector<double> coxa_deltas(NUM_LEGS, 0.0);
+
     for (int i = 0; i < NUM_LEGS; ++i) {
         double theta = BASE_THETA_OFFSETS[i];
         Point3D analytic_identity(r * std::cos(theta), r * std::sin(theta), z0);
@@ -106,7 +111,7 @@ static bool validateAllLegs(const StrideTestCase &tc, RobotModel &model, const P
         Point3D angular_diff = angular_component_got - angular_component_expected;
         double angular_err = std::sqrt(angular_diff.x * angular_diff.x + angular_diff.y * angular_diff.y + angular_diff.z * angular_diff.z);
 
-        // Coxa delta
+        // Coxa delta y validación de traslación tangencial aproximada
         double stance_ratio = on_ground_ratio;
         double coxa_delta_expected = tc.angular_velocity * (stance_ratio / tc.frequency);
         Point3D radius_vec(analytic_identity.x, analytic_identity.y, 0.0);
@@ -120,16 +125,36 @@ static bool validateAllLegs(const StrideTestCase &tc, RobotModel &model, const P
         }
         double coxa_err = std::fabs(coxa_delta_got - coxa_delta_expected);
 
+        // (Nuevo) Validaciones tangenciales:
+        //  a) Ortogonalidad: componente angular ⋅ radio ≈ 0
+        //  b) Magnitud: |stride_angular| ≈ |coxa_delta_expected| * radius_norm
+        double tangential_dot = angular_component_got.x * radius_vec.x + angular_component_got.y * radius_vec.y; // debería ~0
+        double tangential_dot_abs = std::fabs(tangential_dot);
+        double expected_arc_len = std::fabs(coxa_delta_expected) * radius_norm;
+        double got_arc_len = std::sqrt(angular_component_got.x * angular_component_got.x + angular_component_got.y * angular_component_got.y);
+        double arc_len_err = std::fabs(got_arc_len - expected_arc_len);
+        double tangential_tol = tol * std::max(1.0, radius_norm);
+        double arc_len_tol = tol * std::max(1.0, radius_norm);
+
         // Relación mm -> grados (lineal planar escalada compartida por todas las patas)
         double linear_planar_mm = std::sqrt(scaled_linear.x * scaled_linear.x + scaled_linear.y * scaled_linear.y);
         double coxa_delta_deg_exp = math_utils::radiansToDegrees(coxa_delta_expected);
         double coxa_delta_deg_got = math_utils::radiansToDegrees(coxa_delta_got);
 
-        bool pass = (err <= tol && angular_err <= tol && (!coxa_valid || coxa_err <= tol) && planar_geom_err <= tol);
-        std::cout << "    Leg " << i << ": stride_err=" << err
+        // Guardar para análisis de simetría (se considera sólo la parte angular pura)
+        angular_components[i] = angular_component_got;
+        angular_mags[i] = std::sqrt(angular_component_got.x * angular_component_got.x + angular_component_got.y * angular_component_got.y);
+        coxa_deltas[i] = coxa_delta_got;
+
+        bool tangential_ok = (!coxa_valid) || (tangential_dot_abs <= tangential_tol && arc_len_err <= arc_len_tol);
+        bool pass = (err <= tol && angular_err <= tol && (!coxa_valid || coxa_err <= tol) && planar_geom_err <= tol && tangential_ok);
+        std::cout << "    Leg " << i
+                  << ": stride_err=" << err
                   << " ang_err=" << angular_err
                   << " coxa_err=" << coxa_err
                   << " geom_err=" << planar_geom_err
+                  << " tangential_dot=" << tangential_dot_abs
+                  << " arc_len_err=" << arc_len_err
                   << " | linear(mm)=" << linear_planar_mm
                   << " coxaΔexp(deg)=" << coxa_delta_deg_exp
                   << " coxaΔgot(deg)=" << coxa_delta_deg_got
@@ -137,6 +162,73 @@ static bool validateAllLegs(const StrideTestCase &tc, RobotModel &model, const P
         if (!pass)
             all_ok = false;
     }
+
+    // ================= Symmetry Validation for Opposite Pairs =================
+    // Pares opuestos: (0,3), (1,4), (2,5)
+    struct Pair {
+        int a;
+        int b;
+        const char *label;
+    };
+    Pair pairs[3] = {{0, 3, "(0,3)"}, {1, 4, "(1,4)"}, {2, 5, "(2,5)"}};
+    // Contexto geométrico: ángulos base (offset DH) de cada pata en grados para evidenciar estructura hexagonal
+    std::cout << "    BaseAngles(deg):";
+    for (int i = 0; i < NUM_LEGS; ++i) {
+        double deg = math_utils::radiansToDegrees(BASE_THETA_OFFSETS[i]);
+        std::cout << " L" << i << "=" << std::fixed << std::setprecision(1) << deg;
+    }
+    std::cout << std::endl;
+    std::cout << "    Symmetry (pares opuestos, Δθ≈180° ideal):" << std::endl;
+    double dir_tol = 1e-6; // tolerancia direccional absoluta
+    for (const auto &p : pairs) {
+        Point3D va = angular_components[p.a];
+        Point3D vb = angular_components[p.b];
+        double ma = angular_mags[p.a];
+        double mb = angular_mags[p.b];
+        // Si ambos son casi cero, se considera trivialmente simétrico
+        bool trivial = (ma < 1e-12 && mb < 1e-12);
+        double rel_mag_err = 0.0;
+        double dir_dot_norm = 0.0;
+        bool mag_ok = true, dir_ok = true;
+        if (!trivial) {
+            rel_mag_err = std::fabs(ma - mb) / std::max(1e-12, (ma + mb) * 0.5);
+            if (ma > 0 && mb > 0) {
+                dir_dot_norm = (va.x * vb.x + va.y * vb.y + va.z * vb.z) / (ma * mb);
+            }
+            // Para rotación global pura se espera vectores opuestos (dot≈-1).
+            // Para combinaciones con gran componente lineal puede relajarse; aquí mantenemos criterio estricto.
+            mag_ok = (rel_mag_err <= 1e-9 || trivial);
+            dir_ok = (std::fabs(dir_dot_norm + 1.0) <= dir_tol) || trivial;
+        }
+        bool pair_ok = (trivial || (mag_ok && dir_ok));
+        double theta_a_deg = math_utils::radiansToDegrees(BASE_THETA_OFFSETS[p.a]);
+        double theta_b_deg = math_utils::radiansToDegrees(BASE_THETA_OFFSETS[p.b]);
+        double delta_theta = std::fmod(std::fabs(theta_a_deg - theta_b_deg), 360.0);
+        if (delta_theta > 180.0)
+            delta_theta = 360.0 - delta_theta; // menor ángulo
+        std::cout << "      OppPair " << p.label
+                  << " (θa=" << theta_a_deg << ", θb=" << theta_b_deg << ", Δθ=" << delta_theta << ")"
+                  << " |mag_a|=" << ma << " |mag_b|=" << mb
+                  << " rel_mag_err=" << rel_mag_err
+                  << " dir_dot(expect -1)=" << dir_dot_norm
+                  << (trivial ? " (trivial: sin rotación)" : "")
+                  << (pair_ok ? " ✓" : " ❌") << std::endl;
+        if (!pair_ok)
+            all_ok = false;
+    }
+
+    // Magnitud similar específica entre (0,3) y (2,5) (coherencia hexagonal adicional)
+    double avg03 = 0.5 * (angular_mags[0] + angular_mags[3]);
+    double avg25 = 0.5 * (angular_mags[2] + angular_mags[5]);
+    double rel_block_err = std::fabs(avg03 - avg25) / std::max(1e-12, (avg03 + avg25) * 0.5);
+    bool block_ok = (rel_block_err <= 1e-9) || (avg03 < 1e-12 && avg25 < 1e-12);
+    std::cout << "      Block magnitudes hexagon ( (0,3) vs (2,5) ) avg03=" << avg03 << " avg25=" << avg25
+              << " rel_err=" << rel_block_err
+              << " criterio: magnitudes similares por ejes reflexivos del hexágono"
+              << (block_ok ? " ✓" : " ❌") << std::endl;
+    if (!block_ok)
+        all_ok = false;
+
     return all_ok;
 }
 
@@ -279,10 +371,25 @@ int main() {
         double linear_planar_mm = std::sqrt(scaled_linear.x * scaled_linear.x + scaled_linear.y * scaled_linear.y);
         double coxa_delta_deg_expected = math_utils::radiansToDegrees(coxa_delta_expected);
         double coxa_delta_deg_got = math_utils::radiansToDegrees(coxa_delta_got);
-        std::cout << " Coxa Δexpected(rad): " << coxa_delta_expected << "  Coxa Δgot(rad): " << coxa_delta_got << "  |Δerr|=" << coxa_err << std::endl;
-        std::cout << " Mapping: linear_planar_scaled=" << linear_planar_mm << " mm -> coxaΔexpected=" << coxa_delta_deg_expected << " deg  coxaΔgot=" << coxa_delta_deg_got << " deg" << std::endl;
+        // Validaciones tangenciales adicionales (idénticas a sección multi‑leg) para el caso base leg0
+        double tangential_dot = angular_component_got.x * radius_vec.x + angular_component_got.y * radius_vec.y;
+        double tangential_dot_abs = std::fabs(tangential_dot);
+        double expected_arc_len = std::fabs(coxa_delta_expected) * radius_norm;
+        double got_arc_len = std::sqrt(angular_component_got.x * angular_component_got.x + angular_component_got.y * angular_component_got.y);
+        double arc_len_err = std::fabs(got_arc_len - expected_arc_len);
+        std::cout << " Coxa Δexpected(rad): " << coxa_delta_expected
+                  << "  Coxa Δgot(rad): " << coxa_delta_got
+                  << "  |Δerr|=" << coxa_err << std::endl;
+        std::cout << " Tangential: |ω×r|exp=" << expected_arc_len
+                  << " |ω×r|got=" << got_arc_len
+                  << " arc_len_err=" << arc_len_err
+                  << " dot(radius,stride_ang)=" << tangential_dot_abs << std::endl;
+        std::cout << " Mapping: linear_planar_scaled=" << linear_planar_mm
+                  << " mm -> coxaΔexpected=" << coxa_delta_deg_expected
+                  << " deg  coxaΔgot=" << coxa_delta_deg_got << " deg" << std::endl;
 
-        bool pass = (err <= TOL && angular_err <= TOL && (!coxa_delta_valid || coxa_err <= TOL));
+        bool tangential_ok = (!coxa_delta_valid) || (tangential_dot_abs <= TOL * std::max(1.0, radius_norm) && std::fabs(got_arc_len - expected_arc_len) <= TOL * std::max(1.0, radius_norm));
+        bool pass = (err <= TOL && angular_err <= TOL && (!coxa_delta_valid || coxa_err <= TOL) && tangential_ok);
         if (!pass) {
             std::cout << "  ❌ Mismatch supera tolerancia." << std::endl;
             all_passed = false;
