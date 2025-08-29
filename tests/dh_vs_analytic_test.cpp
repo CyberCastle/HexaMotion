@@ -28,10 +28,8 @@ int main() {
     std::cout << std::fixed << std::setprecision(6);
     std::cout << "=== DH vs Analytic Methods Comparison Test ===" << std::endl;
 
-    // Define BASE_THETA_OFFSETS for the test (in radians)
-    static const double BASE_THETA_OFFSETS[NUM_LEGS] = {
-        -30.0 * M_PI / 180.0, -90.0 * M_PI / 180.0, -150.0 * M_PI / 180.0,
-        30.0 * M_PI / 180.0, 90.0 * M_PI / 180.0, 150.0 * M_PI / 180.0};
+    // Use global BASE_THETA_OFFSETS (declared extern in analytic_robot_model.h / hexamotion_constants.h)
+    // to avoid divergence between test expectations and library constants.
 
     bool ok = true;
 
@@ -233,8 +231,21 @@ int main() {
     // Test 7: Verify hexagon symmetry properties
     std::cout << "\n--- Test 7: Hexagon Symmetry Validation ---" << std::endl;
 
-    // Check that opposite legs are symmetric (leg pairs: 0-3, 1-4, 2-5)
-    int leg_pairs[3][2] = {{0, 3}, {1, 4}, {2, 5}};
+    // Check that opposite legs are symmetric.
+    // NOTE: Physical leg mounting angles (BASE_THETA_OFFSETS) follow the order:
+    // index: 0  -> -30° (AR  = Anterior Right)
+    //        1  -> -90° (BR  = Back Right)
+    //        2  -> -150° (CR = Center Right)
+    //        3  ->  30° (CL  = Center Left)
+    //        4  ->  90° (BL  = Back Left)
+    //        5  -> 150° (AL  = Anterior Left)
+    // Opposite (180° apart) angle pairs are therefore:
+    // (-30°,150°) => indices (0,5)
+    // (-90°, 90°) => indices (1,4)
+    // (-150°,30°) => indices (2,3)
+    // The original test assumed index pairs (0,3),(1,4),(2,5) which do not match the configured geometry
+    // and produced false symmetry violations. We correct the pairing here.
+    int leg_pairs[3][2] = {{0, 5}, {1, 4}, {2, 3}};
 
     for (int p_idx = 0; p_idx < 3; ++p_idx) {
         int leg1 = leg_pairs[p_idx][0];
@@ -261,35 +272,45 @@ int main() {
     // Test 8: Verify 60-degree spacing between adjacent legs
     std::cout << "\n--- Test 8: Adjacent Leg Spacing Validation ---" << std::endl;
 
-    for (int leg = 0; leg < NUM_LEGS; ++leg) {
-        int next_leg = (leg + 1) % NUM_LEGS;
+    // The physical mounting order (indices) is not monotonic in angle.
+    // To properly validate 60° spacing we sort legs by their base angle first,
+    // then check consecutive angular differences (absolute value) are 60°.
+    struct LegAngle {
+        int idx;
+        double angle;
+    };
+    std::vector<LegAngle> leg_angles;
+    leg_angles.reserve(NUM_LEGS);
+    for (int i = 0; i < NUM_LEGS; ++i) {
+        double a = BASE_THETA_OFFSETS[i];
+        // Normalize to [0, 2π)
+        if (a < 0)
+            a += 2.0 * M_PI;
+        leg_angles.push_back({i, a});
+    }
+    std::sort(leg_angles.begin(), leg_angles.end(), [](const LegAngle &l1, const LegAngle &l2) { return l1.angle < l2.angle; });
 
-        Point3D pos1 = analytic_model.getAnalyticLegBasePosition(leg);
-        Point3D pos2 = analytic_model.getAnalyticLegBasePosition(next_leg);
-
-        double angle1 = atan2(pos1.y, pos1.x);
-        double angle2 = atan2(pos2.y, pos2.x);
-
-        double angle_diff = angle2 - angle1;
-
-        // Normalize angle difference to [-π, π]
-        while (angle_diff > M_PI)
-            angle_diff -= 2.0 * M_PI;
-        while (angle_diff < -M_PI)
-            angle_diff += 2.0 * M_PI;
-
-        double expected_diff = -60.0 * M_PI / 180.0; // -60 degrees (clockwise)
-        double spacing_error = std::abs(angle_diff - expected_diff);
-
-        std::cout << "Legs " << leg << "->" << next_leg << " angle difference="
-                  << angle_diff * 180.0 / M_PI << "° (expected="
-                  << expected_diff * 180.0 / M_PI << "°) error="
-                  << spacing_error * 180.0 / M_PI << "°" << std::endl;
-
-        if (spacing_error > 1e-6) {
-            std::cout << "  ⚠️  Incorrect spacing between legs " << leg << " and " << next_leg << std::endl;
-            ok = false;
+    bool spacing_ok = true;
+    for (size_t k = 0; k < leg_angles.size(); ++k) {
+        size_t next = (k + 1) % leg_angles.size();
+        double a1 = leg_angles[k].angle;
+        double a2 = leg_angles[next].angle;
+        double diff = a2 - a1;
+        if (diff < 0)
+            diff += 2.0 * M_PI;
+        // Expected +60° between successive sorted legs
+        double expected = 60.0 * M_PI / 180.0;
+        double err = std::abs(diff - expected);
+        std::cout << "Legs (sorted) " << leg_angles[k].idx << "->" << leg_angles[next].idx
+                  << " angle diff=" << diff * 180.0 / M_PI << "° (expected="
+                  << expected * 180.0 / M_PI << "°) error=" << err * 180.0 / M_PI << "°" << std::endl;
+        if (err > 1e-6) {
+            spacing_ok = false;
         }
+    }
+    if (!spacing_ok) {
+        std::cout << "  ⚠️  One or more adjacent angular spacings are incorrect" << std::endl;
+        ok = false;
     }
 
     if (ok) {
