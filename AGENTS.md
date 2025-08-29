@@ -58,7 +58,18 @@ These are the characteristics of a real robot, used to test this library.
 
 ### Leg base orientation
 
-The internal DH/base orientation offsets are (degrees): leg0 = -30, leg1 = -90, leg2 = -150, leg3 = +150, leg4 = +90, leg5 = +30. This preserves 60° separation while rotating the frame so opposing pairs are symmetric ((0,3), (1,4), (2,5)). Forward remains +X; external tools assuming leg0 at 0° should account for this -30° global rotation.
+Current internal DH/base orientation offsets (degrees) come directly from `BASE_THETA_OFFSETS` in `hexamotion_constants.h` and are ordered by internal leg index / mnemonic:
+
+| Index | Name | Meaning        | Angle (°) |
+| ----- | ---- | -------------- | --------- |
+| 0     | AR   | Anterior Right | -30       |
+| 1     | BR   | Back Right     | -90       |
+| 2     | CR   | Center Right   | -150      |
+| 3     | CL   | Center Left    | +30       |
+| 4     | BL   | Back Left      | +90       |
+| 5     | AL   | Anterior Left  | +150      |
+
+Forward still points along +X. External tools assuming leg0 at 0° should account for the global -30° rotation.
 
 ### Velocity and acceleration units
 
