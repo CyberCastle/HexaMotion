@@ -11,6 +11,7 @@
 #include <ArduinoEigen.h>
 #include <math.h>
 
+#include <vector>
 // Forward declarations
 class WalkController;
 
@@ -94,6 +95,46 @@ class LocomotionSystem {
 
     // Runtime-only switch to gate coxa servo output during tests
     bool coxa_movement_enabled_ = true;
+
+#ifdef TESTING_ENABLED
+    // --- Coxa telemetry instrumentation (TESTING ONLY) ---
+    struct CoxaTelemetrySample {
+        double time;                         // simulation time (s)
+        double global_angle[NUM_LEGS];       // absolute coxa joint angle (rad)
+        double local_angle[NUM_LEGS];        // local (offset-compensated) coxa angle (rad)
+        double global_velocity[NUM_LEGS];    // d(global_angle)/dt (rad/s)
+        double local_velocity[NUM_LEGS];     // d(local_angle)/dt (rad/s)
+        double global_accel[NUM_LEGS];       // d(global_velocity)/dt (rad/s^2)
+        double local_accel[NUM_LEGS];        // d(local_velocity)/dt (rad/s^2)
+        StepPhase phase[NUM_LEGS];           // resolved phase (STANCE/SWING)
+        double stride_dx[NUM_LEGS];          // current (tip.x - stance_start_tip.x) in global frame (mm)
+        double stride_dy[NUM_LEGS];          // current (tip.y - stance_start_tip.y) in global frame (mm)
+        double body_vel_x;                   // commanded linear X velocity (mm/s)
+        double body_vel_y;                   // commanded linear Y velocity (mm/s)
+        double body_ang_vel;                 // commanded angular velocity (deg/s)
+        double servo_command_coxa[NUM_LEGS]; // last servo command for coxa (rad, internal sign-compensated)
+    };
+    bool telemetry_enabled_ = false;                      // runtime toggle
+    double telemetry_time_accumulator_ = 0.0;             // simulated time accumulator
+    std::vector<CoxaTelemetrySample> telemetry_;          // ring / linear buffer
+    static constexpr size_t kMaxTelemetrySamples_ = 8192; // cap to avoid unbounded growth in tests
+    // Previous state for velocity/accel estimation
+    double prev_coxa_angle_[NUM_LEGS] = {0};
+    double prev_coxa_velocity_[NUM_LEGS] = {0};
+    bool prev_valid_ = false;
+    // Stride start tip position per leg (updated when entering STANCE)
+    Point3D stride_start_tip_[NUM_LEGS];
+    bool stride_start_valid_[NUM_LEGS] = {false, false, false, false, false, false};
+    // Last servo command (degrees) captured in publish step to compare vs internal angle
+    double last_servo_cmd_deg_[NUM_LEGS][DOF_PER_LEG] = {{0}};
+
+    void recordCoxaTelemetrySample(); // internal helper (called inside update())
+  public:                             // test-only public accessors (still under TESTING_ENABLED)
+    void enableTelemetry(bool enable) { telemetry_enabled_ = enable; }
+    bool isTelemetryEnabled() const { return telemetry_enabled_; }
+    size_t getTelemetrySampleCount() const { return telemetry_.size(); }
+    const CoxaTelemetrySample &getTelemetrySample(size_t idx) const { return telemetry_[idx]; }
+#endif
 
   public:
     /**
