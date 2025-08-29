@@ -169,10 +169,15 @@ GaitConfiguration createTripodGaitConfig(const Parameters &params) {
     config.phase_config.stance_phase = 2;
     config.phase_config.swing_phase = 2;
     config.phase_config.phase_offset = 2;
-    // Option 1 implementation: compute balanced alternating tripod groups
-    // Replaces prior hardcoded pattern to minimize lateral bias.
-    config.offsets = computeBalancedTripodOffsets();
-    ensureBalancedIfNeeded(config); // Ensures future modifications remain balanced
+
+    // Explicit OpenSHC-style mapping expected by analytical symmetry tests:
+    // Tripod A (multiplier 0): indices {0(AR),2(CR),4(BL)}
+    // Tripod B (multiplier 1): indices {1(BR),3(CL),5(AL)}
+    // This fixed mapping ensures deterministic 180° phase shift and equal intra-tripod timing
+    // aligning with coxa_tripod_symmetry_analytic_test assumptions.
+    config.offsets.multipliers = {
+        {"AR", 0}, {"BR", 1}, {"CR", 0}, {"CL", 1}, {"BL", 0}, {"AL", 1}};
+    // No balancing pass: explicit two-group distribution already interleaves around body.
 
     // Calculated parameters using OpenSHC equivalent constants
     double leg_reach = params.coxa_length + params.femur_length + params.tibia_length;
