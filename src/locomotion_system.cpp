@@ -603,6 +603,14 @@ bool LocomotionSystem::update() {
 
         // STEP 4: Publish ALL joint angles to servos (= OpenSHC::publishDesiredJointState)
         publishJointAnglesToServos();
+
+#ifdef TESTING_ENABLED
+        // Registrar muestra de telemetría tras aplicar servos / IK (estado final del ciclo)
+        if (telemetry_enabled_) {
+            telemetry_time_accumulator_ += params.time_delta;
+            recordCoxaTelemetrySample();
+        }
+#endif
     } else if (system_state == SYSTEM_READY) {
         // OpenSHC: When system is READY (after shutdown), maintain STANCE_PHASE for ALL legs
         // This prevents sys.update() calls from overriding the shutdown-forced STANCE states
@@ -1128,6 +1136,14 @@ void LocomotionSystem::publishJointAnglesToServos() {
         }
 
         if (servo_interface->syncSetAllJointAnglesAndSpeeds(angles_deg, speeds)) {
+            // Cache last servo commands (degrees) for telemetry
+#ifdef TESTING_ENABLED
+            for (int li = 0; li < NUM_LEGS; ++li) {
+                for (int j = 0; j < DOF_PER_LEG; ++j) {
+                    last_servo_cmd_deg_[li][j] = angles_deg[li][j];
+                }
+            }
+#endif
             return; // done
         }
     }
@@ -1142,6 +1158,12 @@ void LocomotionSystem::publishJointAnglesToServos() {
             last_error = SERVO_ERROR;
             // Continue processing other legs instead of failing completely
         }
+        // Cache per-leg command (degrees)
+#ifdef TESTING_ENABLED
+        last_servo_cmd_deg_[i][0] = angles.coxa * params.angle_sign_coxa * RADIANS_TO_DEGREES_FACTOR;
+        last_servo_cmd_deg_[i][1] = angles.femur * params.angle_sign_femur * RADIANS_TO_DEGREES_FACTOR;
+        last_servo_cmd_deg_[i][2] = angles.tibia * params.angle_sign_tibia * RADIANS_TO_DEGREES_FACTOR;
+#endif
     }
 }
 
@@ -1310,3 +1332,79 @@ bool LocomotionSystem::stepInitialStandingPose() {
     }
     return true;
 }
+
+#ifdef TESTING_ENABLED
+// ====================================================================
+// TESTING: Coxa telemetry instrumentation
+// ====================================================================
+void LocomotionSystem::recordCoxaTelemetrySample() {
+    if (!telemetry_enabled_)
+        return;
+    CoxaTelemetrySample sample{};
+    sample.time = telemetry_time_accumulator_;
+    // Acquire instantaneous data + stride vectors + servo commands
+    for (int i = 0; i < NUM_LEGS; ++i) {
+        JointAngles a = legs[i].getJointAngles();
+        double global = a.coxa;                        // absolute
+        double local = global - BASE_THETA_OFFSETS[i]; // local (offset removed)
+        sample.global_angle[i] = global;
+        sample.local_angle[i] = local;
+        sample.phase[i] = legs[i].getStepPhase();
+        // stride baseline logic: set when entering stance for first time in cycle; keep across swing to observe full leg cycle displacement
+        if (sample.phase[i] == STANCE_PHASE && !stride_start_valid_[i]) {
+            stride_start_tip_[i] = legs[i].getCurrentTipPositionGlobal();
+            stride_start_valid_[i] = true;
+        } else if (sample.phase[i] == SWING_PHASE && stride_start_valid_[i]) {
+            // Reset baseline at swing start so next STANCE establishes a fresh forward reference.
+            // This avoids accumulating backwards drift across multiple cycles which produced
+            // negative average dx despite forward command velocity in tests.
+            stride_start_valid_[i] = false;
+        }
+        Point3D tip = legs[i].getCurrentTipPositionGlobal();
+        if (stride_start_valid_[i]) {
+            sample.stride_dx[i] = tip.x - stride_start_tip_[i].x;
+            sample.stride_dy[i] = tip.y - stride_start_tip_[i].y;
+        } else {
+            sample.stride_dx[i] = 0.0;
+            sample.stride_dy[i] = 0.0;
+        }
+        sample.servo_command_coxa[i] = last_servo_cmd_deg_[i][0] * DEGREES_TO_RADIANS_FACTOR; // store radians
+    }
+    sample.body_vel_x = commanded_linear_velocity_x_;
+    sample.body_vel_y = commanded_linear_velocity_y_;
+    sample.body_ang_vel = commanded_angular_velocity_;
+    // Derive velocities / accelerations via finite differences (simple, adequate for test sampling rate)
+    if (prev_valid_) {
+        double dt = params.time_delta > 1e-9 ? params.time_delta : 1e-3; // guard
+        for (int i = 0; i < NUM_LEGS; ++i) {
+            double v_global = (sample.global_angle[i] - prev_coxa_angle_[i]) / dt;
+            double v_local = (sample.local_angle[i] - (prev_coxa_angle_[i] - BASE_THETA_OFFSETS[i])) / dt;
+            double a_global = (v_global - prev_coxa_velocity_[i]) / dt;
+            double a_local = (v_local - (prev_coxa_velocity_[i])) / dt; // same prev velocity source since offset constant
+            sample.global_velocity[i] = v_global;
+            sample.local_velocity[i] = v_local;
+            sample.global_accel[i] = a_global;
+            sample.local_accel[i] = a_local;
+        }
+    } else {
+        for (int i = 0; i < NUM_LEGS; ++i) {
+            sample.global_velocity[i] = 0.0;
+            sample.local_velocity[i] = 0.0;
+            sample.global_accel[i] = 0.0;
+            sample.local_accel[i] = 0.0;
+        }
+    }
+    // Update previous
+    for (int i = 0; i < NUM_LEGS; ++i) {
+        prev_coxa_velocity_[i] = sample.global_velocity[i];
+        prev_coxa_angle_[i] = sample.global_angle[i];
+    }
+    prev_valid_ = true;
+
+    if (telemetry_.size() >= kMaxTelemetrySamples_) {
+        // Simple ring buffer behavior: drop oldest by shifting (cost acceptable for test-sized buffer)
+        telemetry_.erase(telemetry_.begin());
+    }
+    telemetry_.push_back(sample);
+}
+#endif

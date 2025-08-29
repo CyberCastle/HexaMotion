@@ -31,7 +31,7 @@ int main() {
     // Define BASE_THETA_OFFSETS for the test (in radians)
     static const double BASE_THETA_OFFSETS[NUM_LEGS] = {
         -30.0 * M_PI / 180.0, -90.0 * M_PI / 180.0, -150.0 * M_PI / 180.0,
-        150.0 * M_PI / 180.0, 90.0 * M_PI / 180.0, 30.0 * M_PI / 180.0};
+        30.0 * M_PI / 180.0, 90.0 * M_PI / 180.0, 150.0 * M_PI / 180.0};
 
     bool ok = true;
 

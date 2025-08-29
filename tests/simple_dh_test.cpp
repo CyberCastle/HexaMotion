@@ -31,7 +31,7 @@ int main() {
     std::cout << std::fixed << std::setprecision(3);
     std::cout << "=== DH Parameter Validation Test ===" << std::endl;
 
-    static const double BASE_THETA_OFFSETS[NUM_LEGS] = {-30.0f, -90.0f, -150.0f, 150.0f, 90.0f, 30.0f};
+    static const double BASE_THETA_OFFSETS[NUM_LEGS] = {-30.0f, -90.0f, -150.0f, 30.0f, 90.0f, 150.0f};
 
     JointAngles q(0, 0, 0);
     bool ok = true;
@@ -205,7 +205,7 @@ int main() {
  */
 Point3D transformGlobalToLocal(const RobotModel &model, int leg, const Point3D &global_pos) {
     // Get the leg base position and orientation from DH parameters
-    static const double BASE_THETA_OFFSETS[NUM_LEGS] = {-30.0f, -90.0f, -150.0f, 150.0f, 90.0f, 30.0f};
+    static const double BASE_THETA_OFFSETS[NUM_LEGS] = {-30.0f, -90.0f, -150.0f, 30.0f, 90.0f, 150.0f};
     const Parameters &params = model.getParams();
 
     // Calculate leg base position
@@ -237,7 +237,7 @@ Point3D transformGlobalToLocal(const RobotModel &model, int leg, const Point3D &
  */
 Point3D transformLocalToGlobal(const RobotModel &model, int leg, const Point3D &local_pos) {
     // Get the leg base position and orientation from DH parameters
-    static const double BASE_THETA_OFFSETS[NUM_LEGS] = {-30.0f, -90.0f, -150.0f, 150.0f, 90.0f, 30.0f};
+    static const double BASE_THETA_OFFSETS[NUM_LEGS] = {-30.0f, -90.0f, -150.0f, 30.0f, 90.0f, 150.0f};
     const Parameters &params = model.getParams();
 
     // Calculate leg base position

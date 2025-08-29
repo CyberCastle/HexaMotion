@@ -45,7 +45,7 @@ static Point3D computeExpectedOpenSHCStride(const StrideTestCase &tc);
 
 // Ejecuta la misma lógica de validación sobre las 6 patas usando la posición por defecto de cada una.
 static bool validateAllLegs(const StrideTestCase &tc, RobotModel &model, const Parameters &params, double tol) {
-    std::cout << "  [SubTest] Validación radial en las 6 coxas (analítico vs DH)" << std::endl;
+    std::cout << "  [SubTest] Validación radial y simetría hexagonal (6 coxas)" << std::endl;
     bool all_ok = true;
     // Construir objetos Leg (uno por índice)
     std::vector<std::unique_ptr<Leg>> legs;
@@ -59,6 +59,11 @@ static bool validateAllLegs(const StrideTestCase &tc, RobotModel &model, const P
     double z0 = params.default_height_offset;
 
     // Para cada leg, construir identidad analítica: (r cos(theta_i), r sin(theta_i), z0) usando BASE_THETA_OFFSETS
+    // Almacenes para simetría tangencial (se llenan dentro del loop)
+    std::vector<Point3D> angular_components(NUM_LEGS, Point3D(0, 0, 0));
+    std::vector<double> angular_mags(NUM_LEGS, 0.0);
+    std::vector<double> coxa_deltas(NUM_LEGS, 0.0);
+
     for (int i = 0; i < NUM_LEGS; ++i) {
         double theta = BASE_THETA_OFFSETS[i];
         Point3D analytic_identity(r * std::cos(theta), r * std::sin(theta), z0);
@@ -88,8 +93,13 @@ static bool validateAllLegs(const StrideTestCase &tc, RobotModel &model, const P
         stepper.setWalkPlane(analytic_identity);
         stepper.setWalkPlaneNormal(Point3D(0, 0, 1));
         stepper.updateStride();
-
+        // Ya no existen getters de instrumentación de capas (raw/arc_pre/post).
+        // Obtenemos directamente el stride final calculado (tras validaciones de seguridad si aplicaran).
         Point3D got = stepper.getStrideVector();
+
+        // Nota: La versión actual de LegStepper::updateStride implementa directamente la fórmula combinada
+        // (v + ω×r) * (stance_ratio / frequency) sin etapas intermedias expuestas públicamente; por ello
+        // se elimina el análisis de E0/E1/E2 y sólo se compara contra el modelo OpenSHC esperado.
 
         // Recalcular expected stride usando analytic_identity como radio planar
         StrideTestCase local_tc = tc;
@@ -106,7 +116,7 @@ static bool validateAllLegs(const StrideTestCase &tc, RobotModel &model, const P
         Point3D angular_diff = angular_component_got - angular_component_expected;
         double angular_err = std::sqrt(angular_diff.x * angular_diff.x + angular_diff.y * angular_diff.y + angular_diff.z * angular_diff.z);
 
-        // Coxa delta
+        // Coxa delta y validación de traslación tangencial aproximada
         double stance_ratio = on_ground_ratio;
         double coxa_delta_expected = tc.angular_velocity * (stance_ratio / tc.frequency);
         Point3D radius_vec(analytic_identity.x, analytic_identity.y, 0.0);
@@ -120,16 +130,36 @@ static bool validateAllLegs(const StrideTestCase &tc, RobotModel &model, const P
         }
         double coxa_err = std::fabs(coxa_delta_got - coxa_delta_expected);
 
+        // (Nuevo) Validaciones tangenciales:
+        //  a) Ortogonalidad: componente angular ⋅ radio ≈ 0
+        //  b) Magnitud: |stride_angular| ≈ |coxa_delta_expected| * radius_norm
+        double tangential_dot = angular_component_got.x * radius_vec.x + angular_component_got.y * radius_vec.y; // debería ~0
+        double tangential_dot_abs = std::fabs(tangential_dot);
+        double expected_arc_len = std::fabs(coxa_delta_expected) * radius_norm;
+        double got_arc_len = std::sqrt(angular_component_got.x * angular_component_got.x + angular_component_got.y * angular_component_got.y);
+        double arc_len_err = std::fabs(got_arc_len - expected_arc_len);
+        double tangential_tol = tol * std::max(1.0, radius_norm);
+        double arc_len_tol = tol * std::max(1.0, radius_norm);
+
         // Relación mm -> grados (lineal planar escalada compartida por todas las patas)
         double linear_planar_mm = std::sqrt(scaled_linear.x * scaled_linear.x + scaled_linear.y * scaled_linear.y);
         double coxa_delta_deg_exp = math_utils::radiansToDegrees(coxa_delta_expected);
         double coxa_delta_deg_got = math_utils::radiansToDegrees(coxa_delta_got);
 
-        bool pass = (err <= tol && angular_err <= tol && (!coxa_valid || coxa_err <= tol) && planar_geom_err <= tol);
-        std::cout << "    Leg " << i << ": stride_err=" << err
+        // Guardar para análisis de simetría (se considera sólo la parte angular pura)
+        angular_components[i] = angular_component_got;
+        angular_mags[i] = std::sqrt(angular_component_got.x * angular_component_got.x + angular_component_got.y * angular_component_got.y);
+        coxa_deltas[i] = coxa_delta_got;
+
+        bool tangential_ok = (!coxa_valid) || (tangential_dot_abs <= tangential_tol && arc_len_err <= arc_len_tol);
+        bool pass = (err <= tol && angular_err <= tol && (!coxa_valid || coxa_err <= tol) && planar_geom_err <= tol && tangential_ok);
+        std::cout << "    Leg " << i
+                  << ": stride_err=" << err
                   << " ang_err=" << angular_err
                   << " coxa_err=" << coxa_err
                   << " geom_err=" << planar_geom_err
+                  << " tangential_dot=" << tangential_dot_abs
+                  << " arc_len_err=" << arc_len_err
                   << " | linear(mm)=" << linear_planar_mm
                   << " coxaΔexp(deg)=" << coxa_delta_deg_exp
                   << " coxaΔgot(deg)=" << coxa_delta_deg_got
@@ -137,7 +167,203 @@ static bool validateAllLegs(const StrideTestCase &tc, RobotModel &model, const P
         if (!pass)
             all_ok = false;
     }
+
+    // ================= Symmetry Validation for Opposite Pairs =================
+    // Pares opuestos: (0,3), (1,4), (2,5)
+    struct Pair {
+        int a;
+        int b;
+        const char *label;
+    };
+    Pair pairs[3] = {{0, 3, "(0,3)"}, {1, 4, "(1,4)"}, {2, 5, "(2,5)"}};
+    // Contexto geométrico: ángulos base (offset DH) de cada pata en grados para evidenciar estructura hexagonal
+    std::cout << "    BaseAngles(deg):";
+    for (int i = 0; i < NUM_LEGS; ++i) {
+        double deg = math_utils::radiansToDegrees(BASE_THETA_OFFSETS[i]);
+        std::cout << " L" << i << "=" << std::fixed << std::setprecision(1) << deg;
+    }
+    std::cout << std::endl;
+    std::cout << "    Symmetry (pares opuestos, Δθ≈180° ideal):" << std::endl;
+    double dir_tol = 1e-6; // tolerancia direccional absoluta
+    for (const auto &p : pairs) {
+        Point3D va = angular_components[p.a];
+        Point3D vb = angular_components[p.b];
+        double ma = angular_mags[p.a];
+        double mb = angular_mags[p.b];
+        // Si ambos son casi cero, se considera trivialmente simétrico
+        bool trivial = (ma < 1e-12 && mb < 1e-12);
+        double rel_mag_err = 0.0;
+        double dir_dot_norm = 0.0;
+        bool mag_ok = true, dir_ok = true;
+        if (!trivial) {
+            rel_mag_err = std::fabs(ma - mb) / std::max(1e-12, (ma + mb) * 0.5);
+            if (ma > 0 && mb > 0) {
+                dir_dot_norm = (va.x * vb.x + va.y * vb.y + va.z * vb.z) / (ma * mb);
+            }
+            // Para rotación global pura se espera vectores opuestos (dot≈-1).
+            // Para combinaciones con gran componente lineal puede relajarse; aquí mantenemos criterio estricto.
+            mag_ok = (rel_mag_err <= 1e-9 || trivial);
+            dir_ok = (std::fabs(dir_dot_norm + 1.0) <= dir_tol) || trivial;
+        }
+        bool pair_ok = (trivial || (mag_ok && dir_ok));
+        double theta_a_deg = math_utils::radiansToDegrees(BASE_THETA_OFFSETS[p.a]);
+        double theta_b_deg = math_utils::radiansToDegrees(BASE_THETA_OFFSETS[p.b]);
+        double delta_theta = std::fmod(std::fabs(theta_a_deg - theta_b_deg), 360.0);
+        if (delta_theta > 180.0)
+            delta_theta = 360.0 - delta_theta; // menor ángulo
+        std::cout << "      OppPair " << p.label
+                  << " (θa=" << theta_a_deg << ", θb=" << theta_b_deg << ", Δθ=" << delta_theta << ")"
+                  << " |mag_a|=" << ma << " |mag_b|=" << mb
+                  << " rel_mag_err=" << rel_mag_err
+                  << " dir_dot(expect -1)=" << dir_dot_norm
+                  << (trivial ? " (trivial: sin rotación)" : "")
+                  << (pair_ok ? " ✓" : " ❌") << std::endl;
+        if (!pair_ok)
+            all_ok = false;
+    }
+
+    // Magnitud similar específica entre (0,3) y (2,5) (coherencia hexagonal adicional)
+    double avg03 = 0.5 * (angular_mags[0] + angular_mags[3]);
+    double avg25 = 0.5 * (angular_mags[2] + angular_mags[5]);
+    double rel_block_err = std::fabs(avg03 - avg25) / std::max(1e-12, (avg03 + avg25) * 0.5);
+    bool block_ok = (rel_block_err <= 1e-9) || (avg03 < 1e-12 && avg25 < 1e-12);
+    std::cout << "      Block magnitudes hexagon ( (0,3) vs (2,5) ) avg03=" << avg03 << " avg25=" << avg25
+              << " rel_err=" << rel_block_err
+              << " criterio: magnitudes similares por ejes reflexivos del hexágono"
+              << (block_ok ? " ✓" : " ❌") << std::endl;
+    if (!block_ok)
+        all_ok = false;
+
     return all_ok;
+}
+
+// ---------------------------------------------------------------------------
+// Nueva validación: demuestra que el algoritmo actual asume rotación alrededor
+// del ORIGEN global en lugar del verdadero centro geométrico del cuerpo.
+// Idea: se traslada todo el hexágono por un vector 'shift'. Si la rotación
+// estuviera correctamente centrada, el stride angular esperado (ω×r_rel) NO
+// cambiaría al añadir un shift constante al centro (porque r_rel = p_i - centro).
+// Sin embargo, el código actual usa directamente (x,y) absolutos => aparece un
+// sesgo constante bias = ω × shift que se suma a TODAS las patas.
+// Verificamos:
+//  1) got_stride - expected_center_stride es igual (≈) para todas las patas.
+//  2) Ese vector común coincide con bias = ω×shift * (stance_ratio/frequency).
+//  3) Tras sustraer bias, cada pata satisface la fórmula centrada correcta.
+// Esto confirma: "el stride actual es consistente internamente, pero se asume
+// un centro y un frame homogéneo que no se respeta aguas abajo".
+// ---------------------------------------------------------------------------
+static bool validateFrameCenterAssumption(const StrideTestCase &baseTc, RobotModel &model, const Parameters &params, const Point3D &shift, double tol) {
+    std::cout << "\n  [FrameTest] Shift aplicado = (" << shift.x << ", " << shift.y << ") mm" << std::endl;
+
+    // Prepara legs
+    std::vector<std::unique_ptr<Leg>> legs;
+    legs.reserve(NUM_LEGS);
+    for (int i = 0; i < NUM_LEGS; ++i) {
+        legs.emplace_back(std::make_unique<Leg>(i, model));
+    }
+
+    double r = params.hexagon_radius + params.coxa_length + params.femur_length; // radio analítico
+    double z0 = params.default_height_offset;
+    double period = baseTc.stance_period + baseTc.swing_period;
+    double stance_ratio = (period > 0.0) ? (double)baseTc.stance_period / period : 0.0;
+    double scale = (stance_ratio / baseTc.frequency); // factor temporal común
+
+    // Centro geométrico desplazado (ideal)
+    Point3D center = Point3D(shift.x, shift.y, z0);
+    // Sesgo teórico inducido por usar origen global incorrecto
+    // ω×shift (ω sobre k̂) => (-ω*shift.y, ω*shift.x, 0)
+    Point3D bias(-baseTc.angular_velocity * shift.y, baseTc.angular_velocity * shift.x, 0.0);
+    bias = bias * scale; // escalado por tiempo en apoyo
+
+    std::vector<Point3D> diffs;
+    diffs.reserve(NUM_LEGS);
+    bool all_ok = true;
+
+    for (int i = 0; i < NUM_LEGS; ++i) {
+        double theta = BASE_THETA_OFFSETS[i];
+        Point3D identity_unshifted(r * std::cos(theta), r * std::sin(theta), z0);
+        Point3D identity_shifted(identity_unshifted.x + shift.x, identity_unshifted.y + shift.y, z0);
+
+        // Construir test case local para ambos
+        StrideTestCase tcUn = baseTc;
+        tcUn.identity_tip = identity_unshifted;
+        StrideTestCase tcSh = baseTc;
+        tcSh.identity_tip = identity_shifted;
+
+        // Stepper unshifted
+        LegStepper stepperUn(i, identity_unshifted, *legs[i], model);
+        StepCycle cycle{};
+        cycle.frequency_ = baseTc.frequency;
+        cycle.period_ = baseTc.stance_period + baseTc.swing_period;
+        cycle.stance_period_ = baseTc.stance_period;
+        cycle.swing_period_ = baseTc.swing_period;
+        cycle.stance_start_ = 0;
+        cycle.stance_end_ = baseTc.stance_period;
+        cycle.swing_start_ = baseTc.stance_period;
+        cycle.swing_end_ = cycle.period_;
+        stepperUn.setStepCycle(cycle);
+        stepperUn.setDesiredVelocity(baseTc.linear_velocity, baseTc.angular_velocity);
+        stepperUn.setWalkPlane(identity_unshifted);
+        stepperUn.setWalkPlaneNormal(Point3D(0, 0, 1));
+        stepperUn.updateStride();
+        Point3D strideUn = stepperUn.getStrideVector();
+
+        // Stepper shifted
+        LegStepper stepperSh(i, identity_shifted, *legs[i], model);
+        stepperSh.setStepCycle(cycle);
+        stepperSh.setDesiredVelocity(baseTc.linear_velocity, baseTc.angular_velocity);
+        stepperSh.setWalkPlane(identity_shifted);
+        stepperSh.setWalkPlaneNormal(Point3D(0, 0, 1));
+        stepperSh.updateStride();
+        Point3D strideSh = stepperSh.getStrideVector();
+
+        Point3D diff = strideSh - strideUn; // debería ser igual a bias
+        diffs.push_back(diff);
+        Point3D residual = diff - bias; // cerca de cero
+        double diff_err = std::sqrt((diff.x - bias.x) * (diff.x - bias.x) + (diff.y - bias.y) * (diff.y - bias.y));
+        double residual_norm = std::sqrt(residual.x * residual.x + residual.y * residual.y + residual.z * residual.z);
+        double bias_mag = std::sqrt(bias.x * bias.x + bias.y * bias.y);
+        bool pass_local = (diff_err <= tol * std::max(1.0, bias_mag) && residual_norm <= tol * std::max(1.0, bias_mag));
+        if (!pass_local)
+            all_ok = false;
+        std::cout << "    Leg " << i << " diff=(" << diff.x << "," << diff.y << ") bias=(" << bias.x << "," << bias.y << ") residual=(" << residual.x << "," << residual.y << ")" << (pass_local ? " ✓" : " ❌") << std::endl;
+    }
+
+    // Verificar que todos los diffs son (casi) iguales entre sí (consistencia interna)
+    double uniform_err_max = 0.0;
+    Point3D ref = diffs[0];
+    for (size_t i = 1; i < diffs.size(); ++i) {
+        Point3D d = diffs[i] - ref;
+        double dn = std::sqrt(d.x * d.x + d.y * d.y + d.z * d.z);
+        uniform_err_max = std::max(uniform_err_max, dn);
+    }
+    bool uniform_ok = uniform_err_max <= tol * 1e3; // tolerancia relajada (el algoritmo puede recortar stride)
+    if (!uniform_ok) {
+        std::cout << "    ⚠️  Uniformidad NO estricta: uniform_err_max=" << uniform_err_max << std::endl;
+        all_ok = false;
+    }
+
+    double bias_mag = std::sqrt(bias.x * bias.x + bias.y * bias.y);
+    Point3D diff_meas = ref;
+    double diff_mag = std::sqrt(diff_meas.x * diff_meas.x + diff_meas.y * diff_meas.y);
+    double dot = diff_meas.x * bias.x + diff_meas.y * bias.y;
+    double dir_cos = (bias_mag > 1e-12 && diff_mag > 1e-12) ? dot / (bias_mag * diff_mag) : 1.0;
+    double angle_deg = std::acos(std::max(-1.0, std::min(1.0, dir_cos))) * 180.0 / M_PI;
+    double mag_ratio = (bias_mag > 1e-12) ? diff_mag / bias_mag : 0.0;
+    bool bias_detected = (diff_mag > tol * 100.0); // el medido debe ser significativo
+    bool direction_ok = angle_deg <= 15.0;         // alineación direccional razonable
+    std::cout << "    Bias teórico=(" << bias.x << "," << bias.y << ") mag=" << bias_mag
+              << " | diff_medido=(" << diff_meas.x << "," << diff_meas.y << ") mag=" << diff_mag
+              << " angle_diff_deg=" << angle_deg << " mag_ratio=" << mag_ratio << std::endl;
+
+    if (uniform_ok && bias_detected && direction_ok) {
+        std::cout << "    ✓ Confirmado: stride interno consistente + dependencia del origen (diff uniforme alineado a ω×shift)." << std::endl;
+        return true;
+    } else {
+        std::cout << "    ❌ No se confirma completamente (uniform_ok=" << uniform_ok
+                  << ", bias_detected=" << bias_detected << ", direction_ok=" << direction_ok << ")" << std::endl;
+        return false;
+    }
 }
 
 // Calcula el stride vector esperado usando la fórmula OpenSHC (idéntica a walk_controller.cpp de OpenSHC).
@@ -279,10 +505,25 @@ int main() {
         double linear_planar_mm = std::sqrt(scaled_linear.x * scaled_linear.x + scaled_linear.y * scaled_linear.y);
         double coxa_delta_deg_expected = math_utils::radiansToDegrees(coxa_delta_expected);
         double coxa_delta_deg_got = math_utils::radiansToDegrees(coxa_delta_got);
-        std::cout << " Coxa Δexpected(rad): " << coxa_delta_expected << "  Coxa Δgot(rad): " << coxa_delta_got << "  |Δerr|=" << coxa_err << std::endl;
-        std::cout << " Mapping: linear_planar_scaled=" << linear_planar_mm << " mm -> coxaΔexpected=" << coxa_delta_deg_expected << " deg  coxaΔgot=" << coxa_delta_deg_got << " deg" << std::endl;
+        // Validaciones tangenciales adicionales (idénticas a sección multi‑leg) para el caso base leg0
+        double tangential_dot = angular_component_got.x * radius_vec.x + angular_component_got.y * radius_vec.y;
+        double tangential_dot_abs = std::fabs(tangential_dot);
+        double expected_arc_len = std::fabs(coxa_delta_expected) * radius_norm;
+        double got_arc_len = std::sqrt(angular_component_got.x * angular_component_got.x + angular_component_got.y * angular_component_got.y);
+        double arc_len_err = std::fabs(got_arc_len - expected_arc_len);
+        std::cout << " Coxa Δexpected(rad): " << coxa_delta_expected
+                  << "  Coxa Δgot(rad): " << coxa_delta_got
+                  << "  |Δerr|=" << coxa_err << std::endl;
+        std::cout << " Tangential: |ω×r|exp=" << expected_arc_len
+                  << " |ω×r|got=" << got_arc_len
+                  << " arc_len_err=" << arc_len_err
+                  << " dot(radius,stride_ang)=" << tangential_dot_abs << std::endl;
+        std::cout << " Mapping: linear_planar_scaled=" << linear_planar_mm
+                  << " mm -> coxaΔexpected=" << coxa_delta_deg_expected
+                  << " deg  coxaΔgot=" << coxa_delta_deg_got << " deg" << std::endl;
 
-        bool pass = (err <= TOL && angular_err <= TOL && (!coxa_delta_valid || coxa_err <= TOL));
+        bool tangential_ok = (!coxa_delta_valid) || (tangential_dot_abs <= TOL * std::max(1.0, radius_norm) && std::fabs(got_arc_len - expected_arc_len) <= TOL * std::max(1.0, radius_norm));
+        bool pass = (err <= TOL && angular_err <= TOL && (!coxa_delta_valid || coxa_err <= TOL) && tangential_ok);
         if (!pass) {
             std::cout << "  ❌ Mismatch supera tolerancia." << std::endl;
             all_passed = false;
@@ -294,6 +535,17 @@ int main() {
         bool radial_ok = validateAllLegs(tc, model, params, TOL);
         if (!radial_ok) {
             all_passed = false;
+        }
+        // Nota: Los errores de simetría ya reflejan que la desviación proviene de E0 en la mayoría de casos.
+
+        // --- Nueva prueba de frame/centro: sólo si hay componente angular (para observar bias) ---
+        if (std::fabs(tc.angular_velocity) > 1e-9) {
+            // Shift artificial (desplaza el centro real).
+            Point3D shiftA(25.0, -25.0, 0.0);
+            std::cout << "\n  [FrameTestSuite] Caso: " << tc.name << " (con shiftA)" << std::endl;
+            bool frame_ok = validateFrameCenterAssumption(tc, model, params, shiftA, 1e-9);
+            if (!frame_ok)
+                all_passed = false;
         }
     }
 

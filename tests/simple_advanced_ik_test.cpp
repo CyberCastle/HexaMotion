@@ -34,7 +34,7 @@ int main() {
     std::cout << "=== Advanced IK Round-Trip Validation Test ===" << std::endl;
     std::cout << "Using validated positions from simple_ik_test as reference" << std::endl;
 
-    static const double BASE_THETA_OFFSETS[NUM_LEGS] = {-30.0f, -90.0f, -150.0f, 150.0f, 90.0f, 30.0f};
+    static const double BASE_THETA_OFFSETS[NUM_LEGS] = {-30.0f, -90.0f, -150.0f, 30.0f, 90.0f, 150.0f};
     bool ok = true;
 
     // Test 1: Round-Trip FK-IK validation using known good positions from simple_ik_test
