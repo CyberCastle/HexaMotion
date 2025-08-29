@@ -1354,6 +1354,11 @@ void LocomotionSystem::recordCoxaTelemetrySample() {
         if (sample.phase[i] == STANCE_PHASE && !stride_start_valid_[i]) {
             stride_start_tip_[i] = legs[i].getCurrentTipPositionGlobal();
             stride_start_valid_[i] = true;
+        } else if (sample.phase[i] == SWING_PHASE && stride_start_valid_[i]) {
+            // Reset baseline at swing start so next STANCE establishes a fresh forward reference.
+            // This avoids accumulating backwards drift across multiple cycles which produced
+            // negative average dx despite forward command velocity in tests.
+            stride_start_valid_[i] = false;
         }
         Point3D tip = legs[i].getCurrentTipPositionGlobal();
         if (stride_start_valid_[i]) {
