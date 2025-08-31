@@ -360,6 +360,20 @@ int main(int argc, char **argv) {
         return 1;
     }
 
+    // --- Enable AutoPose (tripod gait) ---
+    // Previously the test constructed a BodyPoseConfiguration incorrectly from auto-pose factory and thus ignored auto pose.
+    // We explicitly build the AutoPoseConfiguration for the active gait and enable it in the BodyPoseController.
+    {
+        auto *bpc = sys.getBodyPoseController();
+        if (bpc) {
+            AutoPoseConfiguration ap_cfg = createAutoPoseConfigurationForGait(p, "tripod_gait");
+            bpc->setAutoPoseConfig(ap_cfg);
+            bpc->setAutoPoseEnabled(true);
+        } else {
+            std::cerr << "WARNING: BodyPoseController no disponible; AutoPose no se activará." << std::endl;
+        }
+    }
+
     // Enable coxa telemetry for detailed post-run analysis (testing instrumentation)
 #ifdef TESTING_ENABLED
     sys.enableTelemetry(true);

@@ -173,9 +173,10 @@ void LegPoser::updateAutoPose(int phase_index, const AutoPoseConfiguration &auto
         return count ? acc / count : 0.0;
     };
 
-    double base_roll = computeAxis(auto_cfg.roll_amplitudes);   // degrees
-    double base_pitch = computeAxis(auto_cfg.pitch_amplitudes); // degrees
-    double base_yaw = computeAxis(auto_cfg.yaw_amplitudes);     // degrees
+    // Amplitudes are defined in radians (config file). Use directly.
+    double base_roll = computeAxis(auto_cfg.roll_amplitudes);   // radians
+    double base_pitch = computeAxis(auto_cfg.pitch_amplitudes); // radians
+    double base_yaw = computeAxis(auto_cfg.yaw_amplitudes);     // radians
     double base_x = computeAxis(auto_cfg.x_amplitudes);         // mm
     double base_y = computeAxis(auto_cfg.y_amplitudes);         // mm
     double base_z = computeAxis(auto_cfg.z_amplitudes);         // mm
@@ -184,14 +185,13 @@ void LegPoser::updateAutoPose(int phase_index, const AutoPoseConfiguration &auto
     const LegStancePosition &stance = body_cfg.leg_stance_positions[leg_index_];
     double xs = stance.x;                // mm
     double ys = stance.y;                // mm
-    double orient_dx = (-base_yaw * ys); // yaw causes lateral shift proportional to radius (degrees * mm)
+    double orient_dx = (-base_yaw * ys); // small-angle approximation (rad * mm)
     double orient_dy = (base_yaw * xs);
-    double orient_dz = base_roll * ys - base_pitch * xs; // roll/pitch induce vertical shift
+    double orient_dz = base_roll * ys - base_pitch * xs; // roll/pitch induce vertical shift (rad*mm)
 
     // Build base pose (translation + orientation quaternion)
     Point3D base_translation(base_x + orient_dx, base_y + orient_dy, base_z + orient_dz);
-    Eigen::Vector3d euler_deg(base_roll, base_pitch, base_yaw);
-    Eigen::Vector3d euler_rad = euler_deg * M_PI / 180.0;
+    Eigen::Vector3d euler_rad(base_roll, base_pitch, base_yaw);
     Eigen::Quaterniond q = Eigen::AngleAxisd(euler_rad.z(), Eigen::Vector3d::UnitZ()) *
                            Eigen::AngleAxisd(euler_rad.y(), Eigen::Vector3d::UnitY()) *
                            Eigen::AngleAxisd(euler_rad.x(), Eigen::Vector3d::UnitX());
