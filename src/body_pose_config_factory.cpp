@@ -281,18 +281,7 @@ BodyPoseConfiguration getDefaultPoseConfig(const Parameters &params) {
  * @param params Robot parameters from HexaModel
  * @return Conservative pose configuration with reduced limits for safety
  */
-BodyPoseConfiguration getConservativePoseConfig(const Parameters &params) {
-    return createPoseConfiguration(params, "conservative");
-}
-
-/**
- * @brief Get high-speed pose configuration using robot parameters
- * @param params Robot parameters from HexaModel
- * @return High-speed pose configuration optimized for faster locomotion
- */
-BodyPoseConfiguration getHighSpeedPoseConfig(const Parameters &params) {
-    return createPoseConfiguration(params, "high_speed");
-}
+// Configuraciones alternativas eliminadas (se mantiene sólo default)
 
 // Implementation for the linker
 BodyPoseConfiguration getDefaultBodyPoseConfig(const Parameters &params) {
@@ -305,66 +294,67 @@ BodyPoseConfiguration getDefaultBodyPoseConfig(const Parameters &params) {
  * @param params Robot parameters
  * @return Auto-pose configuration structure
  */
-AutoPoseConfiguration createAutoPoseConfiguration(const Parameters &params) {
-    AutoPoseConfiguration config;
+AutoPoseConfiguration createAutoPoseConfigurationForGait(const Parameters &params, const std::string &gait_name) {
+    AutoPoseConfiguration cfg; // disabled por defecto
+    cfg.pose_frequency = -1.0; // sincronizado
+    cfg.gait_name = gait_name;
 
-    // OpenSHC auto_pose.yaml equivalent settings
-    config.enabled = false;       // Disable auto-pose for consistent testing
-    config.pose_frequency = -1.0; // Synchronize with gait cycle
-
-    // Tripod gait phase configuration (OpenSHC equivalent)
-    config.pose_phase_starts = {1, 3}; // Phase starts for compensation
-    config.pose_phase_ends = {3, 1};   // Phase ends for compensation
-
-    // Auto-pose amplitudes (from OpenSHC auto_pose.yaml)
-    config.roll_amplitudes = {-0.015, 0.015}; // Roll compensation (radians)
-    config.pitch_amplitudes = {0.000, 0.000}; // Pitch compensation (radians)
-    config.yaw_amplitudes = {0.000, 0.000};   // Yaw compensation (radians)
-    config.x_amplitudes = {0.000, 0.000};     // X translation (millimeters)
-    config.y_amplitudes = {0.000, 0.000};     // Y translation (millimeters)
-    config.z_amplitudes = {20.0, 20.0};       // Z translation (millimeters)
-
-    // Tripod group configuration
-    config.tripod_group_a_legs = {0, 2, 4}; // AR, CR, BL
-    config.tripod_group_b_legs = {1, 3, 5}; // BR, CL, AL
-
-    return config;
-}
-
-/**
- * @brief Create conservative auto-pose configuration
- * @param params Robot parameters
- * @return Conservative auto-pose configuration
- */
-AutoPoseConfiguration createConservativeAutoPoseConfiguration(const Parameters &params) {
-    AutoPoseConfiguration config = createAutoPoseConfiguration(params);
-
-    // Reduced amplitudes for conservative operation
-    config.roll_amplitudes = {-0.010, 0.010}; // Reduced roll compensation
-    config.z_amplitudes = {15.0, 15.0};       // Reduced Z compensation (millimeters)
-
-    return config;
-}
-
-/**
- * @brief Create high-speed auto-pose configuration
- * @param params Robot parameters
- * @return High-speed auto-pose configuration
- */
-AutoPoseConfiguration createHighSpeedAutoPoseConfiguration(const Parameters &params) {
-    AutoPoseConfiguration config = createAutoPoseConfiguration(params);
-
-    // Increased amplitudes for high-speed operation
-    config.roll_amplitudes = {-0.020, 0.020}; // Increased roll compensation
-    config.z_amplitudes = {25.0, 25.0};       // Increased Z compensation (millimeters)
-
-    return config;
-}
-
-BodyPoseConfiguration getConservativeBodyPoseConfig(const Parameters &params) {
-    return createPoseConfiguration(params, "conservative");
-}
-
-BodyPoseConfiguration getHighSpeedBodyPoseConfig(const Parameters &params) {
-    return createPoseConfiguration(params, "high_speed");
+    if (gait_name == "tripod_gait") {
+        cfg.pose_phase_length = 4;
+        cfg.pose_phase_starts = {1, 3};
+        cfg.pose_phase_ends = {3, 1};
+        cfg.roll_amplitudes = {-0.015, 0.015};
+        cfg.pitch_amplitudes = {0.0, 0.0};
+        cfg.yaw_amplitudes = {0.0, 0.0};
+        cfg.x_amplitudes = {0.0, 0.0};
+        cfg.y_amplitudes = {0.0, 0.0};
+        cfg.z_amplitudes = {20.0, 20.0};
+        cfg.gravity_amplitudes = {0.0, 0.0};
+        int starts[NUM_LEGS] = {1, 3, 1, 3, 1, 3};
+        int ends[NUM_LEGS] = {3, 1, 3, 1, 3, 1};
+        for (int i = 0; i < NUM_LEGS; ++i) {
+            cfg.negation_phase_start[i] = starts[i];
+            cfg.negation_phase_end[i] = ends[i];
+            cfg.negation_transition_ratio[i] = 0.0;
+        }
+    } else if (gait_name == "wave_gait") {
+        cfg.pose_phase_length = 12;
+        cfg.pose_phase_starts = {1, 3, 5, 7, 9, 11};
+        cfg.pose_phase_ends = {3, 5, 7, 9, 11, 1};
+        cfg.roll_amplitudes = {-0.015, 0.015, 0.015, 0.015, -0.015, -0.015};
+        cfg.pitch_amplitudes = {0.020, -0.020, 0.0, 0.020, -0.020, 0.0};
+        cfg.yaw_amplitudes = {0, 0, 0, 0, 0, 0};
+        cfg.x_amplitudes = {0, 0, 0, 0, 0, 0};
+        cfg.y_amplitudes = {0, 0, 0, 0, 0, 0};
+        cfg.z_amplitudes = {0, 0, 0, 0, 0, 0};
+        cfg.gravity_amplitudes = {0, 0, 0, 0, 0, 0};
+        int starts[NUM_LEGS] = {1, 11, 9, 3, 5, 7};
+        int ends[NUM_LEGS] = {3, 1, 11, 5, 7, 9};
+        for (int i = 0; i < NUM_LEGS; ++i) {
+            cfg.negation_phase_start[i] = starts[i];
+            cfg.negation_phase_end[i] = ends[i];
+            cfg.negation_transition_ratio[i] = 0.0;
+        }
+    } else if (gait_name == "ripple_gait") {
+        cfg.pose_phase_length = 6;
+        cfg.pose_phase_starts = {0, 1, 2, 3, 4, 5};
+        cfg.pose_phase_ends = {2, 3, 4, 5, 0, 1};
+        cfg.roll_amplitudes = {-0.015, 0.015, -0.015, 0.015, -0.015, 0.015};
+        cfg.pitch_amplitudes = {-0.020, 0.020, 0.0, -0.020, 0.020, 0.0};
+        cfg.yaw_amplitudes = {0, 0, 0, 0, 0, 0};
+        cfg.x_amplitudes = {0, 0, 0, 0, 0, 0};
+        cfg.y_amplitudes = {0, 0, 0, 0, 0, 0};
+        cfg.z_amplitudes = {0, 0, 0, 0, 0, 0};
+        cfg.gravity_amplitudes = {0, 0, 0, 0, 0, 0};
+        int starts[NUM_LEGS] = {0, 2, 4, 1, 5, 3};
+        int ends[NUM_LEGS] = {2, 4, 0, 3, 1, 5};
+        for (int i = 0; i < NUM_LEGS; ++i) {
+            cfg.negation_phase_start[i] = starts[i];
+            cfg.negation_phase_end[i] = ends[i];
+            cfg.negation_transition_ratio[i] = 0.0;
+        }
+    } else {
+        // amble_gait u otros no soportados => cfg queda disabled
+    }
+    return cfg;
 }

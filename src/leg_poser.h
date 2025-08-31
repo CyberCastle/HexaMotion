@@ -1,6 +1,7 @@
 #ifndef LEG_POSER_H
 #define LEG_POSER_H
 
+#include "body_pose_config.h" // AutoPoseConfiguration & BodyPoseConfiguration
 #include "hexamotion_constants.h"
 #include "leg.h"
 #include "robot_model.h"
@@ -100,10 +101,12 @@ class LegPoser {
                         double lift_height, double time_to_step, bool apply_delta = true);
 
     /**
-     * @brief Sets the leg specific auto pose from the default auto pose
-     * @param phase The phase is the input value which is used to determine the progression along the bezier curves
+     * @brief Update leg-specific auto pose using phased window & negation logic (OpenSHC-style).
+     * @param phase_index Integer phase index in [0, base_period) for the unified posing cycle.
+     * @param auto_cfg   Reference auto-pose configuration (phase windows, amplitudes, negation windows).
+     * @param body_cfg   Reference body pose configuration (stance reference positions).
      */
-    void updateAutoPose(int phase);
+    void updateAutoPose(int phase_index, const AutoPoseConfiguration &auto_cfg, const BodyPoseConfiguration &body_cfg);
 
     /**
      * @brief Set target position for leg movement

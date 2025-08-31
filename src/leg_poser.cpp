@@ -12,7 +12,6 @@
  * This implementation is adapted from OpenSHC's LegPoser class to work with HexaMotion's architecture.
  * It provides smooth transitions for leg positioning using Bezier curves.
  */
-
 LegPoser::LegPoser(int leg_index, Leg &leg, RobotModel &robot_model)
     : leg_index_(leg_index), leg_(leg), robot_model_(robot_model), first_iteration_(true), master_iteration_count_(0) {
 
@@ -139,87 +138,140 @@ bool LegPoser::stepToPosition(const Pose &target_tip_pose, const Pose &target_po
     }
 }
 
-void LegPoser::updateAutoPose(int phase) {
-    // Enhanced OpenSHC-style auto pose implementation
-    // This method updates the leg-specific auto pose based on the gait phase
-    // with improved compensation for body balance and stability
+void LegPoser::updateAutoPose(int phase_index, const AutoPoseConfiguration &auto_cfg, const BodyPoseConfiguration &body_cfg) {
+    // OpenSHC-style per-leg negation of already computed global auto pose (emulated locally).
+    // This version mirrors OpenSHC LegPoser::updateAutoPose logic:
+    // 1. Determine negation window (start/end) mapped into unified phase domain.
+    // 2. Handle wrap-around windows (start > end) by extending end beyond period.
+    // 3. Decide if current phase_index triggers negation enable flag.
+    // 4. If negated, build a smooth removal pose via smoothstep ramps (negation_transition_ratio).
+    // 5. Compose final auto_pose_ relative to stance reference for this leg.
 
-    // Get default stance position for this leg
-    Point3D default_stance_pos = leg_.getCurrentTipPositionGlobal();
+    if (!auto_cfg.enabled) {
+        auto_pose_ = Pose();
+        return;
+    }
 
-    // Calculate phase-based compensation (OpenSHC style)
-    // Phase is typically 0-100, representing the gait cycle progress
-    double phase_ratio = static_cast<double>(phase) / 100.0;
+    // Determine base period (robust fallbacks like body controller)
+    int base_period = auto_cfg.pose_phase_length;
+    if (base_period <= 0) {
+        int max_idx = 0;
+        for (int v : auto_cfg.pose_phase_starts)
+            if (v > max_idx)
+                max_idx = v;
+        for (int v : auto_cfg.pose_phase_ends)
+            if (v > max_idx)
+                max_idx = v;
+        base_period = std::max(4, max_idx + 1);
+    }
+    int phase = (phase_index % base_period + base_period) % base_period; // normalize
 
-    // Get robot parameters for compensation calculations
-    const auto &params = robot_model_.getParams();
-    double body_clearance = params.standing_height;
+    // Window membership helper (same semantics as body controller)
+    auto inWindow = [base_period](int start, int end, int value) {
+        if (start == end)
+            return false;
+        if (start < end)
+            return value >= start && value < end;
+        return value >= start || value < end;
+    };
 
-    // Calculate auto pose compensation based on phase
-    // This simulates the body pose adjustments during gait execution
-    Point3D compensated_position = default_stance_pos;
+    auto modDist = [base_period](int from, int to) { return (to - from + base_period) % base_period; };
 
-    // Enhanced phase-based Z compensation (body height variation)
-    // Use sinusoidal compensation for smooth transitions relative to physical reference
-    double z_compensation = 0.0;
-    if (phase_ratio < 0.5) {
-        // First half of gait cycle - gradual lift for stability
-        z_compensation = body_clearance * 0.015 * sin(phase_ratio * 2.0 * M_PI);
+    // Cubic smoothstep easing function f(x)=3x^2-2x^3 with clamped domain [0,1].
+    // Derived by solving a cubic a x^3 + b x^2 + c x + d subject to:
+    //  f(0)=0 (start at 0), f(1)=1 (end at 1), f'(0)=0 and f'(1)=0 (zero slope at boundaries).
+    // These four boundary conditions yield a=-2, b=3, c=0, d=0 -> f(x)=3x^2-2x^3.
+    // Provides C1 continuity (no velocity jump) minimizing jerk at start/end of negation ramps.
+    // Chosen over linear (discontinuous derivative) and over quintic smootherstep (6x^5-15x^4+10x^3)
+    // to balance smoothness with minimal computational cost in the control loop.
+    auto smoothstep = [](double x) {
+        x = math_utils::clamp(x, 0.0, 1.0);
+        return x * x * (3.0 - 2.0 * x);
+    };
+
+    // Compute base aggregated auto pose (same averaging strategy as BodyPoseController) for this phase.
+    auto computeAxis = [&](const std::vector<double> &amps) {
+        if (amps.empty())
+            return 0.0;
+        double acc = 0.0;
+        int count = 0;
+        for (size_t i = 0; i < auto_cfg.pose_phase_starts.size() && i < amps.size(); ++i) {
+            if (inWindow(auto_cfg.pose_phase_starts[i], auto_cfg.pose_phase_ends[i], phase)) {
+                acc += amps[i];
+                ++count;
+            }
+        }
+        return count ? acc / count : 0.0;
+    };
+
+    double base_roll = computeAxis(auto_cfg.roll_amplitudes);
+    double base_pitch = computeAxis(auto_cfg.pitch_amplitudes);
+    double base_yaw = computeAxis(auto_cfg.yaw_amplitudes);
+    double base_x = computeAxis(auto_cfg.x_amplitudes);
+    double base_y = computeAxis(auto_cfg.y_amplitudes);
+    double base_z = computeAxis(auto_cfg.z_amplitudes);
+
+    // Negation window for this leg
+    int ns = auto_cfg.negation_phase_start[leg_index_] % base_period;
+    int ne = auto_cfg.negation_phase_end[leg_index_] % base_period;
+    bool inside = inWindow(ns, ne, phase);
+    int window_len = modDist(ns, ne);
+    if (window_len == 0)
+        window_len = base_period; // window covers full cycle
+
+    // Determine current sign / blending factor based on negation transition
+    double tr_ratio = math_utils::clamp(auto_cfg.negation_transition_ratio[leg_index_], 0.0, 0.49);
+    double transition_span = window_len * tr_ratio;
+    double sign = 1.0;  // +1 means not negated, -1 means fully negated
+    double blend = 1.0; // 1.0 = full amplitude, 0 = zero (during cross-fade removal)
+
+    if (transition_span <= 0.0) {
+        sign = inside ? -1.0 : 1.0;
     } else {
-        // Second half of gait cycle - gradual drop for natural movement
-        z_compensation = -body_clearance * 0.015 * sin((phase_ratio - 0.5) * 2.0 * M_PI);
+        if (inside) {
+            int dist_from_start = modDist(ns, phase);
+            int dist_to_end = modDist(phase, ne);
+            if (dist_from_start < transition_span) {          // entry ramp
+                double t = dist_from_start / transition_span; // 0->1
+                double s = smoothstep(t);
+                // Transition +1 -> -1 crossing zero at s=0.5
+                sign = 1.0 - 2.0 * s;
+            } else if (dist_to_end < transition_span) {   // exit ramp
+                double t = dist_to_end / transition_span; // 0->1
+                double s = smoothstep(t);
+                sign = -1.0 + 2.0 * s; // -1 -> +1
+            } else {
+                sign = -1.0;
+            }
+        } else {
+            sign = 1.0;
+        }
     }
 
-    // Consider physical reference height in Z compensation calculations
-    // This ensures compensation is relative to the actual physical robot configuration
-    double base_z_position = physical_reference_height_ + body_clearance;
-    compensated_position.z = base_z_position + z_compensation;
+    // Orientation induced positional offsets (small-angle) relative to stance reference
+    const LegStancePosition &stance = body_cfg.leg_stance_positions[leg_index_];
+    double xs = stance.x;
+    double ys = stance.y;
+    double orient_dx = (-base_yaw * ys);
+    double orient_dy = (base_yaw * xs);
+    double orient_dz = base_roll * ys - base_pitch * xs;
 
-    // Enhanced phase-based XY compensation (body roll/pitch compensation)
-    // Consider leg position relative to body center for more accurate compensation
-    double x_compensation = 0.0;
-    double y_compensation = 0.0;
+    Point3D offset;
+    offset.x = base_x + orient_dx;        // X translation + yaw-induced shift
+    offset.y = base_y + orient_dy;        // Y translation + yaw-induced shift
+    offset.z = base_z * sign + orient_dz; // Z translation with possible negation + roll/pitch induced shift
 
-    // Calculate leg position relative to body center
-    double leg_angle = robot_model_.getLegBaseAngleOffset(leg_index_);
+    // Build pose (translation only for now; orientation reserved for future)
+    auto_pose_ = Pose(offset, Eigen::Quaterniond::Identity());
 
-    // Roll compensation based on leg position (Y-axis variation)
-    // Legs on opposite sides of Y-axis get opposite compensation
-    double roll_factor = sin(leg_angle);
-    y_compensation = body_clearance * 0.008 * roll_factor * sin(phase_ratio * 4.0 * M_PI);
-
-    // Pitch compensation based on leg position (X-axis variation)
-    // Legs on opposite sides of X-axis get opposite compensation
-    double pitch_factor = cos(leg_angle);
-    x_compensation = body_clearance * 0.008 * pitch_factor * cos(phase_ratio * 4.0 * M_PI);
-
-    // Additional stability compensation for tripod gait
-    // This helps maintain center of mass during leg transitions
-    double stability_compensation = 0.0;
-    if (phase_ratio > 0.4 && phase_ratio < 0.6) {
-        // During critical transition phase, add extra stability
-        stability_compensation = body_clearance * 0.005 * cos((phase_ratio - 0.5) * 10.0 * M_PI);
-    }
-
-    // Apply XY compensations
-    compensated_position.x += x_compensation;
-    compensated_position.y += y_compensation;
-    // Z position was already set above with base_z_position + z_compensation
-    compensated_position.z += stability_compensation;
-
-    // Create auto pose with compensated position and identity rotation
-    auto_pose_ = Pose(compensated_position, Eigen::Vector3d(0, 0, 0));
-
-    // Apply auto pose to current tip position if compensation is significant
-    double compensation_magnitude = std::sqrt(
-        (compensated_position.x - default_stance_pos.x) * (compensated_position.x - default_stance_pos.x) +
-        (compensated_position.y - default_stance_pos.y) * (compensated_position.y - default_stance_pos.y) +
-        (compensated_position.z - default_stance_pos.z) * (compensated_position.z - default_stance_pos.z));
-
-    // Only apply compensation if it's above a minimum threshold to avoid jitter
-    if (compensation_magnitude > 0.5) { // 0.5mm threshold
-        // OpenSHC pattern: Only update position, NO IK here
-        // IK is applied externally by the controller, not by trajectory generators
-        leg_.setCurrentTipPositionGlobal(auto_pose_.position);
+    // Apply only if magnitude exceeds threshold (jitter guard)
+    double mag = std::sqrt(offset.x * offset.x + offset.y * offset.y + offset.z * offset.z);
+    if (mag > auto_cfg.apply_threshold_mm) {
+        // Direct positional application: external controller/IK will refine if needed
+        Point3D new_pos = leg_.getCurrentTipPositionGlobal();
+        new_pos.x += offset.x;
+        new_pos.y += offset.y;
+        new_pos.z += offset.z;
+        leg_.setCurrentTipPositionGlobal(new_pos);
     }
 }

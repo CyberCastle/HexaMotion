@@ -115,25 +115,34 @@ struct BodyPoseConfiguration {
  * Based on OpenSHC's auto_pose.yaml configuration structure
  */
 struct AutoPoseConfiguration {
-    bool enabled;             //< Enable/disable auto-pose during gait
-    bool tripod_mode_enabled; //< Enable/disable tripod-specific compensation
-    double pose_frequency;    //< Pose frequency (-1.0 = sync with gait cycle)
+    bool enabled = false;         //< Enable/disable auto-pose during gait
+    double pose_frequency = -1.0; //< Pose frequency (-1.0 = sync with gait cycle)
+    int pose_phase_length = 0;    //< Base phase length (from YAML) used when pose_frequency != -1
 
-    // Phase configuration for tripod gait
-    std::vector<int> pose_phase_starts; //< Phase starts for compensation
-    std::vector<int> pose_phase_ends;   //< Phase ends for compensation
+    // Phase segmentation (ordered as in auto_pose.yaml for the active gait)
+    std::vector<int> pose_phase_starts; //< Start indices (inclusive)
+    std::vector<int> pose_phase_ends;   //< End indices (exclusive cyclic) matching starts
 
-    // Auto-pose amplitudes (OpenSHC auto_pose.yaml equivalent)
-    std::vector<double> roll_amplitudes;  //< Roll compensation amplitudes (radians)
-    std::vector<double> pitch_amplitudes; //< Pitch compensation amplitudes (radians)
-    std::vector<double> yaw_amplitudes;   //< Yaw compensation amplitudes (radians)
-    std::vector<double> x_amplitudes;     //< X translation amplitudes (millimeters)
-    std::vector<double> y_amplitudes;     //< Y translation amplitudes (millimeters)
-    std::vector<double> z_amplitudes;     //< Z translation amplitudes (millimeters)
+    // Per-leg negation windows (indices into unified posing cycle). Size NUM_LEGS
+    int negation_phase_start[NUM_LEGS] = {0};
+    int negation_phase_end[NUM_LEGS] = {0};
+    double negation_transition_ratio[NUM_LEGS] = {0.0}; //< 0 => cambio inmediato, >0 suaviza transición
 
-    // Tripod group configuration
-    std::vector<int> tripod_group_a_legs; //< Group A legs (AR, CR, BL)
-    std::vector<int> tripod_group_b_legs; //< Group B legs (BR, CL, AL)
+    // Auto-pose amplitudes por fase (vector length = number of phases)
+    std::vector<double> roll_amplitudes;    //< rad
+    std::vector<double> pitch_amplitudes;   //< rad
+    std::vector<double> yaw_amplitudes;     //< rad
+    std::vector<double> x_amplitudes;       //< mm
+    std::vector<double> y_amplitudes;       //< mm
+    std::vector<double> z_amplitudes;       //< mm
+    std::vector<double> gravity_amplitudes; //< unitless / factor
+
+    // Metadata
+    std::string gait_name; //< Nombre del gait al que pertenece esta configuración
+
+    // Application threshold: minimum absolute displacement magnitude (mm) to apply
+    // the computed auto-pose offset to avoid micro jitter due to noise / phase edge blending.
+    double apply_threshold_mm = 0.5; //< Default matches legacy heuristic
 };
 
 #endif // BODY_POSE_CONFIG_H

@@ -89,21 +89,6 @@ int main() {
               << "Y=" << current_default.max_translation.y << "mm, "
               << "Z=" << current_default.max_translation.z << "mm" << std::endl;
 
-    // Test conservative configuration using factory
-    BodyPoseConfiguration conservative_config = getConservativeBodyPoseConfig(p);
-    pc.setBodyPoseConfig(conservative_config);
-    const auto &current_conservative = pc.getBodyPoseConfig();
-    std::cout << "Conservative config - Body clearance: " << current_conservative.body_clearance << "mm, "
-              << "Swing height: " << current_conservative.swing_height << "mm" << std::endl;
-
-    // Test high-speed configuration using factory
-    BodyPoseConfiguration high_speed_config = getHighSpeedBodyPoseConfig(p);
-    pc.setBodyPoseConfig(high_speed_config);
-    const auto &current_high_speed = pc.getBodyPoseConfig();
-    std::cout << "High-speed config - Body clearance: " << current_high_speed.body_clearance << "mm, "
-              << "Swing height: " << current_high_speed.swing_height << "mm" << std::endl;
-
-    // Reset to default for pose tests using factory
     pc.setBodyPoseConfig(getDefaultBodyPoseConfig(p));
 
     // Disable smooth trajectory for deterministic tests
@@ -232,40 +217,58 @@ int main() {
     std::cout << "✓ Horizontal plane test passed: height=" << horizontal_pose.position.z
               << " (expected around " << expected_horizontal_height << ")" << std::endl;
 
-    // Test case 2: Tilted plane (legs at different heights)
+    // Test case 2: Tilted plane (legs at different heights) with smooth transition expectation
+    double avg_tilt_z = 0.0;
     for (int i = 0; i < NUM_LEGS; i++) {
         legs[i].setStepPhase(STANCE_PHASE);
-        Point3D tilted_pos(i * 50.0, i * 30.0, -150.0 + i * 10.0); // Increasing height
+        double leg_z = -150.0 + i * 10.0;
+        Point3D tilted_pos(i * 50.0, i * 30.0, leg_z); // Increasing height
         legs[i].setCurrentTipPositionGlobal(tilted_pos);
+        avg_tilt_z += leg_z;
     }
+    avg_tilt_z /= NUM_LEGS;
+    double expected_tilt_height = avg_tilt_z + 150.0; // add body clearance
 
-    pc.updateWalkPlanePose(legs);
-    Pose tilted_pose = pc.getWalkPlanePose();
+    // Advance updates until height approaches target (mechanically plausible gradual change)
+    int max_iters = 80; // > duration (1s) * 50Hz
+    double last_height = pc.getWalkPlanePose().position.z;
+    double final_height = last_height;
+    for (int it = 0; it < max_iters; ++it) {
+        pc.updateWalkPlanePose(legs);
+        final_height = pc.getWalkPlanePose().position.z;
 
-    // For tilted plane, height should be different from horizontal
-    assert(std::abs(tilted_pose.position.z - horizontal_pose.position.z) > 5.0 &&
-           "Tilted plane should result in different height than horizontal");
-    std::cout << "✓ Tilted plane test passed: height=" << tilted_pose.position.z
-              << " (differs from horizontal by " << std::abs(tilted_pose.position.z - horizontal_pose.position.z) << ")" << std::endl;
+        // Break once we've passed 60% of expected delta or are within 2mm of target
+        double delta_from_horizontal = std::abs(final_height - horizontal_pose.position.z);
+        double target_delta = std::abs(expected_tilt_height - horizontal_pose.position.z);
+        if (delta_from_horizontal >= 0.6 * target_delta || std::abs(final_height - expected_tilt_height) < 2.0) {
+            break;
+        }
+    }
+    double achieved_delta = std::abs(final_height - horizontal_pose.position.z);
+    assert(achieved_delta > 5.0 && "Tilted plane should result in noticeable height change after transition steps");
+    std::cout << "✓ Tilted plane test passed (gradual): final_height=" << final_height
+              << " (delta=" << achieved_delta << ", target=" << expected_tilt_height << ")" << std::endl;
 
-    // Test case 3: Insufficient stance legs (< 3) - should use fallback normal but height from available legs
+    // Test case 3: Insufficient stance legs (< 3) - smooth convergence
     for (int i = 0; i < NUM_LEGS; i++) {
         legs[i].setStepPhase(i < 2 ? STANCE_PHASE : SWING_PHASE);
-        Point3D test_pos(i * 50.0, i * 30.0, -150.0 + i * 10.0);
+        double leg_z = -150.0 + i * 10.0;
+        Point3D test_pos(i * 50.0, i * 30.0, leg_z);
         legs[i].setCurrentTipPositionGlobal(test_pos);
     }
-
     Pose before_insufficient = pc.getWalkPlanePose();
-    pc.updateWalkPlanePose(legs);
-    Pose after_insufficient = pc.getWalkPlanePose();
-
-    // With insufficient stance legs, normal should be horizontal (0,0,1) but height may change
-    // Expected height: average of first 2 legs (-150 + -140)/2 = -145, plus body clearance = 5
-    double expected_height_insufficient = ((-150.0) + (-150.0 + 10.0)) / 2.0 + 150.0; // -145 + 150 = 5
-    assert(std::abs(after_insufficient.position.z - expected_height_insufficient) < 2.0 &&
-           "Insufficient stance legs should use average of available stance legs");
-    std::cout << "✓ Insufficient stance legs test passed: height=" << after_insufficient.position.z
-              << " (expected: " << expected_height_insufficient << ")" << std::endl; // Test calculateWalkPlaneHeight with precise validation
+    double expected_height_insufficient = ((-150.0) + (-140.0)) / 2.0 + 150.0; // average of two stance + clearance
+    double insufficient_height = before_insufficient.position.z;
+    for (int it = 0; it < max_iters; ++it) {
+        pc.updateWalkPlanePose(legs);
+        insufficient_height = pc.getWalkPlanePose().position.z;
+        if (std::abs(insufficient_height - expected_height_insufficient) < 2.0)
+            break;
+    }
+    assert(std::abs(insufficient_height - expected_height_insufficient) < 2.0 &&
+           "Insufficient stance legs should converge to average stance leg height + clearance");
+    std::cout << "✓ Insufficient stance legs test passed: height=" << insufficient_height
+              << " (expected≈ " << expected_height_insufficient << ")" << std::endl; // Test calculateWalkPlaneHeight with precise validation
     std::cout << "\n=== Testing calculateWalkPlaneHeight with Result Validation ===" << std::endl;
 
     // Set known leg heights and validate average calculation
@@ -280,12 +283,18 @@ int main() {
     }
     expected_average /= NUM_LEGS;
 
-    pc.updateWalkPlanePose(legs);
-    Pose height_test_pose = pc.getWalkPlanePose();
-    double actual_plane_height = height_test_pose.position.z - 150.0; // subtract body clearance
-
+    // Allow gradual convergence via Bezier transition if rotation change is significant
+    double actual_plane_height = 0.0;
+    for (int it = 0; it < max_iters; ++it) {
+        pc.updateWalkPlanePose(legs);
+        Pose height_test_pose = pc.getWalkPlanePose();
+        actual_plane_height = height_test_pose.position.z - 150.0; // subtract body clearance
+        if (std::abs(actual_plane_height - expected_average) < 1.0) {
+            break;
+        }
+    }
     assert(std::abs(actual_plane_height - expected_average) < 1.0 &&
-           "Walk plane height should match average of stance leg heights");
+           "Walk plane height should converge to average of stance leg heights");
     std::cout << "✓ Walk plane height validation passed: actual=" << actual_plane_height
               << ", expected=" << expected_average << " (difference: " << std::abs(actual_plane_height - expected_average) << ")" << std::endl;
 
@@ -423,11 +432,16 @@ int main() {
     }
     expected_average_z /= NUM_LEGS;
 
-    Eigen::Vector3d calculated_body_pos = pc.calculateBodyPosition(legs);
-    double calculated_z = calculated_body_pos.z() - 150.0; // subtract body clearance to get leg plane height
-
+    double calculated_z = 0.0;
+    for (int it = 0; it < max_iters; ++it) {
+        Eigen::Vector3d calculated_body_pos = pc.calculateBodyPosition(legs);
+        calculated_z = calculated_body_pos.z() - 150.0; // subtract body clearance
+        if (std::abs(calculated_z - expected_average_z) < 2.0) {
+            break;
+        }
+    }
     assert(std::abs(calculated_z - expected_average_z) < 2.0 &&
-           "Body position Z should reflect average leg height (with walk plane enabled)");
+           "Body position Z should converge to average leg height (with walk plane enabled)");
     std::cout << "✓ calculateBodyPosition with walk plane: calculated_z=" << calculated_z
               << ", expected_z=" << expected_average_z << " (difference: " << std::abs(calculated_z - expected_average_z) << ")" << std::endl;
 
@@ -468,7 +482,7 @@ int main() {
     // Test auto-pose config access
     const auto &auto_config = pc.getAutoPoseConfig();
     std::cout << "✓ Auto-pose config accessed: enabled=" << auto_config.enabled
-              << ", tripod_mode=" << auto_config.tripod_mode_enabled << std::endl;
+              << ", gait_name=" << auto_config.gait_name << std::endl;
 
     // Test updateAutoPose with different gait phases and validate leg changes
     Point3D pre_autopose_positions[NUM_LEGS];
