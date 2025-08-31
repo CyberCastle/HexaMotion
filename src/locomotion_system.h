@@ -261,8 +261,8 @@ class LocomotionSystem {
     /** Query if initial standing pose transition is active. */
     bool isInitialStandingPoseActive() const { return body_pose_ctrl && body_pose_ctrl->isInitialStandingPoseActive(); }
 
-  /** Set body pose with position and orientation (orientation in radians) */
-  bool setBodyPose(const Eigen::Vector3d &position, const Eigen::Vector3d &orientation);
+    /** Set body pose with position and orientation (orientation in radians) */
+    bool setBodyPose(const Eigen::Vector3d &position, const Eigen::Vector3d &orientation);
 
     /** Check if smooth movement is in progress */
     bool isSmoothMovementInProgress() const;
