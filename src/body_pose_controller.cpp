@@ -972,8 +972,7 @@ bool BodyPoseController::executeShutdownSequence(Leg legs[NUM_LEGS]) {
 
 // Update auto-pose during gait execution (OpenSHC equivalent)
 bool BodyPoseController::updateAutoPose(double gait_phase, Leg legs[NUM_LEGS]) {
-    // Mantener plano de caminata actualizado (despeje del cuerpo)
-    updateWalkPlanePose(legs);
+
     if (!auto_pose_enabled || !auto_pose_config.enabled)
         return true; // nothing to do
 
