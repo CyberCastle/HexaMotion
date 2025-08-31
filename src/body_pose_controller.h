@@ -333,10 +333,18 @@ class BodyPoseController {
      */
     void updateCurrentPose(double gait_phase, Leg legs[NUM_LEGS]);
 
+    /**
+     * @brief Apply global + per-leg auto pose modulation to desired tip positions (OpenSHC-style).
+     * This transforms each leg's desired tip position before batch IK so that horizontal (x,y)
+     * translations and yaw/roll/pitch components influence coxa motion.
+     */
+    void applyAutoPoseToDesiredTips(Leg legs[NUM_LEGS]);
+
   private:
-    RobotModel &model;                      //< Reference to robot model
-    BodyPoseConfiguration body_pose_config; //< Body pose configuration
-    AutoPoseConfiguration auto_pose_config; //< Auto-pose configuration
+    RobotModel &model;                         //< Reference to robot model
+    BodyPoseConfiguration body_pose_config;    //< Body pose configuration
+    AutoPoseConfiguration auto_pose_config;    //< Auto-pose configuration
+    Pose global_auto_pose_ = Pose::Identity(); //< Aggregated (non-negated) auto pose applied/removed per leg
 
     // Leg posers for each leg
     class LegPoserImpl;

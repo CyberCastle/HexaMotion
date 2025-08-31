@@ -84,9 +84,38 @@ void BodyPoseController::updateCurrentPose(double gait_phase, Leg legs[NUM_LEGS]
     // Keep walk plane pose coherent with current stance distribution.
     updateWalkPlanePose(legs);
 
-    // Apply auto-pose patterning (phase-synchronised) if enabled.
-    // We ignore the return value (currently always true) since we perform no fallback action here.
-    updateAutoPose(gait_phase, legs);
+    // Update (but do NOT yet apply) auto-pose patterning. We aggregate into global_auto_pose_
+    // and per-leg posers; actual spatial effect on desired tip positions happens in
+    // applyAutoPoseToDesiredTips() just before IK (mirrors OpenSHC ordering: compose then apply).
+    if (auto_pose_enabled && auto_pose_config.enabled) {
+        // Run phase update => populates each leg poser auto_pose_ (negated windows) and computes base amplitudes.
+        updateAutoPose(gait_phase, legs);
+        // Reconstruct a global base auto pose by averaging active leg base poses (simple heuristic).
+        // In original OpenSHC a unified auto_pose_ is built from AutoPoser objects; we approximate using leg 0.
+        if (leg_posers_[0]) {
+            global_auto_pose_ = leg_posers_[0]->get()->getAutoPose();
+        } else {
+            global_auto_pose_ = Pose::Identity();
+        }
+    } else {
+        global_auto_pose_ = Pose::Identity();
+    }
+}
+
+void BodyPoseController::applyAutoPoseToDesiredTips(Leg legs[NUM_LEGS]) {
+    if (!auto_pose_enabled || !auto_pose_config.enabled)
+        return;
+    // Remove global pose then add per-leg pose, equivalent to OpenSHC updateStance() logic.
+    for (int i = 0; i < NUM_LEGS; ++i) {
+        Point3D raw = legs[i].getDesiredTipPosition();
+        Pose raw_pose(raw, Eigen::Quaterniond::Identity());
+        Pose posed = raw_pose.removePose(global_auto_pose_);
+        if (leg_posers_[i]) {
+            posed = posed.addPose(leg_posers_[i]->get()->getAutoPose());
+        }
+        // Write back only position (orientation ignored by current IK path).
+        legs[i].setDesiredTipPosition(posed.position);
+    }
 }
 
 BodyPoseController::~BodyPoseController() {

@@ -226,23 +226,12 @@ void LegPoser::updateAutoPose(int phase_index, const AutoPoseConfiguration &auto
     if (control_input <= 0.0) {
         auto_pose_ = base_auto_pose_; // unchanged
     } else if (control_input >= 1.0) {
+
         // Fully cancelled (identity pose)
         auto_pose_ = Pose();
     } else {
         // Subtract interpolated fraction of base pose
         Pose portion = Pose().interpolate(control_input, base_auto_pose_);
         auto_pose_ = base_auto_pose_.removePose(portion);
-    }
-
-    // Apply positional component to leg tip if above threshold (jitter guard)
-    double mag = std::sqrt(auto_pose_.position.x * auto_pose_.position.x +
-                           auto_pose_.position.y * auto_pose_.position.y +
-                           auto_pose_.position.z * auto_pose_.position.z);
-    if (mag > auto_cfg.apply_threshold_mm) {
-        Point3D new_pos = leg_.getCurrentTipPositionGlobal();
-        new_pos.x += auto_pose_.position.x;
-        new_pos.y += auto_pose_.position.y;
-        new_pos.z += auto_pose_.position.z;
-        leg_.setCurrentTipPositionGlobal(new_pos);
     }
 }
