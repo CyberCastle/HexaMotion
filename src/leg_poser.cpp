@@ -33,126 +33,107 @@ LegPoser::LegPoser(const LegPoser *leg_poser)
     : leg_index_(leg_poser->leg_index_), leg_(leg_poser->leg_), robot_model_(leg_poser->robot_model_), auto_pose_(leg_poser->auto_pose_), first_iteration_(leg_poser->first_iteration_), master_iteration_count_(leg_poser->master_iteration_count_), origin_tip_pose_(leg_poser->origin_tip_pose_), current_tip_pose_(leg_poser->current_tip_pose_), target_tip_pose_(leg_poser->target_tip_pose_), external_target_(leg_poser->external_target_), leg_completed_step_(leg_poser->leg_completed_step_), physical_reference_height_(leg_poser->physical_reference_height_) {
 }
 
-bool LegPoser::stepToPosition(const Pose &target_tip_pose, const Pose &target_pose,
-                              double lift_height, double time_to_step, bool apply_delta) {
-    // OpenSHC EXACT implementation
+int LegPoser::stepToPosition(const Pose &target_tip_pose, const Pose &target_pose,
+                             double lift_height, double time_to_step, bool apply_delta) {
+    // Initialize on first iteration
     if (first_iteration_) {
         origin_tip_pose_ = getCurrentTipPose();
         master_iteration_count_ = 0;
         first_iteration_ = false;
     }
 
-    Pose desired_tip_pose = target_tip_pose;
-
-    // Check if transition is needed (OpenSHC exact)
-    Point3D position_delta = origin_tip_pose_.position - desired_tip_pose.position;
-    bool transition_position = std::sqrt(position_delta.x * position_delta.x +
-                                         position_delta.y * position_delta.y +
-                                         position_delta.z * position_delta.z) > TIP_TOLERANCE;
-
-    if (!transition_position && lift_height == 0.0) {
+    // Distance check to early-complete
+    Point3D delta_pos = origin_tip_pose_.position - target_tip_pose.position;
+    double dist = std::sqrt(delta_pos.x * delta_pos.x + delta_pos.y * delta_pos.y + delta_pos.z * delta_pos.z);
+    if (dist < TIP_TOLERANCE && lift_height == 0.0) {
         first_iteration_ = true;
         current_tip_pose_ = origin_tip_pose_;
         leg_completed_step_ = true;
-        return true;
+        return PROGRESS_COMPLETE;
     }
 
-    // Apply delta positioning (admittance control equivalent - simplified)
-    if (apply_delta) {
-        desired_tip_pose.position.x += target_pose.position.x;
-        desired_tip_pose.position.y += target_pose.position.y;
-        desired_tip_pose.position.z += target_pose.position.z;
-    }
-
-    master_iteration_count_++;
-
-    // OpenSHC exact timing calculation
+    // Timing discretization
     double time_delta = robot_model_.getTimeDelta();
     int num_iterations = std::max(1, static_cast<int>(std::round(time_to_step / time_delta)));
-    current_num_iterations_ = num_iterations; // store for progress reporting
-    double delta_t = 1.0 / num_iterations;
-
+    current_num_iterations_ = num_iterations;
+    master_iteration_count_++;
     double completion_ratio = static_cast<double>(master_iteration_count_ - 1) / static_cast<double>(num_iterations);
+    if (completion_ratio < 0.0)
+        completion_ratio = 0.0;
+    if (completion_ratio > 1.0)
+        completion_ratio = 1.0;
 
-    // Interpolate pose applied to body between identity and target (OpenSHC exact)
-    // Simplified: target_pose influence over completion_ratio
-    Point3D pose_influence = target_pose.position * completion_ratio;
+    // Eased interpolation of full target pose (translation + rotation)
+    auto smoothStep = [](double x) { x = math_utils::clamp(x, 0.0, 1.0); return x * x * (3.0 - 2.0 * x); };
+    double eased = smoothStep(completion_ratio);
+    Pose desired_pose = Pose().interpolate(eased, target_pose); // Equivalent to Identity().interpolate
 
-    Point3D new_tip_position = origin_tip_pose_.position;
-
-    // OpenSHC EXACT bezier curve implementation
-    int half_swing_iteration = num_iterations / 2;
-
-    // Control nodes for dual 3D quartic bezier curves (OpenSHC exact)
+    // Dual quartic bezier control nodes like original
     Point3D control_nodes_primary[5];
     Point3D control_nodes_secondary[5];
-    Point3D origin_to_target = origin_tip_pose_.position - desired_tip_pose.position;
-
-    // OpenSHC exact control node calculation
+    Point3D origin_to_target = origin_tip_pose_.position - target_tip_pose.position;
     control_nodes_primary[0] = origin_tip_pose_.position;
     control_nodes_primary[1] = origin_tip_pose_.position;
     control_nodes_primary[2] = origin_tip_pose_.position;
-    control_nodes_primary[3] = desired_tip_pose.position + origin_to_target * 0.75;
-    control_nodes_primary[4] = desired_tip_pose.position + origin_to_target * 0.5;
+    control_nodes_primary[3] = target_tip_pose.position + origin_to_target * 0.75;
+    control_nodes_primary[4] = target_tip_pose.position + origin_to_target * 0.5;
     control_nodes_primary[2].z += lift_height;
     control_nodes_primary[3].z += lift_height;
     control_nodes_primary[4].z += lift_height;
-
-    control_nodes_secondary[0] = desired_tip_pose.position + origin_to_target * 0.5;
-    control_nodes_secondary[1] = desired_tip_pose.position + origin_to_target * 0.25;
-    control_nodes_secondary[2] = desired_tip_pose.position;
-    control_nodes_secondary[3] = desired_tip_pose.position;
-    control_nodes_secondary[4] = desired_tip_pose.position;
+    control_nodes_secondary[0] = target_tip_pose.position + origin_to_target * 0.5;
+    control_nodes_secondary[1] = target_tip_pose.position + origin_to_target * 0.25;
+    control_nodes_secondary[2] = target_tip_pose.position;
+    control_nodes_secondary[3] = target_tip_pose.position;
+    control_nodes_secondary[4] = target_tip_pose.position;
     control_nodes_secondary[0].z += lift_height;
     control_nodes_secondary[1].z += lift_height;
     control_nodes_secondary[2].z += lift_height;
 
-    // OpenSHC exact swing iteration calculation
+    int half_swing_iteration = num_iterations / 2;
     int swing_iteration_count = (master_iteration_count_ + (num_iterations - 1)) % num_iterations + 1;
-
-    double time_input;
-    // Calculate change in position using 1st/2nd bezier curve (OpenSHC exact)
+    double delta_t = 1.0 / num_iterations;
+    double bez_time_input;
+    Point3D new_tip_position;
     if (swing_iteration_count <= half_swing_iteration) {
-        time_input = swing_iteration_count * delta_t * 2.0;
-        new_tip_position = math_utils::quarticBezier(control_nodes_primary, time_input);
+        bez_time_input = swing_iteration_count * delta_t * 2.0;
+        new_tip_position = math_utils::quarticBezier(control_nodes_primary, bez_time_input);
     } else {
-        time_input = (swing_iteration_count - half_swing_iteration) * delta_t * 2.0;
-        new_tip_position = math_utils::quarticBezier(control_nodes_secondary, time_input);
+        bez_time_input = (swing_iteration_count - half_swing_iteration) * delta_t * 2.0;
+        new_tip_position = math_utils::quarticBezier(control_nodes_secondary, bez_time_input);
     }
 
-    // Apply workspace constraints to the calculated position
+    // Workspace constraint
     new_tip_position = robot_model_.getWorkspaceAnalyzer().constrainToGeometricWorkspace(leg_index_, new_tip_position);
+    // Apply pose transform inverse (OpenSHC semantics) and admittance delta if requested
+    Point3D transformed = desired_pose.inverseTransformVector(new_tip_position);
+    if (apply_delta) {
+        // Defensive safeguard: if admittance controller not yet initialized or delta unreasonably large, ignore.
+        auto safe_component = [&](double v) { return (std::isfinite(v) && std::fabs(v) <= ADMITTANCE_MAX_ABS_DELTA_MM) ? v : 0.0; };
+        transformed.x += safe_component(admittance_delta_.x);
+        transformed.y += safe_component(admittance_delta_.y);
+        transformed.z += safe_component(admittance_delta_.z);
+    }
+    current_tip_pose_.position = transformed;
+    current_tip_pose_.rotation = target_tip_pose.rotation; // Pass-through target tip orientation
 
-    // OpenSHC pattern: Apply pose transformation to tip position
-    current_tip_pose_.position = new_tip_position - pose_influence;
-    current_tip_pose_.rotation = target_tip_pose.rotation;
-
-    // Return completion status (OpenSHC exact)
-    if (master_iteration_count_ >= num_iterations) {
+    int progress_percent = static_cast<int>(std::round(completion_ratio * 100.0));
+    if (progress_percent >= PROGRESS_COMPLETE) {
         first_iteration_ = true;
         leg_completed_step_ = true;
-        current_tip_pose_ = target_tip_pose; // Ensure exact final position
-        return true;
-    } else {
-        return false;
+        current_tip_pose_ = target_tip_pose; // finalize
+        progress_percent = PROGRESS_COMPLETE;
     }
+    return progress_percent;
 }
 
 void LegPoser::updateAutoPose(int phase_index, const AutoPoseConfiguration &auto_cfg, const BodyPoseConfiguration &body_cfg) {
-    // OpenSHC-style per-leg negation of already computed global auto pose (emulated locally).
-    // This version mirrors OpenSHC LegPoser::updateAutoPose logic:
-    // 1. Determine negation window (start/end) mapped into unified phase domain.
-    // 2. Handle wrap-around windows (start > end) by extending end beyond period.
-    // 3. Decide if current phase_index triggers negation enable flag.
-    // 4. If negated, build a smooth removal pose via smoothstep ramps (negation_transition_ratio).
-    // 5. Compose final auto_pose_ relative to stance reference for this leg.
-
+    // Full auto-pose update (OpenSHC-style) with subtraction-based negation.
     if (!auto_cfg.enabled) {
         auto_pose_ = Pose();
         return;
     }
 
-    // Determine base period (robust fallbacks like body controller)
+    // Determine base posing cycle length (robust fallback for malformed configs)
     int base_period = auto_cfg.pose_phase_length;
     if (base_period <= 0) {
         int max_idx = 0;
@@ -164,32 +145,20 @@ void LegPoser::updateAutoPose(int phase_index, const AutoPoseConfiguration &auto
                 max_idx = v;
         base_period = std::max(4, max_idx + 1);
     }
-    int phase = (phase_index % base_period + base_period) % base_period; // normalize
+    int phase = (phase_index % base_period + base_period) % base_period; // normalised phase index
 
-    // Window membership helper (same semantics as body controller)
+    // Helper lambdas
     auto inWindow = [base_period](int start, int end, int value) {
         if (start == end)
-            return false;
+            return false; // empty window
         if (start < end)
             return value >= start && value < end;
-        return value >= start || value < end;
+        return value >= start || value < end; // wrapped window
     };
-
     auto modDist = [base_period](int from, int to) { return (to - from + base_period) % base_period; };
+    auto smoothstep = [](double x) { x = math_utils::clamp(x, 0.0, 1.0); return x * x * (3.0 - 2.0 * x); };
 
-    // Cubic smoothstep easing function f(x)=3x^2-2x^3 with clamped domain [0,1].
-    // Derived by solving a cubic a x^3 + b x^2 + c x + d subject to:
-    //  f(0)=0 (start at 0), f(1)=1 (end at 1), f'(0)=0 and f'(1)=0 (zero slope at boundaries).
-    // These four boundary conditions yield a=-2, b=3, c=0, d=0 -> f(x)=3x^2-2x^3.
-    // Provides C1 continuity (no velocity jump) minimizing jerk at start/end of negation ramps.
-    // Chosen over linear (discontinuous derivative) and over quintic smootherstep (6x^5-15x^4+10x^3)
-    // to balance smoothness with minimal computational cost in the control loop.
-    auto smoothstep = [](double x) {
-        x = math_utils::clamp(x, 0.0, 1.0);
-        return x * x * (3.0 - 2.0 * x);
-    };
-
-    // Compute base aggregated auto pose (same averaging strategy as BodyPoseController) for this phase.
+    // Aggregate base amplitudes (average of all active windows covering current phase) per axis
     auto computeAxis = [&](const std::vector<double> &amps) {
         if (amps.empty())
             return 0.0;
@@ -204,74 +173,76 @@ void LegPoser::updateAutoPose(int phase_index, const AutoPoseConfiguration &auto
         return count ? acc / count : 0.0;
     };
 
-    double base_roll = computeAxis(auto_cfg.roll_amplitudes);
-    double base_pitch = computeAxis(auto_cfg.pitch_amplitudes);
-    double base_yaw = computeAxis(auto_cfg.yaw_amplitudes);
-    double base_x = computeAxis(auto_cfg.x_amplitudes);
-    double base_y = computeAxis(auto_cfg.y_amplitudes);
-    double base_z = computeAxis(auto_cfg.z_amplitudes);
+    double base_roll = computeAxis(auto_cfg.roll_amplitudes);   // degrees
+    double base_pitch = computeAxis(auto_cfg.pitch_amplitudes); // degrees
+    double base_yaw = computeAxis(auto_cfg.yaw_amplitudes);     // degrees
+    double base_x = computeAxis(auto_cfg.x_amplitudes);         // mm
+    double base_y = computeAxis(auto_cfg.y_amplitudes);         // mm
+    double base_z = computeAxis(auto_cfg.z_amplitudes);         // mm
 
-    // Negation window for this leg
+    // Orientation-induced positional offsets (small-angle approximation) relative to stance reference
+    const LegStancePosition &stance = body_cfg.leg_stance_positions[leg_index_];
+    double xs = stance.x;                // mm
+    double ys = stance.y;                // mm
+    double orient_dx = (-base_yaw * ys); // yaw causes lateral shift proportional to radius (degrees * mm)
+    double orient_dy = (base_yaw * xs);
+    double orient_dz = base_roll * ys - base_pitch * xs; // roll/pitch induce vertical shift
+
+    // Build base pose (translation + orientation quaternion)
+    Point3D base_translation(base_x + orient_dx, base_y + orient_dy, base_z + orient_dz);
+    Eigen::Vector3d euler_deg(base_roll, base_pitch, base_yaw);
+    Eigen::Vector3d euler_rad = euler_deg * M_PI / 180.0;
+    Eigen::Quaterniond q = Eigen::AngleAxisd(euler_rad.z(), Eigen::Vector3d::UnitZ()) *
+                           Eigen::AngleAxisd(euler_rad.y(), Eigen::Vector3d::UnitY()) *
+                           Eigen::AngleAxisd(euler_rad.x(), Eigen::Vector3d::UnitX());
+    base_auto_pose_ = Pose(base_translation, q);
+
+    // Negation window (per leg): cancellation by subtracting an interpolated fraction of the base pose
     int ns = auto_cfg.negation_phase_start[leg_index_] % base_period;
     int ne = auto_cfg.negation_phase_end[leg_index_] % base_period;
     bool inside = inWindow(ns, ne, phase);
     int window_len = modDist(ns, ne);
     if (window_len == 0)
-        window_len = base_period; // window covers full cycle
-
-    // Determine current sign / blending factor based on negation transition
+        window_len = base_period; // full cycle window
     double tr_ratio = math_utils::clamp(auto_cfg.negation_transition_ratio[leg_index_], 0.0, 0.49);
     double transition_span = window_len * tr_ratio;
-    double sign = 1.0;  // +1 means not negated, -1 means fully negated
-    double blend = 1.0; // 1.0 = full amplitude, 0 = zero (during cross-fade removal)
-
-    if (transition_span <= 0.0) {
-        sign = inside ? -1.0 : 1.0;
-    } else {
-        if (inside) {
+    double control_input = 0.0; // 0=no cancellation, 1=full cancellation
+    if (inside) {
+        if (transition_span <= 0.0) {
+            control_input = 1.0; // full cancel inside window
+        } else {
             int dist_from_start = modDist(ns, phase);
             int dist_to_end = modDist(phase, ne);
-            if (dist_from_start < transition_span) {          // entry ramp
-                double t = dist_from_start / transition_span; // 0->1
-                double s = smoothstep(t);
-                // Transition +1 -> -1 crossing zero at s=0.5
-                sign = 1.0 - 2.0 * s;
-            } else if (dist_to_end < transition_span) {   // exit ramp
-                double t = dist_to_end / transition_span; // 0->1
-                double s = smoothstep(t);
-                sign = -1.0 + 2.0 * s; // -1 -> +1
+            if (dist_from_start < transition_span) { // entry ramp
+                control_input = smoothstep(double(dist_from_start) / transition_span);
+            } else if (dist_to_end < transition_span) { // exit ramp
+                control_input = smoothstep(double(dist_to_end) / transition_span);
             } else {
-                sign = -1.0;
+                control_input = 1.0; // middle region full cancel
             }
-        } else {
-            sign = 1.0;
         }
     }
 
-    // Orientation induced positional offsets (small-angle) relative to stance reference
-    const LegStancePosition &stance = body_cfg.leg_stance_positions[leg_index_];
-    double xs = stance.x;
-    double ys = stance.y;
-    double orient_dx = (-base_yaw * ys);
-    double orient_dy = (base_yaw * xs);
-    double orient_dz = base_roll * ys - base_pitch * xs;
+    if (control_input <= 0.0) {
+        auto_pose_ = base_auto_pose_; // unchanged
+    } else if (control_input >= 1.0) {
+        // Fully cancelled (identity pose)
+        auto_pose_ = Pose();
+    } else {
+        // Subtract interpolated fraction of base pose
+        Pose portion = Pose().interpolate(control_input, base_auto_pose_);
+        auto_pose_ = base_auto_pose_.removePose(portion);
+    }
 
-    Point3D offset;
-    offset.x = base_x + orient_dx;        // X translation + yaw-induced shift
-    offset.y = base_y + orient_dy;        // Y translation + yaw-induced shift
-    offset.z = base_z * sign + orient_dz; // Z translation with possible negation + roll/pitch induced shift
-
-    // Build pose (translation only for now; orientation reserved for future)
-    auto_pose_ = Pose(offset, Eigen::Quaterniond::Identity());
-
-    // Apply only if magnitude exceeds threshold (jitter guard)
-    double mag = std::sqrt(offset.x * offset.x + offset.y * offset.y + offset.z * offset.z);
+    // Apply positional component to leg tip if above threshold (jitter guard)
+    double mag = std::sqrt(auto_pose_.position.x * auto_pose_.position.x +
+                           auto_pose_.position.y * auto_pose_.position.y +
+                           auto_pose_.position.z * auto_pose_.position.z);
     if (mag > auto_cfg.apply_threshold_mm) {
-        // Direct positional application: external controller/IK will refine if needed
         Point3D new_pos = leg_.getCurrentTipPositionGlobal();
-        new_pos.x += offset.x;
-        new_pos.y += offset.y;
-        new_pos.z += offset.z;
+        new_pos.x += auto_pose_.position.x;
+        new_pos.y += auto_pose_.position.y;
+        new_pos.z += auto_pose_.position.z;
         leg_.setCurrentTipPositionGlobal(new_pos);
     }
 }

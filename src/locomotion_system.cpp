@@ -595,6 +595,21 @@ bool LocomotionSystem::update() {
             }
         }
 
+        // STEP 2a: Update body pose (partial OpenSHC PoseController::updateCurrentPose)
+        // We only update auto-pose modulation and walk plane pose estimation here.
+        if (body_pose_ctrl) {
+
+            // Derive normalized gait phase [0,1) from first leg stepper (consistent across legs in synchronized gaits)
+            double gait_phase = 0.0;
+            StepCycle sc = walk_ctrl->getStepCycle();
+            int period = sc.period_ > 0 ? sc.period_ : 1;
+            auto leg0 = walk_ctrl->getLegStepper(0);
+            if (leg0) {
+                gait_phase = static_cast<double>(leg0->getPhase() % period) / static_cast<double>(period);
+            }
+            body_pose_ctrl->updateCurrentPose(gait_phase, legs);
+        }
+
         // STEP 2b: Finalize leg phases (FSR or pure kinematic) after trajectories computed
         updateLegStates();
 

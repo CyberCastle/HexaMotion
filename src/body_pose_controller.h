@@ -320,6 +320,17 @@ class BodyPoseController {
     void setWalkPlanePoseEnabled(bool enabled);
     bool isWalkPlanePoseEnabled() const;
 
+    /**
+     * @brief Update current body pose state (partial OpenSHC PoseController::updateCurrentPose equivalent).
+     * @details Minimal adaptation that only forwards to auto-pose and walk plane pose update mechanisms.
+     *          It intentionally omits IMU fusion, manual pose input handling, reset logic and stiffness
+     *          modulation present in the full OpenSHC implementation. Gait phase is propagated so that
+     *          phase-synchronised auto pose patterns can be evaluated consistently.
+     * @param gait_phase Normalised gait phase in [0,1).
+     * @param legs Array of Leg objects (needed for walk plane estimation and per-leg auto pose updates).
+     */
+    void updateCurrentPose(double gait_phase, Leg legs[NUM_LEGS]);
+
   private:
     RobotModel &model;                      //< Reference to robot model
     BodyPoseConfiguration body_pose_config; //< Body pose configuration

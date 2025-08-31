@@ -74,6 +74,21 @@ BodyPoseController::BodyPoseController(RobotModel &m, const BodyPoseConfiguratio
     auto_pose_config = createAutoPoseConfigurationForGait(model.getParams(), gait_name);
 }
 
+// -------------------------------------------------------------------------------------------------
+// Partial OpenSHC PoseController::updateCurrentPose adaptation
+// Only updates walk plane pose (clearance / plane estimation) and auto pose modulation.
+// Excludes: IMU gravity estimation, manual pose input filtering, pose reset sequences,
+// dynamic stiffness adjustments, external target transforms, and progress tracking.
+// Rationale: HexaMotion centralises those concerns elsewhere (LocomotionSystem / IMU modules).
+void BodyPoseController::updateCurrentPose(double gait_phase, Leg legs[NUM_LEGS]) {
+    // Keep walk plane pose coherent with current stance distribution.
+    updateWalkPlanePose(legs);
+
+    // Apply auto-pose patterning (phase-synchronised) if enabled.
+    // We ignore the return value (currently always true) since we perform no fallback action here.
+    updateAutoPose(gait_phase, legs);
+}
+
 BodyPoseController::~BodyPoseController() {
     // Clean up leg posers
     for (int i = 0; i < NUM_LEGS; i++) {
