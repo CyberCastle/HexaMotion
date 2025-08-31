@@ -298,6 +298,7 @@ AutoPoseConfiguration createAutoPoseConfigurationForGait(const Parameters &param
     AutoPoseConfiguration cfg; // disabled por defecto
     cfg.pose_frequency = -1.0; // sincronizado
     cfg.gait_name = gait_name;
+    cfg.enabled = true;
 
     if (gait_name == "tripod_gait") {
         cfg.pose_phase_length = 4;

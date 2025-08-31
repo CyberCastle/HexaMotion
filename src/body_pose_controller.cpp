@@ -116,18 +116,14 @@ LegPoser *BodyPoseController::getLegPoser(int leg_index) const {
 
 bool BodyPoseController::setBodyPose(const Eigen::Vector3d &position, const Eigen::Vector3d &orientation,
                                      Leg legs[NUM_LEGS]) {
-    // Check body pose limits before applying
+    // orientation is already in radians (roll,pitch,yaw)
     if (!checkBodyPoseLimits(position, orientation)) {
         return false;
     }
-
-    // Use smooth trajectory as default behavior if enabled
     if (model.getParams().smooth_trajectory.use_current_servo_positions &&
         model.getParams().smooth_trajectory.enable_pose_interpolation) {
         return setBodyPoseSmooth(position, orientation, legs);
     }
-
-    // Original implementation for compatibility when smooth trajectory is disabled
     return setBodyPoseImmediate(position, orientation, legs);
 }
 
@@ -249,19 +245,14 @@ StandingPoseJoints BodyPoseController::getStandingPoseJoints(int leg_index) cons
 
 bool BodyPoseController::setBodyPoseQuaternion(const Eigen::Vector3d &position, const Eigen::Vector4d &quaternion,
                                                Leg legs[NUM_LEGS]) {
-    // Use smooth trajectory with quaternion if enabled
+    // Convert quaternion to Euler (radians) directly and pass through
+    Point3D euler_rad = math_utils::quaternionToEulerPoint3D(quaternion);
+    Eigen::Vector3d orientation(euler_rad.x, euler_rad.y, euler_rad.z);
     if (model.getParams().smooth_trajectory.use_current_servo_positions &&
         model.getParams().smooth_trajectory.enable_pose_interpolation &&
         model.getParams().smooth_trajectory.use_quaternion_slerp) {
         return setBodyPoseSmoothQuaternion(position, quaternion, legs);
     }
-
-    // Original implementation for compatibility
-    Point3D euler_rad = math_utils::quaternionToEulerPoint3D(quaternion);
-    Eigen::Vector3d orientation(
-        math_utils::radiansToDegrees(euler_rad.x),
-        math_utils::radiansToDegrees(euler_rad.y),
-        math_utils::radiansToDegrees(euler_rad.z));
     return setBodyPose(position, orientation, legs);
 }
 
@@ -302,12 +293,8 @@ bool BodyPoseController::setBodyPoseSmooth(const Eigen::Vector3d &position, cons
 
 bool BodyPoseController::setBodyPoseSmoothQuaternion(const Eigen::Vector3d &position, const Eigen::Vector4d &quaternion,
                                                      Leg legs[NUM_LEGS]) {
-    // Convert quaternion to euler for compatibility with existing smooth trajectory
     Point3D euler_rad = math_utils::quaternionToEulerPoint3D(quaternion);
-    Eigen::Vector3d orientation(
-        math_utils::radiansToDegrees(euler_rad.x),
-        math_utils::radiansToDegrees(euler_rad.y),
-        math_utils::radiansToDegrees(euler_rad.z));
+    Eigen::Vector3d orientation(euler_rad.x, euler_rad.y, euler_rad.z);
     return setBodyPoseSmooth(position, orientation, legs);
 }
 
@@ -354,9 +341,9 @@ bool BodyPoseController::checkBodyPoseLimits(const Eigen::Vector3d &position, co
     }
 
     // Check rotation limits using configured max_rotation values
-    double roll_rad = math_utils::degreesToRadians(orientation.x());
-    double pitch_rad = math_utils::degreesToRadians(orientation.y());
-    double yaw_rad = math_utils::degreesToRadians(orientation.z());
+    double roll_rad = orientation.x();
+    double pitch_rad = orientation.y();
+    double yaw_rad = orientation.z();
 
     if (std::abs(roll_rad) > body_pose_config.max_rotation.roll ||
         std::abs(pitch_rad) > body_pose_config.max_rotation.pitch ||

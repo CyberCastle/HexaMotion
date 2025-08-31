@@ -483,6 +483,7 @@ bool LocomotionSystem::setStandingPose() {
 }
 
 bool LocomotionSystem::setBodyPose(const Eigen::Vector3d &position, const Eigen::Vector3d &orientation) {
+    // orientation expected in radians (roll,pitch,yaw)
 
     // Use BodyPoseController to set the pose
     bool success = body_pose_ctrl->setBodyPose(position, orientation, legs);

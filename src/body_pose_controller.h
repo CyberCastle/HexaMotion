@@ -58,8 +58,9 @@ class BodyPoseController {
      * @param legs Array of Leg objects to update
      * @return true if successful, false otherwise
      */
-    bool setBodyPose(const Eigen::Vector3d &position, const Eigen::Vector3d &orientation,
-                     Leg legs[NUM_LEGS]);
+  // orientation now expected in radians (roll,pitch,yaw)
+  bool setBodyPose(const Eigen::Vector3d &position, const Eigen::Vector3d &orientation,
+           Leg legs[NUM_LEGS]);
 
     /**
      * @brief Set body pose with quaternion orientation
@@ -264,8 +265,9 @@ class BodyPoseController {
     void setAutoPoseEnabled(bool enabled) { auto_pose_enabled = enabled; }
 
     // Smooth trajectory methods
-    bool setBodyPoseSmooth(const Eigen::Vector3d &position, const Eigen::Vector3d &orientation,
-                           Leg legs[NUM_LEGS], IServoInterface *servos = nullptr);
+  // orientation in radians
+  bool setBodyPoseSmooth(const Eigen::Vector3d &position, const Eigen::Vector3d &orientation,
+               Leg legs[NUM_LEGS], IServoInterface *servos = nullptr);
     bool setBodyPoseSmoothQuaternion(const Eigen::Vector3d &position, const Eigen::Vector4d &quaternion,
                                      Leg legs[NUM_LEGS]);
     bool setBodyPoseImmediate(const Eigen::Vector3d &position, const Eigen::Vector3d &orientation,
