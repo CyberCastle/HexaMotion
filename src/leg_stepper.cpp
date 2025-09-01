@@ -195,9 +195,27 @@ void LegStepper::calculateSwingTiming(double time_delta) {
     // OpenSHC exact: swing_delta_t_ = 1.0 / (swing_iterations / 2.0)
     swing_delta_t_ = 1.0 / (swing_iterations_ / 2.0);
 
-    // Calculate stance timing using same OpenSHC formula
-    stance_iterations_ = int((double(step_cycle_.stance_period_) / step_cycle_.period_) / (step_cycle_.frequency_ * time_delta));
-    stance_delta_t_ = 1.0 / stance_iterations_;
+    // Calculate stance timing using same OpenSHC formula,
+    // but apply symmetric rounding & parity rules like swing
+    double raw_stance_iters =
+        (double(step_cycle_.stance_period_) /
+         step_cycle_.period_) /
+        (step_cycle_.frequency_ * time_delta);
+
+    stance_iterations_ = static_cast<int>(std::round(raw_stance_iters));
+    if (stance_iterations_ % 2 != 0) {
+        // Enforce even count for midpoint consistency (mirrors swing handling)
+        stance_iterations_++;
+    }
+
+    // Maintain minimum for numerical stability of integration
+    if (stance_iterations_ < 10) {
+        stance_iterations_ = 10;
+        if (stance_iterations_ % 2 != 0)
+            stance_iterations_++; // keep even
+    }
+
+    stance_delta_t_ = (stance_iterations_ > 0) ? (1.0 / static_cast<double>(stance_iterations_)) : 0.0;
 }
 
 void LegStepper::initializeSwingPeriod(int iteration) {
