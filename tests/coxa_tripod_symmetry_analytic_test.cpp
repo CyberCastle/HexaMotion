@@ -19,12 +19,14 @@ static int g_max_steps = 1200;                    // Límite de seguridad
 static bool g_show_only_phase_transitions = true; // Modo compacto por defecto
 static double g_sym_threshold_stance_deg = 3.0;   // |sum(delta)| máximo permitido en STANCE
 static double g_sym_threshold_swing_deg = 4.0;    // |sum(delta)| máximo permitido en SWING (más tolerancia)
+static bool g_enable_autopose = false;            // Habilitar AutoPose por defecto para analizar su efecto
 
 // Acumuladores globales de métricas (máximos absolutos observados)
 static double g_max_abs_sum_stance_pair[3] = {0, 0, 0}; // pares (0,3) (1,4) (2,5)
 static double g_max_abs_sum_swing_pair[3] = {0, 0, 0};
 static int g_sym_violations_stance = 0;
 static int g_sym_violations_swing = 0;
+static bool g_premises_failed = false; // Nuevo: separa fallos de premises de violaciones de simetría estricta
 
 static void printHelpAndExit() {
     std::cout << "Uso: ./coxa_phase_transition_test [opciones]\n"
@@ -68,6 +70,8 @@ static void parseArgs(int argc, char **argv) {
         } else if (a == "--sym-thr-swing") {
             needVal("--sym-thr-swing");
             g_sym_threshold_swing_deg = std::atof(argv[++i]);
+        } else if (a == "--autopose") {
+            g_enable_autopose = true;
         } else {
             std::cerr << "Argumento desconocido: " << a << std::endl;
             printHelpAndExit();
@@ -360,19 +364,29 @@ int main(int argc, char **argv) {
         return 1;
     }
 
-    // --- Enable AutoPose (tripod gait) ---
-    // Previously the test constructed a BodyPoseConfiguration incorrectly from auto-pose factory and thus ignored auto pose.
-    // We explicitly build the AutoPoseConfiguration for the active gait and enable it in the BodyPoseController.
+    // --- (Re)Enable AutoPose (tripod gait) if requested ---
     {
         auto *bpc = sys.getBodyPoseController();
-        if (bpc) {
+        if (bpc && g_enable_autopose) {
             AutoPoseConfiguration ap_cfg = createAutoPoseConfigurationForGait(p, "tripod_gait");
             bpc->setAutoPoseConfig(ap_cfg);
             bpc->setAutoPoseEnabled(true);
+            std::cout << "[DIAG] AutoPose habilitado para tripod_gait." << std::endl;
+        } else if (bpc && !g_enable_autopose) {
+            bpc->setAutoPoseEnabled(false);
+            std::cout << "[DIAG] AutoPose deshabilitado (--no-autopose)." << std::endl;
         } else {
             std::cerr << "WARNING: BodyPoseController no disponible; AutoPose no se activará." << std::endl;
         }
     }
+
+    // Diagnóstico: imprimir BASE_THETA_OFFSETS
+    extern const double BASE_THETA_OFFSETS[NUM_LEGS];
+    std::cout << "[DIAG] BASE_THETA_OFFSETS (deg):";
+    for (int i = 0; i < NUM_LEGS; ++i) {
+        std::cout << " " << std::fixed << std::setprecision(1) << toDegrees(BASE_THETA_OFFSETS[i]);
+    }
+    std::cout << std::endl;
 
     // Enable coxa telemetry for detailed post-run analysis (testing instrumentation)
 #ifdef TESTING_ENABLED
@@ -490,11 +504,32 @@ int main(int argc, char **argv) {
 
     printCoxaStates(sys, step, transition_counts, leg_phase_iterations, swing_iterations_per_cycle, stance_iterations_per_cycle, stance_start_coxa_rad, initial_coxa_rad);
 
+    // --- Radius accumulation for normalization (stance-only) ---
+    double stance_radius_sum[NUM_LEGS] = {0.0};
+    int stance_radius_count[NUM_LEGS] = {0};
+    double mean_stance_radius[NUM_LEGS];
+    for (int i = 0; i < NUM_LEGS; ++i)
+        mean_stance_radius[i] = 1.0; // default to 1 to avoid div0 later
+
     while (step < g_max_steps) {
         // Actualizar sistema
         if (!sys.update()) {
             std::cerr << "WARNING: System update failed at step " << step << std::endl;
             continue;
+        }
+
+        // Acumular radios efectivos en STANCE (distancia base->tip) para normalización posterior
+        for (int i = 0; i < NUM_LEGS; ++i) {
+            const Leg &leg = sys.getLeg(i);
+            if (leg.getStepPhase() == STANCE_PHASE) {
+                Point3D base = leg.getBasePosition();
+                Point3D tip = leg.getCurrentTipPositionGlobal();
+                double dx = tip.x - base.x;
+                double dy = tip.y - base.y;
+                double r = std::sqrt(dx * dx + dy * dy);
+                stance_radius_sum[i] += r;
+                stance_radius_count[i]++;
+            }
         }
 
         // Verificar transiciones y detectar si hay algún cambio de fase
@@ -549,6 +584,13 @@ int main(int argc, char **argv) {
         step++;
     }
 
+    // Calcular radios medios de stance (siempre antes del análisis de telemetría)
+    for (int i = 0; i < NUM_LEGS; ++i) {
+        if (stance_radius_count[i] > 0) {
+            mean_stance_radius[i] = stance_radius_sum[i] / stance_radius_count[i];
+        }
+    }
+
 #ifdef TESTING_ENABLED
     // --- Detailed post-simulation telemetry analysis (testing only) ---
     std::cout << "\n=== DETAILED COXA TELEMETRY ANALYSIS (TESTING_ENABLED) ===" << std::endl;
@@ -593,6 +635,79 @@ int main(int argc, char **argv) {
             sa.reserve(n);
             sb.reserve(n);
             for (size_t i = 0; i < n; ++i) {
+
+                // ---------------------------------------------------------------------
+                // NEW TELEMETRY: Expected vs Observed Stance Angular Sweep Δθ
+                // Model: During stance the body advances g_test_velocity * stance_duration.
+                // If the foot were perfectly stationary in world, the coxa joint local angle
+                // should change approximately Δθ_expected = linear_displacement / r_mean.
+                // We compute observed mean stance sweep per leg by detecting STANCE->SWING
+                // transitions and measuring |θ_end_stance - θ_start_stance| in local frame.
+                // ---------------------------------------------------------------------
+                struct SweepStats {
+                    double sum_abs = 0.0;
+                    int count = 0;
+                    double max_abs = 0.0;
+                };
+                SweepStats sweep[NUM_LEGS];
+                // Track stance start angle for each leg
+                double stance_start_local_angle[NUM_LEGS];
+                bool stance_active[NUM_LEGS];
+                // Initialize with first sample
+                if (n > 0) {
+                    const auto &s0 = sys.getTelemetrySample(0);
+                    for (int L = 0; L < NUM_LEGS; ++L) {
+                        stance_active[L] = (s0.phase[L] == STANCE_PHASE);
+                        stance_start_local_angle[L] = s0.local_angle[L];
+                    }
+                }
+                for (size_t i = 1; i < n; ++i) {
+                    const auto &sprev = sys.getTelemetrySample(i - 1);
+                    const auto &scur = sys.getTelemetrySample(i);
+                    for (int L = 0; L < NUM_LEGS; ++L) {
+                        StepPhase p_prev = sprev.phase[L];
+                        StepPhase p_cur = scur.phase[L];
+                        // Stance start
+                        if (p_prev != STANCE_PHASE && p_cur == STANCE_PHASE) {
+                            stance_active[L] = true;
+                            stance_start_local_angle[L] = scur.local_angle[L];
+                        }
+                        // Stance end (measure using last stance angle = sprev.local_angle when p_prev==STANCE && p_cur==SWING)
+                        if (p_prev == STANCE_PHASE && p_cur == SWING_PHASE) {
+                            double delta = sprev.local_angle[L] - stance_start_local_angle[L];
+                            double abs_delta = std::fabs(delta);
+                            sweep[L].sum_abs += abs_delta;
+                            sweep[L].count++;
+                            sweep[L].max_abs = std::max(sweep[L].max_abs, abs_delta);
+                            stance_active[L] = false;
+                        }
+                    }
+                }
+                // Expected stance duration (seconds)
+                double stance_duration_sec = stance_iterations_per_cycle * time_delta;
+                double expected_linear_advance = g_test_velocity * stance_duration_sec; // mm
+                double expected_delta_theta[NUM_LEGS];
+                for (int L = 0; L < NUM_LEGS; ++L) {
+                    double r = std::max(1e-6, mean_stance_radius[L]);
+                    expected_delta_theta[L] = expected_linear_advance / r; // rad (approx)
+                }
+                std::cout << "\n=== EXPECTED vs OBSERVED STANCE SWEEP Δθ (local frame) ===" << std::endl;
+                std::cout << "Assumptions: foot approximately stationary in world during stance, body velocity = "
+                          << g_test_velocity << " mm/s, stance_duration = " << stance_duration_sec << " s (" << stance_iterations_per_cycle
+                          << " iters) => expected linear advance per stance = " << expected_linear_advance << " mm" << std::endl;
+                const char *LEG_NAMES_SWEEP[NUM_LEGS] = {"AR", "BR", "CR", "CL", "BL", "AL"};
+                for (int L = 0; L < NUM_LEGS; ++L) {
+                    double observed_mean = (sweep[L].count > 0) ? (sweep[L].sum_abs / sweep[L].count) : 0.0;
+                    double ratio = expected_delta_theta[L] > 1e-6 ? observed_mean / expected_delta_theta[L] : 0.0;
+                    std::cout << "  Leg " << LEG_NAMES_SWEEP[L]
+                              << " mean_obs_dtheta(rad)=" << observed_mean
+                              << " expected(rad)=" << expected_delta_theta[L]
+                              << " ratio=" << ratio
+                              << " samples=" << sweep[L].count
+                              << " max_obs_dtheta(rad)=" << sweep[L].max_abs
+                              << std::endl;
+                }
+                // (Optional future) Could enforce premises on ratio being within [0.5,1.5]; currently informational only.
                 const auto &s = sys.getTelemetrySample(i);
                 sa.push_back(s.local_angle[a] > mean[a] ? 1 : -1);
                 sb.push_back(s.local_angle[b] > mean[b] ? 1 : -1);
@@ -630,23 +745,41 @@ int main(int argc, char **argv) {
         // 2. Simetría especular global: phi_i ≈ -phi_j en promedio para pares opuestos
         int pairs[3][2] = {{0, 3}, {1, 4}, {2, 5}};
         bool specular_ok = true;
+        bool specular_linear_ok = true;
+        const double kSpecularAngularMAEThresh = 0.15; // rad (legacy)
+        const double kSpecularLinearMAEThresh = 8.0;   // mm (new, linearized)
+        std::cout << "Mean stance radii (mm) per leg:";
+        for (int i = 0; i < NUM_LEGS; ++i)
+            std::cout << " " << std::fixed << std::setprecision(1) << mean_stance_radius[i];
+        std::cout << std::endl;
         for (auto &pr : pairs) {
-            double avg = 0;
+            double err_sum_ang = 0.0;
+            double err_sum_lin = 0.0;
             int c = 0;
-            double err_sum = 0;
             for (size_t i = 0; i < n; ++i) {
                 const auto &s = sys.getTelemetrySample(i);
-                double li = s.local_angle[pr[0]];
-                double lj = s.local_angle[pr[1]];
-                double sum = li + lj; // debería tender a 0
-                err_sum += std::fabs(sum);
+                double li = s.local_angle[pr[0]]; // rad
+                double lj = s.local_angle[pr[1]]; // rad
+                double sum_ang = li + lj;         // rad
+                err_sum_ang += std::fabs(sum_ang);
+                // Linearized (approx tangential) displacement: angle * mean stance radius
+                double sum_lin = li * mean_stance_radius[pr[0]] + lj * mean_stance_radius[pr[1]]; // mm
+                err_sum_lin += std::fabs(sum_lin);
                 ++c;
             }
-            double mae = err_sum / std::max(1, c);
-            std::cout << "SpecularPair (" << pr[0] << "," << pr[1] << ") MAE local_sum(rad)=" << mae << std::endl;
-            if (mae > 0.15)
-                specular_ok = false; // tolerancia heurística
+            double mae_ang = err_sum_ang / std::max(1, c);
+            double mae_lin = err_sum_lin / std::max(1, c);
+            std::cout << "SpecularPair (" << pr[0] << "," << pr[1]
+                      << ") MAE local_sum(rad)=" << mae_ang
+                      << " MAE linear_sum(mm)=" << mae_lin << std::endl;
+            if (mae_ang > kSpecularAngularMAEThresh)
+                specular_ok = false;
+            if (mae_lin > kSpecularLinearMAEThresh)
+                specular_linear_ok = false;
         }
+        // We now define specular_ok as requiring the linear criterion; keep angular as informative only.
+        if (!specular_linear_ok)
+            specular_ok = false;
         // 3. Simetría barrido por pata (amplitud protacción vs retracción) ya aproximado con amp[] (baseline)
         // 4. Copias entre patas separadas 60° dentro mismo trípode: comparar amplitudes
         bool tripod_internal_ok = true;
@@ -663,6 +796,21 @@ int main(int argc, char **argv) {
         };
         checkTripod(tripodA);
         checkTripod(tripodB);
+        // Linearized amplitude comparison (amp_rad * mean_radius) to reduce bias from different leg arm lengths
+        bool tripod_internal_linear_ok = true;
+        double lin_amp[NUM_LEGS];
+        for (int L = 0; L < NUM_LEGS; ++L)
+            lin_amp[L] = amp[L] * mean_stance_radius[L];
+        auto checkTripodLinear = [&](int *legs) {
+            double a0 = lin_amp[legs[0]];
+            for (int k = 1; k < 3; ++k) {
+                double rel = fabs(lin_amp[legs[k]] - a0) / std::max(1e-6, fabs(a0));
+                if (rel > 0.2)
+                    tripod_internal_linear_ok = false;
+            }
+        };
+        checkTripodLinear(tripodA);
+        checkTripodLinear(tripodB);
         // Servo vs internal angle match
         double servo_angle_mae = 0.0;
         int servo_samples = 0;
@@ -705,23 +853,24 @@ int main(int argc, char **argv) {
         auto is_forward = [](double dx) { return dx > 0.0 || dx < -1.0; }; // tolerate |dx|>1mm negative as forward
         bool forward_progress_ok = (is_forward(avg_dx_stance_tripodA) && is_forward(avg_dx_stance_tripodB));
 
-        std::cout << "TripodA amps(rad): " << amp[0] << "," << amp[2] << "," << amp[4] << "  TripodB amps(rad): " << amp[1] << "," << amp[3] << "," << amp[5] << std::endl;
+        std::cout << "TripodA amps(rad): " << amp[0] << "," << amp[2] << "," << amp[4]
+                  << "  TripodB amps(rad): " << amp[1] << "," << amp[3] << "," << amp[5] << std::endl;
+        std::cout << "TripodA linear_amps(mm): " << lin_amp[0] << "," << lin_amp[2] << "," << lin_amp[4]
+                  << "  TripodB linear_amps(mm): " << lin_amp[1] << "," << lin_amp[3] << "," << lin_amp[5] << std::endl;
         std::cout << "Servo vs model coxa MAE(rad): " << servo_angle_mae << " (tol=" << servo_tol_rad << ") match=" << (servo_match_ok ? "YES" : "NO") << std::endl;
         std::cout << "Avg stance stride dx TripodA=" << avg_dx_stance_tripodA << " TripodB=" << avg_dx_stance_tripodB << " forward_progress_ok=" << (forward_progress_ok ? "YES" : "NO") << std::endl;
         std::cout << "Premises Result: specular_ok=" << (specular_ok ? "YES" : "NO")
-                  << " tripod_internal_ok=" << (tripod_internal_ok ? "YES" : "NO")
+                  << " tripod_internal_ok(ang)=" << (tripod_internal_ok ? "YES" : "NO")
+                  << " tripod_internal_ok(lin)=" << (tripod_internal_linear_ok ? "YES" : "NO")
                   << " phase_shift_ok=" << (phase_shift_ok ? "YES" : "NO")
                   << " servo_match_ok=" << (servo_match_ok ? "YES" : "NO")
                   << " forward_progress_ok=" << (forward_progress_ok ? "YES" : "NO") << std::endl;
-        bool premises_ok = specular_ok && tripod_internal_ok && phase_shift_ok && servo_match_ok && forward_progress_ok;
+        bool premises_ok = specular_ok && tripod_internal_linear_ok && phase_shift_ok && servo_match_ok && forward_progress_ok;
         if (!premises_ok) {
             std::cout << "[PREMISES] FAIL: Deviations detected in one or more gait symmetry/phase/stride premises." << std::endl;
+            g_premises_failed = true; // No contaminar métricas de simetría: solo marcamos flag independiente
         } else {
             std::cout << "[PREMISES] OK: All gait symmetry, phase shift, stride and servo correspondence premises satisfied." << std::endl;
-        }
-        if (!premises_ok) {
-            // Force global failure reflected later
-            g_sym_violations_stance += 1; // ensure symmetry_ok false OR we set a separate flag
         }
     }
 #endif
@@ -766,7 +915,7 @@ int main(int argc, char **argv) {
 
     bool success = allLegsCompletedTransitions(transition_counts);
 
-    // Evaluar simetría global PASS/FAIL
+    // Evaluar simetría global PASS/FAIL (solo en base a g_sym_violations_*)
     bool symmetry_ok = (g_sym_violations_stance == 0 && g_sym_violations_swing == 0);
     if (!symmetry_ok) {
         std::cout << "\n[SIMETRIA] Violaciones detectadas:" << std::endl;
@@ -781,7 +930,11 @@ int main(int argc, char **argv) {
                   << "] SWING max=[" << g_max_abs_sum_swing_pair[0] << ", " << g_max_abs_sum_swing_pair[1] << ", " << g_max_abs_sum_swing_pair[2]
                   << "]" << std::endl;
     }
-    success = success && symmetry_ok;
+    if (g_premises_failed) {
+        std::cout << "\n[PREMISES] Violaciones detectadas (fase/servo/stride) — ver sección de telemetría detallada." << std::endl;
+    }
+
+    success = success && symmetry_ok && !g_premises_failed;
     std::cout << "\nResultado: " << (success ? "ÉXITO" : "FALLO") << std::endl;
     std::cout << "Test finalizado." << std::endl;
 
