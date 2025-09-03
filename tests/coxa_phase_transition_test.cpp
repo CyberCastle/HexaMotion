@@ -392,7 +392,7 @@ int main(int argc, char **argv) {
     int startup_sequence_attempts = 0;
     const Parameters &startup_params = sys.getParameters();
     double time_delta_startup = startup_params.time_delta;
-    double step_frequency_startup = DEFAULT_STEP_FREQUENCY;
+    double step_frequency_startup = startup_params.step_frequency;
     int horiz_iters = std::max(1, (int)std::round((1.0 / step_frequency_startup) / time_delta_startup));
     int vert_iters = std::max(1, (int)std::round((3.0 / step_frequency_startup) / time_delta_startup));
     int expected_total_iters = horiz_iters + vert_iters;

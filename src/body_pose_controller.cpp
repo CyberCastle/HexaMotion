@@ -823,8 +823,8 @@ bool BodyPoseController::executeStartupSequence(Leg legs[NUM_LEGS]) {
         first_sequence_execution_ = false; // After setup
     }
 
-    // Timings similar to OpenSHC constants
-    double step_frequency = DEFAULT_STEP_FREQUENCY;     // TODO map from params
+    // Timings now use configurable global step_frequency (OpenSHC semantics)
+    double step_frequency = model.getParams().step_frequency;
     double horiz_time = 1.0 / step_frequency;           // Normalized horizontal transition time
     double vert_time = 3.0 / step_frequency;            // Normalized vertical transition time
     double lift_height = body_pose_config.swing_height; // Use swing height for horizontal phase
@@ -956,7 +956,7 @@ bool BodyPoseController::executeShutdownSequence(Leg legs[NUM_LEGS]) {
 
     // Execute shutdown transition for all legs simultaneously
     double step_height = body_pose_config.swing_height;
-    double step_time = 1.0 / DEFAULT_STEP_FREQUENCY;
+    double step_time = 1.0 / model.getParams().step_frequency;
     bool all_legs_complete = true;
 
     for (int i = 0; i < NUM_LEGS; i++) {

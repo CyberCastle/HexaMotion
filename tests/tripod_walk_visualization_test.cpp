@@ -197,7 +197,7 @@ int main() {
     // Dynamic expected iterations for two-phase startup (horizontal + vertical)
     const Parameters &startup_params = sys.getParameters();
     double time_delta_startup = startup_params.time_delta;
-    double step_frequency_startup = DEFAULT_STEP_FREQUENCY; // matches controller use
+    double step_frequency_startup = startup_params.step_frequency; // configurable
     int horiz_iters = std::max(1, (int)std::round((1.0 / step_frequency_startup) / time_delta_startup));
     int vert_iters = std::max(1, (int)std::round((3.0 / step_frequency_startup) / time_delta_startup));
     int expected_total_iters = horiz_iters + vert_iters;

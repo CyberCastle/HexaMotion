@@ -143,8 +143,8 @@ GaitConfiguration createWaveGaitConfig(const Parameters &params) {
     config.body_clearance = params.standing_height;
 
     // OpenSHC trajectory parameters
-    config.swing_width = 3.0;                       // mm - smaller lateral shift for wave gait (more conservative)
-    config.step_frequency = DEFAULT_STEP_FREQUENCY; // Hz - OpenSHC default step frequency
+    config.swing_width = 3.0;                      // mm - smaller lateral shift for wave gait (more conservative)
+    config.step_frequency = params.step_frequency; // Hz - configurable global step frequency
 
     config.max_velocity = 50.0;
     config.stability_factor = 0.95;
@@ -153,6 +153,8 @@ GaitConfiguration createWaveGaitConfig(const Parameters &params) {
     config.stance_span_modifier = 0.1; // OpenSHC: valor por defecto para wave gait
 
     config.description = "Wave gait: Most stable gait with sequential leg movement";
+    // Propagate global control loop time delta into configuration for internal StepCycle generation
+    config.time_delta = params.time_delta;
     ensureBalancedIfNeeded(config); // No-op (more than 2 groups)
     config.step_order = {"AR", "CL", "BL", "AL", "CR", "BR"};
     return config;
@@ -177,7 +179,6 @@ GaitConfiguration createTripodGaitConfig(const Parameters &params) {
     // aligning with coxa_tripod_symmetry_analytic_test assumptions.
     config.offsets.multipliers = {
         {"AR", 0}, {"BR", 1}, {"CR", 0}, {"CL", 1}, {"BL", 0}, {"AL", 1}};
-    // No balancing pass: explicit two-group distribution already interleaves around body.
 
     // Calculated parameters using OpenSHC equivalent constants
     double leg_reach = params.coxa_length + params.femur_length + params.tibia_length;
@@ -186,8 +187,8 @@ GaitConfiguration createTripodGaitConfig(const Parameters &params) {
     config.body_clearance = params.standing_height;
 
     // OpenSHC trajectory parameters
-    config.swing_width = 5.0;                       // mm - OpenSHC standard lateral shift at mid-swing
-    config.step_frequency = DEFAULT_STEP_FREQUENCY; // Hz - OpenSHC default step frequency
+    config.swing_width = 5.0;                      // mm - OpenSHC standard lateral shift at mid-swing
+    config.step_frequency = params.step_frequency; // Hz - configurable global step frequency
 
     config.max_velocity = 100.0;
     config.stability_factor = 0.75;
@@ -197,6 +198,8 @@ GaitConfiguration createTripodGaitConfig(const Parameters &params) {
 
     config.description = "Tripod gait: Balanced speed and stability with alternating tripods";
     config.step_order = {"AR/BL/CR", "AL/BR/CL"};
+    // Set control loop resolution for generateStepCycle()
+    config.time_delta = params.time_delta;
     return config;
 }
 
@@ -226,8 +229,8 @@ GaitConfiguration createRippleGaitConfig(const Parameters &params) {
     config.body_clearance = params.standing_height;
 
     // OpenSHC trajectory parameters
-    config.swing_width = 7.0;                       // mm - larger lateral shift for ripple gait (more dynamic)
-    config.step_frequency = DEFAULT_STEP_FREQUENCY; // Hz - OpenSHC default step frequency
+    config.swing_width = 7.0;                      // mm - larger lateral shift for ripple gait (more dynamic)
+    config.step_frequency = params.step_frequency; // Hz - configurable global step frequency
 
     config.max_velocity = 150.0;           // Faster movement
     config.stability_factor = 0.60;        // Moderate stability
@@ -238,7 +241,8 @@ GaitConfiguration createRippleGaitConfig(const Parameters &params) {
     // Description
     config.description = "Ripple gait: Faster gait with overlapping leg movements";
     config.step_order = {"AR", "CL", "BR", "AL", "CR", "BL"};
-
+    // Set control loop resolution for generateStepCycle()
+    config.time_delta = params.time_delta;
     return config;
 }
 
@@ -268,8 +272,8 @@ GaitConfiguration createMetachronalGaitConfig(const Parameters &params) {
     config.body_clearance = params.standing_height;
 
     // OpenSHC trajectory parameters
-    config.swing_width = 4.0;                       // mm - moderate lateral shift for metachronal gait (adaptive)
-    config.step_frequency = DEFAULT_STEP_FREQUENCY; // Hz - OpenSHC default step frequency
+    config.swing_width = 4.0;                      // mm - moderate lateral shift for metachronal gait (adaptive)
+    config.step_frequency = params.step_frequency; // Hz - configurable global step frequency
 
     config.max_velocity = 80.0;     // Adaptive speed
     config.stability_factor = 0.85; // High stability with adaptation
@@ -280,7 +284,8 @@ GaitConfiguration createMetachronalGaitConfig(const Parameters &params) {
     // Description
     config.description = "Metachronal gait: Adaptive gait that adjusts to terrain conditions";
     config.step_order = {"AR", "CL", "BL", "AL", "CR", "BR"};
-
+    // Set control loop resolution for generateStepCycle()
+    config.time_delta = params.time_delta;
     return config;
 }
 

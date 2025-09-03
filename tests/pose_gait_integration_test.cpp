@@ -277,7 +277,7 @@ int main() {
     // Calculate expected iterations based on system parameters
     // For tripod gait: 2 groups × step_time / time_delta + safety margin
     double time_to_start = pose_config.time_to_start; // Default: 6.0 seconds
-    double step_time = 1.0 / DEFAULT_STEP_FREQUENCY;  // Default: 1.0 second per step
+    double step_time = 1.0 / p.step_frequency;        // Configured seconds per step
     int expected_iterations_per_group = static_cast<int>(std::ceil(step_time / p.time_delta));
     int expected_total_iterations = expected_iterations_per_group * 2;     // 2 tripod groups
     int safety_margin = static_cast<int>(expected_total_iterations * 0.5); // 50% safety margin

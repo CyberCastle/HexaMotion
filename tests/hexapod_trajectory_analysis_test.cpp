@@ -617,7 +617,8 @@ int main() {
 
         // Configure StepCycle from tripod gait configuration
         double openshc_default_frequency = 1.0; // OpenSHC uses 1.0 Hz as default
-        StepCycle step_cycle = tripod_config.generateStepCycle(openshc_default_frequency);
+        // generateStepCycle() now uses internally stored step_frequency (params.step_frequency)
+        StepCycle step_cycle = tripod_config.generateStepCycle();
         stepper->setStepCycle(step_cycle);
 
         steppers.push_back(std::move(stepper));

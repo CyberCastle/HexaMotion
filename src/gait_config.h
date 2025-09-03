@@ -85,6 +85,7 @@ struct GaitConfiguration {
     // OpenSHC trajectory parameters
     double swing_width;    //< Lateral shift at mid-swing position in mm (OpenSHC mid_lateral_shift)
     double step_frequency; //< Step frequency in Hz (OpenSHC default: 1.0 Hz)
+    double time_delta;     //< Control loop timestep in seconds (copied from Parameters)
 
     // Gait performance parameters
     double max_velocity;         //< Maximum walking velocity in mm/s
@@ -96,45 +97,39 @@ struct GaitConfiguration {
     std::string description;             //< Human-readable description of the gait
     std::vector<std::string> step_order; //< Order of leg movements in the gait
 
-    // Methods to generate StepCycle for this gait (OpenSHC-style normalization)
-    StepCycle generateStepCycle(double override_step_frequency = -1.0, double time_delta_ = -1.0) const {
-        StepCycle step_cycle;
+    // Generate StepCycle using stored configuration (OpenSHC-style normalization)
+    StepCycle generateStepCycle() const {
+        StepCycle step_cycle{};
         int base_step_period = phase_config.stance_phase + phase_config.swing_phase;
-
-        // time_delta_ (Parameters::time_delta) must be explicitly provided (>0). No default/fallback frequency.
-        // If invalid (<=0) an empty StepCycle is returned to signal configuration error.
-        double time_delta = time_delta_;
-        if (time_delta <= 0.0) {
-            // Defensive: avoid division by zero; mark invalid cycle
+        if (time_delta <= 0.0 || base_step_period <= 0 || step_frequency <= 0.0) {
+            // Defensive invalid state
             step_cycle.period_ = 0;
             step_cycle.frequency_ = 0.0;
-            step_cycle.stance_period_ = 0;
-            step_cycle.swing_period_ = 0;
-            step_cycle.stance_start_ = 0;
-            step_cycle.stance_end_ = 0;
-            step_cycle.swing_start_ = 0;
-            step_cycle.swing_end_ = 0;
             return step_cycle;
         }
-        double swing_ratio = double(phase_config.swing_phase) / double(base_step_period);
 
-        // Use configured step_frequency by default, or override if provided
-        double effective_step_frequency = (override_step_frequency > 0.0) ? override_step_frequency : step_frequency;
+        // Target total iterations for one full cycle based purely on desired frequency and loop dt
+        double target_iterations = (1.0 / step_frequency) / time_delta;
 
-        // OpenSHC normalization logic
-        double raw_step_period = ((1.0 / effective_step_frequency) / time_delta) / swing_ratio;
-
-        // Round to even multiple of base_step_period
-        int normaliser = static_cast<int>(std::round(raw_step_period / base_step_period));
-        if (normaliser % 2 != 0)
-            normaliser++; // Ensure even for proper division
-        if (normaliser < 2)
-            normaliser = 2; // Minimum normaliser
+        // Determine integer normaliser (multiplier of base_step_period) that minimizes frequency error.
+        double ideal_normaliser = target_iterations / base_step_period;
+        int n_floor = std::max(1, (int)std::floor(ideal_normaliser));
+        int n_ceil = std::max(1, (int)std::ceil(ideal_normaliser));
+        // Evaluate both candidates
+        auto freq_for = [&](int n) { return 1.0 / (double(n * base_step_period) * time_delta); };
+        double freq_floor = freq_for(n_floor);
+        double freq_ceil = freq_for(n_ceil);
+        double err_floor = std::fabs(freq_floor - step_frequency);
+        double err_ceil = std::fabs(freq_ceil - step_frequency);
+        int normaliser = (err_floor <= err_ceil) ? n_floor : n_ceil;
+        // Ensure at least 1
+        if (normaliser < 1)
+            normaliser = 1;
 
         step_cycle.period_ = normaliser * base_step_period;
         step_cycle.frequency_ = 1.0 / (step_cycle.period_ * time_delta);
 
-        // Calculate normalized periods
+        // Partition periods proportionally
         step_cycle.stance_period_ = phase_config.stance_phase * normaliser;
         step_cycle.swing_period_ = phase_config.swing_phase * normaliser;
         step_cycle.stance_start_ = 0;

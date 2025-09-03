@@ -70,14 +70,21 @@ struct Parameters {
     double max_velocity;
     double max_angular_velocity;
     double stability_margin;
-    // Removed obsolete control_frequency (replaced by unified time_delta)
 
-    // Unified global control loop timestep (seconds) following OpenSHC semantics.
-    // This value defines the nominal period used by all time-based integrations and
-    // gait timing calculations. This repository now removes per-cycle measured dt usage
-    // inside LocomotionSystem for simplicity; optional pacing/jitter instrumentation can
-    // be implemented externally without altering deterministic gait iteration logic.
-    double time_delta = 0.02;                         // Default 50 Hz loop
+    // Global gait tempo (Hz). Used by GaitConfiguration::generateStepCycle() to derive the
+    // nominal (pre‑normalization) cycle duration: raw_iterations ≈ (1 / step_frequency) / time_delta.
+    // The final StepCycle period is then normalized to an even multiple of (stance_phase + swing_phase)
+    // to preserve exact whole‑number iteration counts per sub‑phase. Change this to speed up or slow
+    // down all gaits uniformly. Runtime changes require regenerating gait configs (factory) before use.
+    double step_frequency = 1.0; // Default OpenSHC tempo (1 Hz)
+
+    // Unified control loop timestep (seconds). Single source of discrete integration resolution for:
+    //  * Gait iteration counts (StepCycle normalization)
+    //  * Velocity/acceleration limiting and stride integration
+    //  * IK velocity-based adjustments and timing-dependent filters
+    // Deterministic fixed step chosen for reproducibility.
+    // Adjust only if the actual loop rate changes; otherwise leave at 0.02 (50 Hz).
+    double time_delta = 0.02;                         // 50 Hz control loop
     double default_servo_speed = SERVO_SPEED_DEFAULT; //< Default servo movement speed (0.1-3.0, where 1.0 is normal speed)
     // Enable kinematic integration of body translation & yaw (simulation/testing)
     bool enable_body_translation = false; //< When true, LocomotionSystem::update() integrates body_position & yaw from commanded velocities
