@@ -597,7 +597,8 @@ void LegStepper::updateStepStateFromPhase() {
     // Determine state directly from phase_ relative to configured step_cycle_.
     // step_cycle_ may have been set from gait configuration.
     int swing_start_iter = step_cycle_.stance_period_; // stance first, then swing
-    int swing_end_iter = step_cycle_.period_;          // end exclusive conceptually
+
+    // swing_end_iter conceptually equal to step_cycle_.period_ (end exclusive) but not needed here.
     int local = phase_ % step_cycle_.period_;
     bool in_swing = (local >= swing_start_iter);
     if (step_state_ == STEP_FORCE_STOP)

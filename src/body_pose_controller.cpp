@@ -992,9 +992,9 @@ bool BodyPoseController::updateAutoPose(double gait_phase, Leg legs[NUM_LEGS]) {
     if (!auto_pose_enabled || !auto_pose_config.enabled)
         return true; // nothing to do
 
-    // 1. Determine pose cycle length.
-    //    If pose_frequency == -1.0 we assume sync with gait step cycle and use configured pose_phase_length.
-    //    Otherwise we still use pose_phase_length as discrete resolution for the pose cycle.
+    // Determine pose cycle length.
+    // If pose_frequency == -1.0 we assume sync with gait step cycle and use configured pose_phase_length.
+    // Otherwise we still use pose_phase_length as discrete resolution for the pose cycle.
     int base_period = auto_pose_config.pose_phase_length;
     if (base_period <= 0) {
         // Derive fallback from the largest index found in starts/ends (robust for partial configurations)
@@ -1008,50 +1008,11 @@ bool BodyPoseController::updateAutoPose(double gait_phase, Leg legs[NUM_LEGS]) {
         base_period = std::max(4, max_idx + 1); // reasonable minimum
     }
 
-    // 2. Convert gait_phase [0,1) to integer phase index in [0, base_period)
+    // Convert gait_phase [0,1) to integer phase index in [0, base_period)
     double wrapped = gait_phase - std::floor(gait_phase);
     int current_phase_index = static_cast<int>(wrapped * base_period) % base_period;
 
-    // 3. Cyclic window utilities and modular distance helpers
-    auto inWindow = [base_period](int start, int end, int value) {
-        if (start == end)
-            return false; // empty window
-        if (start < end)
-            return value >= start && value < end;
-        return value >= start || value < end; // wraps end of cycle
-    };
-    auto modDist = [base_period](int from, int to) {
-        return (to - from + base_period) % base_period; // forward modular distance [0, base_period)
-    };
-    auto smoothstep = [](double x) {
-        x = math_utils::clamp(x, 0.0, 1.0);
-        return x * x * (3.0 - 2.0 * x);
-    };
-
-    // 4. Active amplitude selection (average of all phases whose window contains the current index)
-    auto computeAxis = [&](const std::vector<double> &amps) {
-        if (amps.empty())
-            return 0.0;
-        double acc = 0.0;
-        int count = 0;
-        for (size_t i = 0; i < auto_pose_config.pose_phase_starts.size() && i < amps.size(); ++i) {
-            if (inWindow(auto_pose_config.pose_phase_starts[i], auto_pose_config.pose_phase_ends[i], current_phase_index)) {
-                acc += amps[i];
-                ++count;
-            }
-        }
-        return count > 0 ? acc / count : 0.0;
-    };
-
-    double base_roll = computeAxis(auto_pose_config.roll_amplitudes);
-    double base_pitch = computeAxis(auto_pose_config.pitch_amplitudes);
-    double base_yaw = computeAxis(auto_pose_config.yaw_amplitudes);
-    double base_x = computeAxis(auto_pose_config.x_amplitudes);
-    double base_y = computeAxis(auto_pose_config.y_amplitudes);
-    double base_z = computeAxis(auto_pose_config.z_amplitudes);
-    double gravity_factor = computeAxis(auto_pose_config.gravity_amplitudes); // scaling factor (>=0)
-
-    // 5. Delegar por pierna al LegPoser (paridad OpenSHC). Cada LegPoser recalcula offsets y aplica umbral.
+    // Per-leg delegation to the LegPoser (OpenSHC parity). Each LegPoser recalculates offsets and applies threshold.
     for (int leg_index = 0; leg_index < NUM_LEGS; ++leg_index) {
         if (leg_posers_[leg_index]) {
             leg_posers_[leg_index]->get()->updateAutoPose(current_phase_index, auto_pose_config, body_pose_config);
