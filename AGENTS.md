@@ -58,7 +58,18 @@ These are the characteristics of a real robot, used to test this library.
 
 ### Leg base orientation
 
-The internal DH/base orientation offsets are (degrees): leg0 = -30, leg1 = -90, leg2 = -150, leg3 = +150, leg4 = +90, leg5 = +30. This preserves 60° separation while rotating the frame so opposing pairs are symmetric ((0,3), (1,4), (2,5)). Forward remains +X; external tools assuming leg0 at 0° should account for this -30° global rotation.
+Current internal DH/base orientation offsets (degrees) come directly from `BASE_THETA_OFFSETS` in `hexamotion_constants.h` and are ordered by internal leg index / mnemonic:
+
+| Index | Name | Meaning        | Angle (°) |
+| ----- | ---- | -------------- | --------- |
+| 0     | AR   | Anterior Right | -30       |
+| 1     | BR   | Back Right     | -90       |
+| 2     | CR   | Center Right   | -150      |
+| 3     | CL   | Center Left    | +30       |
+| 4     | BL   | Back Left      | +90       |
+| 5     | AL   | Anterior Left  | +150      |
+
+Forward still points along +X. External tools assuming leg0 at 0° should account for the global -30° rotation.
 
 ### Velocity and acceleration units
 
@@ -66,7 +77,44 @@ All internal kinematic/dynamic calculations use millimeters (mm), millimeters pe
 
 ### Stance and workspace radii
 
-Workspace and stance radii derive from physical reach (coxa + femur + tibia = 359 mm) subject to safety scaling. The stance radius is clamped not to exceed the walkspace radius and respects safety margins to avoid commanding unreachable circular trajectories at high angular velocities.
+Stance and walkspace radii are now derived from the kinematics of the configured standing pose, not from the theoretical flat extension (femur + tibia) nor the naïve sum (coxa + femur + tibia).
+
+Standing pose definition:
+
+-   Tibia is vertical (femur_angle + tibia_angle = 0)
+-   Body height = `standing_height`
+
+Given femur_length = 101 mm, tibia_length = 208 mm, standing_height = 150 mm:
+
+```
+target_z = -standing_height
+target_z = -femur_length * sin(femur_angle) - tibia_length
+sin(femur_angle) = -(target_z + tibia_length) / femur_length
+```
+
+Solving yields femur_angle ≈ -35° and horizontal femur projection = femur_length \* cos(femur_angle) ≈ 82.8 mm.
+The tibia contributes no horizontal reach in this pose (vertical), so horizontal reach from the coxa pivot is:
+
+```
+standing_horizontal_reach = coxa_length + horizontal_femur ≈ 50 + 82.8 = 132.8 mm
+```
+
+Thus the default stance radial distance from body center (hexagon radius + standing horizontal reach) is about:
+
+```
+hexagon_radius + standing_horizontal_reach ≈ 200 + 132.8 = 332.8 mm
+```
+
+Implementation details:
+
+-   `BodyPoseConfiguration::standing_horizontal_reach` stores this value (computed from the configured standing pose joints).
+-   Fallback stance initialization and walkspace generation now use this standing horizontal reach directly (no additional 0.65 scaling) because it is already conservative relative to maximum flat extension.
+-   Previous documentation claiming (coxa + femur + tibia = 359 mm) overstated usable horizontal reach; tibia length is mostly vertical in standing pose and should not be added for horizontal radius computation.
+
+This change ensures gait planning, stride limits, and circular trajectory validation remain consistent with the maintained body height, preventing overestimation that could command unreachable lateral positions at higher angular velocities.
+
+Symmetry requirement:
+All calculations (standing horizontal reach, stance positions, walkspace radii and gait phase assumptions) currently assume a symmetric standing pose across opposing leg pairs (0↔3, 1↔4, 2↔5) with identical joint solutions. Per‑leg asymmetric standing poses or individualized reach scaling are NOT supported at this time. Providing asymmetric joint angles will produce undefined or inconsistent workspace/velocity limits.
 
 ### Test Parameters
 

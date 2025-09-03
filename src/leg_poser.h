@@ -1,8 +1,10 @@
 #ifndef LEG_POSER_H
 #define LEG_POSER_H
 
+#include "body_pose_config.h" // AutoPoseConfiguration & BodyPoseConfiguration
 #include "hexamotion_constants.h"
 #include "leg.h"
+#include "math_utils.h" // For clamp utility used in defensive admittance validation
 #include "robot_model.h"
 #include <memory>
 #include <vector>
@@ -78,6 +80,24 @@ class LegPoser {
     inline void setExternalTarget(const ExternalTarget &target) { external_target_ = target; }
     inline void setAutoPose(const Pose &auto_pose) { auto_pose_ = auto_pose; }
     inline void setLegCompletedStep(bool complete) { leg_completed_step_ = complete; }
+    // Admittance delta (external compliance offset) setter
+    inline void setAdmittanceDelta(const Point3D &delta) {
+        // Defensive validation: sanitize NaN/Inf and clamp to safe engineering bounds (class constant)
+        auto sanitize = [&](double v) {
+            if (!std::isfinite(v))
+                return 0.0; // Replace NaN/Inf with 0
+            return math_utils::clamp(v, -ADMITTANCE_MAX_ABS_DELTA_MM, ADMITTANCE_MAX_ABS_DELTA_MM);
+        };
+        admittance_delta_.x = sanitize(delta.x);
+        admittance_delta_.y = sanitize(delta.y);
+        admittance_delta_.z = sanitize(delta.z);
+        // Optional micro-noise deadband (eliminate jitter below 0.01 mm)
+        auto deadband = [](double v) { return (std::fabs(v) < 0.01) ? 0.0 : v; };
+        admittance_delta_.x = deadband(admittance_delta_.x);
+        admittance_delta_.y = deadband(admittance_delta_.y);
+        admittance_delta_.z = deadband(admittance_delta_.z);
+    }
+    inline Point3D getAdmittanceDelta() const { return admittance_delta_; }
 
     /**
      * @brief Reset the key variables of stepToPosition() ready for new stepping maneuver
@@ -96,14 +116,16 @@ class LegPoser {
      * @param apply_delta A bool defining if a position offset value should be applied to the target tip position
      * @return true if step is complete, false if still in progress
      */
-    bool stepToPosition(const Pose &target_tip_pose, const Pose &target_pose,
-                        double lift_height, double time_to_step, bool apply_delta = true);
+    int stepToPosition(const Pose &target_tip_pose, const Pose &target_pose,
+                       double lift_height, double time_to_step, bool apply_delta = true);
 
     /**
-     * @brief Sets the leg specific auto pose from the default auto pose
-     * @param phase The phase is the input value which is used to determine the progression along the bezier curves
+     * @brief Update leg-specific auto pose using phased window & negation logic (OpenSHC-style).
+     * @param phase_index Integer phase index in [0, base_period) for the unified posing cycle.
+     * @param auto_cfg   Reference auto-pose configuration (phase windows, amplitudes, negation windows).
+     * @param body_cfg   Reference body pose configuration (stance reference positions).
      */
-    void updateAutoPose(int phase);
+    void updateAutoPose(int phase_index, const AutoPoseConfiguration &auto_cfg, const BodyPoseConfiguration &body_cfg);
 
     /**
      * @brief Set target position for leg movement
@@ -138,7 +160,7 @@ class LegPoser {
      */
     bool stepToPosition(const Point3D &target_position, double step_height, double step_time) {
         Pose target_pose(target_position, Eigen::Vector3d(0, 0, 0));
-        return stepToPosition(target_pose, Pose::Identity(), step_height, step_time, false);
+        return stepToPosition(target_pose, Pose::Identity(), step_height, step_time, false) == PROGRESS_COMPLETE;
     }
 
   private:
@@ -146,10 +168,15 @@ class LegPoser {
     Leg &leg_;                //< Reference to the Leg object this poser controls
     RobotModel &robot_model_; //< Reference to the robot model for parameter access
 
-    Pose auto_pose_;                 //< Leg specific auto pose
-    bool first_iteration_ = true;    //< Flag denoting if an iterating function is on it's first iteration
-    int master_iteration_count_ = 0; //< Master iteration count used in generating time input for bezier curves
-    int current_num_iterations_ = 0; //< Total iterations for current step (for progress reporting)
+    Pose auto_pose_;                         //< Leg specific auto pose (post-negation)
+    Pose base_auto_pose_;                    //< Base (global) auto pose before leg negation
+    int pose_negation_phase_start_ = 0;      //< Phase start for negation window
+    int pose_negation_phase_end_ = 0;        //< Phase end for negation window
+    double negation_transition_ratio_ = 0.0; //< Ratio of window used for ramp in/out
+    bool negate_auto_pose_ = false;          //< Flag if currently negating
+    bool first_iteration_ = true;            //< Flag denoting if an iterating function is on it's first iteration
+    int master_iteration_count_ = 0;         //< Master iteration count used in generating time input for bezier curves
+    int current_num_iterations_ = 0;         //< Total iterations for current step (for progress reporting)
 
     Pose origin_tip_pose_;           //< Origin tip pose used in bezier curve equations
     Pose current_tip_pose_;          //< Current tip pose
@@ -158,7 +185,8 @@ class LegPoser {
 
     bool leg_completed_step_ = false; //< Flag denoting if leg has completed its required step in a sequence
 
-    double physical_reference_height_; //< Physical reference height (z = getDefaultHeightOffset() when all angles are 0°)
+    double physical_reference_height_;  //< Physical reference height (z = getDefaultHeightOffset() when all angles are 0°)
+    Point3D admittance_delta_{0, 0, 0}; //< Latest admittance (compliance) delta applied when apply_delta=true
 };
 
 #endif // LEG_POSER_H

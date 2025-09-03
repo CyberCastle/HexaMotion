@@ -121,9 +121,6 @@ struct Parameters {
     // Tipo de gait seleccionado (OpenSHC compatible)
     std::string gait_type;
 
-    // Gait phase offset multiplier for tripod gait synchronization
-    double offset_multiplier = 0.5; // Default offset multiplier for tripod gait phase synchronization
-
     // Walkspace overlap control (OpenSHC equivalent)
     bool overlapping_walkspaces = false; // Flag denoting if walkspaces are allowed to overlap (default: false, same as OpenSHC)
 
@@ -160,14 +157,6 @@ struct Parameters {
     bool enable_phase_end_snap = true;        //< Enable snapping foot to frozen target at phase end
     double phase_end_snap_tolerance_mm = 1.0; //< Distance tolerance (mm) for hard snap
     double phase_end_snap_alpha = 1.0;        //< Blend factor (1.0 hard snap, <1.0 partial correction)
-
-    // --- Tangential stance mode ---
-    // When enabled, the STANCE phase constrains foot motion to pure tangential travel
-    // around the leg base at constant planar radius and constant height. The femur/tibia
-    // joint angles remain effectively frozen; only the coxa rotates. This diverges from
-    // vanilla OpenSHC which integrates full Bezier-derived velocity (allowing radial
-    // drift and vertical micro-adjustments). Use to stabilize stance joint posture.
-    bool enable_tangential_stance_mode = true; //< default on for experimentation
 
     // --- Segment mass properties (optional) ---
     // When > 0 they are used for relative torque computation in startup normalization.

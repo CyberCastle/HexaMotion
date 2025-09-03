@@ -34,7 +34,7 @@ int main() {
     std::cout << std::fixed << std::setprecision(3);
     std::cout << "=== Inverse Kinematics Validation Test ===" << std::endl;
 
-    static const double BASE_THETA_OFFSETS[NUM_LEGS] = {-30.0f, -90.0f, -150.0f, 150.0f, 90.0f, 30.0f};
+    static const double BASE_THETA_OFFSETS[NUM_LEGS] = {-30.0f, -90.0f, -150.0f, 30.0f, 90.0f, 150.0f};
     bool ok = true;
 
     // Test 1: Simple Horizontal Test (original functionality)

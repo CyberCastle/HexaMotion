@@ -78,7 +78,6 @@ void SCurveProfile::computeProfile() {
             double mid_a = 0.5 * (low_a + high_a);
             double tj_mid = mid_a / j;
             // compute ta needed to keep velocity symmetric WITHOUT exceeding vmax (ignore vmax here)
-            double v_macro_base_mid = 0.5 * mid_a * mid_a / j + 0.5 * mid_a * tj_mid;
             double ta_mid = 0.0; // we try without plateau first because adding plateau increases distance
             // If even triangular sequence overshoots target half distance we must lower accel.
             auto integrate_macro_mid = [&](double ta) {

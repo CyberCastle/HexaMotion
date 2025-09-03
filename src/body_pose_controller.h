@@ -58,6 +58,7 @@ class BodyPoseController {
      * @param legs Array of Leg objects to update
      * @return true if successful, false otherwise
      */
+    // orientation now expected in radians (roll,pitch,yaw)
     bool setBodyPose(const Eigen::Vector3d &position, const Eigen::Vector3d &orientation,
                      Leg legs[NUM_LEGS]);
 
@@ -264,6 +265,7 @@ class BodyPoseController {
     void setAutoPoseEnabled(bool enabled) { auto_pose_enabled = enabled; }
 
     // Smooth trajectory methods
+    // orientation in radians
     bool setBodyPoseSmooth(const Eigen::Vector3d &position, const Eigen::Vector3d &orientation,
                            Leg legs[NUM_LEGS], IServoInterface *servos = nullptr);
     bool setBodyPoseSmoothQuaternion(const Eigen::Vector3d &position, const Eigen::Vector4d &quaternion,
@@ -320,10 +322,29 @@ class BodyPoseController {
     void setWalkPlanePoseEnabled(bool enabled);
     bool isWalkPlanePoseEnabled() const;
 
+    /**
+     * @brief Update current body pose state (partial OpenSHC PoseController::updateCurrentPose equivalent).
+     * @details Minimal adaptation that only forwards to auto-pose and walk plane pose update mechanisms.
+     *          It intentionally omits IMU fusion, manual pose input handling, reset logic and stiffness
+     *          modulation present in the full OpenSHC implementation. Gait phase is propagated so that
+     *          phase-synchronised auto pose patterns can be evaluated consistently.
+     * @param gait_phase Normalised gait phase in [0,1).
+     * @param legs Array of Leg objects (needed for walk plane estimation and per-leg auto pose updates).
+     */
+    void updateCurrentPose(double gait_phase, Leg legs[NUM_LEGS]);
+
+    /**
+     * @brief Apply global + per-leg auto pose modulation to desired tip positions (OpenSHC-style).
+     * This transforms each leg's desired tip position before batch IK so that horizontal (x,y)
+     * translations and yaw/roll/pitch components influence coxa motion.
+     */
+    void applyAutoPoseToDesiredTips(Leg legs[NUM_LEGS]);
+
   private:
-    RobotModel &model;                      //< Reference to robot model
-    BodyPoseConfiguration body_pose_config; //< Body pose configuration
-    AutoPoseConfiguration auto_pose_config; //< Auto-pose configuration
+    RobotModel &model;                         //< Reference to robot model
+    BodyPoseConfiguration body_pose_config;    //< Body pose configuration
+    AutoPoseConfiguration auto_pose_config;    //< Auto-pose configuration
+    Pose global_auto_pose_ = Pose::Identity(); //< Aggregated (non-negated) auto pose applied/removed per leg
 
     // Leg posers for each leg
     class LegPoserImpl;
