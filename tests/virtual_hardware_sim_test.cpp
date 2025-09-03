@@ -49,15 +49,18 @@ constexpr int VISUALIZATION_STEPS = 150;       // Steps to run the visualization
 constexpr int ANGLE_HISTORY_SIZE = 200;        // Number of angle measurements to store
 
 // CLI flags
-static const char *FLAG_ENABLE_FSR = "--fsr";                      // Enable FSR-based contact adaptation
-static const char *FLAG_CONTACT_THRESHOLD = "--contact-th=";       // Override contact threshold
-static const char *FLAG_RELEASE_THRESHOLD = "--release-th=";       // Override release threshold
-static const char *FLAG_MIN_PRESSURE = "--min-pressure=";          // Override minimum pressure
-static const char *FLAG_PRESERVE_SWING = "--preserve-swing";       // Preserve swing end pose as stance origin
-static const char *FLAG_NO_PRESERVE_SWING = "--no-preserve-swing"; // Reset stance origin each stance
-static const char *FLAG_HELP = "--help";                           // Help flag
-static const char *FLAG_DEBUG_FSR = "--debug-fsr";                 // Enable FSR phase transition logging
-static const char *FLAG_DRIFT_METRICS = "--drift-metrics";         // Enable drift metrics accumulation & summary
+static const char *FLAG_ENABLE_FSR = "--fsr";                        // Enable FSR-based contact adaptation
+static const char *FLAG_CONTACT_THRESHOLD = "--contact-th=";         // (Deprecated) Override contact threshold (alias for fsr touchdown)
+static const char *FLAG_FSR_TOUCHDOWN_THRESHOLD = "--fsr-touch-th="; // Override fsr touchdown threshold (0-1)
+static const char *FLAG_RELEASE_THRESHOLD = "--release-th=";         // (Deprecated) Override release threshold (alias liftoff)
+static const char *FLAG_FSR_LIFTOFF_THRESHOLD = "--fsr-liftoff-th="; // Override FSR liftoff threshold (0-1)
+static const char *FLAG_MIN_PRESSURE = "--min-pressure=";            // (Deprecated) Override minimum pressure (alias)
+static const char *FLAG_FSR_MIN_PRESSURE = "--fsr-min-pressure=";    // Override minimum normalized FSR pressure (0-1)
+static const char *FLAG_PRESERVE_SWING = "--preserve-swing";         // Preserve swing end pose as stance origin
+static const char *FLAG_NO_PRESERVE_SWING = "--no-preserve-swing";   // Reset stance origin each stance
+static const char *FLAG_HELP = "--help";                             // Help flag
+static const char *FLAG_DEBUG_FSR = "--debug-fsr";                   // Enable FSR phase transition logging
+static const char *FLAG_DRIFT_METRICS = "--drift-metrics";           // Enable drift metrics accumulation & summary
 
 /**
  * @brief Custom IMU interface for visualization that provides stable orientation data
@@ -480,9 +483,12 @@ static void printHelp() {
     std::cout << "Usage: virtual_hardware_sim_test [options]\n"
               << "Options:\n"
               << "  " << FLAG_ENABLE_FSR << "            Enable FSR contact adaptation logic\n"
-              << "  " << FLAG_CONTACT_THRESHOLD << "X   Set contact threshold (default 0.7)\n"
-              << "  " << FLAG_RELEASE_THRESHOLD << "X   Set release threshold (default 0.3)\n"
-              << "  " << FLAG_MIN_PRESSURE << "X       Set min pressure to trust contact (default 10.0)\n"
+              << "  " << FLAG_CONTACT_THRESHOLD << "X   (Deprecated) Set contact threshold (alias, default 0.7)\n"
+              << "  " << FLAG_FSR_TOUCHDOWN_THRESHOLD << "X   Set FSR touchdown threshold (0-1, default 0.7)\n"
+              << "  " << FLAG_RELEASE_THRESHOLD << "X   (Deprecated) Set release threshold (alias, default 0.3)\n"
+              << "  " << FLAG_FSR_LIFTOFF_THRESHOLD << "X   Set FSR liftoff threshold (0-1, default 0.3)\n"
+              << "  " << FLAG_MIN_PRESSURE << "X       (Deprecated) Set min pressure (legacy raw, alias)\n"
+              << "  " << FLAG_FSR_MIN_PRESSURE << "X   Set min normalized FSR pressure (0-1, default 0.05)\n"
               << "  " << FLAG_PRESERVE_SWING << "          Preserve swing touchdown as stance origin (continuous)\n"
               << "  " << FLAG_NO_PRESERVE_SWING << "      Reset stance origin each cycle (anti-drift)\n"
               << "  " << FLAG_DEBUG_FSR << "            Log FSR phase transitions\n"
@@ -520,9 +526,12 @@ int main(int argc, char **argv) {
         } else if (arg == FLAG_NO_PRESERVE_SWING) {
             params.preserve_swing_end_pose = false;
             preserve_flag_set = true;
-        } else if (!parseFlagValue(arg, FLAG_CONTACT_THRESHOLD, params.contact_threshold) &&
-                   !parseFlagValue(arg, FLAG_RELEASE_THRESHOLD, params.release_threshold) &&
-                   !parseFlagValue(arg, FLAG_MIN_PRESSURE, params.min_pressure)) {
+        } else if (!parseFlagValue(arg, FLAG_FSR_TOUCHDOWN_THRESHOLD, params.fsr_touchdown_threshold) &&
+                   !parseFlagValue(arg, FLAG_CONTACT_THRESHOLD, params.fsr_touchdown_threshold) &&
+                   !parseFlagValue(arg, FLAG_FSR_LIFTOFF_THRESHOLD, params.fsr_liftoff_threshold) &&
+                   !parseFlagValue(arg, FLAG_RELEASE_THRESHOLD, params.fsr_liftoff_threshold) &&
+                   !parseFlagValue(arg, FLAG_FSR_MIN_PRESSURE, params.fsr_min_pressure) &&
+                   !parseFlagValue(arg, FLAG_MIN_PRESSURE, params.fsr_min_pressure)) {
             std::cout << "Unknown argument: " << arg << " (ignored)" << std::endl;
         }
     }
@@ -530,9 +539,9 @@ int main(int argc, char **argv) {
     if (enable_fsr) {
         params.use_fsr_contact = true;
         // If default thresholds were not overridden they remain at struct defaults
-        std::cout << "[FSR] Enabled with thresholds: contact=" << params.contact_threshold
-                  << " release=" << params.release_threshold
-                  << " min_pressure=" << params.min_pressure << std::endl;
+        std::cout << "[FSR] Enabled with thresholds: touchdown=" << params.fsr_touchdown_threshold
+                  << " liftoff=" << params.fsr_liftoff_threshold
+                  << " fsr_min_pressure=" << params.fsr_min_pressure << std::endl;
     } else {
         std::cout << "[FSR] Disabled (use " << FLAG_ENABLE_FSR << " to enable)." << std::endl;
     }

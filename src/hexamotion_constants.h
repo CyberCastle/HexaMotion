@@ -182,8 +182,9 @@
 // ========================================================================
 
 // Default FSR threshold values for terrain contact detection
-#define DEFAULT_FSR_TOUCHDOWN_THRESHOLD 10.0 // Default FSR touchdown threshold (N or ADC units)
-#define DEFAULT_FSR_LIFTOFF_THRESHOLD 5.0    // Default FSR liftoff threshold (N or ADC units)
+// Normalized (0-1) default FSR contact thresholds (rolling average values)
+#define DEFAULT_FSR_TOUCHDOWN_THRESHOLD 0.7 // Default normalized touchdown (enter contact)
+#define DEFAULT_FSR_LIFTOFF_THRESHOLD 0.3   // Default normalized liftoff (exit contact)
 
 // Terrain analysis parameters
 #define STEP_DEPTH_DEFAULT 20.0   // Default step depth for terrain analysis (mm)

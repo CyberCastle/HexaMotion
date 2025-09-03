@@ -465,8 +465,10 @@ void initializeRobotParameters() {
     robot_params.tibia_angle_limits[1] = 90.0f;
 
     // Sensor parameters
-    robot_params.fsr_touchdown_threshold = 50.0f;           // Touchdown threshold (ADC units)
-    robot_params.fsr_liftoff_threshold = 25.0f;   // Liftoff threshold (ADC units)
+    // UPDATED: Thresholds now use normalized rolling average (0.0 - 1.0) instead of raw ADC units
+    robot_params.fsr_touchdown_threshold = 0.7f;           // Touchdown (enter contact)
+    robot_params.fsr_liftoff_threshold = 0.3f;             // Liftoff (exit contact)
+    // If migrating from legacy raw ADC configuration, map previous values to [0,1] range after filtering.
     robot_params.fsr_max_pressure = 100.0f;       // Newtons
 
     // Control parameters

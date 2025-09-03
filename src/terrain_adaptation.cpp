@@ -30,11 +30,19 @@ TerrainAdaptation::TerrainAdaptation(RobotModel &model)
     // Initialize FSR thresholds from model parameters or use defaults
     const Parameters &params = model_.getParams();
 
-    // Use fsr_touchdown_threshold if configured (> 0), otherwise use default
-    touchdown_threshold_ = (params.fsr_touchdown_threshold > 0.0) ? params.fsr_touchdown_threshold : DEFAULT_FSR_TOUCHDOWN_THRESHOLD;
-
-    // Use fsr_liftoff_threshold if configured (> 0), otherwise use default
-    liftoff_threshold_ = (params.fsr_liftoff_threshold > 0.0) ? params.fsr_liftoff_threshold : DEFAULT_FSR_LIFTOFF_THRESHOLD;
+    // Normalize thresholds to [0,1]; fallback to defaults only if out of range
+    {
+        double td = params.fsr_touchdown_threshold;
+        if (td < 0.0 || td > 1.0)
+            td = DEFAULT_FSR_TOUCHDOWN_THRESHOLD;
+        touchdown_threshold_ = math_utils::clamp(td, 0.0, 1.0);
+    }
+    {
+        double lo = params.fsr_liftoff_threshold;
+        if (lo < 0.0 || lo > 1.0)
+            lo = DEFAULT_FSR_LIFTOFF_THRESHOLD;
+        liftoff_threshold_ = math_utils::clamp(lo, 0.0, 1.0);
+    }
 
     // Initialize per-leg data
     for (int i = 0; i < NUM_LEGS; i++) {
@@ -516,13 +524,13 @@ void TerrainAdaptation::updateAdvancedTerrainAnalysis(const IMUData &imu_data) {
 void TerrainAdaptation::updateThresholdsFromModel() {
     const Parameters &params = model_.getParams();
 
-    // Update touchdown threshold from fsr_touchdown_threshold if configured
-    if (params.fsr_touchdown_threshold > 0.0) {
-        touchdown_threshold_ = params.fsr_touchdown_threshold;
-    }
-
-    // Update liftoff threshold from fsr_liftoff_threshold if configured
-    if (params.fsr_liftoff_threshold > 0.0) {
-        liftoff_threshold_ = params.fsr_liftoff_threshold;
-    }
+    // Always refresh with clamped normalized values (0..1)
+    touchdown_threshold_ = math_utils::clamp((params.fsr_touchdown_threshold < 0.0 || params.fsr_touchdown_threshold > 1.0)
+                                                 ? DEFAULT_FSR_TOUCHDOWN_THRESHOLD
+                                                 : params.fsr_touchdown_threshold,
+                                             0.0, 1.0);
+    liftoff_threshold_ = math_utils::clamp((params.fsr_liftoff_threshold < 0.0 || params.fsr_liftoff_threshold > 1.0)
+                                               ? DEFAULT_FSR_LIFTOFF_THRESHOLD
+                                               : params.fsr_liftoff_threshold,
+                                           0.0, 1.0);
 }

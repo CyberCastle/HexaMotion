@@ -192,17 +192,17 @@ void Leg::updateFSRHistory(bool in_contact, double pressure) {
     contact_force_ = pressure;
 }
 
-bool Leg::getFilteredContactState(double contact_threshold, double release_threshold) const {
+bool Leg::getFilteredContactState(double fsr_touchdown_threshold, double fsr_liftoff_threshold) const {
     // Calculate average contact value from history
     double avg_contact = getAverageContactValue();
 
     // Apply hysteresis for contact detection
     if (in_contact_) {
         // Currently in contact - use release threshold
-        return avg_contact >= release_threshold;
+        return avg_contact >= fsr_liftoff_threshold;
     } else {
         // Currently not in contact - use contact threshold
-        return avg_contact >= contact_threshold;
+        return avg_contact >= fsr_touchdown_threshold;
     }
 }
 

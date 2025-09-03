@@ -737,7 +737,7 @@ void LocomotionSystem::updateLegStates() {
         auto leg_stepper = walk_ctrl ? walk_ctrl->getLegStepper(i) : nullptr;
 
         if (fsr_enabled) {
-            bool filtered_contact = legs[i].getFilteredContactState(params.contact_threshold, params.release_threshold);
+            bool filtered_contact = legs[i].getFilteredContactState(params.fsr_touchdown_threshold, params.fsr_liftoff_threshold);
             StepPhase current_state = legs[i].getStepPhase();
 
             // Hysteresis transitions with optional debug logging
@@ -777,7 +777,7 @@ void LocomotionSystem::updateLegStates() {
                 double phase_fraction = static_cast<double>(leg_stepper->getPhase()) /
                                         static_cast<double>(walk_ctrl->getStepCycle().period_);
                 bool should_be_swing = legs[i].shouldBeInSwing(phase_fraction, walk_ctrl->getStanceDuration());
-                if (should_be_swing && legs[i].getStepPhase() == STANCE_PHASE && legs[i].getContactForce() < params.min_pressure) {
+                if (should_be_swing && legs[i].getStepPhase() == STANCE_PHASE && legs[i].getContactForce() < params.fsr_min_pressure) {
                     legs[i].setStepPhase(SWING_PHASE);
 
 #ifdef TESTING_ENABLED
@@ -785,7 +785,7 @@ void LocomotionSystem::updateLegStates() {
                         // Revert implies we force SWING; guard against duplicate logs
                         if (!last_logged_initialized_ || last_logged_leg_phase_[i] != SWING_PHASE) {
                             std::cout << "[FSR] leg=" << i << " REVERT STANCE->SWING low_pressure=" << legs[i].getContactForce()
-                                      << " < min_pressure phase_guard" << std::endl;
+                                      << " < fsr_min_pressure phase_guard" << std::endl;
                             last_logged_leg_phase_[i] = SWING_PHASE;
                         }
                     }

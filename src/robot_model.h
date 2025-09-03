@@ -57,17 +57,15 @@ struct Parameters {
     double dh_parameters[NUM_LEGS][DOF_PER_LEG + 1][4];
 
     Eigen::Vector3d imu_calibration_offset;
-    double fsr_touchdown_threshold;
-    double fsr_liftoff_threshold;
-    double fsr_max_pressure;
 
     // FSR contact filtering thresholds (used in LocomotionSystem::updateLegStates)
-    // contact_threshold: minimum historical rolling average to consider contact (hysteresis enter)
-    // release_threshold: maximum historical rolling average to consider release (hysteresis exit)
-    // min_pressure: minimum pressure to validate physical contact and reject false positives
-    double contact_threshold = 0.7; //< Average contact value (0-1) to switch to STANCE
-    double release_threshold = 0.3; //< Average contact value (0-1) to switch to SWING
-    double min_pressure = 10.0;     //< Minimum raw pressure to trust a reported contact
+    // fsr_touchdown_threshold: minimum historical rolling average to consider contact (hysteresis enter)
+    // fsr_liftoff_threshold: maximum historical rolling average to consider release (hysteresis exit)
+    // fsr_min_pressure: minimum normalized/raw pressure/average to validate physical contact and reject false positives
+    double fsr_touchdown_threshold = 0.7; //< Average contact value (0-1) to switch to STANC
+    double fsr_liftoff_threshold = 0.3;   //< Average contact value (0-1) to switch to SWING
+    double fsr_min_pressure = 0.05;       //< Minimum normalized value (0-1) to trust reported contact (legacy raw=10 maps ≈0.05)
+    double fsr_max_pressure = 0.9;        //< Maximum expected normalized pressure (0-1). 1.0 = saturated/full contact (used for clamping/validation)
 
     double max_velocity;
     double max_angular_velocity;

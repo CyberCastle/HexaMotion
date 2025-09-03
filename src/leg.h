@@ -230,11 +230,11 @@ class Leg {
 
     /**
      * @brief Get filtered contact state using history.
-     * @param contact_threshold Threshold for contact detection (default 0.7)
-     * @param release_threshold Threshold for contact release (default 0.3)
+     * @param fsr_touchdown_threshold Threshold for contact detection (default 0.7)
+     * @param fsr_liftoff_threshold Threshold for contact release (default 0.3)
      * @return True if leg is in contact based on filtered history
      */
-    bool getFilteredContactState(double contact_threshold = 0.7, double release_threshold = 0.3) const;
+    bool getFilteredContactState(double fsr_touchdown_threshold = 0.7, double fsr_liftoff_threshold = 0.3) const;
 
     /**
      * @brief Get current FSR history index.
