@@ -121,9 +121,6 @@ struct Parameters {
     // Tipo de gait seleccionado (OpenSHC compatible)
     std::string gait_type;
 
-    // Gait phase offset multiplier for tripod gait synchronization
-    double offset_multiplier = 0.5; // Default offset multiplier for tripod gait phase synchronization
-
     // Walkspace overlap control (OpenSHC equivalent)
     bool overlapping_walkspaces = false; // Flag denoting if walkspaces are allowed to overlap (default: false, same as OpenSHC)
 
@@ -161,13 +158,21 @@ struct Parameters {
     double phase_end_snap_tolerance_mm = 1.0; //< Distance tolerance (mm) for hard snap
     double phase_end_snap_alpha = 1.0;        //< Blend factor (1.0 hard snap, <1.0 partial correction)
 
-    // --- Tangential stance mode ---
-    // When enabled, the STANCE phase constrains foot motion to pure tangential travel
-    // around the leg base at constant planar radius and constant height. The femur/tibia
-    // joint angles remain effectively frozen; only the coxa rotates. This diverges from
-    // vanilla OpenSHC which integrates full Bezier-derived velocity (allowing radial
-    // drift and vertical micro-adjustments). Use to stabilize stance joint posture.
-    bool enable_tangential_stance_mode = true; //< default on for experimentation
+    // --- Segment mass properties (optional) ---
+    // When > 0 they are used for relative torque computation in startup normalization.
+    // Units: kilograms (or any consistent unit; only ratios are used).
+    double coxa_mass = 0.0;  //< Coxa mass (0 => use lengths only)
+    double femur_mass = 0.0; //< Femur mass (0 => use lengths only)
+    double tibia_mass = 0.0; //< Tibia mass (0 => use lengths only)
+
+    // --- Startup (initial standing) normalization configuration ---
+    struct StartupNormalizationConfig {
+        bool enable_torque_balanced = true; //< Enable torque/energy balanced scaling in LIFT phase
+        double alpha = 0.6;                 //< Exponent smoothing factor for weight factors (0.5-0.8 recommended)
+        double speed_deadband = 0.05;       //< Minimum non-zero normalized speed after scaling
+        double accel_deadband = 0.05;       //< Minimum non-zero normalized acceleration after scaling
+        double tibia_speed_cap = 0.85;      //< Optional ceiling for tibia speed after scaling
+    } startup_norm;
 };
 
 enum GaitType {
@@ -486,6 +491,23 @@ class IServoInterface {
      */
     virtual bool setJointAngleAndSpeed(int leg_index, int joint_index, double angle, double speed) = 0;
 
+    /**
+     * Extended joint motion command including acceleration (jerk-limited motion planners support).
+     * Implementations that do not natively support acceleration can ignore the parameter and
+     * fallback to setJointAngleAndSpeed(). Default implementation delegates to that legacy method.
+     * @param leg_index Index of the leg (0-5)
+     * @param joint_index Joint index within leg (0-2)
+     * @param angle Target angular position in degrees
+     * @param speed Target (approximate) velocity or driver speed parameter
+     * @param acceleration Optional acceleration limit (driver units or deg/s^2). May be ignored.
+     * @return true if command accepted
+     */
+    virtual bool setJointAngleSpeedAccel(int leg_index, int joint_index,
+                                         double angle, double speed, double acceleration) {
+        (void)acceleration; // default: unused
+        return setJointAngleAndSpeed(leg_index, joint_index, angle, speed);
+    }
+
     /** Retrieve the current joint angle. */
     virtual double getJointAngle(int leg_index, int joint_index) = 0;
 
@@ -508,6 +530,30 @@ class IServoInterface {
         (void)angles_deg;
         (void)speeds;
         return false;
+    }
+
+    /**
+     * Batch command to set all joints' angles, speeds and accelerations.
+     * This extends syncSetAllJointAnglesAndSpeeds by adding an acceleration parameter
+     * (for jerk-limited or S-curve motion planners). Implementations that do not
+     * natively support acceleration limits may ignore the parameter and delegate to
+     * syncSetAllJointAnglesAndSpeeds(), mirroring the behaviour of
+     * setJointAngleSpeedAccel which falls back to setJointAngleAndSpeed.
+     *
+     * Default implementation: delegates to syncSetAllJointAnglesAndSpeeds() and ignores
+     * acceleration values, returning its result. Override for bus-level optimized
+     * synchronous write including acceleration control.
+     *
+     * @param angles_deg Target joint angles in degrees [leg][joint].
+     * @param speeds Target joint speeds or driver-native speed values [leg][joint].
+     * @param accelerations Target joint accelerations (driver units or deg/s^2) [leg][joint].
+     * @return true if batch command was sent, false otherwise (caller may fallback to per-joint calls).
+     */
+    virtual bool syncSetAllJointAnglesSpeedsAccels(const double angles_deg[NUM_LEGS][DOF_PER_LEG],
+                                                   const double speeds[NUM_LEGS][DOF_PER_LEG],
+                                                   const double accelerations[NUM_LEGS][DOF_PER_LEG]) {
+        (void)accelerations; // default: unused (fallback)
+        return syncSetAllJointAnglesAndSpeeds(angles_deg, speeds);
     }
 
     /**

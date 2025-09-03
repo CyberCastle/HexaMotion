@@ -159,6 +159,13 @@ class ExampleServo : public IServoInterface {
         return true;
     }
 
+    bool setJointAngleSpeedAccel(int leg_index, int joint_index,
+                                 double angle, double speed, double acceleration) override {
+        // Ignore acceleration but store angle (and acknowledge speed).
+        (void)acceleration;
+        return setJointAngleAndSpeed(leg_index, joint_index, angle, speed);
+    }
+
     double getJointAngle(int leg_index, int joint_index) override {
         if (leg_index < 0 || leg_index >= NUM_LEGS)
             return 0.0f;

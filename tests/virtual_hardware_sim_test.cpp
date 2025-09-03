@@ -213,6 +213,7 @@ struct ServoAngleRecord {
     int joint;
     double angle_degrees;
     double speed;
+    double acceleration;
     double target_angle_degrees;
     std::chrono::steady_clock::time_point timestamp;
 };
@@ -285,11 +286,23 @@ class AngleVisualizationServo : public IServoInterface {
             record.joint = joint;
             record.angle_degrees = angle; // Already in degrees
             record.speed = speed;
+            record.acceleration = 0.0;           // legacy call (no acceleration provided)
             record.target_angle_degrees = angle; // Already in degrees
             record.timestamp = std::chrono::steady_clock::now();
 
             angle_history_.push_back(record);
 
+            return true;
+        }
+        return false;
+    }
+
+    bool setJointAngleSpeedAccel(int leg, int joint, double angle, double speed, double acceleration) override {
+        if (setJointAngleAndSpeed(leg, joint, angle, speed)) {
+            // Patch last record with acceleration value (since setJointAngleAndSpeed already pushed it)
+            if (!angle_history_.empty()) {
+                angle_history_.back().acceleration = acceleration;
+            }
             return true;
         }
         return false;

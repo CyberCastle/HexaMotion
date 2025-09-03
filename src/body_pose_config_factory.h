@@ -51,14 +51,7 @@ BodyPoseConfiguration getDefaultBodyPoseConfig(const Parameters &params);
  * @param params Robot parameters from HexaModel
  * @return Conservative body pose configuration with reduced limits for safety
  */
-BodyPoseConfiguration getConservativeBodyPoseConfig(const Parameters &params);
-
-/**
- * @brief Get high-speed body pose configuration using robot parameters
- * @param params Robot parameters from HexaModel
- * @return High-speed body pose configuration optimized for faster locomotion
- */
-BodyPoseConfiguration getHighSpeedBodyPoseConfig(const Parameters &params);
+// Configuraciones alternativas eliminadas para simplificar (solo default soportado)
 
 /**
  * @brief Create auto-pose configuration for tripod gait (OpenSHC equivalent)
@@ -66,21 +59,7 @@ BodyPoseConfiguration getHighSpeedBodyPoseConfig(const Parameters &params);
  * @param params Robot parameters
  * @return Auto-pose configuration structure
  */
-AutoPoseConfiguration createAutoPoseConfiguration(const Parameters &params);
-
-/**
- * @brief Create conservative auto-pose configuration
- * @param params Robot parameters
- * @return Conservative auto-pose configuration with reduced amplitudes
- */
-AutoPoseConfiguration createConservativeAutoPoseConfiguration(const Parameters &params);
-
-/**
- * @brief Create high-speed auto-pose configuration
- * @param params Robot parameters
- * @return High-speed auto-pose configuration with increased amplitudes
- */
-AutoPoseConfiguration createHighSpeedAutoPoseConfiguration(const Parameters &params);
+AutoPoseConfiguration createAutoPoseConfigurationForGait(const Parameters &params, const std::string &gait_name);
 
 /**
  * @brief Calculate servo angles for a given height using analytical IK (OpenSHC)

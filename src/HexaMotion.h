@@ -15,6 +15,7 @@
 #include "math_utils.h"
 #include "precision_config.h"
 #include "robot_model.h"
+#include "s_curve_profile.h"
 #include "state_controller.h"
 #include "terrain_adaptation.h"
 #include "velocity_limits.h"

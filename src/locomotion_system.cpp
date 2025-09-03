@@ -483,6 +483,7 @@ bool LocomotionSystem::setStandingPose() {
 }
 
 bool LocomotionSystem::setBodyPose(const Eigen::Vector3d &position, const Eigen::Vector3d &orientation) {
+    // orientation expected in radians (roll,pitch,yaw)
 
     // Use BodyPoseController to set the pose
     bool success = body_pose_ctrl->setBodyPose(position, orientation, legs);
@@ -551,6 +552,14 @@ bool LocomotionSystem::update() {
         updateLegStates(); // early call: updates in_contact_ & histories; phase may be overwritten later
     }
 
+    // Handle initial standing pose transition (non-blocking) prior to normal running
+    // During initial standing S-curve we temporarily keep system_state as SYSTEM_READY until finished
+    if (body_pose_ctrl && body_pose_ctrl->isInitialStandingPoseActive()) {
+        if (!stepInitialStandingPose()) {
+            return false; // error already set
+        }
+    }
+
     // Only update leg trajectories if system is in RUNNING state
     if (walk_ctrl && system_state == SYSTEM_RUNNING) {
         // Optional kinematic integration of body pose (test / simulation)
@@ -587,14 +596,43 @@ bool LocomotionSystem::update() {
             }
         }
 
+        // STEP 2a: Update body pose (partial OpenSHC PoseController::updateCurrentPose)
+        // We only update auto-pose modulation and walk plane pose estimation here.
+        if (body_pose_ctrl) {
+
+            // Derive normalized gait phase [0,1) from first leg stepper (consistent across legs in synchronized gaits)
+            double gait_phase = 0.0;
+            StepCycle sc = walk_ctrl->getStepCycle();
+            int period = sc.period_ > 0 ? sc.period_ : 1;
+            auto leg0 = walk_ctrl->getLegStepper(0);
+            if (leg0) {
+                gait_phase = static_cast<double>(leg0->getPhase() % period) / static_cast<double>(period);
+            }
+            body_pose_ctrl->updateCurrentPose(gait_phase, legs);
+        }
+
         // STEP 2b: Finalize leg phases (FSR or pure kinematic) after trajectories computed
         updateLegStates();
+
+        // STEP 2c: Apply auto pose modulation to desired tip positions prior to IK so horizontal
+        // components (x,y,yaw-derived) affect coxa angles (OpenSHC-style stance posing integration).
+        if (body_pose_ctrl) {
+            body_pose_ctrl->applyAutoPoseToDesiredTips(legs);
+        }
 
         // STEP 3: Apply IK to ALL legs at once (= OpenSHC::Model::updateModel)
         applyInverseKinematicsToAllLegs();
 
         // STEP 4: Publish ALL joint angles to servos (= OpenSHC::publishDesiredJointState)
         publishJointAnglesToServos();
+
+#ifdef TESTING_ENABLED
+        // Registrar muestra de telemetría tras aplicar servos / IK (estado final del ciclo)
+        if (telemetry_enabled_) {
+            telemetry_time_accumulator_ += params.time_delta;
+            recordCoxaTelemetrySample();
+        }
+#endif
     } else if (system_state == SYSTEM_READY) {
         // OpenSHC: When system is READY (after shutdown), maintain STANCE_PHASE for ALL legs
         // This prevents sys.update() calls from overriding the shutdown-forced STANCE states
@@ -1120,6 +1158,14 @@ void LocomotionSystem::publishJointAnglesToServos() {
         }
 
         if (servo_interface->syncSetAllJointAnglesAndSpeeds(angles_deg, speeds)) {
+            // Cache last servo commands (degrees) for telemetry
+#ifdef TESTING_ENABLED
+            for (int li = 0; li < NUM_LEGS; ++li) {
+                for (int j = 0; j < DOF_PER_LEG; ++j) {
+                    last_servo_cmd_deg_[li][j] = angles_deg[li][j];
+                }
+            }
+#endif
             return; // done
         }
     }
@@ -1134,5 +1180,256 @@ void LocomotionSystem::publishJointAnglesToServos() {
             last_error = SERVO_ERROR;
             // Continue processing other legs instead of failing completely
         }
+        // Cache per-leg command (degrees)
+#ifdef TESTING_ENABLED
+        last_servo_cmd_deg_[i][0] = angles.coxa * params.angle_sign_coxa * RADIANS_TO_DEGREES_FACTOR;
+        last_servo_cmd_deg_[i][1] = angles.femur * params.angle_sign_femur * RADIANS_TO_DEGREES_FACTOR;
+        last_servo_cmd_deg_[i][2] = angles.tibia * params.angle_sign_tibia * RADIANS_TO_DEGREES_FACTOR;
+#endif
     }
 }
+
+// =====================================================================================
+// INITIAL STANDING POSE ESTABLISHMENT (jerk-limited smooth transition)
+// =====================================================================================
+bool LocomotionSystem::establishInitialStandingPose() {
+    if (!servo_interface || !body_pose_ctrl) {
+        last_error = SERVO_ERROR;
+        return false;
+    }
+    if (body_pose_ctrl->isInitialStandingPoseActive()) {
+        // Already in progress; just step
+        return stepInitialStandingPose();
+    }
+    // Refresh leg joint angles from actual servo feedback so S-curve profiles start at true hardware pose.
+    // If servo interface does not provide meaningful feedback, this is harmless (legs already have last commanded angles).
+    body_pose_ctrl->getCurrentServoPositions(servo_interface, legs);
+    // Initialize controller-side profiles using current leg joint angles
+    if (!body_pose_ctrl->beginInitialStandingPoseTransition(legs)) {
+        return false; // no change
+    }
+    startup_in_progress = true;
+    system_state = SYSTEM_READY; // use READY as transitional state for startup S-curve
+    return stepInitialStandingPose();
+}
+
+bool LocomotionSystem::stepInitialStandingPose() {
+    if (!servo_interface || !body_pose_ctrl) {
+        last_error = SERVO_ERROR;
+        return false;
+    }
+    if (!body_pose_ctrl->isInitialStandingPoseActive()) {
+        return true; // nothing to do
+    }
+
+    // Use internal parameter set time delta
+    double dt = params.time_delta; // time step seconds
+
+    // Allocate temporary buffers for positions, velocities, accelerations per joint
+    double positions[NUM_LEGS][3];
+    double velocities[NUM_LEGS][3];
+    double accelerations[NUM_LEGS][3];
+
+    if (!body_pose_ctrl->stepInitialStandingPoseTransition(legs, dt, positions, velocities, accelerations)) {
+        // stepping failed
+        last_error = STATE_ERROR;
+        return false;
+    }
+
+    // Map radian joint state to servo commands each iteration
+    // Determine speed multipliers based on normalized velocity relative to heuristic vmax per joint (derived same way as in controller begin)
+    // We recompute heuristic vmax in degrees/s to convert to speed multiplier (0..1), then send acceleration when available.
+    double angles_deg[NUM_LEGS][3];
+    double speeds[NUM_LEGS][3];
+    double accels[NUM_LEGS][3];
+
+    // Heuristic max velocity (degrees/s) consistent with earlier logic
+    double vmax_deg = params.default_servo_speed; // heuristic max speed (deg/s) for normalization
+    double amax_deg = vmax_deg * 4.0;
+
+    // Precompute torque-balanced weight factors (relative) once (lazy static cache)
+    static bool weight_factors_initialized = false;
+    static double weight_factor[3] = {1.0, 1.0, 1.0};
+    if (!weight_factors_initialized) {
+        // Quasi-static torque proxy:
+        // tau_joint ≈ (m_segment * g * L_segment/2) + (m_distal_total * g * L_segment)
+        // If masses are not defined (>0) assume mass proportional to length.
+        double Lc = params.coxa_length > 1e-6 ? params.coxa_length : 1.0;
+        double Lf = params.femur_length > 1e-6 ? params.femur_length : 1.0;
+        double Lt = params.tibia_length > 1e-6 ? params.tibia_length : 1.0;
+        double mc = params.coxa_mass > 0.0 ? params.coxa_mass : Lc; // fallback proporcional
+        double mf = params.femur_mass > 0.0 ? params.femur_mass : Lf;
+        double mt = params.tibia_mass > 0.0 ? params.tibia_mass : Lt;
+        // Distal accumulated masses
+        double distal_femur = mt;     // femur ve tibia distal
+        double distal_coxa = mf + mt; // coxa ve femur + tibia
+        double tau_coxa = mc * Lc * 0.5 + distal_coxa * Lc;
+        double tau_femur = mf * Lf * 0.5 + distal_femur * Lf;
+        double tau_tibia = mt * Lt * 0.5; // tibia solo propia
+        // Normalize relative to coxa
+        double alpha = params.startup_norm.alpha;
+        weight_factor[0] = 1.0; // coxa baseline
+        weight_factor[1] = pow(tau_femur / tau_coxa, alpha);
+        weight_factor[2] = pow(tau_tibia / tau_coxa, alpha);
+        // Safety clamps
+        for (int k = 0; k < 3; ++k) {
+            if (weight_factor[k] < 1e-3)
+                weight_factor[k] = 1e-3;
+            if (weight_factor[k] > 10.0)
+                weight_factor[k] = 10.0;
+        }
+        weight_factors_initialized = true;
+    }
+
+    bool in_lift_phase = body_pose_ctrl->isInitialStandingPoseActive() && !body_pose_ctrl->isInitialStandingAlignmentPhase();
+    bool apply_torque_balanced = in_lift_phase && params.startup_norm.enable_torque_balanced;
+    double v_dead = params.startup_norm.speed_deadband;
+    double a_dead = params.startup_norm.accel_deadband;
+
+    for (int i = 0; i < NUM_LEGS; ++i) {
+        for (int j = 0; j < 3; ++j) {
+            double pos_rad = positions[i][j];
+            double vel_rad = velocities[i][j];
+            double acc_rad = accelerations[i][j];
+            double sign = 1.0;
+            if (j == 0)
+                sign = params.angle_sign_coxa;
+            else if (j == 1)
+                sign = params.angle_sign_femur;
+            else
+                sign = params.angle_sign_tibia;
+            angles_deg[i][j] = pos_rad * sign * RADIANS_TO_DEGREES_FACTOR;
+            double vel_deg = vel_rad * RADIANS_TO_DEGREES_FACTOR;
+            double speed_mult = vmax_deg > 1e-6 ? fabs(vel_deg) / vmax_deg : 0.0;
+            double acc_deg = acc_rad * RADIANS_TO_DEGREES_FACTOR;
+            double accel_mult = amax_deg > 1e-6 ? fabs(acc_deg) / amax_deg : 0.0;
+            if (apply_torque_balanced) {
+                double wf = weight_factor[j];
+                if (wf > 1e-6) {
+                    speed_mult /= wf;
+                    accel_mult /= wf;
+                }
+            }
+            // Deadbands
+            if (speed_mult < v_dead)
+                speed_mult = v_dead;
+            if (accel_mult < a_dead)
+                accel_mult = a_dead;
+            if (speed_mult > 1.0)
+                speed_mult = 1.0;
+            if (accel_mult > 1.0)
+                accel_mult = 1.0;
+            // Optional tibia speed cap
+            if (apply_torque_balanced && j == 2 && params.startup_norm.tibia_speed_cap > 0.0 && speed_mult > params.startup_norm.tibia_speed_cap) {
+                speed_mult = params.startup_norm.tibia_speed_cap;
+            }
+            speeds[i][j] = speed_mult;
+            accels[i][j] = accel_mult;
+        }
+        if (!coxa_movement_enabled_) {
+            // Freeze coxa if disabled
+            angles_deg[i][0] = 0.0;
+            speeds[i][0] = 0.0;
+            accels[i][0] = 0.0;
+        }
+    }
+
+    // Prefer batch interface supporting acceleration if available
+    bool batch_ok = false;
+    if (servo_interface->syncSetAllJointAnglesSpeedsAccels(angles_deg, speeds, accels)) {
+        batch_ok = true; // full accel-capable batch path
+    }
+    if (!batch_ok) {
+        // Fallback: per-joint
+        for (int i = 0; i < NUM_LEGS; ++i) {
+            for (int j = 0; j < 3; ++j) {
+                servo_interface->setJointAngleSpeedAccel(i, j, angles_deg[i][j], speeds[i][j], accels[i][j]);
+            }
+        }
+    }
+
+    // If finished, finalize state and compute body position
+    if (!body_pose_ctrl->isInitialStandingPoseActive()) {
+        body_position = body_pose_ctrl->calculateBodyPosition(legs);
+        system_state = SYSTEM_READY;
+        startup_in_progress = false;
+        shutdown_in_progress = false;
+    }
+    return true;
+}
+
+#ifdef TESTING_ENABLED
+// ====================================================================
+// TESTING: Coxa telemetry instrumentation
+// ====================================================================
+void LocomotionSystem::recordCoxaTelemetrySample() {
+    if (!telemetry_enabled_)
+        return;
+    CoxaTelemetrySample sample{};
+    sample.time = telemetry_time_accumulator_;
+    // Acquire instantaneous data + stride vectors + servo commands
+    for (int i = 0; i < NUM_LEGS; ++i) {
+        JointAngles a = legs[i].getJointAngles();
+        double global = a.coxa;                        // absolute
+        double local = global - BASE_THETA_OFFSETS[i]; // local (offset removed)
+        sample.global_angle[i] = global;
+        sample.local_angle[i] = local;
+        sample.phase[i] = legs[i].getStepPhase();
+        // stride baseline logic: set when entering stance for first time in cycle; keep across swing to observe full leg cycle displacement
+        if (sample.phase[i] == STANCE_PHASE && !stride_start_valid_[i]) {
+            stride_start_tip_[i] = legs[i].getCurrentTipPositionGlobal();
+            stride_start_valid_[i] = true;
+        } else if (sample.phase[i] == SWING_PHASE && stride_start_valid_[i]) {
+            // Reset baseline at swing start so next STANCE establishes a fresh forward reference.
+            // This avoids accumulating backwards drift across multiple cycles which produced
+            // negative average dx despite forward command velocity in tests.
+            stride_start_valid_[i] = false;
+        }
+        Point3D tip = legs[i].getCurrentTipPositionGlobal();
+        if (stride_start_valid_[i]) {
+            sample.stride_dx[i] = tip.x - stride_start_tip_[i].x;
+            sample.stride_dy[i] = tip.y - stride_start_tip_[i].y;
+        } else {
+            sample.stride_dx[i] = 0.0;
+            sample.stride_dy[i] = 0.0;
+        }
+        sample.servo_command_coxa[i] = last_servo_cmd_deg_[i][0] * DEGREES_TO_RADIANS_FACTOR; // store radians
+    }
+    sample.body_vel_x = commanded_linear_velocity_x_;
+    sample.body_vel_y = commanded_linear_velocity_y_;
+    sample.body_ang_vel = commanded_angular_velocity_;
+    // Derive velocities / accelerations via finite differences (simple, adequate for test sampling rate)
+    if (prev_valid_) {
+        double dt = params.time_delta > 1e-9 ? params.time_delta : 1e-3; // guard
+        for (int i = 0; i < NUM_LEGS; ++i) {
+            double v_global = (sample.global_angle[i] - prev_coxa_angle_[i]) / dt;
+            double v_local = (sample.local_angle[i] - (prev_coxa_angle_[i] - BASE_THETA_OFFSETS[i])) / dt;
+            double a_global = (v_global - prev_coxa_velocity_[i]) / dt;
+            double a_local = (v_local - (prev_coxa_velocity_[i])) / dt; // same prev velocity source since offset constant
+            sample.global_velocity[i] = v_global;
+            sample.local_velocity[i] = v_local;
+            sample.global_accel[i] = a_global;
+            sample.local_accel[i] = a_local;
+        }
+    } else {
+        for (int i = 0; i < NUM_LEGS; ++i) {
+            sample.global_velocity[i] = 0.0;
+            sample.local_velocity[i] = 0.0;
+            sample.global_accel[i] = 0.0;
+            sample.local_accel[i] = 0.0;
+        }
+    }
+    // Update previous
+    for (int i = 0; i < NUM_LEGS; ++i) {
+        prev_coxa_velocity_[i] = sample.global_velocity[i];
+        prev_coxa_angle_[i] = sample.global_angle[i];
+    }
+    prev_valid_ = true;
+
+    if (telemetry_.size() >= kMaxTelemetrySamples_) {
+        // Simple ring buffer behavior: drop oldest by shifting (cost acceptable for test-sized buffer)
+        telemetry_.erase(telemetry_.begin());
+    }
+    telemetry_.push_back(sample);
+}
+#endif

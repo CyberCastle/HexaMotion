@@ -6,6 +6,7 @@
 #include "leg.h"
 #include "leg_poser.h"
 #include "robot_model.h"
+#include "s_curve_profile.h" // SCurveProfile definition for initial standing transition
 #include <ArduinoEigen.h>
 #include <memory>
 #include <vector>
@@ -57,6 +58,7 @@ class BodyPoseController {
      * @param legs Array of Leg objects to update
      * @return true if successful, false otherwise
      */
+    // orientation now expected in radians (roll,pitch,yaw)
     bool setBodyPose(const Eigen::Vector3d &position, const Eigen::Vector3d &orientation,
                      Leg legs[NUM_LEGS]);
 
@@ -99,6 +101,13 @@ class BodyPoseController {
      * @return true if successful, false otherwise
      */
     bool setStandingPose(Leg legs[NUM_LEGS]);
+
+    /**
+     * @brief Access standing pose joint configuration (radians) for a leg.
+     * @param leg_index Leg index (0..NUM_LEGS-1)
+     * @return StandingPoseJoints structure (coxa,femur,tibia) in radians.
+     */
+    StandingPoseJoints getStandingPoseJoints(int leg_index) const;
 
     /**
      * @brief Interpolate between two poses
@@ -256,6 +265,7 @@ class BodyPoseController {
     void setAutoPoseEnabled(bool enabled) { auto_pose_enabled = enabled; }
 
     // Smooth trajectory methods
+    // orientation in radians
     bool setBodyPoseSmooth(const Eigen::Vector3d &position, const Eigen::Vector3d &orientation,
                            Leg legs[NUM_LEGS], IServoInterface *servos = nullptr);
     bool setBodyPoseSmoothQuaternion(const Eigen::Vector3d &position, const Eigen::Vector4d &quaternion,
@@ -270,6 +280,41 @@ class BodyPoseController {
     void resetTrajectory();
     bool isTrajectoryInProgress() const { return trajectory_in_progress; }
 
+    /**
+     * @brief Begin jerk-limited initial standing pose transition (non-blocking).
+     * @details Creates 7-segment S-curve motion profiles (in radians) from current leg joint angles to configured
+     *          standing pose angles and arms the internal state machine. Does not publish servo commands.
+     * @return true if a transition was started or immediately finished (already at target). Use isInitialStandingPoseActive() to know if ongoing.
+     */
+    bool beginInitialStandingPoseTransition(Leg legs[NUM_LEGS]);
+
+    /**
+     * @brief Advance the active initial standing pose transition by dt.
+     * @param legs Leg array to update with new joint sample.
+     * @param dt   Timestep (seconds).
+     * @param out_positions Optional: joint positions (radians) sampled this step [leg][joint]; can be nullptr.
+     * @param out_vel Optional: joint velocities (rad/s) sampled this step [leg][joint]; can be nullptr.
+     * @param out_acc Optional: joint accelerations (rad/s^2) sampled this step [leg][joint]; can be nullptr.
+     * @return true when transition completes at this call (final sample applied), false if still in progress or no active transition.
+     */
+    bool stepInitialStandingPoseTransition(Leg legs[NUM_LEGS], double dt,
+                                           double out_positions[NUM_LEGS][DOF_PER_LEG] = nullptr,
+                                           double out_vel[NUM_LEGS][DOF_PER_LEG] = nullptr,
+                                           double out_acc[NUM_LEGS][DOF_PER_LEG] = nullptr);
+
+    /** Active flag accessor for the initial standing pose transition */
+    bool isInitialStandingPoseActive() const { return initial_standing_active_; }
+    /** True if in alignment (coxa) phase */
+    bool isInitialStandingAlignmentPhase() const { return initial_standing_active_ && initial_standing_phase_ == InitialStandingPhase::ALIGN; }
+    /** Set tolerance (radians) used to validate coxa alignment */
+    void setInitialStandingAlignmentTolerance(double radians) { initial_standing_align_tolerance_ = radians; }
+    /** Returns true if all coxa joints are within alignment tolerance of target (valid during ALIGN phase) */
+    bool isInitialStandingAligned(const Leg legs[NUM_LEGS]) const;
+    /** Progress [0,1] of the initial standing pose transition (0 if inactive) */
+    double getInitialStandingPoseProgress() const {
+        return initial_standing_total_time_ > 0.0 ? math_utils::clamp(initial_standing_time_ / initial_standing_total_time_, 0.0, 1.0) : 0.0;
+    }
+
     // Walk plane pose system (OpenSHC equivalent)
     void updateWalkPlanePose(Leg legs[NUM_LEGS]);
     Pose getWalkPlanePose() const;
@@ -277,10 +322,29 @@ class BodyPoseController {
     void setWalkPlanePoseEnabled(bool enabled);
     bool isWalkPlanePoseEnabled() const;
 
+    /**
+     * @brief Update current body pose state (partial OpenSHC PoseController::updateCurrentPose equivalent).
+     * @details Minimal adaptation that only forwards to auto-pose and walk plane pose update mechanisms.
+     *          It intentionally omits IMU fusion, manual pose input handling, reset logic and stiffness
+     *          modulation present in the full OpenSHC implementation. Gait phase is propagated so that
+     *          phase-synchronised auto pose patterns can be evaluated consistently.
+     * @param gait_phase Normalised gait phase in [0,1).
+     * @param legs Array of Leg objects (needed for walk plane estimation and per-leg auto pose updates).
+     */
+    void updateCurrentPose(double gait_phase, Leg legs[NUM_LEGS]);
+
+    /**
+     * @brief Apply global + per-leg auto pose modulation to desired tip positions (OpenSHC-style).
+     * This transforms each leg's desired tip position before batch IK so that horizontal (x,y)
+     * translations and yaw/roll/pitch components influence coxa motion.
+     */
+    void applyAutoPoseToDesiredTips(Leg legs[NUM_LEGS]);
+
   private:
-    RobotModel &model;                      //< Reference to robot model
-    BodyPoseConfiguration body_pose_config; //< Body pose configuration
-    AutoPoseConfiguration auto_pose_config; //< Auto-pose configuration
+    RobotModel &model;                         //< Reference to robot model
+    BodyPoseConfiguration body_pose_config;    //< Body pose configuration
+    AutoPoseConfiguration auto_pose_config;    //< Auto-pose configuration
+    Pose global_auto_pose_ = Pose::Identity(); //< Aggregated (non-negated) auto pose applied/removed per leg
 
     // Leg posers for each leg
     class LegPoserImpl;
@@ -337,6 +401,19 @@ class BodyPoseController {
     double walk_plane_bezier_duration;               //< Duration of Bézier transition
     Point3D walk_plane_position_nodes[5];            //< Position control nodes for quartic Bézier
     Eigen::Quaterniond walk_plane_rotation_nodes[5]; //< Rotation control nodes for quartic Bézier
+
+    // Initial standing pose S-curve transition state
+    bool initial_standing_active_ = false;
+    double initial_standing_time_ = 0.0;
+    double initial_standing_total_time_ = 0.0;
+    enum class InitialStandingPhase { ALIGN,
+                                      LIFT };
+    InitialStandingPhase initial_standing_phase_ = InitialStandingPhase::ALIGN;
+    // For phase 2 lazy profile creation
+    bool initial_standing_lift_profiles_created_ = false;
+    double initial_standing_align_tolerance_ = 1.0 * DEGREES_TO_RADIANS_FACTOR; // default 1 degree
+    // S-curve profiles per joint for initial standing pose
+    SCurveProfile *initial_standing_profiles_[NUM_LEGS][DOF_PER_LEG] = {nullptr};
 
     // Walk plane pose helper methods
     Point3D calculateWalkPlaneNormal(Leg legs[NUM_LEGS]) const;
