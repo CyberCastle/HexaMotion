@@ -1201,6 +1201,9 @@ bool LocomotionSystem::establishInitialStandingPose() {
         // Already in progress; just step
         return stepInitialStandingPose();
     }
+    // Refresh leg joint angles from actual servo feedback so S-curve profiles start at true hardware pose.
+    // If servo interface does not provide meaningful feedback, this is harmless (legs already have last commanded angles).
+    body_pose_ctrl->getCurrentServoPositions(servo_interface, legs);
     // Initialize controller-side profiles using current leg joint angles
     if (!body_pose_ctrl->beginInitialStandingPoseTransition(legs)) {
         return false; // no change
