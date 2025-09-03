@@ -483,6 +483,7 @@ bool LocomotionSystem::setStandingPose() {
 }
 
 bool LocomotionSystem::setBodyPose(const Eigen::Vector3d &position, const Eigen::Vector3d &orientation) {
+    // orientation expected in radians (roll,pitch,yaw)
 
     // Use BodyPoseController to set the pose
     bool success = body_pose_ctrl->setBodyPose(position, orientation, legs);
@@ -595,8 +596,29 @@ bool LocomotionSystem::update() {
             }
         }
 
+        // STEP 2a: Update body pose (partial OpenSHC PoseController::updateCurrentPose)
+        // We only update auto-pose modulation and walk plane pose estimation here.
+        if (body_pose_ctrl) {
+
+            // Derive normalized gait phase [0,1) from first leg stepper (consistent across legs in synchronized gaits)
+            double gait_phase = 0.0;
+            StepCycle sc = walk_ctrl->getStepCycle();
+            int period = sc.period_ > 0 ? sc.period_ : 1;
+            auto leg0 = walk_ctrl->getLegStepper(0);
+            if (leg0) {
+                gait_phase = static_cast<double>(leg0->getPhase() % period) / static_cast<double>(period);
+            }
+            body_pose_ctrl->updateCurrentPose(gait_phase, legs);
+        }
+
         // STEP 2b: Finalize leg phases (FSR or pure kinematic) after trajectories computed
         updateLegStates();
+
+        // STEP 2c: Apply auto pose modulation to desired tip positions prior to IK so horizontal
+        // components (x,y,yaw-derived) affect coxa angles (OpenSHC-style stance posing integration).
+        if (body_pose_ctrl) {
+            body_pose_ctrl->applyAutoPoseToDesiredTips(legs);
+        }
 
         // STEP 3: Apply IK to ALL legs at once (= OpenSHC::Model::updateModel)
         applyInverseKinematicsToAllLegs();
@@ -1179,6 +1201,9 @@ bool LocomotionSystem::establishInitialStandingPose() {
         // Already in progress; just step
         return stepInitialStandingPose();
     }
+    // Refresh leg joint angles from actual servo feedback so S-curve profiles start at true hardware pose.
+    // If servo interface does not provide meaningful feedback, this is harmless (legs already have last commanded angles).
+    body_pose_ctrl->getCurrentServoPositions(servo_interface, legs);
     // Initialize controller-side profiles using current leg joint angles
     if (!body_pose_ctrl->beginInitialStandingPoseTransition(legs)) {
         return false; // no change

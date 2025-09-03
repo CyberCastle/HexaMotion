@@ -202,6 +202,9 @@
 // HexaMotion uses millimeters
 #define TIP_TOLERANCE 5.0 // mm
 
+// Admittance safety limit (maximum absolute compliance delta per axis in mm)
+#define ADMITTANCE_MAX_ABS_DELTA_MM 50.0
+
 // ========================================================================
 // AUTO-POSE CONSTANTS (OpenSHC equivalent)
 // ========================================================================
