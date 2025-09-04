@@ -457,6 +457,13 @@ int main(int argc, char **argv) {
     std::cout << "  stance_iterations_per_cycle: " << stance_iterations_per_cycle << std::endl;
     std::cout << "  total_iterations_per_cycle: " << total_iterations_per_cycle << std::endl;
 
+    // Validación de coherencia interna del StepCycle
+    if (swing_iterations_per_cycle + stance_iterations_per_cycle != actual_step_cycle.period_) {
+        std::cerr << "ERROR: Inconsistencia StepCycle: swing(" << swing_iterations_per_cycle
+                  << ") + stance(" << stance_iterations_per_cycle << ") != period(" << actual_step_cycle.period_ << ")" << std::endl;
+        return 1; // Fallar inmediatamente
+    }
+
     std::cout << "Iteraciones derivadas: swing=" << swing_iterations_per_cycle
               << ", stance=" << stance_iterations_per_cycle << std::endl;
     if (swing_iterations_per_cycle != stance_iterations_per_cycle) {

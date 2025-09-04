@@ -262,6 +262,11 @@ int main() {
 
     std::cout << "Iteraciones derivadas StepCycle: swing=" << swing_iterations_per_cycle
               << ", stance=" << stance_iterations_per_cycle << std::endl;
+    // Coherencia interna: swing + stance debe igualar al periodo total normalizado
+    if (swing_iterations_per_cycle + stance_iterations_per_cycle != actual_step_cycle.period_) {
+        std::cerr << "ERROR: Inconsistent StepCycle timing (swing+stance != period)." << std::endl;
+        return 1; // Abort test early
+    }
     if (swing_iterations_per_cycle != stance_iterations_per_cycle) {
         std::cout << "ℹ️  INFO: Diferencia entre swing y stance (válida si la configuración lo define)." << std::endl;
     }

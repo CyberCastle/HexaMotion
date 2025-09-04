@@ -444,6 +444,13 @@ int main(int argc, char **argv) {
     std::cout << "  stance_iterations_per_cycle: " << stance_iterations_per_cycle << std::endl;
     std::cout << "  total_iterations_per_cycle: " << total_iterations_per_cycle << std::endl;
 
+    // Validación de coherencia interna: las iteraciones derivadas deben sumar el periodo
+    if (swing_iterations_per_cycle + stance_iterations_per_cycle != actual_step_cycle.period_) {
+        std::cerr << "ERROR: Inconsistencia de timing: swing(" << swing_iterations_per_cycle << ") + stance("
+                  << stance_iterations_per_cycle << ") != period(" << actual_step_cycle.period_ << ")" << std::endl;
+        return 1; // Fallar el test: estado interno incoherente
+    }
+
     std::cout << "Iteraciones derivadas: swing=" << swing_iterations_per_cycle << ", stance=" << stance_iterations_per_cycle << std::endl;
     if (swing_iterations_per_cycle != stance_iterations_per_cycle) {
         std::cout << "⚠️  NOTE: swing y stance difieren; validar coherencia de configuración (esto es permitido si las fases tienen distinta duración)." << std::endl;
