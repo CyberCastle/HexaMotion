@@ -10,7 +10,7 @@
  * 1. Inicializa el LocomotionSystem igual que tripod_walk_visualization_test
  * 2. Ejecuta la secuencia de startup completa
  * 3. Monitorea solo los ángulos de coxa durante las transiciones
- * 4. Usa el mismo timing (52 iteraciones por fase)
+ * 4. Usa el timing derivado dinámicamente del StepCycle (iteraciones por fase calculadas)
  * 5. Termina cuando todas las patas completan las transiciones requeridas
  *
  * @author HexaMotion Team
@@ -116,7 +116,7 @@ static void printTestHeader() {
     } else {
         std::cout << "Modo: TODAS LAS ITERACIONES (detalle completo)." << std::endl;
     }
-    std::cout << "Con timing OpenSHC: Cada fase (stance/swing) dura 52 iteraciones." << std::endl;
+    std::cout << "Con timing OpenSHC: Cada fase (stance/swing) usa iteraciones normalizadas dinámicas (no fijo a 52)." << std::endl;
     std::cout << "Objetivo: " << g_required_swing_transitions << " transiciones STANCE->SWING por pata." << std::endl;
     std::cout << "Duración estimada (aprox): ~" << (g_required_swing_transitions * 104) << " pasos (solo referencia)." << std::endl;
     std::cout << "Velocidad: " << g_test_velocity << " mm/s" << std::endl;
@@ -444,12 +444,11 @@ int main(int argc, char **argv) {
     std::cout << "  stance_iterations_per_cycle: " << stance_iterations_per_cycle << std::endl;
     std::cout << "  total_iterations_per_cycle: " << total_iterations_per_cycle << std::endl;
 
-    if (swing_iterations_per_cycle != 52 || stance_iterations_per_cycle != 52) {
-        std::cout << "⚠️  WARNING: Las iteraciones no coinciden con trajectory_tip_position_test (esperado: 52 cada fase)" << std::endl;
-        std::cout << "   Este test usa: swing=" << swing_iterations_per_cycle << ", stance=" << stance_iterations_per_cycle << std::endl;
-    } else {
-        std::cout << "✅ SINCRONIZACIÓN CONFIRMADA: Usando 52 iteraciones por fase" << std::endl;
+    std::cout << "Iteraciones derivadas: swing=" << swing_iterations_per_cycle << ", stance=" << stance_iterations_per_cycle << std::endl;
+    if (swing_iterations_per_cycle != stance_iterations_per_cycle) {
+        std::cout << "⚠️  NOTE: swing y stance difieren; validar coherencia de configuración (esto es permitido si las fases tienen distinta duración)." << std::endl;
     }
+    std::cout << "(Referencia previa de 52 eliminada; ahora se valida contra StepCycle real)." << std::endl;
 
     // DEBUG: Mostrar offset multipliers del tripod gait
     std::cout << "\n=== DEBUG: Tripod Gait Offset Multipliers ===" << std::endl;

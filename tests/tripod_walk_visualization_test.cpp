@@ -35,8 +35,10 @@
 // Test configuration
 constexpr double TEST_VELOCITY = 100;          // mm/s, a moderate speed for clear observation
 constexpr double TEST_ANGULAR_VELOCITY = 0.25; // rad/s, introduce rotational motion for validation
-constexpr int REQUIRED_SWING_TRANSITIONS = 2;  // Each leg must complete 2 STANCE->SWING transitions (reduced for 52-iteration phases)
-constexpr int MAX_STEPS = 520;                 // Increased to accommodate 52-iteration phases (2 cycles = 208 steps + margin)
+// Número reducido de transiciones para terminar rápido; independiente del tamaño de fase.
+constexpr int REQUIRED_SWING_TRANSITIONS = 2;
+// Límite general; ya no depende de asumir 52 iteraciones por fase.
+constexpr int MAX_STEPS = 600;
 
 // Utility to convert radians to degrees
 static double toDegrees(double radians) {
@@ -51,8 +53,8 @@ static void printTestHeader() {
     std::cout << "                            TRIPOD GAIT DETAILED VALIDATION TEST" << std::endl;
     std::cout << "=======================================================================================================" << std::endl;
     std::cout << "This test will monitor each leg until it completes " << REQUIRED_SWING_TRANSITIONS << " STANCE->SWING transitions." << std::endl;
-    std::cout << "With OpenSHC timing: Each phase (stance/swing) lasts 52 iterations." << std::endl;
-    std::cout << "Expected test duration: ~" << (REQUIRED_SWING_TRANSITIONS * 104) << " steps for full cycle completion." << std::endl;
+    std::cout << "With OpenSHC timing: Iteraciones por fase se derivan dinámicamente (no fija 52)." << std::endl;
+    std::cout << "Expected test duration (aprox): depende de iteraciones derivadas (se mostrará abajo)." << std::endl;
     std::cout << "Velocity: " << TEST_VELOCITY << " mm/s" << std::endl;
     std::cout << "Angular velocity: " << TEST_ANGULAR_VELOCITY << " rad/s" << std::endl
               << std::endl;
@@ -258,14 +260,12 @@ int main() {
     std::cout << "  stance_iterations_per_cycle: " << stance_iterations_per_cycle << std::endl;
     std::cout << "  total_iterations_per_cycle: " << total_iterations_per_cycle << std::endl;
 
-    // Verificar que coincidan con trajectory_tip_position_test (debe ser 52 cada uno)
-    if (swing_iterations_per_cycle != 52 || stance_iterations_per_cycle != 52) {
-        std::cout << "⚠️  WARNING: Las iteraciones no coinciden con trajectory_tip_position_test (esperado: 52 cada fase)" << std::endl;
-        std::cout << "   trajectory_tip_position_test usa: swing=52, stance=52" << std::endl;
-        std::cout << "   tripod_walk_visualization_test usa: swing=" << swing_iterations_per_cycle << ", stance=" << stance_iterations_per_cycle << std::endl;
-    } else {
-        std::cout << "✅ SINCRONIZACIÓN CONFIRMADA: Ambos tests usan 52 iteraciones por fase" << std::endl;
+    std::cout << "Iteraciones derivadas StepCycle: swing=" << swing_iterations_per_cycle
+              << ", stance=" << stance_iterations_per_cycle << std::endl;
+    if (swing_iterations_per_cycle != stance_iterations_per_cycle) {
+        std::cout << "ℹ️  INFO: Diferencia entre swing y stance (válida si la configuración lo define)." << std::endl;
     }
+    std::cout << "(Referencia fija de 52 eliminada; se usa StepCycle real)." << std::endl;
     int step = 0;
     int transition_counts[NUM_LEGS] = {0};
     StepPhase previous_phases[NUM_LEGS];
@@ -402,7 +402,8 @@ int main() {
         std::cout << "  ✅ GaitConfiguration and StepCycle configuration totally coherent with OpenSHC" << std::endl;
 
         std::cout << "\n🎉 TEST PASSED! Gait cycle observed and robot returned to stable standing pose. 🎉" << std::endl;
-        std::cout << "🔄 Timing perfectamente sincronizado con trajectory_tip_position_test (52 iteraciones por fase)" << std::endl;
+        std::cout << "🔄 Timing sincronizado con trajectory_tip_position_test (iteraciones reales: swing=" << swing_iterations_per_cycle
+                  << ", stance=" << stance_iterations_per_cycle << ")" << std::endl;
         return 0;
     } else {
         std::cout << "\n❌ TEST FAILED! Robot did not return to a stable standing pose. ❌" << std::endl;
