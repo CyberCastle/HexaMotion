@@ -17,9 +17,9 @@ The robot body forms a hexagon, so each coxa joint is mounted at a 60° interval
 -   Smart servo interface for precise joint control.
 -   Error reporting and self tests.
 
-## 🚀 New: Smooth Movement Feature
+## 🚀 Smooth Movement Feature
 
-HexaMotion now includes **smooth trajectory interpolation** that uses current servo positions as starting points for pose changes, similar to OpenSHC's approach. This provides:
+HexaMotion includes **smooth trajectory interpolation** that uses current servo positions as starting points for pose changes (OpenSHC-style). This provides:
 
 -   **Natural movement**: Smooth transitions instead of sudden position jumps
 -   **Current position awareness**: Trajectories start from actual servo positions
@@ -34,11 +34,8 @@ params.smooth_trajectory.use_current_servo_positions = true;  // Enable feature
 params.smooth_trajectory.interpolation_speed = 0.15f;        // Smooth speed
 params.smooth_trajectory.max_interpolation_steps = 20;       // Precision
 
-// Standard pose changes now use smooth trajectories automatically
+// Standard pose changes use smooth trajectories automatically when enabled in params
 locomotion_system.setBodyPose(new_position, new_orientation);
-
-// Or configure at runtime
-locomotion_system.configureSmoothMovement(true, 0.2f, 25);
 ```
 
 See [Smooth Movement Guide](docs/SMOOTH_MOVEMENT_GUIDE.md) for complete documentation.
@@ -50,21 +47,21 @@ See [Smooth Movement Guide](docs/SMOOTH_MOVEMENT_GUIDE.md) for complete document
 
 ## Including the library
 
-Place this repository inside your Arduino `libraries` directory. In your sketch include the header:
+Place this repository inside your Arduino `libraries` directory. In your sketch include the unified header:
 
 ```cpp
-#include <locomotion_system.h>
+#include <HexaMotion.h>
 ```
 
 ## Basic usage
 
 Create hardware interface classes that implement `IIMUInterface`, `IFSRInterface` and `IServoInterface`. Then pass instances of these classes to `LocomotionSystem` together with your robot parameters.
 
-**Note**: HexaMotion now **fully supports advanced IMUs like the BNO055** with enhanced terrain adaptation and locomotion capabilities. The system automatically detects and leverages absolute positioning data while maintaining 100% backward compatibility with basic IMUs. See [Enhanced IMU Implementation Report](ENHANCED_IMU_IMPLEMENTATION_REPORT.md) for complete details.
+**Note**: HexaMotion supports advanced IMUs like the BNO055 with enhanced terrain adaptation and locomotion capabilities. The system automatically detects and leverages absolute positioning data while maintaining backward compatibility with basic IMUs.
 
 ```cpp
 #include <Arduino.h>
-#include <locomotion_system.h>
+#include <HexaMotion.h>
 
 class MyIMU : public IIMUInterface {
     // Implement basic methods and optionally support absolute positioning
@@ -92,11 +89,31 @@ MyFSR fsr;
 MyServo servos;
 
 void setup() {
-  robot.initialize(&imu, &fsr, &servos);
+    // Optional: configure smoothing before init
+    params.smooth_trajectory.use_current_servo_positions = true;
+    params.smooth_trajectory.enable_pose_interpolation = true;
+    params.smooth_trajectory.interpolation_speed = 0.15f; // 0.01 - 1.0
+
+    // Create a body pose configuration (factory pattern)
+    BodyPoseConfiguration pose_cfg = BodyPoseConfigFactory::create("default", params);
+
+    // Initialize hardware + controllers
+    robot.initialize(&imu, &fsr, &servos, pose_cfg);
+
+    // Move to calibrated standing pose
+    robot.setStandingPose();
+
+    // Select gait (TRIPOD_GAIT, WAVE_GAIT, RIPPLE_GAIT, METACHRONAL_GAIT)
+    robot.setGaitType(TRIPOD_GAIT);
+
+    // Start continuous forward motion (mm/s), or use turnInPlace / walkSideways
+    robot.walkForward(30.0);
+    // robot.turnInPlace(0.3);      // alternative rotation (rad/s)
 }
 
 void loop() {
-  robot.update();
+    // Run control loop (~50 Hz). Consider using a timing guard for real hardware.
+    robot.update();
 }
 ```
 
@@ -151,8 +168,7 @@ Make sure the joint limit arrays (`coxa_angle_limits`, `femur_angle_limits` and
 `LocomotionSystem` instance. If these values remain at their defaults the system
 will flag `KINEMATICS_ERROR` and skip sending servo commands.
 
-Simple mock implementations of these interfaces are provided under the
-`examples/` directory.
+Example mock implementations of these interfaces can be created following the skeletons above (a dedicated `examples/` directory was removed).
 
 Debug logging can be enabled by defining the `ENABLE_LOG` macro before
 including the library. When active, certain events such as joint limit
@@ -186,36 +202,6 @@ make
 
 Each test binary can be executed individually once the build completes.
 
-## 🚀 Enhanced IMU Integration
+## IMU Integration
 
-HexaMotion now provides **complete support for advanced IMUs** like the BNO055, offering significant improvements in precision and capability:
-
-### **Enhanced Capabilities:**
-
--   **🎯 Precision Terrain Adaptation**: Uses absolute orientation for accurate gravity estimation
--   **⚡ Dynamic Motion Detection**: Leverages gravity-free linear acceleration data
--   **🧭 Quaternion-Based Analysis**: Advanced terrain complexity assessment
--   **📊 Multi-Factor Stability**: Enhanced stability calculations using all available sensor data
--   **🔄 Intelligent Fallback**: Automatically degrades gracefully to basic algorithms when needed
-
-### **Supported IMU Types:**
-
--   **Advanced IMUs** (BNO055, etc.): Full enhanced feature set
--   **Basic IMUs** (MPU6050, etc.): Original functionality preserved
-
-### **Key Benefits:**
-
-```cpp
-// Enhanced features automatically enabled for advanced IMUs
-MyBNO055IMU advanced_imu;  // Implements hasAbsolutePositioning() = true
-LocomotionSystem robot(params);
-robot.initialize(&advanced_imu, &fsr, &servos);
-// System automatically uses enhanced algorithms
-
-// Basic IMUs work exactly as before
-MyMPU6050IMU basic_imu;    // hasAbsolutePositioning() = false
-robot.initialize(&basic_imu, &fsr, &servos);
-// Uses proven original algorithms
-```
-
-**📚 Documentation**: See [Enhanced IMU Implementation Report](ENHANCED_IMU_IMPLEMENTATION_REPORT.md) for complete technical details.
+Advanced IMUs (e.g. BNO055) automatically enable: absolute orientation usage, improved terrain adaptation, gravity-free linear acceleration, quaternion-based terrain analysis and multi-factor stability estimation. When an IMU does not provide absolute positioning, the system gracefully falls back to the baseline algorithms without code changes required. Implement `hasAbsolutePositioning()` accordingly in your `IIMUInterface` implementation.
