@@ -73,6 +73,8 @@ void loop() {
 
 ### Configuración de Paso (Step Length)
 
+NOTA (consistency update): A partir de la unificación de stride planning, `step_length` se basa en el "standing horizontal reach" (alcance horizontal conservador con tibia vertical y proyección del fémur) y no en la suma geométrica completa (coxa+femur+tibia). Esto elimina la sobre‑estimación de zancada y alinea el límite de velocidad con la trayectoria real. Los factores gait\_\*\_length_factor siguen aplicándose sobre este alcance horizontal.
+
 El `step_length` se calcula dinámicamente basándose en varios factores:
 
 ```cpp

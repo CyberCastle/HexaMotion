@@ -293,7 +293,7 @@ int main() {
         std::cout << "ALTURA OBJETIVO: " << target_height << "mm" << std::endl;
         std::cout << std::string(80, '=') << std::endl;
 
-        CalculatedServoAngles calc_angles = calculateServoAnglesForHeight(target_height, p);
+        CalculatedServoAngles calc_angles = RobotModel::calculateServoAnglesForHeight(target_height, p);
         std::cout << "Ángulos calculados para altura objetivo:" << std::endl;
         std::cout << "  - Coxa: " << calc_angles.coxa * (180.0 / M_PI) << "°" << std::endl;
         std::cout << "  - Fémur: " << calc_angles.femur * (180.0 / M_PI) << "°" << std::endl;

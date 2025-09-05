@@ -1,3 +1,4 @@
+#include "../src/body_pose_config_factory.h"
 #include "../src/robot_model.h"
 #include "../src/velocity_limits.h"
 #include "../src/workspace_analyzer.h"
@@ -391,6 +392,28 @@ int main() {
         std::cout << "✗ ERROR: Falta de coherencia entre las correcciones" << std::endl;
     }
 
+    // Test 4.5: Coherencia alcance horizontal en reposo (RobotModel vs BodyPoseConfiguration)
+    std::cout << "\n--- Test 4.5: Coherencia standing_horizontal_reach ---" << std::endl;
+    bool horizontal_reach_ok = true;
+    {
+        // Reutilizamos los parámetros ya configurados (params)
+        BodyPoseConfiguration pose_cfg = getDefaultBodyPoseConfig(params);
+        double model_reach = model.getStandingHorizontalReach();
+        double config_reach = pose_cfg.standing_horizontal_reach;
+        double diff = std::abs(model_reach - config_reach);
+        const double EPS = 1e-9;
+        std::cout << std::fixed << std::setprecision(6);
+        std::cout << "Standing horizontal reach (model)  : " << model_reach << " mm\n";
+        std::cout << "Standing horizontal reach (config) : " << config_reach << " mm\n";
+        std::cout << "Difference                         : " << diff << " mm\n";
+        if (diff > EPS) {
+            std::cout << "✗ Diferencia excesiva ( > " << EPS << ")" << std::endl;
+            horizontal_reach_ok = false;
+        } else {
+            std::cout << "✓ Coherencia verificada" << std::endl;
+        }
+    }
+
     // ========================================================================
     // RESUMEN FINAL
     // ========================================================================
@@ -398,7 +421,7 @@ int main() {
     std::cout << "\n=== RESUMEN FINAL ===" << std::endl;
 
     int passed_tests = 0;
-    int total_tests = 10; // Incrementamos el total para incluir los nuevos tests
+    int total_tests = 11; // +1 por coherencia standing_horizontal_reach
 
     if (analyzer_offset_ok && velocity_offset_ok)
         passed_tests++;
@@ -420,6 +443,8 @@ int main() {
     if (legposer_reference_ok)
         passed_tests++;
     if (coherence_ok)
+        passed_tests++;
+    if (horizontal_reach_ok)
         passed_tests++;
 
     std::cout << "Tests pasados: " << passed_tests << "/" << total_tests << std::endl;

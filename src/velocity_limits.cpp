@@ -84,6 +84,8 @@ void VelocityLimits::generateLimits(const GaitConfiguration &gait_config) {
     internal_config.stance_ratio = gait_config.getStanceRatio();
     internal_config.swing_ratio = gait_config.getSwingRatio();
     internal_config.time_to_max_stride = gait_config.time_to_max_stride;
+    internal_config.step_length = gait_config.step_length;
+    internal_config.max_velocity = gait_config.max_velocity;
 
     // Use existing implementation
     generateLimits(internal_config);
@@ -338,49 +340,33 @@ double VelocityLimits::calculateBearing(double vx, double vy) {
     return normalizeBearing(bearing_deg);
 }
 
-double VelocityLimits::calculateMaxLinearSpeed(double walkspace_radius,
-                                               double on_ground_ratio, double frequency) const {
-
-    // Unified stride-based formula rationale:
-    //  1. Gait length factor: we treat 'on_ground_ratio' as the provisional stride fraction and
-    //     clamp it to [GAIT_MIN_LENGTH_FACTOR, GAIT_MAX_LENGTH_FACTOR] to keep commanded stride
-    //     within morphological / stability bounds.
-    //  2. Raw stride length: leg_reach * gait_length_factor (leg_reach = coxa+femur+tibia total reach).
-    //  3. Overshoot deduction: subtract 2 * average_overshoot (stance + swing phases) where
-    //       average_overshoot = 0.5 * (overshoot_x + overshoot_y)
-    //     Overshoot itself is physics-derived: min(v^2/(2a), 0.5 * a * t_ramp^2), capped at 25% of
-    //     walkspace radius and scaled by safety margin. Deducting twice ensures the effective stride
-    //     fits comfortably inside the reachable boundary over a full accelerate/decelerate cycle.
-    //  4. Temporal scaling: max_speed = effective_stride_length * frequency (one stride per cycle).
-    //  5. Velocity scaling: apply workspace_analyzer velocity_scale (tunable global attenuation).
-    //  6. Capping: enforce configured model cap (params.max_velocity) plus a hard safety ceiling.
-    //
-    // Differences vs removed "compatibility" (OpenSHC diameter traversal) approach:
-    //  - We do not use (2 * scaled_radius) / (stance_ratio / f); that method inflated theoretical
-    //    maxima beyond realistic stride-based reach under current tuning and produced noisy
-    //    divergence diagnostics.
-    //  - Overshoot is handled additively (subtractive correction) instead of the multiplicative
-    //    rational shrink used by stance+swing overshoot in OpenSHC, simplifying reasoning and
-    //    avoiding dual pathway maintenance.
-    //  - A single coherent formula improves predictability for controllers and tests.
-    //  - If strict OpenSHC replication is ever needed, it can be reintroduced as an offline
-    //    reference computation, not an active limiting branch.
-    if (frequency <= 0.0)
+double VelocityLimits::calculateMaxLinearSpeed(double walkspace_radius, const GaitConfig &gait_config) const {
+    // Updated stride-based formula (v2):
+    //  1. Use gait_config.step_length directly. This value is already derived from the
+    //     standing horizontal reach via GAIT_*_LENGTH_FACTOR in gait_config_factory.cpp.
+    //  2. Deduct overshoot (2 * avg_overshoot) to ensure the executed stride comfortably fits
+    //     inside the available walkspace radius across accelerate/decelerate phases.
+    //  3. Convert to speed: v = effective_stride_length * step_frequency.
+    //  4. Apply global velocity scaling (workspace analyzer).
+    //  5. Cap by BOTH global model params.max_velocity and gait_config.max_velocity (if >0) and a
+    //     hard engineering ceiling to prevent runaway values in misconfiguration.
+    //  6. Guard: if frequency <= 0 or step_length <= 0 return 0.
+    (void)walkspace_radius; // Retained in signature for future adaptive scaling (currently unused directly).
+    if (gait_config.frequency <= 0.0 || gait_config.step_length <= 0.0)
         return 0.0;
 
-    double leg_reach = pimpl_->model_.getLegReach();
-    double provisional_factor = on_ground_ratio;
-    double gait_length_factor = math_utils::clamp<double>(provisional_factor, GAIT_MIN_LENGTH_FACTOR, GAIT_MAX_LENGTH_FACTOR);
-    double stride_length = leg_reach * gait_length_factor;
-
+    double stride_length = gait_config.step_length;
     // Overshoot deduction (2x average overshoot) maintains conservative effective stride.
     double avg_overshoot = (pimpl_->workspace_config_.overshoot_x + pimpl_->workspace_config_.overshoot_y) * 0.5;
     stride_length = std::max(0.0, stride_length - 2.0 * avg_overshoot);
-    double max_speed = stride_length * frequency;
+    double max_speed = stride_length * gait_config.frequency;
     auto scaling_factors = pimpl_->workspace_analyzer_->getScalingFactors();
     max_speed *= scaling_factors.velocity_scale;
+
     const auto &params = pimpl_->model_.getParams();
-    double configured_cap = params.max_velocity > 0.0 ? params.max_velocity : DEFAULT_MAX_LINEAR_VELOCITY;
+    double global_cap = params.max_velocity > 0.0 ? params.max_velocity : DEFAULT_MAX_LINEAR_VELOCITY;
+    double gait_cap = (gait_config.max_velocity > 0.0) ? gait_config.max_velocity : global_cap;
+    double configured_cap = std::min(global_cap, gait_cap);
 
     return std::min({max_speed, configured_cap, 5000.0});
 }
@@ -443,9 +429,7 @@ VelocityLimits::LimitValues VelocityLimits::calculateLimitsForBearing(
     }
 
     // Calculate limits based on the most constraining constraints
-    double max_linear_speed = calculateMaxLinearSpeed(min_effective_radius,
-                                                      gait_config.stance_ratio,
-                                                      gait_config.frequency);
+    double max_linear_speed = calculateMaxLinearSpeed(min_effective_radius, gait_config);
 
     double max_angular_speed = calculateMaxAngularSpeed(max_linear_speed,
                                                         pimpl_->workspace_config_.stance_radius);

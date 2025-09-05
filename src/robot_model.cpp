@@ -6,6 +6,7 @@
  * @file robot_model.cpp
  * @brief Implementation of the kinematic robot model.
  */
+#include <algorithm>
 #include <limits>
 #include <math.h>
 #include <memory>
@@ -445,6 +446,86 @@ double RobotModel::getLegReach() const {
     // Maximum reach is femur + tibia lengths (coxa only provides lateral offset)
     // The coxa rotates around Z-axis and doesn't extend the radial reach
     return params.femur_length + params.tibia_length;
+}
+
+double RobotModel::computeStandingHorizontalReach(const Parameters &p) {
+    // Reuse shared femur angle computation (no duplication of trig logic)
+    bool ok = false;
+    double femur_angle = 0.0;
+    // Internal lambda replicating height feasibility logic (shared with angle solver)
+    auto computeFemur = [&](double target_height_mm, bool &valid) -> double {
+        valid = false;
+        if (p.femur_length <= 0.0 || p.tibia_length <= 0.0 || p.coxa_length < 0.0)
+            return 0.0;
+        double min_h = std::max(0.0, p.tibia_length - p.femur_length);
+        double max_h = p.tibia_length + p.femur_length;
+        if (target_height_mm < min_h || target_height_mm > max_h)
+            return 0.0;                                                          // invalid
+        double sin_theta = (target_height_mm - p.tibia_length) / p.femur_length; // sin(femur)
+        sin_theta = std::clamp(sin_theta, -1.0, 1.0);
+        valid = true;
+        return std::asin(sin_theta);
+    };
+    femur_angle = computeFemur(p.standing_height, ok);
+    if (!ok) {
+        return p.coxa_length; // conservative fallback
+    }
+    double horizontal_proj = p.femur_length * std::cos(femur_angle);
+    return p.coxa_length + horizontal_proj;
+}
+
+double RobotModel::getStandingHorizontalReach() const {
+    return computeStandingHorizontalReach(params);
+}
+
+CalculatedServoAngles RobotModel::calculateServoAnglesForHeight(double target_height_mm, const Parameters &params) {
+    CalculatedServoAngles result{0.0, 0.0, 0.0, false};
+    // Based on analytic_robot_model.cpp leg transform:
+    // T = T_base * R_coxa * T_coxa * R_femur * T_femur * R_tibia * T_tibia
+    //
+    // For leg height calculation with coxa = 0° (radial stance):
+    // - T_base: hexagon_radius in XY plane (Z = 0)
+    // - R_coxa: rotation around Z axis (coxa = 0°)
+    // - T_coxa: translation along X axis (coxa_length)
+    // - R_femur: rotation around Y axis (femur angle)
+    // - T_femur: translation along X axis (femur_length)
+    // - R_tibia: rotation around Y axis (tibia angle)
+    // - T_tibia: translation along Z axis (-tibia_length)
+
+    // With coxa = 0°, the Z component of foot position is:
+    // Z = -femur_length * sin(femur_angle) - tibia_length * cos(femur_angle + tibia_angle)
+    //
+    // For standing pose, we want tibia to be vertical (pointing down):
+    // femur_angle + tibia_angle = 0° (so tibia points straight down)
+    // Therefore: tibia_angle = -femur_angle
+    //
+    // Substituting:
+    // Z = -femur_length * sin(femur_angle) - tibia_length * cos(0°)
+    // Z = -femur_length * sin(femur_angle) - tibia_length
+    //
+    // Solving for femur_angle:
+    // target_height = -femur_length * sin(femur_angle) - tibia_length
+    // sin(femur_angle) = -(target_height + tibia_length) / femur_length
+
+    // Convert to signed Z frame convention used in prior derivation
+    double target_z = -target_height_mm;
+    double sin_femur = -(target_z + params.tibia_length) / params.femur_length;
+    if (sin_femur < -1.0 || sin_femur > 1.0)
+        return result; // impossible
+    double femur_rad = std::asin(sin_femur);
+    double tibia_rad = -femur_rad; // keeps tibia vertical
+
+    double femur_deg = femur_rad * 180.0 / M_PI;
+    double tibia_deg = tibia_rad * 180.0 / M_PI;
+    if (femur_deg < params.femur_angle_limits[0] || femur_deg > params.femur_angle_limits[1])
+        return result;
+    if (tibia_deg < params.tibia_angle_limits[0] || tibia_deg > params.tibia_angle_limits[1])
+        return result;
+    result.coxa = 0.0;
+    result.femur = femur_rad;
+    result.tibia = tibia_rad;
+    result.valid = true;
+    return result;
 }
 
 double RobotModel::getDefaultHeightOffset() const {

@@ -77,7 +77,7 @@ workspace_analyzer_fusion_test: workspace_analyzer_fusion_test.cpp ../src/worksp
 bezier_validation_test: bezier_validation_test.cpp ../src/robot_model.cpp ../src/math_utils.cpp ../src/workspace_analyzer.cpp
 	$(CXX) $(CXXFLAGS) $^ -o $@
 
-test_complete_physical_offset: test_complete_physical_offset.cpp ../src/robot_model.cpp ../src/math_utils.cpp ../src/workspace_analyzer.cpp ../src/velocity_limits.cpp
+test_complete_physical_offset: test_complete_physical_offset.cpp ../src/robot_model.cpp ../src/math_utils.cpp ../src/workspace_analyzer.cpp ../src/velocity_limits.cpp ../src/body_pose_config_factory.cpp
 	$(CXX) $(CXXFLAGS) $^ -o $@
 
 s_curve_profile_test: s_curve_profile_test.cpp ../src/s_curve_profile.cpp

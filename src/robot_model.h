@@ -180,6 +180,14 @@ struct Parameters {
     } startup_norm;
 };
 
+// Centralized servo angle solution for standing height (previously in body_pose_config_factory)
+struct CalculatedServoAngles {
+    double coxa;  // Coxa servo angle (radians)
+    double femur; // Femur servo angle (radians)
+    double tibia; // Tibia servo angle (radians)
+    bool valid;   // Solution validity flag
+};
+
 enum GaitType {
     NO_GAIT,
     TRIPOD_GAIT,
@@ -702,6 +710,22 @@ class RobotModel {
      * @return Maximum reach distance
      */
     double getLegReach() const;
+
+    /**
+     * @brief Compute horizontal standing reach (coxa pivot to foot projection) for configured standing_height.
+     * Uses morphology described in AGENTS.md: tibia assumed vertical in nominal standing pose (femur+tibia angle ≈ 0).
+     * Derivation:
+     *   target_z = -standing_height = -femur_length * sin(femur_angle) - tibia_length
+     *   => sin(femur_angle) = (standing_height - tibia_length) / femur_length
+     *   horizontal_projection = femur_length * cos(femur_angle)
+     *   standing_horizontal_reach = coxa_length + horizontal_projection
+     * Fallback: if standing_height invalid (out of feasible range) returns conservative coxa_length.
+     */
+    double getStandingHorizontalReach() const;
+    // Analytic servo angle computation for target height (tibia vertical assumption)
+    static CalculatedServoAngles calculateServoAnglesForHeight(double target_height_mm, const Parameters &params);
+    /** Static helper for external code needing the same computation without an instance. */
+    static double computeStandingHorizontalReach(const Parameters &p);
 
     /** Get the DH position of the leg base (without joint transformations) */
     Point3D getLegBasePosition(int leg_index) const;

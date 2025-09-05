@@ -76,9 +76,11 @@ class VelocityLimits {
         double stance_ratio;       // Ratio of stance phase (0.0 - 1.0)
         double swing_ratio;        // Ratio of swing phase (0.0 - 1.0)
         double time_to_max_stride; // Time to reach maximum stride (s)
+        double step_length;        // Planned stride length per cycle (mm)
+        double max_velocity;       // Gait-specific linear velocity cap (mm/s)
 
         GaitConfig() : frequency(1.0f), stance_ratio(0.6f), swing_ratio(0.4f),
-                       time_to_max_stride(2.0f) {}
+                       time_to_max_stride(2.0f), step_length(0.0f), max_velocity(0.0f) {}
     };
 
     explicit VelocityLimits(const RobotModel &model);
@@ -158,8 +160,8 @@ class VelocityLimits {
     int getBearingIndex(double bearing_degrees) const;
 
     // Internal calculation methods (now implemented via WorkspaceValidator)
-    double calculateMaxLinearSpeed(double walkspace_radius, double on_ground_ratio,
-                                   double frequency) const;
+    // Use gait_config.step_length directly (already derived from standing horizontal reach)
+    double calculateMaxLinearSpeed(double walkspace_radius, const GaitConfig &gait_config) const;
     double calculateMaxAngularSpeed(double max_linear_speed, double stance_radius) const;
     double calculateMaxAcceleration(double max_speed, double time_to_max) const;
     LimitValues calculateLimitsForBearing(double bearing_degrees,

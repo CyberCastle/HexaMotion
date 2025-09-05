@@ -208,7 +208,7 @@ class KinematicsValidator {
             total++;
             // 1. Obtener ángulos de referencia con angle_calculus.cpp
             CalcAngles ref_solution = calcLegAngles(height);
-            CalculatedServoAngles calc_solution = calculateServoAnglesForHeight(height, params);
+            CalculatedServoAngles calc_solution = RobotModel::calculateServoAnglesForHeight(height, params);
 
             if (!ref_solution.valid) {
                 std::cout << std::setw(6) << height << " | INVALID SOLUTION             | INVALID SOLUTION                        |   N/A  |   N/A   | SKIP" << std::endl;

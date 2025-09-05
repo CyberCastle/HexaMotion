@@ -13,16 +13,6 @@
  */
 
 /**
- * @brief Structure for angles calculated by analytic IK (OpenSHC)
- */
-struct CalculatedServoAngles {
-    double coxa;  // coxa servo angle (degrees)
-    double femur; // femur servo angle (degrees)
-    double tibia; // tibia servo angle (degrees)
-    bool valid;   // solution validity flag
-};
-
-/**
  * @brief Calculate hexagonal leg stance positions based on robot parameters
  * @param params Robot parameters containing dimensions and joint limits
  * @return Array of calculated stance positions in millimeters
@@ -47,26 +37,11 @@ std::array<StandingPoseJoints, NUM_LEGS> getDefaultStandingPoseJoints(const Para
 BodyPoseConfiguration getDefaultBodyPoseConfig(const Parameters &params);
 
 /**
- * @brief Get conservative body pose configuration using robot parameters
- * @param params Robot parameters from HexaModel
- * @return Conservative body pose configuration with reduced limits for safety
- */
-// Configuraciones alternativas eliminadas para simplificar (solo default soportado)
-
-/**
  * @brief Create auto-pose configuration for tripod gait (OpenSHC equivalent)
  * Based on OpenSHC's auto_pose.yaml configuration
  * @param params Robot parameters
  * @return Auto-pose configuration structure
  */
 AutoPoseConfiguration createAutoPoseConfigurationForGait(const Parameters &params, const std::string &gait_name);
-
-/**
- * @brief Calculate servo angles for a given height using analytical IK (OpenSHC)
- * @param target_height_mm Target height in millimeters
- * @param params Robot parameters
- * @return Calculated servo angles (CalculatedServoAngles structure)
- */
-CalculatedServoAngles calculateServoAnglesForHeight(double target_height_mm, const Parameters &params);
 
 #endif // BODY_POSE_CONFIG_FACTORY_H
