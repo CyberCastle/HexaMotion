@@ -462,7 +462,7 @@ double RobotModel::computeStandingHorizontalReach(const Parameters &p) {
         if (target_height_mm < min_h || target_height_mm > max_h)
             return 0.0;                                                          // invalid
         double sin_theta = (target_height_mm - p.tibia_length) / p.femur_length; // sin(femur)
-        sin_theta = std::clamp(sin_theta, -1.0, 1.0);
+        sin_theta = math_utils::clamp(sin_theta, -1.0, 1.0);
         valid = true;
         return std::asin(sin_theta);
     };
