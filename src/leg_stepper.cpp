@@ -94,7 +94,7 @@ LegStepper::LegStepper(int leg_index, const Point3D &identity_tip_pose, Leg &leg
 }
 
 void LegStepper::setDesiredVelocity(const Point3D &linear_velocity, double angular_velocity) {
-    // STEP 2: Validate and limit velocities before setting them
+    // Validate and limit velocities before setting them
     Point3D safe_velocity = validateAndLimitVelocities(linear_velocity, angular_velocity);
 
     desired_linear_velocity_ = safe_velocity;
