@@ -6,6 +6,8 @@
 struct Point3D; // forward declaration
 
 namespace math_utils {
+// Standard gravity acceleration (mm/s^2) - BIPM definition (9.80665 m/s^2)
+constexpr double GRAVITY_ACCELERATION = 9806.65;
 /** Convert degrees to radians. */
 double degreesToRadians(double degrees);
 /** Convert radians to degrees. */

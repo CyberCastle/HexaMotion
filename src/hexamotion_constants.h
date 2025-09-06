@@ -16,7 +16,13 @@
 #endif
 
 #define NUM_LEGS 6
+
+// ========================================================================
+// MATHEMATICAL CONSTANTS
+// ========================================================================
+
 #define DEGREES_TO_RADIANS_FACTOR (M_PI / 180.0)
+#define RADIANS_TO_DEGREES_FACTOR (180.0 / M_PI) // Conversion factor radians to degrees
 
 // ========================================================================
 // VELOCITY CONTROL CONSTANTS
@@ -67,23 +73,7 @@
 // ========================================================================
 
 // Joint angle limits (degrees)
-#define COXA_ANGLE_MIN -65.0  // Minimum coxa angle (degrees)
-#define COXA_ANGLE_MAX 65.0   // Maximum coxa angle (degrees)
-#define FEMUR_ANGLE_MIN -75.0 // Minimum femur angle (degrees)
-#define FEMUR_ANGLE_MAX 75.0  // Maximum femur angle (degrees)
-#define TIBIA_ANGLE_MIN -45.0 // Minimum tibia angle (degrees)
-#define TIBIA_ANGLE_MAX 45.0  // Maximum tibia angle (degrees)
-
-// Robot geometry angles
-#define FULL_ROTATION 360.0 // Full rotation in degrees
-
-// Inverse kinematics starting poses (degrees)
-#define IK_PRIMARY_FEMUR_ANGLE -45.0  // Primary IK guess femur angle
-#define IK_PRIMARY_TIBIA_ANGLE 60.0   // Primary IK guess tibia angle
-#define IK_HIGH_FEMUR_ANGLE 30.0      // High pose femur angle
-#define IK_HIGH_TIBIA_ANGLE -60.0     // High pose tibia angle
-#define IK_EXTENDED_FEMUR_ANGLE -60.0 // Extended pose femur angle
-#define IK_EXTENDED_TIBIA_ANGLE 80.0  // Extended pose tibia angle
+#define TIBIA_ANGLE_MAX 45.0 // Maximum tibia angle (degrees)
 
 // ========================================================================
 // ROBOT PARAMETER DEFAULTS
@@ -92,8 +82,6 @@
 // Default velocity limits
 #define DEFAULT_MAX_LINEAR_VELOCITY 200.0 // Default maximum linear velocity (mm/s)
 #define DEFAULT_MAX_ANGULAR_VELOCITY 90.0 // Default maximum angular velocity (degrees/s)
-
-// Control system defaults (step frequency now configurable in Parameters::step_frequency)
 
 // ========================================================================
 // GAIT CONFIGURATION CONSTANTS (OpenSHC equivalent)
@@ -113,50 +101,26 @@
 #define GAIT_METACHRONAL_HEIGHT_FACTOR 0.25 // 25% for smooth motion
 #define GAIT_ADAPTIVE_HEIGHT_FACTOR 0.25    // 25% base for adaptation
 
-// Safety limits as percentage of leg reach/height (OpenSHC equivalent)
-#define GAIT_MIN_LENGTH_FACTOR 0.12 // 12% minimum step length
-#define GAIT_MAX_LENGTH_FACTOR 0.50 // 50% maximum step length
-#define GAIT_MIN_HEIGHT_FACTOR 0.12 // 12% minimum step height
-#define GAIT_MAX_HEIGHT_FACTOR 0.40 // 40% maximum step height
-
 // ========================================================================
 // BODY POSE CONFIGURATION CONSTANTS (OpenSHC equivalent)
 // ========================================================================
 
-// Default swing height factor for body pose configuration (OpenSHC default.yaml: swing_height default 0.020)
 // This is gait-independent, unlike gait-specific step heights
 #define BODY_POSE_DEFAULT_SWING_HEIGHT_FACTOR 0.10 // 10% of standing height (OpenSHC: 0.020m for typical robot)
 
-// Body clearance factor (OpenSHC default.yaml: body_clearance 0.100)
-#define BODY_POSE_DEFAULT_CLEARANCE_FACTOR 1.0 // 100% of standing height (OpenSHC equivalent)
-
 // Velocity scaling and coupling factors
 #define DEFAULT_ANGULAR_SCALING 1.0        // Default angular velocity scaling
-#define ANGULAR_LINEAR_COUPLING 0.3        // Coupling factor between angular and linear velocity
 #define ANGULAR_ACCELERATION_FACTOR 2000.0 // Angular acceleration threshold (mm/s²)
 #define WORKSPACE_SCALING_FACTOR 0.5       // Workspace scaling factor
-#define WALKSPACE_SCALING_FACTOR 0.7       // Walkspace scaling factor
 #define MIN_SERVO_VELOCITY 0.1             // Minimum servo velocity (10% of max)
 #define FULL_ROTATION_DEGREES 360.0        // Full rotation in degrees
 #define HALF_ROTATION_DEGREES 180.0        // Half rotation in degrees
-#define BEARING_STEP_DEGREES 30.0          // Bearing sampling step in degrees
 
 // Directional efficiency attenuation parameters (tunable)
 // Exponent > 1 accentuates attenuation for off-axis bearings while preserving near-axis efficiency.
 // Floor prevents pathological collapse of effective workspace when a subset of legs are misaligned.
 #define DIRECTIONAL_EFFICIENCY_EXPONENT 1.4
 #define DIRECTIONAL_EFFICIENCY_FLOOR 0.15
-
-// ========================================================================
-// MATHEMATICAL CONSTANTS
-// ========================================================================
-
-#define DEGREES_TO_RADIANS_FACTOR (M_PI / 180.0) // Conversion factor degrees to radians
-#define RADIANS_TO_DEGREES_FACTOR (180.0 / M_PI) // Conversion factor radians to degrees
-
-// Physics constants
-#define GRAVITY_ACCELERATION 9806.65 // Standard gravity acceleration (mm/s²) - BIPM definition
-                                     // Reference: https://en.wikipedia.org/wiki/Standard_gravity
 
 // ========================================================================
 // INVERSE KINEMATICS CONSTANTS
@@ -193,8 +157,6 @@
 // TOLERANCE AND PRECISION CONSTANTS
 // ========================================================================
 
-#define FLOAT_TOLERANCE 1e-6   // Standard floating point tolerance
-#define ANGLE_TOLERANCE 0.1    // Angular tolerance (degrees)
 #define POSITION_TOLERANCE 1.0 // Position tolerance (mm)
 #define VELOCITY_THRESHOLD 1.0 // Minimum velocity to consider as moving (mm/s)
 
@@ -204,20 +166,6 @@
 
 // Admittance safety limit (maximum absolute compliance delta per axis in mm)
 #define ADMITTANCE_MAX_ABS_DELTA_MM 50.0
-
-// ========================================================================
-// AUTO-POSE CONSTANTS (OpenSHC equivalent)
-// ========================================================================
-
-// Auto-pose phase conversion constants
-#define AUTO_POSE_PHASE_CONVERSION_FACTOR 100.0   // Conversion factor from gait phase (0.0-1.0) to phase (0-100)
-#define AUTO_POSE_GAIT_PHASE_THRESHOLD 0.5        // Threshold for determining tripod gait group phases
-#define AUTO_POSE_BODY_COMPENSATION_REDUCTION 0.5 // Reduction factor for body-level compensation amplitudes
-
-// Auto-pose default amplitudes (OpenSHC auto_pose.yaml equivalent)
-#define AUTO_POSE_DEFAULT_ROLL_AMPLITUDE 0.015  // Default roll compensation amplitude (radians)
-#define AUTO_POSE_DEFAULT_PITCH_AMPLITUDE 0.020 // Default pitch compensation amplitude (radians)
-#define AUTO_POSE_DEFAULT_Z_AMPLITUDE 0.020     // Default Z compensation amplitude (millimeters)
 
 // ========================================================================
 // SYSTEM STATE CONSTANTS
@@ -231,26 +179,8 @@ enum SystemState {
     SYSTEM_RUNNING = 3  // Robot is running/walking
 };
 
-// Startup sequence constants
-#define STARTUP_SEQUENCE_TIME 6.0     // Time for startup sequence (seconds)
-#define SHUTDOWN_SEQUENCE_TIME 4.0    // Time for shutdown sequence (seconds)
-#define STANCE_TRANSITION_HEIGHT 30.0 // Height for stance transition (mm)
-#define STANCE_TRANSITION_TIME 0.5    // Time for stance transition (seconds)
-
 // Progress constants
-#define PROGRESS_COMPLETE 100  // Sequence completed
-#define PROGRESS_GENERATING -1 // Sequence is being generated
-
-#define LEG_STEPPER_DUTY_FACTOR 0.5
-#define LEG_STEPPER_FLOAT_TOLERANCE 1e-6
-#define LEG_STEPPER_MAX_SWING_VELOCITY 100.0
-#define LEG_STEPPER_DEFAULT_NODE_SEPARATION 0.05
-#define LEG_STEPPER_DEFAULT_TOUCHDOWN_VELOCITY -0.2
-#define LEG_STEPPER_STANCE_NODE_SCALER -0.25
-#define LEG_STEPPER_SWING_LATERAL_SHIFT 10.0
-#define LEG_STEPPER_SWING_NODE_SCALER 0.25
-#define LEG_STEPPER_TOUCHDOWN_NODE_MULTIPLIER 4.0
-#define LEG_STEPPER_TOUCHDOWN_INTERPOLATION 0.5
+#define PROGRESS_COMPLETE 100 // Sequence completed
 
 // ========================================================================
 // STANCE CONFIGURATION CONSTANTS (OpenSHC equivalent)
