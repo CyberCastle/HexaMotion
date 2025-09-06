@@ -231,6 +231,10 @@ VelocityLimits::LimitValues WalkController::getVelocityLimits(double bearing_deg
 }
 
 VelocityLimits::LimitValues WalkController::applyVelocityLimits(double vx, double vy, double omega) const {
+    // If velocity limiting disabled, pass through raw command
+    if (!model.getParams().enable_velocity_limits) {
+        return VelocityLimits::LimitValues(std::abs(vx), std::abs(vy), std::abs(omega), 0.0); // magnitude container (angular_accel unused)
+    }
     // Calculate bearing from velocity components
     double bearing = VelocityLimits::calculateBearing(vx, vy);
 
@@ -265,6 +269,9 @@ VelocityLimits::LimitValues WalkController::applyVelocityLimits(double vx, doubl
 }
 
 bool WalkController::validateVelocityCommand(double vx, double vy, double omega) const {
+    if (!model.getParams().enable_velocity_limits) {
+        return true; // Always accept when disabling limits
+    }
     return velocity_limits_.validateVelocityInputs(vx, vy, omega);
 }
 

@@ -168,6 +168,10 @@ VelocityLimits::LimitValues VelocityLimits::scaleVelocityLimits(
 }
 
 bool VelocityLimits::validateVelocityInputs(double vx, double vy, double omega) const {
+    // Global bypass (debug / external safety control)
+    if (!pimpl_->model_.getParams().enable_velocity_limits) {
+        return true;
+    }
     double bearing = calculateBearing(vx, vy);
     LimitValues limits = getLimit(bearing);
 

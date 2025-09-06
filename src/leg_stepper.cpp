@@ -857,7 +857,7 @@ bool LegStepper::validateCurrentTrajectory() const {
     }
 
     // Step 2: Check velocity constraints if available
-    if (velocity_limits_) {
+    if (velocity_limits_ && params_.enable_velocity_limits) {
         Point3D current_velocity = calculateCurrentTipVelocity();
         if (!velocity_limits_->validateVelocityInputs(current_velocity.x, current_velocity.y, 0.0)) {
             return false;
