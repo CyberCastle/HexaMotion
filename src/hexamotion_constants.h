@@ -130,7 +130,7 @@
 #define IK_MAX_ANGLE_STEP 5.0          // Maximum angle change per IK iteration (degrees)
 
 // Workspace analysis parameters (OpenSHC equivalent, converted to mm)
-#define MAX_POSITION_DELTA 100.0   // Position delta increment for workspace generation (2mm, OpenSHC uses 0.002m)
+#define MAX_POSITION_DELTA 50.0    // Position delta increment for workspace generation (50mm, OpenSHC uses 0.05m)
 #define MAX_WORKSPACE_RADIUS 359.0 // Maximum radius based on robot morphology: coxa(50) + femur(101) + tibia(208) = 359mm
 #define BEARING_STEP 45            // Bearing step for workspace generation (45°, from OpenSHC)
 #define WORKSPACE_LAYERS 5         // Number of height layers for workspace generation (from OpenSHC)
