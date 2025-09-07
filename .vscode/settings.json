@@ -81,6 +81,7 @@
         "hash_map": "cpp",
         "set": "cpp",
         "__availability": "cpp",
-        "semaphore": "cpp"
+        "semaphore": "cpp",
+        "ranges": "cpp"
     }
 }
