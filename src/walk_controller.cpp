@@ -395,7 +395,7 @@ void WalkController::updateWalk(const Point3D &linear_velocity_input, double ang
     if (walk_state_ != WALK_STOPPING && has_velocity_command) {
         // Calculate bearing once for velocity limits
         const double bearing_rad = atan2(linear_velocity_input.y, linear_velocity_input.x);
-        const double bearing_degrees = bearing_rad * 180.0 / M_PI + (bearing_rad < 0 ? 360.0 : 0.0);
+        const double bearing_degrees = math_utils::radiansToDegrees(bearing_rad) + (bearing_rad < 0 ? 360.0 : 0.0);
         const VelocityLimits::LimitValues limits = velocity_limits_.getLimit(bearing_degrees);
 
         // Apply velocity magnitude limiting efficiently
@@ -569,7 +569,7 @@ void WalkController::generateWalkspace() {
 
     // Calculate workspace for each bearing angle
     for (int bearing = 0; bearing <= 360; bearing += 10) {
-        double bearing_rad = bearing * M_PI / 180.0;
+        double bearing_rad = math_utils::degreesToRadians(static_cast<double>(bearing));
 
         // Calculate workspace radius based on leg geometry and joint limits
         double max_radius = 0.0;

@@ -502,7 +502,7 @@ bool BodyPoseController::beginInitialStandingPoseTransition(Leg legs[NUM_LEGS]) 
     }
 
     double vmax_deg = (params.max_angular_velocity > 0.0) ? params.max_angular_velocity : DEFAULT_MAX_ANGULAR_VELOCITY;
-    double vmax = vmax_deg * DEGREES_TO_RADIANS_FACTOR;
+    double vmax = math_utils::degreesToRadians(vmax_deg);
     double amax = vmax * 4.0;
     double jmax = amax * 10.0;
 
@@ -596,7 +596,7 @@ bool BodyPoseController::stepInitialStandingPoseTransition(Leg legs[NUM_LEGS], d
             // Recompute dynamic limits (reuse same heuristic as begin)
             const Parameters &params = model.getParams();
             double vmax_deg = (params.max_angular_velocity > 0.0) ? params.max_angular_velocity : DEFAULT_MAX_ANGULAR_VELOCITY;
-            double vmax = vmax_deg * DEGREES_TO_RADIANS_FACTOR;
+            double vmax = math_utils::degreesToRadians(vmax_deg);
             double amax = vmax * 4.0;
             double jmax = amax * 10.0;
             for (int l = 0; l < NUM_LEGS; ++l) {

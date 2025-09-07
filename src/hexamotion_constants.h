@@ -10,19 +10,9 @@
  * Centralizing these constants improves maintainability and consistency.
  */
 
-#include <cmath>
-#ifndef M_PI
-#define M_PI 3.14159265358979323846
-#endif
-
 #define NUM_LEGS 6
 
-// ========================================================================
-// MATHEMATICAL CONSTANTS
-// ========================================================================
-
-#define DEGREES_TO_RADIANS_FACTOR (M_PI / 180.0)
-#define RADIANS_TO_DEGREES_FACTOR (180.0 / M_PI) // Conversion factor radians to degrees
+#include "math_utils.h"
 
 // ========================================================================
 // VELOCITY CONTROL CONSTANTS
@@ -192,12 +182,12 @@ enum SystemState {
 // and aligns with DH parameter orientation used elsewhere (see tests:
 // coxa_tripod_symmetry_analytic_test expectations).
 const double BASE_THETA_OFFSETS[NUM_LEGS] = {
-    -30.0 * DEGREES_TO_RADIANS_FACTOR,  // Leg 0 (AR)
-    -90.0 * DEGREES_TO_RADIANS_FACTOR,  // Leg 1 (BR)
-    -150.0 * DEGREES_TO_RADIANS_FACTOR, // Leg 2 (CR)
-    30.0 * DEGREES_TO_RADIANS_FACTOR,   // Leg 3 (CL)
-    90.0 * DEGREES_TO_RADIANS_FACTOR,   // Leg 4 (BL)
-    150.0 * DEGREES_TO_RADIANS_FACTOR   // Leg 5 (AL)
+    math_utils::degreesToRadians(-30.0),  // Leg 0 (AR)
+    math_utils::degreesToRadians(-90.0),  // Leg 1 (BR)
+    math_utils::degreesToRadians(-150.0), // Leg 2 (CR)
+    math_utils::degreesToRadians(30.0),   // Leg 3 (CL)
+    math_utils::degreesToRadians(90.0),   // Leg 4 (BL)
+    math_utils::degreesToRadians(150.0)   // Leg 5 (AL)
 };
 
 #endif // HEXAMOTION_CONSTANTS_H

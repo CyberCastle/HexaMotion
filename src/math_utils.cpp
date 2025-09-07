@@ -6,13 +6,6 @@
 
 // Utility function implementations
 namespace math_utils {
-double degreesToRadians(double degrees) {
-    return degrees * DEGREES_TO_RADIANS_FACTOR;
-}
-
-double radiansToDegrees(double radians) {
-    return radians * RADIANS_TO_DEGREES_FACTOR;
-}
 
 double normalizeAngle(double angle) {
     while (angle > HALF_ROTATION_DEGREES)

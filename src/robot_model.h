@@ -273,7 +273,7 @@ struct Pose {
 
     explicit Pose(const Point3D &pos, const Eigen::Vector3d &euler_angles_deg)
         : position(pos) {
-        Eigen::Vector3d euler_rad = euler_angles_deg * M_PI / 180.0f;
+        Eigen::Vector3d euler_rad = euler_angles_deg * math_utils::degreesToRadians(1.0);
         rotation = Eigen::AngleAxisd(euler_rad.z(), Eigen::Vector3d::UnitZ()) *
                    Eigen::AngleAxisd(euler_rad.y(), Eigen::Vector3d::UnitY()) *
                    Eigen::AngleAxisd(euler_rad.x(), Eigen::Vector3d::UnitX());

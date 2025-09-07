@@ -392,8 +392,8 @@ double VelocityLimits::calculateMaxAngularSpeed(double max_linear_speed, double 
 
     // params.max_angular_velocity is assumed in degrees/s per constants; convert if >0
     double configured_cap_rad = (params.max_angular_velocity > 0.0)
-                                    ? params.max_angular_velocity * DEGREES_TO_RADIANS_FACTOR
-                                    : (DEFAULT_MAX_ANGULAR_VELOCITY * DEGREES_TO_RADIANS_FACTOR);
+                                    ? math_utils::degreesToRadians(params.max_angular_velocity)
+                                    : math_utils::degreesToRadians(DEFAULT_MAX_ANGULAR_VELOCITY);
     return std::min({max_angular, configured_cap_rad, 10.0});
 }
 

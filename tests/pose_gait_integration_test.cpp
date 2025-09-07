@@ -15,7 +15,7 @@ struct TestReport {
 
 static void printDiagnostics(const LocomotionSystem &sys) {
     std::cout << "--- Leg diagnostics ---" << std::endl;
-    const double deg = 180.0 / M_PI;
+    const double deg = math_utils::radiansToDegrees(1.0);
     for (int i = 0; i < NUM_LEGS; ++i) {
         const Leg &leg = sys.getLeg(i);
         JointAngles q = leg.getJointAngles();
@@ -122,7 +122,7 @@ static void validateCoxaSymmetry(const LocomotionSystem &sys, TestReport &rep) {
     // Instead, validate that coxa angles are within reasonable operational ranges
 
     for (int i = 0; i < NUM_LEGS; ++i) {
-        double coxa_deg = sys.getLeg(i).getJointAngles().coxa * 180.0 / M_PI;
+        double coxa_deg = math_utils::radiansToDegrees(sys.getLeg(i).getJointAngles().coxa);
         bool ok = std::abs(coxa_deg) <= 65.0; // Within joint limits
         addResult(rep, ok, "Coxa angle within limits leg " + std::to_string(i) + " (" + std::to_string(coxa_deg) + "°)", sys);
     }

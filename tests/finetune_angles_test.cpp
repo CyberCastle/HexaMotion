@@ -1,5 +1,6 @@
 #include "body_pose_config.h"
 #include "body_pose_config_factory.h"
+#include "math_utils.h"
 #include "robot_model.h"
 #include <algorithm>
 #include <cmath>
@@ -40,7 +41,7 @@ double getTibiaAngleToGround(const RobotModel &model, int leg, const JointAngles
     Eigen::Vector3d ground_normal(0, 0, 1);
     double dot_product = tibia_direction.dot(ground_normal) / (tibia_direction.norm() * ground_normal.norm());
     double angle_rad = acos(std::max(-1.0, std::min(1.0, dot_product))); // Clamp para evitar errores numéricos
-    double angle_deg = angle_rad * 180.0 / M_PI;
+    double angle_deg = math_utils::radiansToDegrees(angle_rad);
     // Ángulo respecto al plano XY: 90° cuando la tibia está perpendicular al suelo
     return std::abs(90.0 - angle_deg);
 }
@@ -100,9 +101,9 @@ std::vector<AngleSolution> findOptimalAnglesForHeight(const RobotModel &model, d
         for (double tibia_deg = -1; tibia_deg <= p.tibia_angle_limits[1]; tibia_deg += tibia_step) {
             total_combinations++;
 
-            JointAngles test_angles(coxa_deg * M_PI / 180.0,
-                                    femur_deg * M_PI / 180.0,
-                                    tibia_deg * M_PI / 180.0);
+            JointAngles test_angles(math_utils::degreesToRadians(coxa_deg),
+                                    math_utils::degreesToRadians(femur_deg),
+                                    math_utils::degreesToRadians(tibia_deg));
 
             // Calcular posición global
             Point3D fk_result = model.forwardKinematicsGlobalCoordinates(0, test_angles);
@@ -161,9 +162,9 @@ std::vector<AngleSolution> findOptimalAnglesForHeight(const RobotModel &model, d
                     if (new_femur >= p.femur_angle_limits[0] && new_femur <= p.femur_angle_limits[1] &&
                         new_tibia >= p.tibia_angle_limits[0] && new_tibia <= p.tibia_angle_limits[1]) {
 
-                        JointAngles test_angles(new_coxa * M_PI / 180.0,
-                                                new_femur * M_PI / 180.0,
-                                                new_tibia * M_PI / 180.0);
+                        JointAngles test_angles(math_utils::degreesToRadians(new_coxa),
+                                                math_utils::degreesToRadians(new_femur),
+                                                math_utils::degreesToRadians(new_tibia));
 
                         Point3D fk_result = model.forwardKinematicsGlobalCoordinates(0, test_angles);
                         // Error de altura: magnitud de Z contra altura objetivo
@@ -225,9 +226,9 @@ std::vector<LegConfiguration> calculateAllLegsConfiguration(const RobotModel &mo
 
         // Usar la solución base para fémur y tibia, coxa permanece en 0°
         config.joint_angles = JointAngles(
-            base_solution.coxa_deg * M_PI / 180.0,
-            base_solution.femur_deg * M_PI / 180.0,
-            base_solution.tibia_deg * M_PI / 180.0);
+            math_utils::degreesToRadians(base_solution.coxa_deg),
+            math_utils::degreesToRadians(base_solution.femur_deg),
+            math_utils::degreesToRadians(base_solution.tibia_deg));
 
         // Calcular la posición global para esta pata
         config.global_position = model.forwardKinematicsGlobalCoordinates(leg, config.joint_angles);
@@ -295,9 +296,9 @@ int main() {
 
         CalculatedServoAngles calc_angles = RobotModel::calculateServoAnglesForHeight(target_height, p);
         std::cout << "Ángulos calculados para altura objetivo:" << std::endl;
-        std::cout << "  - Coxa: " << calc_angles.coxa * (180.0 / M_PI) << "°" << std::endl;
-        std::cout << "  - Fémur: " << calc_angles.femur * (180.0 / M_PI) << "°" << std::endl;
-        std::cout << "  - Tibia: " << calc_angles.tibia * (180.0 / M_PI) << "°" << std::endl;
+        std::cout << "  - Coxa: " << math_utils::radiansToDegrees(calc_angles.coxa) << "°" << std::endl;
+        std::cout << "  - Fémur: " << math_utils::radiansToDegrees(calc_angles.femur) << "°" << std::endl;
+        std::cout << "  - Tibia: " << math_utils::radiansToDegrees(calc_angles.tibia) << "°" << std::endl;
         std::cout << "  - Solución válida: " << (calc_angles.valid ? "SÍ" : "NO") << std::endl;
 
         // Buscar soluciones para esta altura con tolerancia aumentada
@@ -367,9 +368,9 @@ int main() {
         std::cout << "  - Diferencias en posición se deben a BASE_THETA_OFFSETS" << std::endl;
 
         // Verificar cinemática inversa para la pata 0
-        JointAngles best_angles(best_solution.coxa_deg * M_PI / 180.0,
-                                best_solution.femur_deg * M_PI / 180.0,
-                                best_solution.tibia_deg * M_PI / 180.0);
+        JointAngles best_angles(math_utils::degreesToRadians(best_solution.coxa_deg),
+                                math_utils::degreesToRadians(best_solution.femur_deg),
+                                math_utils::degreesToRadians(best_solution.tibia_deg));
         Point3D verification = model.forwardKinematicsGlobalCoordinates(0, best_angles);
         std::cout << "\nVerificación FK (pata 0):" << std::endl;
         std::cout << "  - Posición calculada: (" << verification.x << ", " << verification.y << ", " << verification.z << ")" << std::endl;

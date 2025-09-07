@@ -85,7 +85,7 @@ static void parseArgs(int argc, char **argv) {
 
 // Utilidad para convertir radianes a grados
 static double toDegrees(double radians) {
-    return radians * 180.0 / M_PI;
+    return math_utils::radiansToDegrees(radians);
 }
 
 /**
@@ -821,7 +821,7 @@ int main(int argc, char **argv) {
         // Servo vs internal angle match
         double servo_angle_mae = 0.0;
         int servo_samples = 0;
-        double servo_tol_rad = 2.0 * M_PI / 180.0; // 2 deg
+        double servo_tol_rad = math_utils::degreesToRadians(2.0); // 2 deg
         for (size_t i = 0; i < n; ++i) {
             const auto &s = sys.getTelemetrySample(i);
             for (int L = 0; L < NUM_LEGS; ++L) {

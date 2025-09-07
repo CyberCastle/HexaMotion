@@ -315,8 +315,8 @@ void TerrainAdaptation::updateGravityEstimation(const IMUData &imu_data) {
     // Use advanced IMU data if available (e.g., BNO055)
     if (imu_data.has_absolute_capability && imu_data.absolute_data.absolute_orientation_valid) {
         // Calculate gravity vector from absolute orientation (more accurate)
-        double roll_rad = imu_data.absolute_data.absolute_roll * DEGREES_TO_RADIANS_FACTOR;
-        double pitch_rad = imu_data.absolute_data.absolute_pitch * DEGREES_TO_RADIANS_FACTOR;
+        double roll_rad = math_utils::degreesToRadians(imu_data.absolute_data.absolute_roll);
+        double pitch_rad = math_utils::degreesToRadians(imu_data.absolute_data.absolute_pitch);
 
         // Gravity vector from absolute orientation
         accel_gravity = Eigen::Vector3d(
@@ -493,7 +493,7 @@ void TerrainAdaptation::updateAdvancedTerrainAnalysis(const IMUData &imu_data) {
                 quat[0] * quat[0] - quat[1] * quat[1] - quat[2] * quat[2] + quat[3] * quat[3]);
 
             // Update terrain slope analysis
-            double slope_angle = acos(abs(terrain_normal[2])) * RADIANS_TO_DEGREES_FACTOR;
+            double slope_angle = math_utils::radiansToDegrees(acos(abs(terrain_normal[2])));
 
             // Adjust all step planes based on quaternion-derived terrain analysis
             if (slope_angle > 15.0) { // Significant slope detected

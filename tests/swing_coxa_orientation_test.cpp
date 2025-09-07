@@ -127,8 +127,8 @@ int main() {
         }
 
         // Reporte por pata
-        std::cout << "\n[Pata " << leg_index << "] base_theta(deg)=" << base_theta * 180.0 / M_PI << " raw_target=(" << reference_raw_target.x << ", " << reference_raw_target.y << ")" << "\n";
-        const double DEG = 180.0 / M_PI;
+        std::cout << "\n[Pata " << leg_index << "] base_theta(deg)=" << math_utils::radiansToDegrees(base_theta) << " raw_target=(" << reference_raw_target.x << ", " << reference_raw_target.y << ")" << "\n";
+        const double DEG = math_utils::radiansToDegrees(1.0);
         if (!results.empty()) {
             double base_dir = results[0].target_dir;
             for (auto &r : results) {
@@ -150,8 +150,8 @@ int main() {
 
         double max_delta_target_deg = 0.0, max_delta_swing_end_deg = 0.0;
         for (size_t i = 1; i < results.size(); ++i) {
-            double dt = std::fabs((results[i].target_dir - results[0].target_dir) * 180.0 / M_PI);
-            double ds = std::fabs((results[i].swing_end_dir - results[0].swing_end_dir) * 180.0 / M_PI);
+            double dt = std::fabs(math_utils::radiansToDegrees(results[i].target_dir - results[0].target_dir));
+            double ds = std::fabs(math_utils::radiansToDegrees(results[i].swing_end_dir - results[0].swing_end_dir));
             if (dt > max_delta_target_deg)
                 max_delta_target_deg = dt;
             if (ds > max_delta_swing_end_deg)

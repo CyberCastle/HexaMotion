@@ -487,7 +487,7 @@ WorkspaceAnalyzer::calculateVelocityConstraints(int leg_index, double bearing_de
     WorkspaceBounds bounds = getWorkspaceBounds(leg_index);
 
     // Calculate effective workspace radius based on bearing
-    double leg_angle = model_.getLegBaseAngleOffset(leg_index) * RADIANS_TO_DEGREES_FACTOR;
+    double leg_angle = math_utils::radiansToDegrees(model_.getLegBaseAngleOffset(leg_index));
     double bearing_offset = std::abs(bearing_degrees - leg_angle);
     if (bearing_offset > 180.0f) {
         bearing_offset = 360.0f - bearing_offset;
@@ -536,8 +536,8 @@ WorkspaceAnalyzer::calculateVelocityConstraints(int leg_index, double bearing_de
     const auto &params = model_.getParams();
     double linear_cap = (params.max_velocity > 0.0) ? params.max_velocity : DEFAULT_MAX_LINEAR_VELOCITY;
     double angular_cap = (params.max_angular_velocity > 0.0)
-                             ? params.max_angular_velocity * DEGREES_TO_RADIANS_FACTOR
-                             : (DEFAULT_MAX_ANGULAR_VELOCITY * DEGREES_TO_RADIANS_FACTOR);
+                             ? math_utils::degreesToRadians(params.max_angular_velocity)
+                             : math_utils::degreesToRadians(DEFAULT_MAX_ANGULAR_VELOCITY);
     // Acceleration cap heuristic: reach max speed in ~1s => cap >= linear_cap
     double accel_cap = std::max(linear_cap, constraints.max_acceleration);
 
@@ -588,12 +588,12 @@ double WorkspaceAnalyzer::calculateLimitProximity(int leg_index, const JointAngl
     const Parameters &params = model_.getParams();
 
     // Convert angle limits from degrees to radians
-    double coxa_min_rad = params.coxa_angle_limits[0] * M_PI / 180.0;
-    double coxa_max_rad = params.coxa_angle_limits[1] * M_PI / 180.0;
-    double femur_min_rad = params.femur_angle_limits[0] * M_PI / 180.0;
-    double femur_max_rad = params.femur_angle_limits[1] * M_PI / 180.0;
-    double tibia_min_rad = params.tibia_angle_limits[0] * M_PI / 180.0;
-    double tibia_max_rad = params.tibia_angle_limits[1] * M_PI / 180.0;
+    double coxa_min_rad = math_utils::degreesToRadians(params.coxa_angle_limits[0]);
+    double coxa_max_rad = math_utils::degreesToRadians(params.coxa_angle_limits[1]);
+    double femur_min_rad = math_utils::degreesToRadians(params.femur_angle_limits[0]);
+    double femur_max_rad = math_utils::degreesToRadians(params.femur_angle_limits[1]);
+    double tibia_min_rad = math_utils::degreesToRadians(params.tibia_angle_limits[0]);
+    double tibia_max_rad = math_utils::degreesToRadians(params.tibia_angle_limits[1]);
 
     // Calculate limit proximity (OpenSHC-style)
     // (1.0 = furthest possible from limit, 0.0 = equal to limit)
@@ -964,7 +964,7 @@ void WorkspaceAnalyzer::generateWalkspaceForLeg(int leg_index) {
     double layer_step = (height_max - height_min) / WORKSPACE_LAYERS;
 
     for (int b = 0; b <= 360; b += BEARING_STEP) {
-        double rad = b * M_PI / 180.0;
+        double rad = math_utils::degreesToRadians(static_cast<double>(b));
 
         // Calculate max_allowed_radius for this bearing
         double max_allowed_radius = MAX_WORKSPACE_RADIUS;

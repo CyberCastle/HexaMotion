@@ -377,7 +377,7 @@ static bool validateFrameCenterAssumption(const StrideTestCase &baseTc, RobotMod
     double diff_mag = std::sqrt(diff_meas.x * diff_meas.x + diff_meas.y * diff_meas.y);
     double dot = diff_meas.x * bias.x + diff_meas.y * bias.y;
     double dir_cos = (bias_mag > 1e-12 && diff_mag > 1e-12) ? dot / (bias_mag * diff_mag) : 1.0;
-    double angle_deg = std::acos(std::max(-1.0, std::min(1.0, dir_cos))) * 180.0 / M_PI;
+    double angle_deg = math_utils::radiansToDegrees(std::acos(std::max(-1.0, std::min(1.0, dir_cos))));
     double mag_ratio = (bias_mag > 1e-12) ? diff_mag / bias_mag : 0.0;
     bool bias_detected = (diff_mag > tol * 100.0); // el medido debe ser significativo
     bool direction_ok = angle_deg <= 15.0;         // alineación direccional razonable

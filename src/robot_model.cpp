@@ -121,7 +121,7 @@ void RobotModel::initializeDH() {
 JointAngles RobotModel::solveIK(int leg, const Point3D &local_target, JointAngles current) const {
     const double tolerance = IK_TOLERANCE;
     const double dls_coefficient = IK_DLS_COEFFICIENT;
-    const double max_angle_change = IK_MAX_ANGLE_STEP * DEGREES_TO_RADIANS_FACTOR; // Max angle change per iteration
+    const double max_angle_change = math_utils::degreesToRadians(IK_MAX_ANGLE_STEP); // Max angle change per iteration
 
     for (int iter = 0; iter < params.ik.max_iterations; ++iter) {
         // Calculate current position in local leg frame using FK
@@ -515,8 +515,8 @@ CalculatedServoAngles RobotModel::calculateServoAnglesForHeight(double target_he
     double femur_rad = std::asin(sin_femur);
     double tibia_rad = -femur_rad; // keeps tibia vertical
 
-    double femur_deg = femur_rad * 180.0 / M_PI;
-    double tibia_deg = tibia_rad * 180.0 / M_PI;
+    double femur_deg = math_utils::radiansToDegrees(femur_rad);
+    double tibia_deg = math_utils::radiansToDegrees(tibia_rad);
     if (femur_deg < params.femur_angle_limits[0] || femur_deg > params.femur_angle_limits[1])
         return result;
     if (tibia_deg < params.tibia_angle_limits[0] || tibia_deg > params.tibia_angle_limits[1])
@@ -648,7 +648,7 @@ Point3D RobotModel::makeReachable(int leg_index, const Point3D &reference_tip_po
 
         // Calculate bearing (angle) and radius
         double bearing_rad = atan2(relative_pos.y, relative_pos.x);
-        double bearing_deg = bearing_rad * 180.0 / M_PI;
+        double bearing_deg = math_utils::radiansToDegrees(bearing_rad);
 
         // Normalize bearing to [0, 360)
         if (bearing_deg < 0)

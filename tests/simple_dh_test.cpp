@@ -40,7 +40,7 @@ int main() {
     std::cout << "\n--- Test 1: Global Forward Kinematics Validation ---" << std::endl;
     for (int leg = 0; leg < NUM_LEGS; ++leg) {
         Point3D pos = model.forwardKinematicsGlobalCoordinates(leg, q);
-        double theta_rad = BASE_THETA_OFFSETS[leg] * M_PI / 180.0f;
+        double theta_rad = math_utils::degreesToRadians(BASE_THETA_OFFSETS[leg]);
         double reach = p.hexagon_radius + p.coxa_length + p.femur_length;
         double expected_x = reach * cos(theta_rad);
         double expected_y = reach * sin(theta_rad);

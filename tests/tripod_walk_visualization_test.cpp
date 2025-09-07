@@ -42,7 +42,7 @@ constexpr int MAX_STEPS = 600;
 
 // Utility to convert radians to degrees
 static double toDegrees(double radians) {
-    return radians * 180.0 / M_PI;
+    return math_utils::radiansToDegrees(radians);
 }
 
 /**

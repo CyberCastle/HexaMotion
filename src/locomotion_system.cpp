@@ -192,9 +192,9 @@ bool LocomotionSystem::setLegJointAngles(int leg, const JointAngles &q) {
     double tibia_speed = velocity_controller ? velocity_controller->getServoSpeed(leg, 2) : params.default_servo_speed;
 
     // Apply sign inversion/preservation per servo using params.angle_sign_* (adjust left/right or above/below servo orientation)
-    double servo_coxa = clamped_angles.coxa * params.angle_sign_coxa * RADIANS_TO_DEGREES_FACTOR;
-    double servo_femur = clamped_angles.femur * params.angle_sign_femur * RADIANS_TO_DEGREES_FACTOR;
-    double servo_tibia = clamped_angles.tibia * params.angle_sign_tibia * RADIANS_TO_DEGREES_FACTOR;
+    double servo_coxa = math_utils::radiansToDegrees(clamped_angles.coxa * params.angle_sign_coxa);
+    double servo_femur = math_utils::radiansToDegrees(clamped_angles.femur * params.angle_sign_femur);
+    double servo_tibia = math_utils::radiansToDegrees(clamped_angles.tibia * params.angle_sign_tibia);
 
     // Enable coxa movement based for test mode
     // This allows us to gate coxa servo output during test
@@ -1143,13 +1143,13 @@ void LocomotionSystem::publishJointAnglesToServos() {
             // Convert to output degrees with sign
             // Respect runtime coxa gating in the fast sync path as well
             if (coxa_movement_enabled_) {
-                angles_deg[i][0] = a.coxa * params.angle_sign_coxa * RADIANS_TO_DEGREES_FACTOR;
+                angles_deg[i][0] = math_utils::radiansToDegrees(a.coxa * params.angle_sign_coxa);
             } else {
                 angles_deg[i][0] = 0.0; // freeze coxa at 0° when disabled (same behavior as per-leg path)
             }
 
-            angles_deg[i][1] = a.femur * params.angle_sign_femur * RADIANS_TO_DEGREES_FACTOR;
-            angles_deg[i][2] = a.tibia * params.angle_sign_tibia * RADIANS_TO_DEGREES_FACTOR;
+            angles_deg[i][1] = math_utils::radiansToDegrees(a.femur * params.angle_sign_femur);
+            angles_deg[i][2] = math_utils::radiansToDegrees(a.tibia * params.angle_sign_tibia);
 
             // Per-joint speeds
             speeds[i][0] = velocity_controller ? velocity_controller->getServoSpeed(i, 0) : params.default_servo_speed;
@@ -1182,9 +1182,9 @@ void LocomotionSystem::publishJointAnglesToServos() {
         }
         // Cache per-leg command (degrees)
 #ifdef TESTING_ENABLED
-        last_servo_cmd_deg_[i][0] = angles.coxa * params.angle_sign_coxa * RADIANS_TO_DEGREES_FACTOR;
-        last_servo_cmd_deg_[i][1] = angles.femur * params.angle_sign_femur * RADIANS_TO_DEGREES_FACTOR;
-        last_servo_cmd_deg_[i][2] = angles.tibia * params.angle_sign_tibia * RADIANS_TO_DEGREES_FACTOR;
+        last_servo_cmd_deg_[i][0] = math_utils::radiansToDegrees(angles.coxa * params.angle_sign_coxa);
+        last_servo_cmd_deg_[i][1] = math_utils::radiansToDegrees(angles.femur * params.angle_sign_femur);
+        last_servo_cmd_deg_[i][2] = math_utils::radiansToDegrees(angles.tibia * params.angle_sign_tibia);
 #endif
     }
 }
@@ -1298,10 +1298,10 @@ bool LocomotionSystem::stepInitialStandingPose() {
                 sign = params.angle_sign_femur;
             else
                 sign = params.angle_sign_tibia;
-            angles_deg[i][j] = pos_rad * sign * RADIANS_TO_DEGREES_FACTOR;
-            double vel_deg = vel_rad * RADIANS_TO_DEGREES_FACTOR;
+            angles_deg[i][j] = math_utils::radiansToDegrees(pos_rad * sign);
+            double vel_deg = math_utils::radiansToDegrees(vel_rad);
             double speed_mult = vmax_deg > 1e-6 ? fabs(vel_deg) / vmax_deg : 0.0;
-            double acc_deg = acc_rad * RADIANS_TO_DEGREES_FACTOR;
+            double acc_deg = math_utils::radiansToDegrees(acc_rad);
             double accel_mult = amax_deg > 1e-6 ? fabs(acc_deg) / amax_deg : 0.0;
             if (apply_torque_balanced) {
                 double wf = weight_factor[j];
@@ -1393,7 +1393,7 @@ void LocomotionSystem::recordCoxaTelemetrySample() {
             sample.stride_dx[i] = 0.0;
             sample.stride_dy[i] = 0.0;
         }
-        sample.servo_command_coxa[i] = last_servo_cmd_deg_[i][0] * DEGREES_TO_RADIANS_FACTOR; // store radians
+        sample.servo_command_coxa[i] = math_utils::degreesToRadians(last_servo_cmd_deg_[i][0]); // store radians
     }
     sample.body_vel_x = commanded_linear_velocity_x_;
     sample.body_vel_y = commanded_linear_velocity_y_;

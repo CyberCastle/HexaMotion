@@ -2,18 +2,28 @@
 #define MATH_UTILS_H
 
 #include <ArduinoEigen.h>
+#include <cmath>
+
+#ifndef M_PI
+#define M_PI 3.14159265358979323846
+#endif
 
 struct Point3D; // forward declaration
 
 namespace math_utils {
+
 // Standard gravity acceleration (mm/s^2) - BIPM definition (9.80665 m/s^2)
 constexpr double GRAVITY_ACCELERATION = 9806.65;
+
 /** Convert degrees to radians. */
-double degreesToRadians(double degrees);
+constexpr inline double degreesToRadians(double degrees) { return degrees * (M_PI / 180.0); }
+
 /** Convert radians to degrees. */
-double radiansToDegrees(double radians);
+constexpr inline double radiansToDegrees(double radians) { return radians * (180.0 / M_PI); }
+
 /** Normalize an angle to the [-180,180] range. */
 double normalizeAngle(double angle);
+
 /**
  * Rotate a 3D point by roll/pitch/yaw angles (radians).
  */

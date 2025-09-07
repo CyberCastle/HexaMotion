@@ -43,8 +43,8 @@ int main() {
 
     // Validated joint configurations from simple_ik_test (converted to radians)
     JointAngles test_configurations[4] = {
-        JointAngles(0, 0, 0),                                 // Zero configuration
-        JointAngles(0, 20 * M_PI / 180.0, 20 * M_PI / 180.0), // 20° femur/tibia
+        JointAngles(0, 0, 0),                                                                   // Zero configuration
+        JointAngles(0, math_utils::degreesToRadians(20.0), math_utils::degreesToRadians(20.0)), // 20° femur/tibia
         JointAngles(math_utils::degreesToRadians(10.0), math_utils::degreesToRadians(-20.0), math_utils::degreesToRadians(15.0)),
         JointAngles(0.0, math_utils::degreesToRadians(-30.0), math_utils::degreesToRadians(30.0))};
 

@@ -101,9 +101,9 @@ int main() {
     // Randomize initial joint angles (radians) within limits and assign to legs directly
     JointAngles initial_angles[NUM_LEGS];
     for (int l = 0; l < NUM_LEGS; ++l) {
-        initial_angles[l].coxa = randRange(params.coxa_angle_limits[0], params.coxa_angle_limits[1]) * DEGREES_TO_RADIANS_FACTOR;
-        initial_angles[l].femur = randRange(params.femur_angle_limits[0], params.femur_angle_limits[1]) * DEGREES_TO_RADIANS_FACTOR;
-        initial_angles[l].tibia = randRange(params.tibia_angle_limits[0], params.tibia_angle_limits[1]) * DEGREES_TO_RADIANS_FACTOR;
+        initial_angles[l].coxa = math_utils::degreesToRadians(randRange(params.coxa_angle_limits[0], params.coxa_angle_limits[1]));
+        initial_angles[l].femur = math_utils::degreesToRadians(randRange(params.femur_angle_limits[0], params.femur_angle_limits[1]));
+        initial_angles[l].tibia = math_utils::degreesToRadians(randRange(params.tibia_angle_limits[0], params.tibia_angle_limits[1]));
         sys.getLeg(l).setJointAngles(initial_angles[l]);
     }
 
@@ -122,7 +122,7 @@ int main() {
         target_rad[l] = JointAngles(sj.coxa, sj.femur, sj.tibia);
     }
 
-    const double angle_tol = 0.5 * DEGREES_TO_RADIANS_FACTOR; // 0.5° tolerance
+    const double angle_tol = math_utils::degreesToRadians(0.5); // 0.5° tolerance
 
     int iter = 0;
     const int MAX_ITERS = 500; // safety cap
@@ -142,9 +142,9 @@ int main() {
     std::cout << "----|--------|--------|--------" << std::endl;
     std::cout << std::fixed << std::setprecision(1);
     for (int l = 0; l < NUM_LEGS; ++l) {
-        double coxa_deg = initial_angles[l].coxa * RADIANS_TO_DEGREES_FACTOR;
-        double femur_deg = initial_angles[l].femur * RADIANS_TO_DEGREES_FACTOR;
-        double tibia_deg = initial_angles[l].tibia * RADIANS_TO_DEGREES_FACTOR;
+        double coxa_deg = math_utils::radiansToDegrees(initial_angles[l].coxa);
+        double femur_deg = math_utils::radiansToDegrees(initial_angles[l].femur);
+        double tibia_deg = math_utils::radiansToDegrees(initial_angles[l].tibia);
         std::cout << " " << l << "  |" << std::setw(7) << coxa_deg
                   << " |" << std::setw(7) << femur_deg << " |" << std::setw(7) << tibia_deg << std::endl;
     }
@@ -179,9 +179,9 @@ int main() {
             std::cout << "Iter " << std::setw(3) << iter << " | ";
             for (int l = 0; l < NUM_LEGS; ++l) {
                 JointAngles q = sys.getLeg(l).getJointAngles();
-                double coxa_deg = q.coxa * RADIANS_TO_DEGREES_FACTOR;
-                double femur_deg = q.femur * RADIANS_TO_DEGREES_FACTOR;
-                double tibia_deg = q.tibia * RADIANS_TO_DEGREES_FACTOR;
+                double coxa_deg = math_utils::radiansToDegrees(q.coxa);
+                double femur_deg = math_utils::radiansToDegrees(q.femur);
+                double tibia_deg = math_utils::radiansToDegrees(q.tibia);
                 std::cout << "L" << l << "(" << std::setw(4) << coxa_deg << ","
                           << std::setw(4) << femur_deg << "," << std::setw(4) << tibia_deg << ") ";
             }
@@ -193,7 +193,7 @@ int main() {
             for (int l = 0; l < NUM_LEGS; ++l) {
                 StandingPoseJoints sj = ctrl->getStandingPoseJoints(l);
                 double cur = sys.getLeg(l).getJointAngles().coxa;
-                if (std::fabs(cur - sj.coxa) > 1.0 * DEGREES_TO_RADIANS_FACTOR) {
+                if (std::fabs(cur - sj.coxa) > math_utils::degreesToRadians(1.0)) {
                     aligned = false;
                     break;
                 }
@@ -273,12 +273,12 @@ int main() {
     bool all_ok = true;
     for (int l = 0; l < NUM_LEGS; ++l) {
         JointAngles q = sys.getLeg(l).getJointAngles();
-        double coxa_deg = q.coxa * RADIANS_TO_DEGREES_FACTOR;
-        double femur_deg = q.femur * RADIANS_TO_DEGREES_FACTOR;
-        double tibia_deg = q.tibia * RADIANS_TO_DEGREES_FACTOR;
-        double target_coxa_deg = target_rad[l].coxa * RADIANS_TO_DEGREES_FACTOR;
-        double target_femur_deg = target_rad[l].femur * RADIANS_TO_DEGREES_FACTOR;
-        double target_tibia_deg = target_rad[l].tibia * RADIANS_TO_DEGREES_FACTOR;
+        double coxa_deg = math_utils::radiansToDegrees(q.coxa);
+        double femur_deg = math_utils::radiansToDegrees(q.femur);
+        double tibia_deg = math_utils::radiansToDegrees(q.tibia);
+        double target_coxa_deg = math_utils::radiansToDegrees(target_rad[l].coxa);
+        double target_femur_deg = math_utils::radiansToDegrees(target_rad[l].femur);
+        double target_tibia_deg = math_utils::radiansToDegrees(target_rad[l].tibia);
 
         std::cout << " " << l << "  |" << std::setw(7) << std::setprecision(1) << coxa_deg
                   << " |" << std::setw(7) << femur_deg << " |" << std::setw(7) << tibia_deg

@@ -411,7 +411,7 @@ class BodyPoseController {
     InitialStandingPhase initial_standing_phase_ = InitialStandingPhase::ALIGN;
     // For phase 2 lazy profile creation
     bool initial_standing_lift_profiles_created_ = false;
-    double initial_standing_align_tolerance_ = 1.0 * DEGREES_TO_RADIANS_FACTOR; // default 1 degree
+    double initial_standing_align_tolerance_ = math_utils::degreesToRadians(1.0); // default 1 degree
     // S-curve profiles per joint for initial standing pose
     SCurveProfile *initial_standing_profiles_[NUM_LEGS][DOF_PER_LEG] = {nullptr};
 

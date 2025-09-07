@@ -147,8 +147,8 @@ class VisualizationIMU : public IIMUInterface {
     void simulateTerrainTilt(int step) {
         // Simulate gentle terrain variations
         double terrain_freq = 0.02;
-        roll_ = 2.0 * sin(step * terrain_freq) * M_PI / 180.0;        // ±2 degrees
-        pitch_ = 1.5 * cos(step * terrain_freq * 1.3) * M_PI / 180.0; // ±1.5 degrees
+        roll_ = math_utils::degreesToRadians(2.0 * sin(step * terrain_freq));        // ±2 degrees
+        pitch_ = math_utils::degreesToRadians(1.5 * cos(step * terrain_freq * 1.3)); // ±1.5 degrees
     }
 };
 
@@ -272,7 +272,7 @@ class AngleVisualizationServo : public IServoInterface {
 
             // Update target angle and speed
             // NOTE: The 'angle' parameter arrives already converted to DEGREES by LocomotionSystem::setLegJointAngles()
-            // which applies: servo_angle = joint_angle_radians * params.angle_sign_* * RADIANS_TO_DEGREES_FACTOR
+            // which applies: servo_angle = math_utils::radiansToDegrees(joint_angle_radians * params.angle_sign_*)
             target_angles_[leg][joint] = angle;
             speeds_[leg][joint] = speed;
 
@@ -429,7 +429,7 @@ class AngleVisualizationServo : public IServoInterface {
 
             // Show target angles (what HexaMotion is commanding)
             // NOTE: These angles are already in degrees as received from LocomotionSystem::setLegJointAngles()
-            // which converts from radians to degrees using RADIANS_TO_DEGREES_FACTOR before sending to servo interface
+            // which converts from radians to degrees using math_utils::radiansToDegrees before sending to servo interface
             for (int joint = 0; joint < 3; joint++) {
                 std::cout << std::setw(12) << target_angles_[leg][joint];
             }
@@ -717,7 +717,7 @@ int main(int argc, char **argv) {
     std::cout << "📋 ANGLE UNIT CONSISTENCY CHECK:" << std::endl;
     std::cout << "  ✅ virtual_hardware_sim_test: Captures angles from IServoInterface (already in degrees)" << std::endl;
     std::cout << "  ✅ tripod_walk_visualization_test: Reads angles from Leg objects (radians → degrees conversion)" << std::endl;
-    std::cout << "  ✅ Both tests now use the same RADIANS_TO_DEGREES_FACTOR = (180.0 / M_PI)" << std::endl;
+    std::cout << "  ✅ Both tests now use math_utils::radiansToDegrees for conversions" << std::endl;
     std::cout << "  ✅ Conversion path: leg.getJointAngles() [radians] → LocomotionSystem::setLegJointAngles() → servo interface [degrees]" << std::endl;
 
     std::cout << "\n🔄 TRAJECTORY TIMING SYNCHRONIZATION:" << std::endl;

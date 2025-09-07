@@ -701,7 +701,7 @@ Point3D LegStepper::validateAndLimitVelocities(const Point3D &linear_velocity, d
         // Calculate bearing direction
         double bearing = 0.0;
         if (std::abs(linear_velocity.x) > 1e-6 || std::abs(linear_velocity.y) > 1e-6) {
-            bearing = std::atan2(linear_velocity.y, linear_velocity.x) * 180.0 / M_PI;
+            bearing = math_utils::radiansToDegrees(std::atan2(linear_velocity.y, linear_velocity.x));
             if (bearing < 0.0)
                 bearing += 360.0;
         }
@@ -730,7 +730,7 @@ Point3D LegStepper::validateAndLimitVelocities(const Point3D &linear_velocity, d
     // Method 2: Fallback to WorkspaceAnalyzer constraints
     double bearing = 0.0;
     if (std::abs(linear_velocity.x) > 1e-6 || std::abs(linear_velocity.y) > 1e-6) {
-        bearing = std::atan2(linear_velocity.y, linear_velocity.x) * 180.0 / M_PI;
+        bearing = math_utils::radiansToDegrees(std::atan2(linear_velocity.y, linear_velocity.x));
         if (bearing < 0.0)
             bearing += 360.0;
     }

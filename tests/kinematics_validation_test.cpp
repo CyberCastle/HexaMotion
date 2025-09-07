@@ -10,6 +10,7 @@
  */
 
 #include "body_pose_config_factory.h"
+#include "math_utils.h"
 #include "robot_model.h"
 #include <cmath>
 #include <iomanip>
@@ -22,9 +23,6 @@
 constexpr double A_COXA = 50.0;   // mm
 constexpr double B_FEMUR = 101.0; // mm
 constexpr double C_TIBIA = 208.0; // mm
-
-constexpr double DEG2RAD = M_PI / 180.0;
-constexpr double RAD2DEG = 180.0 / M_PI;
 
 // Estructura para ángulos de angle_calculus
 struct CalcAngles {
@@ -51,11 +49,11 @@ CalcAngles calcLegAngles(double H_mm) {
 
     // ---------------------------------------
     // 1) RANGOS (radianes)
-    const double alphaMin = -75.0 * DEG2RAD;
-    const double alphaMax = 75.0 * DEG2RAD;
-    const double betaMin = -45.0 * DEG2RAD;
-    const double betaMax = 45.0 * DEG2RAD;
-    const double dBeta = 0.1 * DEG2RAD; // paso, ajústalo si quieres más precisión
+    const double alphaMin = math_utils::degreesToRadians(-75.0);
+    const double alphaMax = math_utils::degreesToRadians(75.0);
+    const double betaMin = math_utils::degreesToRadians(-45.0);
+    const double betaMax = math_utils::degreesToRadians(45.0);
+    const double dBeta = math_utils::degreesToRadians(0.1); // paso, ajústalo si quieres más precisión
 
     // 2) LONGITUDES
     const double A = A_COXA;
@@ -84,10 +82,10 @@ CalcAngles calcLegAngles(double H_mm) {
             if (err >= bestErr)
                 continue;
 
-            // printf("DEBUG: α=%.2f°, β=%.2f° -> err=%.2f\n", alpha * RAD2DEG, beta * RAD2DEG, err);
+            // printf("DEBUG: α=%.2f°, β=%.2f° -> err=%.2f\n", math_utils::radiansToDegrees(alpha), math_utils::radiansToDegrees(beta), err);
             // 4) Paso a grados y a ángulos de servo
-            double theta1 = (alpha - beta) * RAD2DEG; // θ₁ = α - β
-            double theta2 = -beta * RAD2DEG;          // θ₂ = −β
+            double theta1 = math_utils::radiansToDegrees(alpha - beta); // θ₁ = α - β
+            double theta2 = math_utils::radiansToDegrees(-beta);        // θ₂ = −β
 
             // 5) LÍMITES de servo
             if (theta1 < -75.0 || theta1 > 75.0)
@@ -125,8 +123,8 @@ double calcHeight(double theta1_deg, double theta2_deg, bool &valid) {
         return 0.0;
 
     // Convertir a radianes
-    double theta1 = theta1_deg * DEG2RAD;
-    double theta2 = theta2_deg * DEG2RAD;
+    double theta1 = math_utils::degreesToRadians(theta1_deg);
+    double theta2 = math_utils::degreesToRadians(theta2_deg);
 
     // Relaciones geométricas empleadas en la inversa:
     //   θ₂ = −β     ⇒  β = −θ₂
@@ -135,9 +133,9 @@ double calcHeight(double theta1_deg, double theta2_deg, bool &valid) {
     double alpha = beta - theta1;
 
     // Chequeo opcional de los límites absolutos de α y β
-    if (alpha < -75.0 * DEG2RAD || alpha > 75.0 * DEG2RAD)
+    if (alpha < math_utils::degreesToRadians(-75.0) || alpha > math_utils::degreesToRadians(75.0))
         return 0.0;
-    if (beta < -45.0 * DEG2RAD || beta > 45.0 * DEG2RAD)
+    if (beta < math_utils::degreesToRadians(-45.0) || beta > math_utils::degreesToRadians(45.0))
         return 0.0;
 
     // Altura alcanzada (positivo hacia abajo)
@@ -219,21 +217,21 @@ class KinematicsValidator {
             // Mostrar ambos resultados explícitamente
             double femur1 = ref_solution.theta1; // angle_calculus femur
             double tibia1 = ref_solution.theta2; // angle_calculus tibia
-            double theta1_rad = femur1 * DEG2RAD;
-            double theta2_rad = tibia1 * DEG2RAD;
+            double theta1_rad = math_utils::degreesToRadians(femur1);
+            double theta2_rad = math_utils::degreesToRadians(tibia1);
             double beta1 = -theta2_rad;         // β = −θ₂
             double alpha1 = theta1_rad + beta1; // α = θ₁ + β
-            double alpha1_deg = alpha1 * RAD2DEG;
-            double beta1_deg = beta1 * RAD2DEG;
+            double alpha1_deg = math_utils::radiansToDegrees(alpha1);
+            double beta1_deg = math_utils::radiansToDegrees(beta1);
 
             double femur2 = calc_solution.femur; // calculateServoAnglesForHeight femur
             double tibia2 = calc_solution.tibia; // calculateServoAnglesForHeight tibia
-            double theta1b_rad = femur2 * DEG2RAD;
-            double theta2b_rad = tibia2 * DEG2RAD;
+            double theta1b_rad = math_utils::degreesToRadians(femur2);
+            double theta2b_rad = math_utils::degreesToRadians(tibia2);
             double beta2 = -theta2b_rad;
             double alpha2 = theta1b_rad + beta2;
-            double alpha2_deg = alpha2 * RAD2DEG;
-            double beta2_deg = beta2 * RAD2DEG;
+            double alpha2_deg = math_utils::radiansToDegrees(alpha2);
+            double beta2_deg = math_utils::radiansToDegrees(beta2);
 
             double dfemur = std::abs(femur1 - femur2);
             double dtibia = std::abs(tibia1 - tibia2);
