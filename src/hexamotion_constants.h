@@ -11,6 +11,12 @@
  */
 
 #define NUM_LEGS 6
+// Degrees of freedom per leg and total DOF
+#define DOF_PER_LEG 3
+#define TOTAL_DOF (NUM_LEGS * DOF_PER_LEG)
+
+// Numerical differentiation step for Jacobians
+#define JACOBIAN_DELTA 0.001f
 
 #include "math_utils.h"
 
