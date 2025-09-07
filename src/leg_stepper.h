@@ -144,8 +144,6 @@ class LegStepper {
     Point3D constrainToWorkspace(const Point3D &target_pose) const;
     Point3D calculateSafeTarget(const Point3D &desired_target) const;
 
-    // Velocity limiting and validation methods (Step 2 implementation)
-    Point3D validateAndLimitVelocities(const Point3D &linear_velocity, double angular_velocity);
     Point3D calculateSafeStride(const Point3D &desired_stride) const;
 
     // VelocityLimits integration for enhanced safety
