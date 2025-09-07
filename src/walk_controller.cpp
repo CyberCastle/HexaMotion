@@ -393,34 +393,40 @@ void WalkController::updateWalk(const Point3D &linear_velocity_input, double ang
     double limited_angular_velocity;
 
     if (walk_state_ != WALK_STOPPING && has_velocity_command) {
-        // Calculate bearing once for velocity limits
-        const double bearing_rad = atan2(linear_velocity_input.y, linear_velocity_input.x);
-        const double bearing_degrees = math_utils::radiansToDegrees(bearing_rad) + (bearing_rad < 0 ? 360.0 : 0.0);
-        const VelocityLimits::LimitValues limits = velocity_limits_.getLimit(bearing_degrees);
+        // Centralized velocity limiting: reuse applyVelocityLimits (single source of truth)
+        VelocityLimits::LimitValues base_limits = applyVelocityLimits(
+            linear_velocity_input.x, linear_velocity_input.y, angular_velocity_input);
 
-        // Apply velocity magnitude limiting efficiently
-        const double input_magnitude = sqrt(linear_velocity_input.x * linear_velocity_input.x +
-                                            linear_velocity_input.y * linear_velocity_input.y);
-        const double scale_factor = (input_magnitude > limits.linear_x && input_magnitude > 0.0) ? limits.linear_x / input_magnitude : 1.0;
+        // Target velocities after directional & coupling limits
+        Point3D target_linear_velocity(base_limits.linear_x, base_limits.linear_y, 0.0);
+        double target_angular_velocity = base_limits.angular_z;
 
-        new_linear_velocity = linear_velocity_input * scale_factor;
-        double new_angular_velocity = math_utils::clamp(angular_velocity_input, -limits.angular_z, limits.angular_z);
+        // Acceleration (rate) limiting: only apply if acceleration constraint > 0
+        double accel_limit = base_limits.acceleration; // already scaled if angular coupling applied
+        if (accel_limit > 0.0) {
+            // Linear rate limiting
+            Point3D diff = target_linear_velocity - desired_linear_velocity_;
+            double diff_mag = std::sqrt(diff.x * diff.x + diff.y * diff.y);
+            double max_step = accel_limit * time_delta_;
+            if (diff_mag > max_step && diff_mag > 1e-9) {
+                double scale = max_step / diff_mag;
+                limited_linear_velocity = desired_linear_velocity_ + diff * scale;
+            } else {
+                limited_linear_velocity = target_linear_velocity;
+            }
 
-        // OpenSHC: Optimized acceleration limiting
-        const Point3D linear_diff = new_linear_velocity - desired_linear_velocity_;
-        const double linear_diff_mag = sqrt(linear_diff.x * linear_diff.x + linear_diff.y * linear_diff.y);
-        const double max_linear_change = limits.acceleration * time_delta_;
-
-        if (linear_diff_mag <= max_linear_change) {
-            limited_linear_velocity = new_linear_velocity;
+            // Angular rate limiting (reuse same accel limit; separate angular limit could be added later)
+            double angular_diff = target_angular_velocity - desired_angular_velocity_;
+            double max_ang_step = accel_limit * time_delta_;
+            if (std::abs(angular_diff) > max_ang_step) {
+                angular_diff = (angular_diff > 0 ? max_ang_step : -max_ang_step);
+            }
+            limited_angular_velocity = desired_angular_velocity_ + angular_diff;
         } else {
-            const double norm_factor = max_linear_change / linear_diff_mag;
-            limited_linear_velocity = desired_linear_velocity_ + linear_diff * norm_factor;
+            // No acceleration constraint configured: take target directly
+            limited_linear_velocity = target_linear_velocity;
+            limited_angular_velocity = target_angular_velocity;
         }
-
-        const double angular_diff = new_angular_velocity - desired_angular_velocity_;
-        const double max_angular_change = limits.acceleration * time_delta_;
-        limited_angular_velocity = desired_angular_velocity_ + math_utils::clamp(angular_diff, -max_angular_change, max_angular_change);
     } else {
         // Zero velocities for stopping/stopped
         limited_linear_velocity = Point3D(0, 0, 0);
