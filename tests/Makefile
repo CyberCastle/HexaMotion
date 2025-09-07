@@ -71,7 +71,7 @@ virtual_hardware_sim_test: virtual_hardware_sim_test.cpp ../src/walk_controller.
 hexapod_trajectory_analysis_test: hexapod_trajectory_analysis_test.cpp ../src/walk_controller.cpp ../src/leg_stepper.cpp ../src/terrain_adaptation.cpp ../src/robot_model.cpp ../src/velocity_limits.cpp ../src/math_utils.cpp ../src/workspace_analyzer.cpp ../src/leg.cpp ../src/gait_config_factory.cpp ../src/body_pose_config_factory.cpp ../src/body_pose_controller.cpp ../src/leg_poser.cpp ../src/s_curve_profile.cpp
 	$(CXX) $(CXXFLAGS) $^ -o $@
 
-workspace_analyzer_fusion_test: workspace_analyzer_fusion_test.cpp ../src/workspace_analyzer.cpp ../src/robot_model.cpp ../src/math_utils.cpp ../src/velocity_limits.cpp
+workspace_analyzer_fusion_test: workspace_analyzer_fusion_test.cpp ../src/workspace_analyzer.cpp ../src/robot_model.cpp ../src/math_utils.cpp ../src/velocity_limits.cpp ../src/gait_config_factory.cpp ../src/leg_stepper.cpp ../src/leg.cpp ../src/gait_config_factory.cpp ../src/body_pose_config_factory.cpp ../src/leg_poser.cpp ../src/s_curve_profile.cpp
 	$(CXX) $(CXXFLAGS) $^ -o $@
 
 bezier_validation_test: bezier_validation_test.cpp ../src/robot_model.cpp ../src/math_utils.cpp ../src/workspace_analyzer.cpp

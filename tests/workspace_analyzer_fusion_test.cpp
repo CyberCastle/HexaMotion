@@ -1,3 +1,4 @@
+#include "../src/gait_config_factory.h" // Added for createTripodGaitConfig
 #include "../src/hexamotion_constants.h"
 #include "../src/robot_model.h"
 #include "../src/velocity_limits.h"
@@ -267,6 +268,11 @@ int main() {
     std::cout << "\n=== VelocityLimits Behavior Tests ===" << std::endl;
 
     VelocityLimits velocity_limits(model);
+
+    // Provide a realistic gait configuration so that step_length > 0 and velocity limits are non-zero.
+    // Without this, VelocityLimits uses a default GaitConfig with step_length=0, yielding all zero limits.
+    auto tripod_gait = createTripodGaitConfig(model.getParams());
+    velocity_limits.generateLimits(tripod_gait);
 
     std::vector<int> bearings = {0, 45, 90, 135, 180};
     bool velocity_limits_ok = true;
