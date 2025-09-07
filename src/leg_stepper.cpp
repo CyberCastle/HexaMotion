@@ -658,7 +658,7 @@ void LegStepper::updateStepStateFromPhase() {
 }
 
 // ========================================================================
-// WORKSPACE VALIDATION AND SAFETY METHODS (STEP 1 IMPLEMENTATION)
+// WORKSPACE VALIDATION AND SAFETY METHODS
 // ========================================================================
 
 bool LegStepper::validateTargetTipPose(const Point3D &target_pose) const {
@@ -730,7 +730,7 @@ Point3D LegStepper::calculateSafeTarget(const Point3D &desired_target) const {
 }
 
 // ========================================================================
-// VELOCITY LIMITING AND VALIDATION METHODS (STEP 2 IMPLEMENTATION)
+// VELOCITY LIMITING AND VALIDATION METHODS
 // ========================================================================
 Point3D LegStepper::calculateSafeStride(const Point3D &desired_stride) const {
 
@@ -777,7 +777,7 @@ Point3D LegStepper::calculateSafeStride(const Point3D &desired_stride) const {
 }
 
 // ========================================================================
-// CONTROL NODE VALIDATION METHODS (STEP 4 IMPLEMENTATION)
+// CONTROL NODE VALIDATION METHODS
 // ========================================================================
 
 void LegStepper::validateAndFixControlNodes(Point3D nodes[5]) const {
