@@ -100,10 +100,11 @@ void VelocityLimits::calculateWorkspace(const GaitConfig &gait_config) {
 
     for (int leg = 0; leg < NUM_LEGS; ++leg) {
         auto bounds = pimpl_->workspace_analyzer_->getWorkspaceBounds(leg);
-
-        // Use the most restrictive values across all legs
+        // bounds.max_reach already morphology‑capped (~standing_horizontal_reach * 1.15)
         min_walkspace_radius = std::min(min_walkspace_radius, bounds.max_reach);
-        min_stance_radius = std::min(min_stance_radius, bounds.max_reach * 0.8);
+        // stance radius should remain anchored to hexagon + standing horizontal reach;
+        // here we approximate a per‑leg stance proxy but later we rely on analyzer constraints.
+        min_stance_radius = std::min(min_stance_radius, bounds.preferred_max_reach + pimpl_->model_.getParams().hexagon_radius);
     }
 
     // Apply safety scaling
@@ -241,7 +242,10 @@ void VelocityLimits::calculateOvershoot(const GaitConfig &gait_config) {
     // theoretical distance under constant accel is 0.5 * a * t_ramp^2.
     // We'll compute both and take the minimum (more conservative), then cap to a fraction of walkspace radius.
 
-    auto constraints = pimpl_->workspace_analyzer_->calculateVelocityConstraints(0, 0.0); // forward
+    // Use gait parameters for a forward bearing (0°) to get consistent morphology-aware constraints
+    auto constraints = pimpl_->workspace_analyzer_->calculateVelocityConstraints(0, 0.0,
+                                                                                 gait_config.frequency,
+                                                                                 gait_config.stance_ratio);
     double v_max = constraints.max_linear_velocity;
     double a_max = std::max(1e-6, constraints.max_acceleration); // avoid div by zero
     double t_ramp = std::max(0.0, gait_config.time_to_max_stride);
@@ -423,7 +427,9 @@ VelocityLimits::LimitValues VelocityLimits::calculateLimitsForBearing(
     VelocityConstraints most_restrictive;
 
     for (int leg = 0; leg < NUM_LEGS; ++leg) {
-        auto constraints = pimpl_->workspace_analyzer_->calculateVelocityConstraints(leg, bearing_degrees);
+        auto constraints = pimpl_->workspace_analyzer_->calculateVelocityConstraints(leg, bearing_degrees,
+                                                                                     gait_config.frequency,
+                                                                                     gait_config.stance_ratio);
 
         // Use the most restrictive constraints
         if (leg == 0 || constraints.workspace_radius < min_effective_radius) {
@@ -456,8 +462,9 @@ VelocityLimits::LimitValues VelocityLimits::calculateLimitsForBearing(
     }
 
     // Ensure stance radius never exceeds walkspace (sanity) and is morphologically plausible
-    if (pimpl_->workspace_config_.stance_radius > pimpl_->workspace_config_.walkspace_radius) {
-        pimpl_->workspace_config_.stance_radius = pimpl_->workspace_config_.walkspace_radius;
+    if (pimpl_->workspace_config_.stance_radius > pimpl_->workspace_config_.walkspace_radius * 2.0) {
+        // Guard only against pathological mismatch; allow stance > walkspace (hexagon radius term) normally.
+        pimpl_->workspace_config_.stance_radius = pimpl_->workspace_config_.walkspace_radius * 2.0;
     }
 
     // Final guard: linear limit should not exceed circumference constraint for instantaneous rotation
