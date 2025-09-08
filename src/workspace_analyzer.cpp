@@ -147,18 +147,23 @@ void WorkspaceAnalyzer::generateWorkspace() {
         Point3D base_pos = model_.getLegBasePosition(leg);
         double base_angle = model_.getLegBaseAngleOffset(leg);
 
-        // Identity tip (XY aligned with base + coxa offset + femur horizontal proj). Z identity plane = 0.
+        // Identity tip (XY aligned with base + coxa + horizontal femur projection).
+        // Morphology (AGENTS.md):
+        //   identity_z_global   = default_height_offset (≈ -208, tibia vertical)
+        //   standing_z_global   = -standing_height      (≈ -150)
+        //   required_shift_z    = standing_z_global - identity_z_global = (-standing_height) - (default_height_offset) = +58
+        // Because here identity plane was set to 0, we must encode only the DIFFERENCE, not a raw global Z sum.
         Point3D identity_tip_position(
             base_pos.x + standing_horizontal_reach * std::cos(base_angle),
             base_pos.y + standing_horizontal_reach * std::sin(base_angle),
-            0.0);
+            0.0); // artificial local frame baseline
 
-        // Default tip at physical standing height (height offset + configured standing height)
-        double default_z = model_.getDefaultHeightOffset() + params.standing_height; // physical frame
-        Point3D default_tip_position = identity_tip_position;                        // XY identical in symmetric pose
+        // Default_z_local = standing_z_global - identity_z_global
+        double default_z = (-params.standing_height) - model_.getDefaultHeightOffset();
+        Point3D default_tip_position = identity_tip_position; // XY identical in symmetric pose
         default_tip_position.z = default_z;
 
-        Point3D default_shift = default_tip_position - identity_tip_position; // Usually (0,0,delta_z)
+        Point3D default_shift = default_tip_position - identity_tip_position; // (0,0, +shift)
 
         // Target workplane height is vertical shift relative to identity plane
         double target_workplane_height = default_shift.z; // matches OpenSHC usage of default_shift[2]
@@ -625,9 +630,13 @@ WorkspaceAnalyzer::getWorkspaceBounds(int leg_index) const {
     bounds.preferred_max_reach = standing_horizontal_reach; // ideal operating radial distance
     bounds.preferred_min_reach = bounds.min_reach * 1.1;    // slight buffer above absolute minimum
 
-    // Height bounds: reference_height_offset_ is physical Z of body when all angles = 0° (tibia vertical)
-    // Allow upward motion limited mostly by femur arc and downward by femur+tibia chain.
-    double up_range = params.femur_length * 0.85;                           // upward clearance (body raising)
+    // Height bounds (Option B semantics):
+    //   standing_height = absolute vertical distance body->foot in nominal standing pose => standing plane Z = -standing_height.
+    //   reference_height_offset_ = physical Z at identity (all joint angles 0°, tibia vertical).
+    // We ensure upward allowance covers either heuristic femur arc or required lift so that the standing plane
+    // (if above identity) lies within [min_height, max_height].
+    double heuristic_up_range = params.femur_length * 0.85;                 // historical conservative heuristic
+    double up_range = std::max(heuristic_up_range, params.standing_height); // ensure standing plane inside bounds
     double down_range = (params.femur_length + params.tibia_length) * 0.85; // downward reach (body lowering)
     bounds.min_height = reference_height_offset_ - down_range;              // more negative (down)
     bounds.max_height = reference_height_offset_ + up_range;                // more positive (up)

@@ -66,30 +66,45 @@ int main() {
         std::cout << "✗ ERROR: Offset físico incorrecto" << std::endl;
     }
 
-    // Test 1.2: Verificar workspaces centrados correctamente para todas las patas
-    std::cout << "\n--- Test 1.2: Workspaces centrados para todas las patas ---" << std::endl;
+    // Test 1.2: Validar perfil vertical morfológico (asimetría intencional)
+    // Criterios derivados de AGENTS.md:
+    //  - reference_height_offset_ (= -tibia_length) debe estar dentro de [min_height, max_height]
+    //  - Margen superior >= standing_height (operational up range)
+    //  - Margen inferior >= 0.85*(femur + tibia) (operational down/adaptación terreno)
+    //  - Se acepta y documenta asimetría (down > up)
+    std::cout << "\n--- Test 1.2: Perfil vertical morfológico (asimétrico) ---" << std::endl;
 
-    bool all_workspaces_centered = true;
+    bool morphological_vertical_profile_ok = true;
+    double expected_ref = -params.tibia_length;
+    double required_up = params.standing_height; // 150
+    double required_down = 0.85 * (params.femur_length + params.tibia_length);
+    const double EPS_VERT = 1.0; // tolerancia mm
+
     for (int leg = 0; leg < NUM_LEGS; leg++) {
         WorkspaceBounds bounds = analyzer.getWorkspaceBounds(leg);
-        double actual_center = (bounds.min_height + bounds.max_height) / 2.0;
-        double expected_center = -params.tibia_length;
+        double up_margin = bounds.max_height - expected_ref;
+        double down_margin = expected_ref - bounds.min_height;
+        bool contains_ref = (expected_ref >= bounds.min_height - 1e-6 && expected_ref <= bounds.max_height + 1e-6);
+        bool up_ok = (up_margin + EPS_VERT >= required_up); // permitir ligera subestimación por redondeo
+        bool down_ok = (down_margin + EPS_VERT >= required_down);
+        bool asymmetry_expected = down_margin > up_margin; // informativo
 
-        std::cout << "Pata " << leg << ": Centro = " << std::fixed << std::setprecision(1)
-                  << actual_center << " mm (esperado: " << expected_center << " mm)";
+        bool leg_ok = contains_ref && up_ok && down_ok;
+        if (!leg_ok)
+            morphological_vertical_profile_ok = false;
 
-        if (std::abs(actual_center - expected_center) < 1.0) {
-            std::cout << " ✓" << std::endl;
-        } else {
-            std::cout << " ✗" << std::endl;
-            all_workspaces_centered = false;
-        }
+        std::cout << "Pata " << leg
+                  << ": ref dentro=" << (contains_ref ? "sí" : "no")
+                  << ", up=" << std::fixed << std::setprecision(1) << up_margin << " (≥ " << required_up << ")"
+                  << ", down=" << down_margin << " (≥ " << required_down << ")"
+                  << ", asim=" << (asymmetry_expected ? "sí" : "no")
+                  << (leg_ok ? " ✓" : " ✗") << std::endl;
     }
 
-    if (all_workspaces_centered) {
-        std::cout << "✓ Todos los workspaces están correctamente centrados" << std::endl;
+    if (morphological_vertical_profile_ok) {
+        std::cout << "✓ Perfil vertical morfológico válido (asimetría esperada)" << std::endl;
     } else {
-        std::cout << "✗ ERROR: Algunos workspaces no están centrados correctamente" << std::endl;
+        std::cout << "✗ ERROR: Perfil vertical no cumple criterios morfológicos" << std::endl;
     }
 
     // ========================================================================
@@ -425,7 +440,7 @@ int main() {
 
     if (analyzer_offset_ok && velocity_offset_ok)
         passed_tests++;
-    if (all_workspaces_centered)
+    if (morphological_vertical_profile_ok)
         passed_tests++;
     if (all_legs_reachable)
         passed_tests++;
