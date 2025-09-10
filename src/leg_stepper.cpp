@@ -69,7 +69,6 @@ LegStepper::LegStepper(int leg_index, const Point3D &identity_tip_pose, Leg &leg
     // Initialize velocity and movement vectors
     desired_linear_velocity_ = Point3D(0, 0, 0);
     desired_angular_velocity_ = 0.0;
-    walk_plane_ = Point3D(0, 0, 0);
     walk_plane_normal_ = Point3D(0, 0, 1);
     stride_vector_ = Point3D(0, 0, 0);
     current_tip_velocity_ = Point3D(0, 0, 0);
@@ -141,12 +140,11 @@ void LegStepper::setDesiredVelocity(const Point3D &linear_velocity, double angul
 #endif
 }
 
+// OpenSHC-based implementation with philosophical alignment adjustments:
+// Here we compute stride each call but freeze (cache) its value at phase start; downstream code uses the
+// frozen copy, preventing migration of the swing target. This mirrors OpenSHC intent where stride parameters
+// remain effectively constant during a phase.
 void LegStepper::updateStride() {
-    // OpenSHC-based implementation with philosophical alignment adjustments:
-    // Previous HexaMotion recalculated stride every iteration using current_tip_pose_, causing intra-phase drift.
-    // Here we compute stride each call but freeze (cache) its value at phase start; downstream code uses the
-    // frozen copy, preventing migration of the swing target. This mirrors OpenSHC intent where stride parameters
-    // remain effectively constant during a phase.
 
     // In OpenSHC this comes from walker_->getWalkPlane()/getWalkPlaneNormal().
     // We decouple by allowing WalkController (or another higher layer) to call
@@ -155,10 +153,7 @@ void LegStepper::updateStride() {
     auto normal_mag = std::sqrt(walk_plane_normal_.x * walk_plane_normal_.x +
                                 walk_plane_normal_.y * walk_plane_normal_.y +
                                 walk_plane_normal_.z * walk_plane_normal_.z);
-    if (normal_mag < 1e-6) {
-        walk_plane_normal_ = Point3D(0, 0, 1); // fallback normal
-        walk_plane_ = Point3D(identity_tip_pose_.x, identity_tip_pose_.y, identity_tip_pose_.z);
-    }
+
     // Normalize plane normal (protect against extreme values)
     if (normal_mag > 1e-6) {
         walk_plane_normal_ = walk_plane_normal_ / normal_mag;

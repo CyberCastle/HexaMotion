@@ -341,6 +341,9 @@ void WalkController::init(const Eigen::Vector3d &current_body_position, const Ei
         } // OpenSHC pattern: Initialize current tip pose to default stance position
         // This ensures LegStepper starts with proper stance coordinates
         leg_stepper->setCurrentTipPose(leg_stepper->getDefaultTipPose());
+
+        // Initialize walk plane and normal so swing clearance is oriented correctly from the start
+        leg_stepper->setWalkPlaneNormal(getWalkPlaneNormal());
     }
 
     // Init velocity input variables
@@ -517,6 +520,10 @@ void WalkController::updateWalk(const Point3D &linear_velocity_input, double ang
 
         // Set velocity once per leg
         leg_stepper->setDesiredVelocity(desired_linear_velocity_, desired_angular_velocity_);
+
+        // Propagate walk plane and its normal from the controller (BodyPoseController) to each LegStepper.
+        // This aligns swing clearance and touchdown direction with the estimated walking surface.
+        leg_stepper->setWalkPlaneNormal(getWalkPlaneNormal());
 
         if (is_active_walking && step_cycle_calculated) {
             // Advance per-leg phase by 1 (keeping global coordination for gait duration)
