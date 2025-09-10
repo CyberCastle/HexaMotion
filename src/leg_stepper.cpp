@@ -169,10 +169,7 @@ void LegStepper::updateStride() {
 
     // Angular stride vector (OpenSHC formula)
     Point3D z_unit(0, 0, 1);
-    double dot_product = current_tip_pose_.x * z_unit.x + current_tip_pose_.y * z_unit.y + current_tip_pose_.z * z_unit.z;
-    Point3D projection_on_z = z_unit * dot_product;
-    // Difference vs prior implementation: use default_tip_pose_ for stable angular radius (reduces drift)
-    Point3D radius = default_tip_pose_ - projection_on_z; // reference rejection (philosophically constant like OpenSHC)
+    Point3D radius = math_utils::rejectVector(current_tip_pose_, z_unit); // current rejection (more responsive, less stable)
 
     Point3D angular_velocity_vector(0, 0, desired_angular_velocity_);
 
@@ -189,7 +186,7 @@ void LegStepper::updateStride() {
     stride_vector_ = stride_vector_ * (on_ground_ratio / step_cycle_.frequency_);
 
     // Apply stride validation and safety constraints
-    stride_vector_ = calculateSafeStride(stride_vector_);
+    // stride_vector_ = calculateSafeStride(stride_vector_);
 
     // Freeze stride if not yet frozen for current phase
     if (!stride_frozen_) {
