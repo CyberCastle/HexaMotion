@@ -292,6 +292,12 @@ Point3D projectVector(const Point3D &vector, const Point3D &onto) {
     return Point3D(onto.x * scale, onto.y * scale, onto.z * scale);
 }
 
+Point3D rejectVector(const Point3D &vector, const Point3D &onto) {
+    // r = a - proj_b(a)
+    Point3D proj = projectVector(vector, onto);
+    return Point3D(vector.x - proj.x, vector.y - proj.y, vector.z - proj.z);
+}
+
 bool solveLeastSquaresPlane(const double *raw_A, const double *raw_B, int num_points, double &a, double &b, double &c) {
 
     // Build normal equations: A^T * A * x = A^T * b
