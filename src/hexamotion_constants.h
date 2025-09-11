@@ -164,6 +164,13 @@
 // HexaMotion uses millimeters
 #define TIP_TOLERANCE 5.0 // mm
 
+// ========================================================================
+// WORKSPACE / STABILITY DEFAULTS (moved from WorkspaceAnalyzer private statics)
+// ========================================================================
+
+#define DEFAULT_STABILITY_THRESHOLD 10.0 // Default stability margin threshold (mm)
+#define DEFAULT_MIN_LEG_SEPARATION 50.0  // Default minimum planar leg tip separation (mm)
+
 // Admittance safety limit (maximum absolute compliance delta per axis in mm)
 #define ADMITTANCE_MAX_ABS_DELTA_MM 50.0
 

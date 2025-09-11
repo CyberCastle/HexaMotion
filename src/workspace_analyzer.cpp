@@ -533,7 +533,13 @@ WorkspaceAnalyzer::WalkspaceResult WorkspaceAnalyzer::analyzeWalkspace(const Poi
 
     // Calculate stability margin
     result.stability_margin = calculateStabilityMargin(leg_positions);
-    result.is_stable = result.stability_margin > STABILITY_THRESHOLD;
+    {
+        const auto &wt = model_.getParams().workspace_tuning;
+        double stability_threshold = (wt.stability_threshold_mm > 0.0)
+                                         ? wt.stability_threshold_mm
+                                         : DEFAULT_STABILITY_THRESHOLD;
+        result.is_stable = result.stability_margin > stability_threshold;
+    }
 
     // Calculate support polygon
     calculateSupportPolygon(leg_positions, result.support_polygon);
@@ -620,7 +626,9 @@ WorkspaceAnalyzer::getWorkspaceBounds(int leg_index) const {
     //  - Safety margin factor is applied but then clamped by a morphology cap (15% over standing reach) so that
     //    downstream velocity planners using bounds.max_reach do not inflate stride/velocity limits.
     double physical_candidate = flat_extension_reach * validation_config_.safety_margin_factor;
-    double morphology_cap = standing_horizontal_reach * 1.15; // 15% headroom beyond nominal standing reach
+    const auto &wt = params.workspace_tuning; // direct access (accessors removed for MCU efficiency)
+    double morphology_cap_factor = (wt.morphology_cap_factor > 0.1) ? wt.morphology_cap_factor : 1.15;
+    double morphology_cap = standing_horizontal_reach * morphology_cap_factor; // configurable headroom
     bounds.max_reach = std::max(standing_horizontal_reach, std::min(physical_candidate, morphology_cap));
 
     // Minimum useful reach: fraction of coxa length (keeps IK well-conditioned near base)
@@ -628,18 +636,24 @@ WorkspaceAnalyzer::getWorkspaceBounds(int leg_index) const {
 
     // Preferred band: anchored on morphology (standing pose) rather than extreme extension
     bounds.preferred_max_reach = standing_horizontal_reach; // ideal operating radial distance
-    bounds.preferred_min_reach = bounds.min_reach * 1.1;    // slight buffer above absolute minimum
+    double preferred_min_reach_buffer = (wt.preferred_min_reach_buffer_factor >= 1.0 &&
+                                         wt.preferred_min_reach_buffer_factor <= 1.5)
+                                            ? wt.preferred_min_reach_buffer_factor
+                                            : 1.1;
+    bounds.preferred_min_reach = bounds.min_reach * preferred_min_reach_buffer; // configurable buffer
 
     // Height bounds (Option B semantics):
     //   standing_height = absolute vertical distance body->foot in nominal standing pose => standing plane Z = -standing_height.
     //   reference_height_offset_ = physical Z at identity (all joint angles 0°, tibia vertical).
     // We ensure upward allowance covers either heuristic femur arc or required lift so that the standing plane
     // (if above identity) lies within [min_height, max_height].
-    double heuristic_up_range = params.femur_length * 0.85;                 // historical conservative heuristic
-    double up_range = std::max(heuristic_up_range, params.standing_height); // ensure standing plane inside bounds
-    double down_range = (params.femur_length + params.tibia_length) * 0.85; // downward reach (body lowering)
-    bounds.min_height = reference_height_offset_ - down_range;              // more negative (down)
-    bounds.max_height = reference_height_offset_ + up_range;                // more positive (up)
+    double femur_up_range_factor = (wt.femur_up_range_factor > 0.0) ? wt.femur_up_range_factor : 0.85;
+    double heuristic_up_range = params.femur_length * femur_up_range_factor; // historical conservative heuristic (configurable)
+    double up_range = std::max(heuristic_up_range, params.standing_height);  // ensure standing plane inside bounds
+    double down_range_factor = (wt.down_range_factor > 0.0) ? wt.down_range_factor : 0.85;
+    double down_range = (params.femur_length + params.tibia_length) * down_range_factor; // downward reach (body lowering)
+    bounds.min_height = reference_height_offset_ - down_range;                           // more negative (down)
+    bounds.max_height = reference_height_offset_ + up_range;                             // more positive (up)
 
     bounds.has_height_restrictions = true;
     bounds.center_position = leg_base;
@@ -732,21 +746,25 @@ WorkspaceAnalyzer::calculateVelocityConstraints(int leg_index, double bearing_de
 
 ScalingFactors WorkspaceAnalyzer::getScalingFactors() const {
     ScalingFactors factors;
+    // Retrieve centralized tunable scaling parameters from robot configuration.
+    // This replaces previously hardcoded constants so external configuration can adjust motion behavior.
+    const Parameters &params = model_.getParams();
+    const auto &cfg = params.scaling; // Parameters::ScalingFactors
 
-    // These scaling factors replace the scattered constants across the codebase:
-    // - WORKSPACE_SCALING_FACTOR (0.8f) -> workspace_scale (0.65f) - more conservative
-    // - WALKSPACE_SCALING_FACTOR (0.65f) -> workspace_scale (0.65f) - consistent
-    // - DEFAULT_ANGULAR_SCALING (1.0f) -> angular_scale (1.0f) - maintained
-    // - Various safety margins -> unified safety_margin (0.9f)
+    // Direct copies (keep legacy defaults if user has not changed them in Parameters)
+    factors.linear_scale = cfg.linear_scale;
+    factors.angular_scale = cfg.angular_scale;
+    factors.workspace_scale = cfg.workspace_scale;
+    factors.velocity_scale = cfg.velocity_scale;
+    factors.acceleration_scale = cfg.acceleration_scale;
+    factors.safety_margin = cfg.safety_margin;
 
-    factors.workspace_scale = 0.65f;                                   // Conservative workspace scaling
-    factors.linear_scale = 0.65f;                                      // Consistent with existing walkspace analysis
-    factors.velocity_scale = 0.9f;                                     // 10% safety margin for velocity calculations
-    factors.angular_scale = 1.0f;                                      // No scaling for angular velocities by default
-    factors.acceleration_scale = 1.0f;                                 // No scaling for acceleration by default
-    factors.collision_scale = validation_config_.safety_margin_factor; // Use configured safety margin
+    // collision_scale: fallback to validation_config_.safety_margin_factor when unset / non-positive
+    factors.collision_scale = (cfg.collision_scale > 0.0)
+                                  ? cfg.collision_scale
+                                  : validation_config_.safety_margin_factor;
 
-    return factors;
+    return factors; // Unified scaling factors now parameter-driven
 }
 
 void WorkspaceAnalyzer::updateSafetyMargin(double margin) {
@@ -946,13 +964,15 @@ bool WorkspaceAnalyzer::wouldCollideWithAdjacent(int leg_index, const Point3D &t
 
     // Check collision with left adjacent leg
     double distance_to_left = getDistance2D(target_position, adjacent_positions[left_adjacent]);
-    if (distance_to_left < MIN_LEG_SEPARATION) {
+    const auto &wt = model_.getParams().workspace_tuning;
+    double min_leg_sep = (wt.min_leg_separation_mm > 0.0) ? wt.min_leg_separation_mm : DEFAULT_MIN_LEG_SEPARATION;
+    if (distance_to_left < min_leg_sep) {
         return true;
     }
 
     // Check collision with right adjacent leg
     double distance_to_right = getDistance2D(target_position, adjacent_positions[right_adjacent]);
-    if (distance_to_right < MIN_LEG_SEPARATION) {
+    if (distance_to_right < min_leg_sep) {
         return true;
     }
 
@@ -978,7 +998,19 @@ bool WorkspaceAnalyzer::adjustForCollisionAvoidance(int leg_index, Point3D &targ
 
     if (distance > 0.001f) {
         // Start with 90% scale and iteratively reduce if still colliding
-        for (double scale = 0.9f; scale >= 0.5f; scale -= 0.1f) {
+        const auto &wt = model_.getParams().workspace_tuning;
+        double start_scale = (wt.collision_adjust_start_scale > 0.0 && wt.collision_adjust_start_scale <= 1.5)
+                                 ? wt.collision_adjust_start_scale
+                                 : 0.9;
+        double min_scale = (wt.collision_adjust_min_scale > 0.0 && wt.collision_adjust_min_scale < 1.0)
+                               ? wt.collision_adjust_min_scale
+                               : 0.5;
+        double step = (wt.collision_adjust_step > 0.0 && wt.collision_adjust_step < 0.5)
+                          ? wt.collision_adjust_step
+                          : 0.1;
+        double safe_scale_ratio = (wt.safe_scale_ratio > 0.0 && wt.safe_scale_ratio <= 1.0) ? wt.safe_scale_ratio : 0.7;
+
+        for (double scale = start_scale; scale >= min_scale; scale -= step) {
             Point3D test_position;
             test_position.x = base_x + dx * scale;
             test_position.y = base_y + dy * scale;
@@ -991,7 +1023,9 @@ bool WorkspaceAnalyzer::adjustForCollisionAvoidance(int leg_index, Point3D &targ
         }
 
         // If we couldn't find a good scale, use minimum safe distance
-        double safe_scale = math_utils::clamp<double>((leg_reach * 0.7) / distance, 0.5, std::numeric_limits<double>::infinity());
+        double safe_scale = math_utils::clamp<double>((leg_reach * safe_scale_ratio) / distance,
+                                                      min_scale,
+                                                      std::numeric_limits<double>::infinity());
         target_position.x = base_x + dx * safe_scale;
         target_position.y = base_y + dy * safe_scale;
         return true;
@@ -1094,7 +1128,11 @@ void WorkspaceAnalyzer::calculateLegWorkspaceBounds(int leg_index) {
 
     // Apply physical height offset: when angles are 0°, the robot is at z = getDefaultHeightOffset()
     // Workspace heights are centered on this reference position
-    double reach_range = total_reach * 0.7; // Use a more realistic range of 70% of total reach
+    const auto &wt = params.workspace_tuning;
+    double span_factor = wt.leg_workspace_height_span_factor;
+    if (span_factor <= 0.05 || span_factor > 1.0)
+        span_factor = 0.7;                          // fallback
+    double reach_range = total_reach * span_factor; // Configurable percentage of total reach
     bounds.min_height = reference_height_offset_ - reach_range;
     bounds.max_height = reference_height_offset_ + reach_range;
 }

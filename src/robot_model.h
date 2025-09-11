@@ -180,6 +180,53 @@ struct Parameters {
         double accel_deadband = 0.05;       //< Minimum non-zero normalized acceleration after scaling
         double tibia_speed_cap = 0.85;      //< Optional ceiling for tibia speed after scaling
     } startup_norm;
+
+    /**
+     * @brief Global motion and workspace scaling factors (moved from hardcoded implementation in WorkspaceAnalyzer::getScalingFactors()).
+     *
+     * These values previously lived as literal constants (e.g. 0.65, 0.9, 1.0) inside the analyzer. Exposing them here
+     * allows runtime / configuration level tuning (same style as StartupNormalizationConfig) without touching core code.
+     *
+     * Usage notes:
+     *  - collision_scale: when <= 0.0 the validation_config_.safety_margin_factor is used dynamically.
+     *  - safety_margin: generic multiplier applied by controllers (e.g. servo speed clamping) for unified conservative tuning.
+     *  - Keep values in a sane physical range (0.4 – 1.2) to avoid destabilizing stride / velocity estimations.
+     */
+    struct ScalingFactors {
+        double linear_scale = 0.65;      //< Legacy linear scaling (replaces scattered WORKSPACE / WALKSPACE constants)
+        double angular_scale = 1.0;      //< Angular scaling (kept at 1.0 unless deliberate reduction required)
+        double workspace_scale = 0.65;   //< Conservative workspace envelope scaling
+        double collision_scale = 0.0;    //< If <= 0 => derive from ValidationConfig::safety_margin_factor
+        double velocity_scale = 0.9;     //< 10% safety margin for derived velocity limits
+        double acceleration_scale = 1.0; //< Acceleration scaling (placeholder for future tuning)
+        double safety_margin = 0.9;      //< Unified safety margin for servo speed / other conservative clamps
+    } scaling;                           //< Instance accessible as params.scaling
+
+    /**
+     * @brief Workspace & morphology heuristic tuning factors.
+     * All former hardcoded literals in WorkspaceAnalyzer moved here for external configurability.
+     * Keep factors within physically meaningful ranges to avoid destabilizing gait generation.
+     */
+    struct WorkspaceTuning {
+        // Stability & collision
+        double stability_threshold_mm = 10.0; //< Min stability margin to be considered stable
+        double min_leg_separation_mm = 50.0;  //< Minimum planar distance between adjacent leg tips
+
+        // Morphology reach heuristics
+        double morphology_cap_factor = 1.15;           //< Headroom over standing_horizontal_reach for max_reach cap
+        double femur_up_range_factor = 0.85;           //< Upward (positive Z) reachable fraction of femur length
+        double down_range_factor = 0.85;               //< Downward (negative Z) fraction of (femur+tibia)
+        double leg_workspace_height_span_factor = 0.7; //< Percentage of total reach for +/- height span in cached workspace
+
+        // Preferred reach buffer
+        double preferred_min_reach_buffer_factor = 1.1; //< Multiplier over absolute min reach for preferred_min_reach
+
+        // Collision avoidance iterative scaling (adjustForCollisionAvoidance)
+        double collision_adjust_start_scale = 0.9; //< Initial radial scale attempt
+        double collision_adjust_min_scale = 0.5;   //< Minimum radial scale attempt
+        double collision_adjust_step = 0.1;        //< Decrement step per attempt
+        double safe_scale_ratio = 0.7;             //< Fallback ratio of leg_reach when iterative scaling fails
+    } workspace_tuning;                            //< params.workspace_tuning
 };
 
 // Centralized servo angle solution for standing height (previously in body_pose_config_factory)
