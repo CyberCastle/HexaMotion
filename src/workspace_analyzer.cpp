@@ -877,7 +877,16 @@ Point3D WorkspaceAnalyzer::constrainToGeometricWorkspace(int leg_index, const Po
     Point3D constrained = target;
     constrained.x = leg_base.x + (target.x - leg_base.x) * scale;
     constrained.y = leg_base.y + (target.y - leg_base.y) * scale;
-    constrained.z = leg_base.z + (target.z - leg_base.z) * scale;
+
+    // Preserve Z near the standing/walking plane to avoid artificial vertical drift.
+    // If the target Z is already close to the default walking plane, keep it unchanged.
+    const double standing_plane_z = model_.getLegDefaultPosition(leg_index).z;
+    const double z_tol = model_.getParams().walk_plane_z_tolerance_mm; // runtime-configurable tolerance
+    if (std::abs(target.z - standing_plane_z) <= z_tol) {
+        constrained.z = target.z; // keep exact plane height
+    } else {
+        constrained.z = leg_base.z + (target.z - leg_base.z) * scale;
+    }
 
     return constrained;
 }

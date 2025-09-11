@@ -156,6 +156,10 @@
 #define POSITION_TOLERANCE 1.0 // Position tolerance (mm)
 #define VELOCITY_THRESHOLD 1.0 // Minimum velocity to consider as moving (mm/s)
 
+// Z-plane tolerance near the walking/standing plane to preserve exact height
+// when applying geometric constraints (prevents artificial Z drift at touchdown)
+#define WALK_PLANE_Z_TOLERANCE_MM 0.75
+
 // Tip position tolerance for determining if a leg tip is at target
 // HexaMotion uses millimeters
 #define TIP_TOLERANCE 5.0 // mm

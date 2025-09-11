@@ -167,6 +167,11 @@ struct Parameters {
     double femur_mass = 0.0; //< Femur mass (0 => use lengths only)
     double tibia_mass = 0.0; //< Tibia mass (0 => use lengths only)
 
+    // --- Constraint tolerances ---
+    // Tolerancia para preservar la altura exacta del plano de marcha al aplicar
+    // el constriñimiento geométrico (evita deriva vertical artificial en touchdown)
+    double walk_plane_z_tolerance_mm = WALK_PLANE_Z_TOLERANCE_MM;
+
     // --- Startup (initial standing) normalization configuration ---
     struct StartupNormalizationConfig {
         bool enable_torque_balanced = true; //< Enable torque/energy balanced scaling in LIFT phase

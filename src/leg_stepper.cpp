@@ -319,6 +319,10 @@ void LegStepper::generateSecondarySwingControlNodes(bool ground_contact) {
     // Set for position continuity at transition between secondary swing and stance curves (C0 Smoothness)
     swing_2_nodes_[4] = target_tip_pose_;
 
+    // Ensure touchdown occurs exactly on the walking plane (standing height)
+    // This eliminates tiny numerical drift in Z accumulated during swing integration
+    swing_2_nodes_[4].z = default_tip_pose_.z;
+
     // Stops further movement of tip position in direction normal to walk plane
     if (ground_contact) {
         swing_2_nodes_[0] = current_tip_pose_ + stance_node_seperation * 0.0;
@@ -579,6 +583,11 @@ void LegStepper::updateTipPositionIterative(int iteration, double time_delta, bo
                     stance_origin_tip_position_ = current_tip_pose_;
                 }
             }
+            // Regardless of drift mode, lock the stance plane Z to standing height when not adapting terrain
+            if (!rough_terrain_mode || force_normal_touchdown) {
+                current_tip_pose_.z = default_tip_pose_.z;
+                stance_origin_tip_position_.z = default_tip_pose_.z;
+            }
         }
 
         // Initialize tangential stance mode state at first stance iteration
@@ -592,6 +601,10 @@ void LegStepper::updateTipPositionIterative(int iteration, double time_delta, bo
         double time_input = stance_iteration * stance_delta_t_;
         Point3D delta_pos = math_utils::quarticBezierDot(stance_nodes_, time_input) * stance_delta_t_;
         current_tip_pose_ += delta_pos;
+        // Keep stance motion constrained to the walking plane when not in rough terrain mode
+        if (!rough_terrain_mode || force_normal_touchdown) {
+            current_tip_pose_.z = default_tip_pose_.z;
+        }
         current_tip_velocity_ = delta_pos / time_delta;
     }
 
@@ -606,6 +619,10 @@ void LegStepper::updateTipPositionIterative(int iteration, double time_delta, bo
                 current_tip_pose_ = frozen_target_tip_pose_;
             } else {
                 current_tip_pose_ = current_tip_pose_ + err * params.phase_end_snap_alpha;
+            }
+            // Guarantee exact touchdown height on walking plane at swing end
+            if (step_state_ == STEP_SWING && (!rough_terrain_mode || force_normal_touchdown)) {
+                current_tip_pose_.z = default_tip_pose_.z;
             }
         }
     }
