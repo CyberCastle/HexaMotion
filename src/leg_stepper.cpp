@@ -501,17 +501,6 @@ void LegStepper::updateTipPositionIterative(int iteration, double time_delta, bo
         // Calculate velocity for this iteration (OpenSHC pattern)
         current_tip_velocity_ = delta_pos / time_delta;
 
-        // Improvement 2: Early swing termination when contact detected in second half of swing
-        if (!first_half && params_.use_fsr_contact && ground_contact) {
-            // Transition immediately to stance on next update
-            step_state_ = STEP_STANCE;
-            // Reset swing-related flags so a fresh stance origin is established
-            swing_initialized_ = false;
-            nodes_generated_ = false; // force regeneration when next swing starts
-            // Force stance iteration start by resetting current_iteration_ to swing_iterations_
-            current_iteration_ = swing_iterations_; // so next call maps to stance_iteration==1
-        }
-
     } else if (step_state_ == STEP_STANCE) {
 
         // Stance iteration mapping: we convert the running iteration counter into a 1-based local index
@@ -584,7 +573,7 @@ void LegStepper::updateTipPositionIterative(int iteration, double time_delta, bo
                 }
             }
             // Regardless of drift mode, lock the stance plane Z to standing height when not adapting terrain
-            if (!rough_terrain_mode || force_normal_touchdown) {
+            if ((!rough_terrain_mode || force_normal_touchdown) && !params.use_fsr_contact) {
                 current_tip_pose_.z = default_tip_pose_.z;
                 stance_origin_tip_position_.z = default_tip_pose_.z;
             }
@@ -602,7 +591,7 @@ void LegStepper::updateTipPositionIterative(int iteration, double time_delta, bo
         Point3D delta_pos = math_utils::quarticBezierDot(stance_nodes_, time_input) * stance_delta_t_;
         current_tip_pose_ += delta_pos;
         // Keep stance motion constrained to the walking plane when not in rough terrain mode
-        if (!rough_terrain_mode || force_normal_touchdown) {
+        if ((!rough_terrain_mode || force_normal_touchdown) && !params.use_fsr_contact) {
             current_tip_pose_.z = default_tip_pose_.z;
         }
         current_tip_velocity_ = delta_pos / time_delta;
@@ -620,8 +609,8 @@ void LegStepper::updateTipPositionIterative(int iteration, double time_delta, bo
             } else {
                 current_tip_pose_ = current_tip_pose_ + err * params.phase_end_snap_alpha;
             }
-            // Guarantee exact touchdown height on walking plane at swing end
-            if (step_state_ == STEP_SWING && (!rough_terrain_mode || force_normal_touchdown)) {
+            // Guarantee exact touchdown height on walking plane at swing end (only if FSR is not in use)
+            if (step_state_ == STEP_SWING && (!rough_terrain_mode || force_normal_touchdown) && !params.use_fsr_contact) {
                 current_tip_pose_.z = default_tip_pose_.z;
             }
         }
