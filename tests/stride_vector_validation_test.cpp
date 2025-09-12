@@ -90,7 +90,6 @@ static bool validateAllLegs(const StrideTestCase &tc, RobotModel &model, const P
         stepper.setStepCycle(cycle);
 
         stepper.setDesiredVelocity(tc.linear_velocity, tc.angular_velocity);
-        stepper.setWalkPlane(analytic_identity);
         stepper.setWalkPlaneNormal(Point3D(0, 0, 1));
         stepper.updateStride();
         // Ya no existen getters de instrumentación de capas (raw/arc_pre/post).
@@ -332,7 +331,6 @@ static bool validateFrameCenterAssumption(const StrideTestCase &baseTc, RobotMod
         cycle.swing_end_ = cycle.period_;
         stepperUn.setStepCycle(cycle);
         stepperUn.setDesiredVelocity(baseTc.linear_velocity, baseTc.angular_velocity);
-        stepperUn.setWalkPlane(identity_unshifted);
         stepperUn.setWalkPlaneNormal(Point3D(0, 0, 1));
         stepperUn.updateStride();
         Point3D strideUn = stepperUn.getStrideVector();
@@ -341,7 +339,6 @@ static bool validateFrameCenterAssumption(const StrideTestCase &baseTc, RobotMod
         LegStepper stepperSh(i, identity_shifted, *legs[i], model);
         stepperSh.setStepCycle(cycle);
         stepperSh.setDesiredVelocity(baseTc.linear_velocity, baseTc.angular_velocity);
-        stepperSh.setWalkPlane(identity_shifted);
         stepperSh.setWalkPlaneNormal(Point3D(0, 0, 1));
         stepperSh.updateStride();
         Point3D strideSh = stepperSh.getStrideVector();
@@ -470,7 +467,6 @@ int main() {
 
         // Establecer velocidades deseadas y plano de marcha
         stepper.setDesiredVelocity(tc.linear_velocity, tc.angular_velocity);
-        stepper.setWalkPlane(Point3D(tc.identity_tip.x, tc.identity_tip.y, tc.identity_tip.z));
         stepper.setWalkPlaneNormal(Point3D(0, 0, 1));
 
         // updateStride calcula y potencialmente congela stride; llamamos una vez.
