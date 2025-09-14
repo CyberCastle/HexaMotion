@@ -22,7 +22,7 @@ class VelocityLimits::Impl {
     LimitMap limit_map_;
     std::array<double, 360> angular_accel_map_{}; // Separate angular acceleration per bearing
     WorkspaceConfig workspace_config_;
-    GaitConfig current_gait_config_;
+    GaitConfiguration current_gait_config_;
     double angular_velocity_scaling_;
 
     explicit Impl(const RobotModel &model)
@@ -40,7 +40,7 @@ class VelocityLimits::Impl {
         workspace_config_.reference_height = model.getDefaultHeightOffset();
 
         // Initialize with default gait configuration
-        current_gait_config_ = GaitConfig();
+        current_gait_config_ = GaitConfiguration();
     }
 };
 
@@ -52,7 +52,7 @@ VelocityLimits::VelocityLimits(const RobotModel &model)
 
 VelocityLimits::~VelocityLimits() = default;
 
-void VelocityLimits::generateLimits(const GaitConfig &gait_config) {
+void VelocityLimits::generateLimits(const GaitConfiguration &gait_config) {
     pimpl_->current_gait_config_ = gait_config;
 
     // Use WorkspaceValidator instead of custom workspace calculation
@@ -76,22 +76,7 @@ VelocityLimits::LimitValues VelocityLimits::getLimit(double bearing_degrees) con
     return interpolateLimits(normalized_bearing);
 }
 
-// Unified configuration interface overloads
-void VelocityLimits::generateLimits(const GaitConfiguration &gait_config) {
-    // Convert unified configuration to internal format
-    GaitConfig internal_config;
-    internal_config.frequency = gait_config.getStepFrequency();
-    internal_config.stance_ratio = gait_config.getStanceRatio();
-    internal_config.swing_ratio = gait_config.getSwingRatio();
-    internal_config.time_to_max_stride = gait_config.time_to_max_stride;
-    internal_config.step_length = gait_config.step_length;
-    internal_config.max_velocity = gait_config.max_velocity;
-
-    // Use existing implementation
-    generateLimits(internal_config);
-}
-
-void VelocityLimits::calculateWorkspace(const GaitConfig &gait_config) {
+void VelocityLimits::calculateWorkspace(const GaitConfiguration &gait_config) {
     // Replace complex workspace calculation with WorkspaceValidator
 
     // Get workspace bounds for all legs
@@ -122,18 +107,6 @@ void VelocityLimits::calculateWorkspace(const GaitConfig &gait_config) {
         std::max(pimpl_->workspace_config_.walkspace_radius, 0.05);
     pimpl_->workspace_config_.stance_radius =
         std::max(pimpl_->workspace_config_.stance_radius, 0.03);
-}
-
-void VelocityLimits::calculateWorkspace(const GaitConfiguration &gait_config) {
-    // Convert unified configuration to internal format
-    GaitConfig internal_config;
-    internal_config.frequency = gait_config.getStepFrequency();
-    internal_config.stance_ratio = gait_config.getStanceRatio();
-    internal_config.swing_ratio = gait_config.getSwingRatio();
-    internal_config.time_to_max_stride = gait_config.time_to_max_stride;
-
-    // Use existing implementation
-    calculateWorkspace(internal_config);
 }
 
 VelocityLimits::LimitValues VelocityLimits::scaleVelocityLimits(
@@ -235,7 +208,7 @@ VelocityLimits::LimitValues VelocityLimits::applyAccelerationLimits(
     return limited_velocities;
 }
 
-void VelocityLimits::calculateOvershoot(const GaitConfig &gait_config) {
+void VelocityLimits::calculateOvershoot(const GaitConfiguration &gait_config) {
 
     // Physical basis: if accelerating from rest to v_max with constant a_max, distance = 0.5 * (v_max^2 / a_max)
     // Additionally, if ramp time (t_ramp = time_to_max_stride) is specified,
@@ -244,8 +217,8 @@ void VelocityLimits::calculateOvershoot(const GaitConfig &gait_config) {
 
     // Use gait parameters for a forward bearing (0°) to get consistent morphology-aware constraints
     auto constraints = pimpl_->workspace_analyzer_->calculateVelocityConstraints(0, 0.0,
-                                                                                 gait_config.frequency,
-                                                                                 gait_config.stance_ratio);
+                                                                                 gait_config.getStepFrequency(),
+                                                                                 gait_config.getStanceRatio());
     double v_max = constraints.max_linear_velocity;
     double a_max = std::max(1e-6, constraints.max_acceleration); // avoid div by zero
     double t_ramp = std::max(0.0, gait_config.time_to_max_stride);
@@ -271,20 +244,8 @@ void VelocityLimits::calculateOvershoot(const GaitConfig &gait_config) {
     pimpl_->workspace_config_.scaled_walkspace_radius = pimpl_->workspace_config_.walkspace_radius;
 }
 
-void VelocityLimits::updateGaitParameters(const GaitConfig &gait_config) {
-    generateLimits(gait_config);
-}
-
 void VelocityLimits::updateGaitParameters(const GaitConfiguration &gait_config) {
-    // Convert unified configuration to internal format
-    GaitConfig internal_config;
-    internal_config.frequency = gait_config.getStepFrequency();
-    internal_config.stance_ratio = gait_config.getStanceRatio();
-    internal_config.swing_ratio = gait_config.getSwingRatio();
-    internal_config.time_to_max_stride = gait_config.time_to_max_stride;
-
-    // Use existing implementation
-    generateLimits(internal_config);
+    generateLimits(gait_config);
 }
 
 const VelocityLimits::WorkspaceConfig &VelocityLimits::getWorkspaceConfig() const {
@@ -348,8 +309,8 @@ double VelocityLimits::calculateBearing(double vx, double vy) {
     return normalizeBearing(bearing_deg);
 }
 
-double VelocityLimits::calculateMaxLinearSpeed(double walkspace_radius, const GaitConfig &gait_config) const {
-    // Updated stride-based formula (v2):
+double VelocityLimits::calculateMaxLinearSpeed(double walkspace_radius, const GaitConfiguration &gait_config) const {
+    // Updated stride-based formula:
     //  1. Use gait_config.step_length directly. This value is already derived from the
     //     standing horizontal reach via GAIT_*_LENGTH_FACTOR in gait_config_factory.cpp.
     //  2. Deduct overshoot (2 * avg_overshoot) to ensure the executed stride comfortably fits
@@ -360,14 +321,14 @@ double VelocityLimits::calculateMaxLinearSpeed(double walkspace_radius, const Ga
     //     hard engineering ceiling to prevent runaway values in misconfiguration.
     //  6. Guard: if frequency <= 0 or step_length <= 0 return 0.
     (void)walkspace_radius; // Retained in signature for future adaptive scaling (currently unused directly).
-    if (gait_config.frequency <= 0.0 || gait_config.step_length <= 0.0)
+    if (gait_config.getStepFrequency() <= 0.0 || gait_config.step_length <= 0.0)
         return 0.0;
 
     double stride_length = gait_config.step_length;
     // Overshoot deduction (2x average overshoot) maintains conservative effective stride.
     double avg_overshoot = (pimpl_->workspace_config_.overshoot_x + pimpl_->workspace_config_.overshoot_y) * 0.5;
     stride_length = std::max(0.0, stride_length - 2.0 * avg_overshoot);
-    double max_speed = stride_length * gait_config.frequency;
+    double max_speed = stride_length * gait_config.getStepFrequency();
     auto scaling_factors = pimpl_->workspace_analyzer_->getScalingFactors();
     max_speed *= scaling_factors.velocity_scale;
 
@@ -418,7 +379,7 @@ double VelocityLimits::calculateMaxAcceleration(double max_speed, double time_to
 }
 
 VelocityLimits::LimitValues VelocityLimits::calculateLimitsForBearing(
-    double bearing_degrees, const GaitConfig &gait_config) const {
+    double bearing_degrees, const GaitConfiguration &gait_config) const {
 
     // Use WorkspaceValidator instead of complex leg analysis
 
@@ -428,8 +389,8 @@ VelocityLimits::LimitValues VelocityLimits::calculateLimitsForBearing(
 
     for (int leg = 0; leg < NUM_LEGS; ++leg) {
         auto constraints = pimpl_->workspace_analyzer_->calculateVelocityConstraints(leg, bearing_degrees,
-                                                                                     gait_config.frequency,
-                                                                                     gait_config.stance_ratio);
+                                                                                     gait_config.getStepFrequency(),
+                                                                                     gait_config.getStanceRatio());
 
         // Use the most restrictive constraints
         if (leg == 0 || constraints.workspace_radius < min_effective_radius) {

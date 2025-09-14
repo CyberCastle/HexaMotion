@@ -416,17 +416,13 @@ workspace.safety_margin = 0.8f;          // 80% del workspace
 workspace.min_ground_clearance = 20.0f;  // mm
 
 // Configurar gait para límites
-VelocityLimits::GaitConfig gait;
-gait.frequency = 1.5f;                   // Hz
-gait.stance_ratio = 0.6f;                // 60% stance, 40% swing
+GaitConfiguration gait;
+gait.step_frequency = 1.5f;              // Hz
 gait.time_to_max_stride = 2.0f;          // s
+// gait.phase_config se configura automáticamente basado en tipo de gait
 
 // Aplicar configuración
-walk_controller.updateVelocityLimits(
-    gait.frequency,
-    gait.stance_ratio,
-    gait.time_to_max_stride
-);
+walk_controller.updateVelocityLimits(gait);
 walk_controller.setVelocitySafetyMargin(workspace.safety_margin);
 ```
 
