@@ -635,73 +635,43 @@ void LegStepper::updateTipPositionIterative(int iteration, double time_delta, bo
 }
 
 Point3D LegStepper::calculateStanceSpanChange() {
-    // Morphology context (AGENTS.md):
-    //  - Body forms a hexagon (legs every 60°) with symmetric default standing pose
-    //  - Tibia vertical at identity (all joint angles 0°) => horizontal reach contributed by coxa + femur projection
-    //  - standing_horizontal_reach (used indirectly via workspace generation) already encodes conservative lateral reach
-    //  - stance_span_modifier scales lateral (Y axis) default separation per leg, selecting bearing 90° or 270°
-    //    with XOR logic so positive values always produce symmetric widening irrespective of leg side.
     // This method mirrors OpenSHC exactly, operating on the precomputed discrete workplanes.
     // Direct translation of OpenSHC LegStepper::calculateStanceSpanChange logic
-    // 1. Determine target workplane height from default shift (default - identity)
+    // 1. Compute target height (rounded) from default shift.
+    // 2. Clamp target height within this leg's workspace range.
+    // 3. Fetch interpolated workplane via getWorkplane().
+    // 4. Apply bearing selection XOR logic (unchanged) to pick lateral radius (90° or 270°).
+    // 5. Return lateral offset scaled by stance_span_modifier symmetrically.
+
     Point3D default_shift = default_tip_pose_ - identity_tip_pose_;
     double target_workplane_height = math_utils::setPrecision(default_shift.z, 3);
 
-    // 2. Acquire full workspace (height -> workplane) for this leg
-    Workspace workspace = robot_model_.getWorkspaceAnalyzer().getLegWorkspace(leg_index_);
+    const auto &analyzer = robot_model_.getWorkspaceAnalyzer();
+    Workspace workspace = analyzer.getLegWorkspace(leg_index_);
     if (workspace.empty()) {
         return Point3D(0, 0, 0);
     }
 
-    // Boundary handling identical to OpenSHC pattern
-    Workspace::iterator upper_bound_it = workspace.upper_bound(target_workplane_height);
-    Workspace::iterator lower_bound_it;
-    if (upper_bound_it == workspace.begin()) {
-        // Below lowest plane: clamp
-        upper_bound_it = workspace.begin();
-        lower_bound_it = workspace.begin();
-    } else if (upper_bound_it == workspace.end()) {
-        // Above highest plane: clamp
-        upper_bound_it = std::prev(workspace.end());
-        lower_bound_it = upper_bound_it;
-    } else {
-        lower_bound_it = std::prev(upper_bound_it);
+    // Clamp height to available range so getWorkplane() never returns empty due to out-of-range.
+    double min_h = workspace.begin()->first;
+    double max_h = workspace.rbegin()->first;
+    double clamped_height = std::clamp(target_workplane_height, min_h, max_h);
+
+    Workplane interpolated = analyzer.getWorkplane(leg_index_, clamped_height);
+    if (interpolated.empty()) {
+        return Point3D(0, 0, 0); // Safety fallback (should not happen after clamping)
     }
 
-    double upper_workplane_height = math_utils::setPrecision(upper_bound_it->first, 3);
-    double lower_workplane_height = math_utils::setPrecision(lower_bound_it->first, 3);
-    const Workplane &upper_workplane = upper_bound_it->second;
-    const Workplane &lower_workplane = lower_bound_it->second;
-
-    // 3. Interpolation factor between bounding workplanes
-    double denom = (upper_workplane_height - lower_workplane_height);
-    double i = (std::abs(denom) < 1e-9) ? 0.0 : (target_workplane_height - lower_workplane_height) / denom;
-    i = std::clamp(i, 0.0, 1.0);
-
-    // 4. Bearing selection logic (lateral bearings 90/270 with XOR)
+    // Bearing selection logic preserved from original (XOR to ensure symmetric widening)
     double stance_span_modifier = stance_span_modifier_;
     bool positive_y_axis = (identity_tip_pose_.y > 0.0);
     int bearing = ((positive_y_axis ^ (stance_span_modifier > 0.0)) ? 270 : 90);
-    // Sign adjust so positive modifier always widens symmetrically
-    stance_span_modifier *= (positive_y_axis ? 1.0 : -1.0);
+    stance_span_modifier *= (positive_y_axis ? 1.0 : -1.0); // Positive modifier widens both sides
 
-    // 5. Radius extraction (single plane or interpolated)
     double radius = 0.0;
-    if (workspace.size() == 1) {
-        auto only = workspace.begin()->second.find(bearing);
-        if (only != workspace.begin()->second.end()) {
-            radius = only->second;
-        }
-    } else {
-        double lower_r = 0.0;
-        auto l_it = lower_workplane.find(bearing);
-        if (l_it != lower_workplane.end())
-            lower_r = l_it->second;
-        double upper_r = lower_r;
-        auto u_it = upper_workplane.find(bearing);
-        if (u_it != upper_workplane.end())
-            upper_r = u_it->second;
-        radius = lower_r * (1.0 - i) + upper_r * i;
+    auto it = interpolated.find(bearing);
+    if (it != interpolated.end()) {
+        radius = it->second;
     }
 
     return Point3D(0.0, radius * stance_span_modifier, 0.0);
