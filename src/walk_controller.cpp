@@ -31,7 +31,8 @@ WalkController::WalkController(RobotModel &m, Leg legs[NUM_LEGS], const BodyPose
     gait_selection_config_ = createGaitSelectionConfig(model.getParams());
     std::string default_gait_name = model.getParams().gait_type.empty() ? "tripod_gait" : model.getParams().gait_type;
     GaitType default_gait_type = RobotModel::stringToGaitType(default_gait_name);
-    setGait(default_gait_type);
+    GaitConfiguration default_gait_config = createGaitConfig(default_gait_type, model.getParams());
+    setGait(default_gait_config);
 
     // Create LegStepper objects for each leg
     for (int i = 0; i < NUM_LEGS; i++) {
@@ -114,29 +115,14 @@ bool WalkController::setGaitConfiguration(const GaitConfiguration &gait_config) 
     return true;
 }
 
+bool WalkController::setGait(const GaitConfiguration &gait_config) {
+    // Delegate to setGaitConfiguration for consistency
+    return setGaitConfiguration(gait_config);
+}
+
 bool WalkController::setGait(GaitType gait_type) {
-    // Get gait configuration from factory using the robot parameters
-    const Parameters &params = model.getParams();
-    GaitConfiguration gait_config;
-
-    switch (gait_type) {
-    case TRIPOD_GAIT:
-        gait_config = createTripodGaitConfig(params);
-        break;
-    case WAVE_GAIT:
-        gait_config = createWaveGaitConfig(params);
-        break;
-    case RIPPLE_GAIT:
-        gait_config = createRippleGaitConfig(params);
-        break;
-    case METACHRONAL_GAIT:
-        gait_config = createMetachronalGaitConfig(params);
-        break;
-    default:
-        // Unsupported gait type, return false
-        return false;
-    }
-
+    // Create gait configuration using factory and robot parameters
+    GaitConfiguration gait_config = createGaitConfig(gait_type, model.getParams());
     return setGaitConfiguration(gait_config);
 }
 

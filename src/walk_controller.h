@@ -153,7 +153,14 @@ class WalkController {
     const GaitConfiguration &getCurrentGaitConfig() const { return current_gait_config_; }
 
     /**
-     * @brief Set gait using gait factory
+     * @brief Set gait using gait configuration
+     * @param gait_config The gait configuration to set
+     * @return true if successful, false otherwise
+     */
+    bool setGait(const GaitConfiguration &gait_config);
+
+    /**
+     * @brief Set gait using gait type (convenience method)
      * @param gait_type The gait type enum to set
      * @return true if successful, false otherwise
      */
