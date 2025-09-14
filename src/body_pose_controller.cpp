@@ -75,7 +75,7 @@ BodyPoseController::BodyPoseController(RobotModel &m, const BodyPoseConfiguratio
 }
 
 // -------------------------------------------------------------------------------------------------
-// Partial OpenSHC PoseController::updateCurrentPose adaptation
+// TODO Partial OpenSHC PoseController::updateCurrentPose adaptation
 // Only updates walk plane pose (clearance / plane estimation) and auto pose modulation.
 // Excludes: IMU gravity estimation, manual pose input filtering, pose reset sequences,
 // dynamic stiffness adjustments, external target transforms, and progress tracking.

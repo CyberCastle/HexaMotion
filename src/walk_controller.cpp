@@ -143,6 +143,7 @@ void WalkController::applyGaitConfigToLegSteppers(const GaitConfiguration &gait_
         // Set gait-specific parameters (not part of StepCycle)
         leg_stepper->setSwingWidth(gait_config.swing_width);
         leg_stepper->setStepClearanceHeight(gait_config.swing_height);
+        leg_stepper->setStanceSpanModifier(gait_config.stance_span_modifier); // OpenSHC stance_span_modifier propagation
 
         // Calculate phase offset using OpenSHC formula
         // OpenSHC: step_offset = (base_step_offset * multiplier) % step.period_

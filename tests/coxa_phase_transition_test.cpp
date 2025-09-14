@@ -33,7 +33,7 @@
 // --------------------------------------------------------------------------------------
 // Parámetros por defecto (pueden sobre-escribirse por CLI)
 // --------------------------------------------------------------------------------------
-static double g_test_velocity = 200.0;            // mm/s
+static double g_test_velocity = 300.0;            // mm/s
 static int g_required_swing_transitions = 5;      // Transiciones STANCE->SWING por pata
 static int g_max_steps = 1200;                    // Límite de seguridad
 static bool g_show_only_phase_transitions = true; // Modo compacto por defecto
@@ -375,6 +375,11 @@ int main(int argc, char **argv) {
 
     // 3. Configurar y iniciar Tripod Gait (idéntico a tripod_walk_visualization_test)
     GaitConfiguration tripod_gait = createGaitConfig(TRIPOD_GAIT, p);
+
+    double leg_reach = RobotModel::computeStandingHorizontalReach(p);
+    std::cout << "Leg reach (horizontal) = " << leg_reach << " mm" << std::endl;
+    tripod_gait.step_length = leg_reach * 2;
+    tripod_gait.time_to_max_stride = 0.2; // segundos (aceleración rápida)
     if (!sys.setGaitConfiguration(tripod_gait)) {
         std::cerr << "ERROR: Failed to set gait type." << std::endl;
         return 1;

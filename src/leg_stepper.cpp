@@ -411,11 +411,21 @@ void LegStepper::updateTipPositionIterative(int iteration, double time_delta, bo
         int swing_iteration = current_iteration_ % swing_iterations_;
         step_progress_ = (swing_iterations_ > 0) ? static_cast<double>(swing_iteration) / static_cast<double>(swing_iterations_) : 0.0;
         step_progress_ = std::min(1.0, step_progress_);
+
+        // OpenSHC: update default tip position at start of swing when rough terrain mode enabled
+        if (rough_terrain_mode && swing_iteration == 0) { // swing_iteration==0 corresponds to first iteration pre-increment
+            updateDefaultTipPosition();
+        }
     } else {
         // For stance phase, calculate progress based on stance iterations
         int stance_iteration = current_iteration_ % stance_iterations_;
         step_progress_ = (stance_iterations_ > 0) ? static_cast<double>(stance_iteration) / static_cast<double>(stance_iterations_) : 0.0;
         step_progress_ = std::min(1.0, step_progress_);
+
+        // OpenSHC: update default tip position at start of stance when rough terrain mode enabled
+        if (rough_terrain_mode && stance_iteration == 0) {
+            updateDefaultTipPosition();
+        }
     }
 
     // Update stride (will freeze on first iteration of the phase)
@@ -622,6 +632,103 @@ void LegStepper::updateTipPositionIterative(int iteration, double time_delta, bo
     }
     previous_tip_pose_ = current_tip_pose_;
     has_previous_position_ = true;
+}
+
+Point3D LegStepper::calculateStanceSpanChange() {
+    // Morphology context (AGENTS.md):
+    //  - Body forms a hexagon (legs every 60°) with symmetric default standing pose
+    //  - Tibia vertical at identity (all joint angles 0°) => horizontal reach contributed by coxa + femur projection
+    //  - standing_horizontal_reach (used indirectly via workspace generation) already encodes conservative lateral reach
+    //  - stance_span_modifier scales lateral (Y axis) default separation per leg, selecting bearing 90° or 270°
+    //    with XOR logic so positive values always produce symmetric widening irrespective of leg side.
+    // This method mirrors OpenSHC exactly, operating on the precomputed discrete workplanes.
+    // Direct translation of OpenSHC LegStepper::calculateStanceSpanChange logic
+    // 1. Determine target workplane height from default shift (default - identity)
+    Point3D default_shift = default_tip_pose_ - identity_tip_pose_;
+    double target_workplane_height = math_utils::setPrecision(default_shift.z, 3);
+
+    // 2. Acquire full workspace (height -> workplane) for this leg
+    Workspace workspace = robot_model_.getWorkspaceAnalyzer().getLegWorkspace(leg_index_);
+    if (workspace.empty()) {
+        return Point3D(0, 0, 0);
+    }
+
+    // Boundary handling identical to OpenSHC pattern
+    Workspace::iterator upper_bound_it = workspace.upper_bound(target_workplane_height);
+    Workspace::iterator lower_bound_it;
+    if (upper_bound_it == workspace.begin()) {
+        // Below lowest plane: clamp
+        upper_bound_it = workspace.begin();
+        lower_bound_it = workspace.begin();
+    } else if (upper_bound_it == workspace.end()) {
+        // Above highest plane: clamp
+        upper_bound_it = std::prev(workspace.end());
+        lower_bound_it = upper_bound_it;
+    } else {
+        lower_bound_it = std::prev(upper_bound_it);
+    }
+
+    double upper_workplane_height = math_utils::setPrecision(upper_bound_it->first, 3);
+    double lower_workplane_height = math_utils::setPrecision(lower_bound_it->first, 3);
+    const Workplane &upper_workplane = upper_bound_it->second;
+    const Workplane &lower_workplane = lower_bound_it->second;
+
+    // 3. Interpolation factor between bounding workplanes
+    double denom = (upper_workplane_height - lower_workplane_height);
+    double i = (std::abs(denom) < 1e-9) ? 0.0 : (target_workplane_height - lower_workplane_height) / denom;
+    i = std::clamp(i, 0.0, 1.0);
+
+    // 4. Bearing selection logic (lateral bearings 90/270 with XOR)
+    double stance_span_modifier = stance_span_modifier_;
+    bool positive_y_axis = (identity_tip_pose_.y > 0.0);
+    int bearing = ((positive_y_axis ^ (stance_span_modifier > 0.0)) ? 270 : 90);
+    // Sign adjust so positive modifier always widens symmetrically
+    stance_span_modifier *= (positive_y_axis ? 1.0 : -1.0);
+
+    // 5. Radius extraction (single plane or interpolated)
+    double radius = 0.0;
+    if (workspace.size() == 1) {
+        auto only = workspace.begin()->second.find(bearing);
+        if (only != workspace.begin()->second.end()) {
+            radius = only->second;
+        }
+    } else {
+        double lower_r = 0.0;
+        auto l_it = lower_workplane.find(bearing);
+        if (l_it != lower_workplane.end())
+            lower_r = l_it->second;
+        double upper_r = lower_r;
+        auto u_it = upper_workplane.find(bearing);
+        if (u_it != upper_workplane.end())
+            upper_r = u_it->second;
+        radius = lower_r * (1.0 - i) + upper_r * i;
+    }
+
+    return Point3D(0.0, radius * stance_span_modifier, 0.0);
+}
+
+void LegStepper::updateDefaultTipPosition() {
+    // TODO: Mirrors OpenSHC LegStepper::updateDefaultTipPosition default branch (no external default support yet)
+
+    // 1. Modify identity tip position by stance span change
+    Point3D identity_tip_position = identity_tip_pose_ + calculateStanceSpanChange();
+
+    // TODO
+    // NOTE: OpenSHC transforms through default body pose (not available here); assume identity frame equivalent.
+
+    // 2. Project vector from identity to stance origin onto walk plane normal
+    Point3D identity_to_stance_origin = stance_origin_tip_position_ - identity_tip_position;
+    Point3D projection_to_walk_plane = math_utils::projectVector(identity_to_stance_origin, walk_plane_normal_);
+
+    Point3D new_default_tip_position = identity_tip_position + projection_to_walk_plane;
+
+    // 3. Update default tip pose if movement exceeds IK tolerance (millimeters)
+    Point3D delta = default_tip_pose_ - new_default_tip_position;
+    double delta_norm = std::sqrt(delta.x * delta.x + delta.y * delta.y + delta.z * delta.z);
+    default_tip_pose_ = new_default_tip_position;
+    if (delta_norm > IK_TOLERANCE) {
+        // In OpenSHC this would trigger walker_->setRegenerateWalkspace(); intentionally omitted.
+    }
 }
 
 // Update using internal phase_ (phase_ already incremented externally or will be incremented after call)

@@ -120,6 +120,9 @@ class LegStepper {
     double getSwingWidth() const { return swing_width_; }
     void setStepClearanceHeight(double step_clearance_height) { step_clearance_height_ = step_clearance_height; }
     double getStepClearanceHeight() const { return step_clearance_height_; }
+    // Stance span modifier (OpenSHC: stance_span_modifier) applied to default tip position lateral spread
+    void setStanceSpanModifier(double m) { stance_span_modifier_ = m; }
+    double getStanceSpanModifier() const { return stance_span_modifier_; }
 
     // OpenSHC-specific workflow methods
     void initializeSwingPeriod(int iteration);
@@ -172,6 +175,12 @@ class LegStepper {
     // OpenSHC-style stride scaler calculation
     double calculateStanceStrideScaler();
 
+    // === OpenSHC replicated methods for lateral stance span adjustment ===
+    // Calculate lateral change applied to identity tip position based on stance_span_modifier (bearing 90/270 logic)
+    Point3D calculateStanceSpanChange();
+    // Update default tip position projecting stance origin onto walk plane after applying stance span change
+    void updateDefaultTipPosition();
+
   private:
     // Basic properties
     int leg_index_;
@@ -217,8 +226,9 @@ class LegStepper {
     int current_iteration_;
 
     // Gait configuration parameters (not part of StepCycle)
-    double swing_width_;           // Lateral shift at mid-swing (OpenSHC mid_lateral_shift)
-    double step_clearance_height_; // Step clearance height (equivalent to OpenSHC walker_->getStepClearance())
+    double swing_width_;                // Lateral shift at mid-swing (OpenSHC mid_lateral_shift)
+    double step_clearance_height_;      // Step clearance height (equivalent to OpenSHC walker_->getStepClearance())
+    double stance_span_modifier_ = 0.0; // OpenSHC stance_span_modifier (range typically [-1.0, 1.0])
 
     // Swing state management (OpenSHC style)
     bool swing_initialized_;
