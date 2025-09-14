@@ -178,7 +178,8 @@ int main() {
               << std::endl;
 
     // 3. Setup and Start Tripod Gait (new API): select gait, set velocities, then startWalking()
-    if (!sys.setGaitType(TRIPOD_GAIT)) {
+    GaitConfiguration tripod_gait = createGaitConfig(TRIPOD_GAIT, p);
+    if (!sys.setGaitConfiguration(tripod_gait)) {
         std::cerr << "ERROR: Failed to set gait type." << std::endl;
         return 1;
     }

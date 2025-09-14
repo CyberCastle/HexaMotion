@@ -359,7 +359,8 @@ int main(int argc, char **argv) {
               << std::endl;
 
     // 3. Configurar y iniciar Tripod Gait (idéntico a tripod_walk_visualization_test)
-    if (!sys.setGaitType(TRIPOD_GAIT)) {
+    GaitConfiguration tripod_gait = createGaitConfig(TRIPOD_GAIT, p);
+    if (!sys.setGaitConfiguration(tripod_gait)) {
         std::cerr << "ERROR: Failed to set gait type." << std::endl;
         return 1;
     }

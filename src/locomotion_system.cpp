@@ -214,29 +214,17 @@ bool LocomotionSystem::setLegJointAngles(int leg, const JointAngles &q) {
 }
 
 // Gait planner
-bool LocomotionSystem::setGaitType(GaitType gait) {
-    bool result = false;
-
-    switch (gait) {
-    case TRIPOD_GAIT:
-        result = walk_ctrl->setGait(TRIPOD_GAIT);
-        break;
-    case WAVE_GAIT:
-        result = walk_ctrl->setGait(WAVE_GAIT);
-        break;
-    case RIPPLE_GAIT:
-        result = walk_ctrl->setGait(RIPPLE_GAIT);
-        break;
-    case METACHRONAL_GAIT:
-        result = walk_ctrl->setGait(METACHRONAL_GAIT);
-        break;
-    default:
+bool LocomotionSystem::setGaitConfiguration(const GaitConfiguration &gait_config) {
+    if (!walk_ctrl) {
+        last_error = PARAMETER_ERROR;
         return false;
     }
 
+    bool result = walk_ctrl->setGait(gait_config);
+
     // Update BodyPoseController with current gait type for startup sequence selection
     if (result && body_pose_ctrl) {
-        body_pose_ctrl->setCurrentGaitType(gait);
+        body_pose_ctrl->setCurrentGaitType(gait_config.gait_type);
     }
 
     return result;
@@ -975,7 +963,7 @@ bool LocomotionSystem::startWalking() {
         last_error = STATE_ERROR;
         return false;
     }
-    // Assumes gait already selected via setGaitType() and velocities set via walkForward/back/sideways/turn methods
+    // Assumes gait already selected via setGaitConfiguration() and velocities set via walkForward/back/sideways/turn methods
     if (resume_from_stop_) {
         // Fast resume: skip body pose startup; re-init walk controller for current pose
         walk_ctrl->init(body_position, body_orientation);

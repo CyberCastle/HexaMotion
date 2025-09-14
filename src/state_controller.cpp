@@ -1,5 +1,6 @@
 #include "state_controller.h"
 #include "body_pose_config_factory.h"
+#include "gait_config_factory.h"
 #include "hexamotion_constants.h"
 #include "locomotion_system.h"
 
@@ -462,7 +463,9 @@ bool StateController::changeGait(GaitType gait) {
         return false; // Will retry when stopped
     }
 
-    return locomotion_system_.setGaitType(gait);
+    // Create gait configuration and set it
+    GaitConfiguration gait_config = createGaitConfig(gait, locomotion_system_.getParams());
+    return locomotion_system_.setGaitConfiguration(gait_config);
 }
 
 // Remove getTransitionProgress() method
