@@ -1,6 +1,7 @@
 #include "walk_controller.h"
 #include "body_pose_config.h"
 #include "gait_config_factory.h"
+#include "gait_types.h"
 #include "hexamotion_constants.h"
 #include "leg_stepper.h"
 #include "math_utils.h"
@@ -29,7 +30,7 @@ WalkController::WalkController(RobotModel &m, Leg legs[NUM_LEGS], const BodyPose
     // Initialize gait configuration system (OpenSHC equivalent)
     gait_selection_config_ = createGaitSelectionConfig(model.getParams());
     std::string default_gait_name = model.getParams().gait_type.empty() ? "tripod_gait" : model.getParams().gait_type;
-    GaitType default_gait_type = stringToGaitType(default_gait_name);
+    GaitType default_gait_type = RobotModel::stringToGaitType(default_gait_name);
     setGait(default_gait_type);
 
     // Create LegStepper objects for each leg
@@ -682,19 +683,4 @@ WalkController::LegTrajectoryInfo WalkController::getLegTrajectoryInfo(int leg_i
     info.velocity = leg_stepper->getCurrentTipVelocity();
 
     return info;
-}
-
-// Helper method implementations
-GaitType WalkController::stringToGaitType(const std::string &gait_name) const {
-    if (gait_name == "tripod_gait") {
-        return TRIPOD_GAIT;
-    } else if (gait_name == "wave_gait") {
-        return WAVE_GAIT;
-    } else if (gait_name == "ripple_gait") {
-        return RIPPLE_GAIT;
-    } else if (gait_name == "metachronal_gait") {
-        return METACHRONAL_GAIT;
-    } else {
-        return NO_GAIT; // Default for unknown gait types
-    }
 }

@@ -1,6 +1,7 @@
 #ifndef ROBOT_MODEL_H
 #define ROBOT_MODEL_H
 
+#include "gait_types.h" // Shared gait type enumeration
 #include "hexamotion_constants.h"
 #include "math_utils.h"
 #include "precision_config.h"
@@ -235,15 +236,6 @@ struct CalculatedServoAngles {
     double femur; // Femur servo angle (radians)
     double tibia; // Tibia servo angle (radians)
     bool valid;   // Solution validity flag
-};
-
-enum GaitType {
-    NO_GAIT,
-    TRIPOD_GAIT,
-    WAVE_GAIT,
-    RIPPLE_GAIT,
-    METACHRONAL_GAIT,
-    ADAPTIVE_GAIT
 };
 
 enum StepPhase {
@@ -773,8 +765,23 @@ class RobotModel {
     double getStandingHorizontalReach() const;
     // Analytic servo angle computation for target height (tibia vertical assumption)
     static CalculatedServoAngles calculateServoAnglesForHeight(double target_height_mm, const Parameters &params);
+
     /** Static helper for external code needing the same computation without an instance. */
     static double computeStandingHorizontalReach(const Parameters &p);
+
+    /**
+     * @brief Convert GaitType enum to string name
+     * @param gait_type GaitType enum value
+     * @return String representation of the gait type
+     */
+    static std::string gaitTypeToString(GaitType gait_type);
+
+    /**
+     * @brief Convert string name to GaitType enum
+     * @param gait_name String name of the gait
+     * @return GaitType enum value (NO_GAIT if not found)
+     */
+    static GaitType stringToGaitType(const std::string &gait_name);
 
     /** Get the DH position of the leg base (without joint transformations) */
     Point3D getLegBasePosition(int leg_index) const;

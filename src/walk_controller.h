@@ -5,6 +5,7 @@
 #include "body_pose_controller.h"
 #include "gait_config.h"
 #include "gait_config_factory.h"
+#include "gait_types.h"  // Include for GaitType definition
 #include "leg_stepper.h" // Include for LegStepper definition
 #include "math_utils.h"
 #include "robot_model.h"
@@ -271,7 +272,6 @@ class WalkController {
     // Helper methods
     double calculateStabilityIndex() const;
     bool checkTerrainConditions() const;
-    GaitType stringToGaitType(const std::string &gait_name) const;
 };
 
 #endif // WALK_CONTROLLER_H

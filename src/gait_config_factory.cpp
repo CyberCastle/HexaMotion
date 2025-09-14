@@ -1,4 +1,6 @@
+#include "gait_config_factory.h"
 #include "gait_config.h"
+#include "gait_types.h"
 #include "hexamotion_constants.h"
 #include "robot_model.h"
 #include <algorithm>
@@ -130,6 +132,7 @@ void ensureBalancedIfNeeded(GaitConfiguration &cfg) {
 GaitConfiguration createWaveGaitConfig(const Parameters &params) {
     GaitConfiguration config;
     config.gait_name = "wave_gait";
+    config.gait_type = WAVE_GAIT;
     config.phase_config.stance_phase = 10;
     config.phase_config.swing_phase = 2;
     config.phase_config.phase_offset = 2;
@@ -173,6 +176,7 @@ GaitConfiguration createWaveGaitConfig(const Parameters &params) {
 GaitConfiguration createTripodGaitConfig(const Parameters &params) {
     GaitConfiguration config;
     config.gait_name = "tripod_gait";
+    config.gait_type = TRIPOD_GAIT;
     config.phase_config.stance_phase = 2;
     config.phase_config.swing_phase = 2;
     config.phase_config.phase_offset = 2;
@@ -217,6 +221,7 @@ GaitConfiguration createTripodGaitConfig(const Parameters &params) {
 GaitConfiguration createRippleGaitConfig(const Parameters &params) {
     GaitConfiguration config;
     config.gait_name = "ripple_gait";
+    config.gait_type = RIPPLE_GAIT;
 
     // OpenSHC gait.yaml parameters
     config.phase_config.stance_phase = 4;
@@ -261,6 +266,7 @@ GaitConfiguration createRippleGaitConfig(const Parameters &params) {
 GaitConfiguration createMetachronalGaitConfig(const Parameters &params) {
     GaitConfiguration config;
     config.gait_name = "metachronal_gait";
+    config.gait_type = METACHRONAL_GAIT;
 
     // Adaptive parameters based on wave gait
     config.phase_config.stance_phase = 8; // Slightly faster than wave
@@ -295,6 +301,32 @@ GaitConfiguration createMetachronalGaitConfig(const Parameters &params) {
     // Set control loop resolution for generateStepCycle()
     config.time_delta = params.time_delta;
     return config;
+}
+
+/**
+ * @brief Create gait configuration based on GaitType enum
+ * @param gait_type Type of gait to create
+ * @param params Robot parameters
+ * @return Configured gait of the specified type
+ */
+GaitConfiguration createGaitConfig(GaitType gait_type, const Parameters &params) {
+    switch (gait_type) {
+    case WAVE_GAIT:
+        return createWaveGaitConfig(params);
+    case TRIPOD_GAIT:
+        return createTripodGaitConfig(params);
+    case RIPPLE_GAIT:
+        return createRippleGaitConfig(params);
+    case METACHRONAL_GAIT:
+        return createMetachronalGaitConfig(params);
+    case ADAPTIVE_GAIT:
+        // For adaptive gait, use metachronal as base configuration
+        return createMetachronalGaitConfig(params);
+    case NO_GAIT:
+    default:
+        // Return default tripod gait for invalid types
+        return createTripodGaitConfig(params);
+    }
 }
 
 /**
