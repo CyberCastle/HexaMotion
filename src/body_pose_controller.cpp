@@ -75,14 +75,33 @@ BodyPoseController::BodyPoseController(RobotModel &m, const BodyPoseConfiguratio
 }
 
 // -------------------------------------------------------------------------------------------------
-// TODO Partial OpenSHC PoseController::updateCurrentPose adaptation
-// Only updates walk plane pose (clearance / plane estimation) and auto pose modulation.
-// Excludes: IMU gravity estimation, manual pose input filtering, pose reset sequences,
-// dynamic stiffness adjustments, external target transforms, and progress tracking.
-// Rationale: HexaMotion centralises those concerns elsewhere (LocomotionSystem / IMU modules).
+// NOTE OpenSHC PoseController::updateCurrentPose adaptation status
+// Implemented here:
+//  - Walk plane pose estimation (height + normal) with Bézier smoothing and clearance integration.
+//  - Global body pose composition currently == walk_plane_pose_ (stored in body_pose_current_).
+//  - Global body pose application (rotation + translation) to desired tip positions prior to per‑leg auto pose.
+//  - Auto pose per‑leg modulation plus stance‑leg averaged global_auto_pose_ (removal/addition ordering mirrors OpenSHC).
+//
+// Missing / Deferred relative to full OpenSHC PoseController capabilities:
+//  - IMU-based gravity / inclination fusion (imu_pose_) for continuous leveling.
+//  - Manual / external body pose input filtering & interpolation inside updateCurrentPose (currently externalised).
+//  - Pose reset / recovery and progress tracking sequences (startup/shutdown progress only partially elsewhere).
+//  - Dynamic stiffness / compliance modulation tied to pose transitions.
+//  - Chained multi-layer pose composition (manual -> imu -> walk plane -> auto -> tip alignment orientation).
+//  - Advanced quaternion averaging (current incremental SLERP adequate for small auto pose deltas only).
+//  - Per-leg asymmetric stance weighting / adaptive exclusion for slipping or faulted legs.
+//  - Velocity & acceleration limiting of body pose changes beyond Bézier walk plane smoothing.
+//  - Tip orientation alignment / end-effector rotational modulation (only positional offsets applied now).
+//
+// Rationale: Non-critical layers (IMU, manual commands, admittance) are centralised in LocomotionSystem or dedicated modules
+// to keep this controller focused on geometric walk plane maintenance plus auto pose synthesis. Items above remain TODOs for
+// future parity with full OpenSHC if required.
 void BodyPoseController::updateCurrentPose(double gait_phase, Leg legs[NUM_LEGS]) {
     // Keep walk plane pose coherent with current stance distribution.
     updateWalkPlanePose(legs);
+
+    // Compose global body pose (currently only walk_plane_pose_). Future extensions: manual / IMU / inclination.
+    body_pose_current_ = walk_plane_pose_;
 
     // Update (but do NOT yet apply) auto-pose patterning. We aggregate into global_auto_pose_
     // and per-leg posers; actual spatial effect on desired tip positions happens in
@@ -90,10 +109,48 @@ void BodyPoseController::updateCurrentPose(double gait_phase, Leg legs[NUM_LEGS]
     if (auto_pose_enabled && auto_pose_config.enabled) {
         // Run phase update => populates each leg poser auto_pose_ (negated windows) and computes base amplitudes.
         updateAutoPose(gait_phase, legs);
-        // Reconstruct a global base auto pose by averaging active leg base poses (simple heuristic).
-        // In original OpenSHC a unified auto_pose_ is built from AutoPoser objects; we approximate using leg 0.
-        if (leg_posers_[0]) {
-            global_auto_pose_ = leg_posers_[0]->get()->getAutoPose();
+        // Reconstruct a global base auto pose by averaging per‑leg auto poses of stance legs (OpenSHC analogue).
+        // Rationale: In OpenSHC, auto_pose_ aggregates multiple AutoPoser outputs before leg-specific negations.
+        // Here each LegPoser holds its own per-leg pose; we approximate the shared component by averaging stance legs.
+        int count = 0;
+        Eigen::Vector3d accum_pos(0, 0, 0);
+        std::vector<Eigen::Quaterniond> quats;
+        for (int i = 0; i < NUM_LEGS; ++i) {
+            if (!leg_posers_[i])
+                continue;
+            if (legs[i].getStepPhase() != STANCE_PHASE)
+                continue; // only stance legs contribute to stable body estimate
+            Pose lp_pose = leg_posers_[i]->get()->getAutoPose();
+            accum_pos += Eigen::Vector3d(lp_pose.position.x, lp_pose.position.y, lp_pose.position.z);
+            quats.push_back(lp_pose.rotation);
+            ++count;
+        }
+        if (count == 0) { // fallback: use all legs if no stance legs (rare edge during full aerial phase)
+            for (int i = 0; i < NUM_LEGS; ++i) {
+                if (!leg_posers_[i])
+                    continue;
+                Pose lp_pose = leg_posers_[i]->get()->getAutoPose();
+                accum_pos += Eigen::Vector3d(lp_pose.position.x, lp_pose.position.y, lp_pose.position.z);
+                quats.push_back(lp_pose.rotation);
+                ++count;
+            }
+        }
+        if (count > 0) {
+            Eigen::Vector3d avg_pos = accum_pos / static_cast<double>(count);
+            // Quaternion averaging (incremental slerp) – adequate for small pose deviations typical of auto pose.
+            Eigen::Quaterniond avg_q = Eigen::Quaterniond::Identity();
+            int qi = 0;
+            for (const auto &q : quats) {
+                if (qi == 0) {
+                    avg_q = q;
+                } else {
+                    double w = 1.0 / static_cast<double>(qi + 1);
+                    avg_q = avg_q.slerp(w, q);
+                }
+                ++qi;
+            }
+            global_auto_pose_.position = Point3D(avg_pos.x(), avg_pos.y(), avg_pos.z());
+            global_auto_pose_.rotation = avg_q.normalized();
         } else {
             global_auto_pose_ = Pose::Identity();
         }
@@ -115,6 +172,21 @@ void BodyPoseController::applyAutoPoseToDesiredTips(Leg legs[NUM_LEGS]) {
         }
         // Write back only position (orientation ignored by current IK path).
         legs[i].setDesiredTipPosition(posed.position);
+    }
+}
+
+void BodyPoseController::applyGlobalBodyPoseToDesiredTips(Leg legs[NUM_LEGS]) {
+    // Apply translation + rotation of current composed body pose to desired tip positions prior to per‑leg auto pose.
+    // Morphology note (AGENTS.md): Default stance has tibia vertical and body reference at z = -tibia_length.
+    // Desired tip Z already embeds clearance; to avoid double counting we offset Z by (body_pose_current_.position.z - body_pose_config.body_clearance).
+    Eigen::Vector3d translation(body_pose_current_.position.x, body_pose_current_.position.y, body_pose_current_.position.z - body_pose_config.body_clearance);
+    Eigen::Quaterniond rotation = body_pose_current_.rotation;
+    for (int i = 0; i < NUM_LEGS; ++i) {
+        Point3D p = legs[i].getDesiredTipPosition();
+        Eigen::Vector3d v(p.x, p.y, p.z);
+        Eigen::Vector3d rotated = rotation * v;
+        Eigen::Vector3d transformed = rotated + translation;
+        legs[i].setDesiredTipPosition(Point3D(transformed.x(), transformed.y(), transformed.z()));
     }
 }
 

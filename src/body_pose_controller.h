@@ -339,6 +339,17 @@ class BodyPoseController {
      * translations and yaw/roll/pitch components influence coxa motion.
      */
     void applyAutoPoseToDesiredTips(Leg legs[NUM_LEGS]);
+    /**
+     * @brief Apply the current global body pose (translation + rotation) to desired tip positions prior to any
+     *        per‑leg auto pose modulation. This mirrors OpenSHC's ordering where the composed body pose (walk plane,
+     *        manual, IMU, etc.) is applied before per‑leg adjustments. For HexaMotion we currently only compose the
+     *        walk plane pose (and future sources can extend this). Translation handling accounts for the robot's
+     *        morphological peculiarity (see AGENTS.md): with all joint angles at 0° the tibia is vertical and the
+     *        body reference sits at z = -tibia_length (default_height_offset). Stance tip Z already encodes the
+     *        clearance; therefore we subtract body_clearance from the global pose Z component to avoid double adding
+     *        nominal height.
+     */
+    void applyGlobalBodyPoseToDesiredTips(Leg legs[NUM_LEGS]);
 
   private:
     RobotModel &model;                         //< Reference to robot model
@@ -394,6 +405,9 @@ class BodyPoseController {
     Pose walk_plane_pose_;              //< Current walk plane pose for body clearance maintenance
     bool walk_plane_pose_enabled;       //< Enable/disable walk plane pose system
     double walk_plane_update_threshold; //< Minimum change threshold for updates
+
+    // Composed body pose (currently equals walk_plane_pose_ but reserved for future manual/IMU components)
+    Pose body_pose_current_ = Pose::Identity();
 
     // Bézier curve control system for smooth transitions
     bool walk_plane_bezier_in_progress;              //< Whether a Bézier transition is in progress
