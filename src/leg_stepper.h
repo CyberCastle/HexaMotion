@@ -108,8 +108,6 @@ class LegStepper {
     void setSwingOriginTipVelocity(const Point3D &velocity) { swing_origin_tip_velocity_ = velocity; }
     void setCompletedFirstStep(bool completed) { completed_first_step_ = completed; }
     void setAtCorrectPhase(bool at_correct) { at_correct_phase_ = at_correct; }
-    void setWalkPlane(const Point3D &walk_plane) { walk_plane_ = walk_plane; }
-    Point3D getWalkPlane() const { return walk_plane_; }
     void setWalkPlaneNormal(const Point3D &walk_plane_normal) { walk_plane_normal_ = walk_plane_normal; }
     Point3D getWalkPlaneNormal() const { return walk_plane_normal_; }
 
@@ -190,7 +188,6 @@ class LegStepper {
     // Walking state
     Point3D desired_linear_velocity_;
     double desired_angular_velocity_;
-    Point3D walk_plane_;
     Point3D walk_plane_normal_;
     Point3D stride_vector_;
     Point3D current_tip_velocity_;

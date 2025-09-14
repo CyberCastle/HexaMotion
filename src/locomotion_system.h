@@ -183,8 +183,8 @@ class LocomotionSystem {
     double getJointLimitProximity(int leg_index, const JointAngles &angles);
 
     // Gait planner
-    /** Select the active gait type. */
-    bool setGaitType(GaitType gait);
+    /** Select the active gait configuration. */
+    bool setGaitConfiguration(const GaitConfiguration &gait_config);
     /** Plan the next gait step from desired velocities. */
     bool planGaitSequence(double velocity_x, double velocity_y, double angular_velocity);
 
@@ -327,6 +327,9 @@ class LocomotionSystem {
 
     /** Get current servo speed for a specific joint (affected by velocity control). */
     double getCurrentServoSpeed(int leg_index, int joint_index) const;
+
+    /** Get robot parameters. */
+    const Parameters &getParams() const { return params; }
 
     // Getter for WalkController
     WalkController *getWalkController() { return walk_ctrl; }

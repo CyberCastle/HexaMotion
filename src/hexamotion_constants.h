@@ -156,9 +156,20 @@
 #define POSITION_TOLERANCE 1.0 // Position tolerance (mm)
 #define VELOCITY_THRESHOLD 1.0 // Minimum velocity to consider as moving (mm/s)
 
+// Z-plane tolerance near the walking/standing plane to preserve exact height
+// when applying geometric constraints (prevents artificial Z drift at touchdown)
+#define WALK_PLANE_Z_TOLERANCE_MM 0.75
+
 // Tip position tolerance for determining if a leg tip is at target
 // HexaMotion uses millimeters
 #define TIP_TOLERANCE 5.0 // mm
+
+// ========================================================================
+// WORKSPACE / STABILITY DEFAULTS (moved from WorkspaceAnalyzer private statics)
+// ========================================================================
+
+#define DEFAULT_STABILITY_THRESHOLD 10.0 // Default stability margin threshold (mm)
+#define DEFAULT_MIN_LEG_SEPARATION 50.0  // Default minimum planar leg tip separation (mm)
 
 // Admittance safety limit (maximum absolute compliance delta per axis in mm)
 #define ADMITTANCE_MAX_ABS_DELTA_MM 50.0

@@ -5,6 +5,7 @@
 #include "body_pose_controller.h"
 #include "gait_config.h"
 #include "gait_config_factory.h"
+#include "gait_types.h"  // Include for GaitType definition
 #include "leg_stepper.h" // Include for LegStepper definition
 #include "math_utils.h"
 #include "robot_model.h"
@@ -152,7 +153,14 @@ class WalkController {
     const GaitConfiguration &getCurrentGaitConfig() const { return current_gait_config_; }
 
     /**
-     * @brief Set gait using gait factory
+     * @brief Set gait using gait configuration
+     * @param gait_config The gait configuration to set
+     * @return true if successful, false otherwise
+     */
+    bool setGait(const GaitConfiguration &gait_config);
+
+    /**
+     * @brief Set gait using gait type (convenience method)
      * @param gait_type The gait type enum to set
      * @return true if successful, false otherwise
      */
@@ -271,7 +279,6 @@ class WalkController {
     // Helper methods
     double calculateStabilityIndex() const;
     bool checkTerrainConditions() const;
-    GaitType stringToGaitType(const std::string &gait_name) const;
 };
 
 #endif // WALK_CONTROLLER_H

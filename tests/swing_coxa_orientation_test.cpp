@@ -86,7 +86,6 @@ int main() {
         Point3D linear_vel(60.0, 20.0, 0.0);
         double angular_vel = 0.3; // yaw
         stepper.setDesiredVelocity(linear_vel, angular_vel);
-        stepper.setWalkPlane(identity_tip);
         stepper.setWalkPlaneNormal(Point3D(0, 0, 1));
 
         std::vector<CoxaAngleCase> cases = {{-20.0}, {0.0}, {20.0}};

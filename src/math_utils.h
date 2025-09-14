@@ -45,8 +45,17 @@ double pointToLineDistance(const Point3D &point, const Point3D &line_start, cons
 
 /** Cross product of two 3D vectors. */
 Point3D crossProduct(const Point3D &a, const Point3D &b);
-/** Project a vector onto another vector. */
+/**
+ * Project a vector onto another vector.
+ * Reference: https://en.wikipedia.org/wiki/Vector_projection
+ */
 Point3D projectVector(const Point3D &vector, const Point3D &onto);
+
+/**
+ * Vector rejection of a onto b, defined as a - proj_b(a).
+ * Reference: https://en.wikipedia.org/wiki/Vector_projection#Vector_rejection
+ */
+Point3D rejectVector(const Point3D &vector, const Point3D &onto);
 
 /** Rotation matrix about X axis (angle in radians). */
 Eigen::Matrix3d rotationMatrixX(double angle);

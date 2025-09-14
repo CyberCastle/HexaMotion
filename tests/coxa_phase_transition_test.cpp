@@ -33,7 +33,7 @@
 // --------------------------------------------------------------------------------------
 // Parámetros por defecto (pueden sobre-escribirse por CLI)
 // --------------------------------------------------------------------------------------
-static double g_test_velocity = 100.0;            // mm/s
+static double g_test_velocity = 200.0;            // mm/s
 static int g_required_swing_transitions = 5;      // Transiciones STANCE->SWING por pata
 static int g_max_steps = 1200;                    // Límite de seguridad
 static bool g_show_only_phase_transitions = true; // Modo compacto por defecto
@@ -99,11 +99,6 @@ static void parseArgs(int argc, char **argv) {
         g_max_steps = 200; // seguridad mínima
 }
 
-// Utilidad para convertir radianes a grados
-static double toDegrees(double radians) {
-    return radians * 180.0 / M_PI;
-}
-
 /**
  * @brief Imprime el encabezado del test.
  */
@@ -162,9 +157,9 @@ static void printCoxaStates(const LocomotionSystem &sys, int step, const int tra
         const Leg &leg = sys.getLeg(i);
         JointAngles angles = leg.getJointAngles();
         double coxa_angle = angles.coxa; // rad absolute
-        coxa_deg[i] = toDegrees(coxa_angle);
-        coxa_delta_initial_deg[i] = toDegrees(coxa_angle - initial_coxa_rad[i]);
-        coxa_delta_stance_deg[i] = toDegrees(coxa_angle - stance_start_coxa_rad[i]);
+        coxa_deg[i] = math_utils::radiansToDegrees(coxa_angle);
+        coxa_delta_initial_deg[i] = math_utils::radiansToDegrees(coxa_angle - initial_coxa_rad[i]);
+        coxa_delta_stance_deg[i] = math_utils::radiansToDegrees(coxa_angle - stance_start_coxa_rad[i]);
         // Radio planar desde la base de la pierna al pie actual (para estimar arco tangencial teórico)
         Point3D base = leg.getBasePosition();
         Point3D tip = leg.getCurrentTipPositionGlobal();
@@ -339,6 +334,10 @@ int main(int argc, char **argv) {
 
     // 1. Inicialización básica
     Parameters p = createDefaultParameters();
+    p.max_velocity = 1000.0;              // mm/s (límite alto para no interferir)
+    p.enable_velocity_limits = false;     // Desactivar limitación dinámica (test de coxas)
+    p.enable_phase_end_snap = false;      // Desactivar snap de fin de fase (test de coxas)
+    p.enable_workspace_constrain = false; // Desactivar workspace constraint (test de coxas)
     LocomotionSystem sys(p);
     DummyIMU imu;
     DummyFSR fsr;
@@ -369,13 +368,14 @@ int main(int argc, char **argv) {
 
         std::cout << std::left << std::setw(7) << LEG_NAMES[i]
                   << std::setw(7) << (phase == STANCE_PHASE ? "S" : "W")
-                  << std::fixed << std::setprecision(2) << toDegrees(angles.coxa) << std::endl;
+                  << std::fixed << std::setprecision(2) << math_utils::radiansToDegrees(angles.coxa) << std::endl;
     }
     std::cout << "-----------------------------\n"
               << std::endl;
 
     // 3. Configurar y iniciar Tripod Gait (idéntico a tripod_walk_visualization_test)
-    if (!sys.setGaitType(TRIPOD_GAIT)) {
+    GaitConfiguration tripod_gait = createGaitConfig(TRIPOD_GAIT, p);
+    if (!sys.setGaitConfiguration(tripod_gait)) {
         std::cerr << "ERROR: Failed to set gait type." << std::endl;
         return 1;
     }

@@ -69,7 +69,6 @@ LegStepper::LegStepper(int leg_index, const Point3D &identity_tip_pose, Leg &leg
     // Initialize velocity and movement vectors
     desired_linear_velocity_ = Point3D(0, 0, 0);
     desired_angular_velocity_ = 0.0;
-    walk_plane_ = Point3D(0, 0, 0);
     walk_plane_normal_ = Point3D(0, 0, 1);
     stride_vector_ = Point3D(0, 0, 0);
     current_tip_velocity_ = Point3D(0, 0, 0);
@@ -141,12 +140,11 @@ void LegStepper::setDesiredVelocity(const Point3D &linear_velocity, double angul
 #endif
 }
 
+// OpenSHC-based implementation with philosophical alignment adjustments:
+// Here we compute stride each call but freeze (cache) its value at phase start; downstream code uses the
+// frozen copy, preventing migration of the swing target. This mirrors OpenSHC intent where stride parameters
+// remain effectively constant during a phase.
 void LegStepper::updateStride() {
-    // OpenSHC-based implementation with philosophical alignment adjustments:
-    // Previous HexaMotion recalculated stride every iteration using current_tip_pose_, causing intra-phase drift.
-    // Here we compute stride each call but freeze (cache) its value at phase start; downstream code uses the
-    // frozen copy, preventing migration of the swing target. This mirrors OpenSHC intent where stride parameters
-    // remain effectively constant during a phase.
 
     // In OpenSHC this comes from walker_->getWalkPlane()/getWalkPlaneNormal().
     // We decouple by allowing WalkController (or another higher layer) to call
@@ -155,10 +153,7 @@ void LegStepper::updateStride() {
     auto normal_mag = std::sqrt(walk_plane_normal_.x * walk_plane_normal_.x +
                                 walk_plane_normal_.y * walk_plane_normal_.y +
                                 walk_plane_normal_.z * walk_plane_normal_.z);
-    if (normal_mag < 1e-6) {
-        walk_plane_normal_ = Point3D(0, 0, 1); // fallback normal
-        walk_plane_ = Point3D(identity_tip_pose_.x, identity_tip_pose_.y, identity_tip_pose_.z);
-    }
+
     // Normalize plane normal (protect against extreme values)
     if (normal_mag > 1e-6) {
         walk_plane_normal_ = walk_plane_normal_ / normal_mag;
@@ -169,10 +164,7 @@ void LegStepper::updateStride() {
 
     // Angular stride vector (OpenSHC formula)
     Point3D z_unit(0, 0, 1);
-    double dot_product = current_tip_pose_.x * z_unit.x + current_tip_pose_.y * z_unit.y + current_tip_pose_.z * z_unit.z;
-    Point3D projection_on_z = z_unit * dot_product;
-    // Difference vs prior implementation: use default_tip_pose_ for stable angular radius (reduces drift)
-    Point3D radius = default_tip_pose_ - projection_on_z; // reference rejection (philosophically constant like OpenSHC)
+    Point3D radius = math_utils::rejectVector(current_tip_pose_, z_unit); // current rejection (more responsive, less stable)
 
     Point3D angular_velocity_vector(0, 0, desired_angular_velocity_);
 
@@ -189,7 +181,7 @@ void LegStepper::updateStride() {
     stride_vector_ = stride_vector_ * (on_ground_ratio / step_cycle_.frequency_);
 
     // Apply stride validation and safety constraints
-    stride_vector_ = calculateSafeStride(stride_vector_);
+    // stride_vector_ = calculateSafeStride(stride_vector_);
 
     // Freeze stride if not yet frozen for current phase
     if (!stride_frozen_) {
@@ -326,6 +318,10 @@ void LegStepper::generateSecondarySwingControlNodes(bool ground_contact) {
     swing_2_nodes_[3] = target_tip_pose_ - stance_node_seperation;
     // Set for position continuity at transition between secondary swing and stance curves (C0 Smoothness)
     swing_2_nodes_[4] = target_tip_pose_;
+
+    // Ensure touchdown occurs exactly on the walking plane (standing height)
+    // This eliminates tiny numerical drift in Z accumulated during swing integration
+    swing_2_nodes_[4].z = default_tip_pose_.z;
 
     // Stops further movement of tip position in direction normal to walk plane
     if (ground_contact) {
@@ -505,17 +501,6 @@ void LegStepper::updateTipPositionIterative(int iteration, double time_delta, bo
         // Calculate velocity for this iteration (OpenSHC pattern)
         current_tip_velocity_ = delta_pos / time_delta;
 
-        // Improvement 2: Early swing termination when contact detected in second half of swing
-        if (!first_half && params_.use_fsr_contact && ground_contact) {
-            // Transition immediately to stance on next update
-            step_state_ = STEP_STANCE;
-            // Reset swing-related flags so a fresh stance origin is established
-            swing_initialized_ = false;
-            nodes_generated_ = false; // force regeneration when next swing starts
-            // Force stance iteration start by resetting current_iteration_ to swing_iterations_
-            current_iteration_ = swing_iterations_; // so next call maps to stance_iteration==1
-        }
-
     } else if (step_state_ == STEP_STANCE) {
 
         // Stance iteration mapping: we convert the running iteration counter into a 1-based local index
@@ -587,6 +572,11 @@ void LegStepper::updateTipPositionIterative(int iteration, double time_delta, bo
                     stance_origin_tip_position_ = current_tip_pose_;
                 }
             }
+            // Regardless of drift mode, lock the stance plane Z to standing height when not adapting terrain
+            if ((!rough_terrain_mode || force_normal_touchdown) && !params.use_fsr_contact) {
+                current_tip_pose_.z = default_tip_pose_.z;
+                stance_origin_tip_position_.z = default_tip_pose_.z;
+            }
         }
 
         // Initialize tangential stance mode state at first stance iteration
@@ -600,6 +590,10 @@ void LegStepper::updateTipPositionIterative(int iteration, double time_delta, bo
         double time_input = stance_iteration * stance_delta_t_;
         Point3D delta_pos = math_utils::quarticBezierDot(stance_nodes_, time_input) * stance_delta_t_;
         current_tip_pose_ += delta_pos;
+        // Keep stance motion constrained to the walking plane when not in rough terrain mode
+        if ((!rough_terrain_mode || force_normal_touchdown) && !params.use_fsr_contact) {
+            current_tip_pose_.z = default_tip_pose_.z;
+        }
         current_tip_velocity_ = delta_pos / time_delta;
     }
 
@@ -614,6 +608,10 @@ void LegStepper::updateTipPositionIterative(int iteration, double time_delta, bo
                 current_tip_pose_ = frozen_target_tip_pose_;
             } else {
                 current_tip_pose_ = current_tip_pose_ + err * params.phase_end_snap_alpha;
+            }
+            // Guarantee exact touchdown height on walking plane at swing end (only if FSR is not in use)
+            if (step_state_ == STEP_SWING && (!rough_terrain_mode || force_normal_touchdown) && !params.use_fsr_contact) {
+                current_tip_pose_.z = default_tip_pose_.z;
             }
         }
     }

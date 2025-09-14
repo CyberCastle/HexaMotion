@@ -385,12 +385,59 @@ int main() {
     }
 
     // ==============================================================
-    // Compatibility Mode Comparison Test
+    // Standing pose workplane height validation (added test)
     // ==============================================================
-    // NOTE: Compatibility (OpenSHC diameter traversal) mode removed. Unified stride-based velocity limiting
-    // provides a single coherent surface, integrates overshoot directly into stride_length, and avoids
-    // inflated theoretical maxima (2R / (stance_ratio/f)) that were not achievable under the configured
-    // stride fraction and scaling. Legacy comparison and divergence diagnostics deleted intentionally.
+    {
+        std::cout << "\n=== Standing Pose Height Validation ===" << std::endl;
+        double expected_standing_height = params.standing_height; // 150 mm (absolute foot height => foot Z = -standing_height)
+
+        // Therefore the standing workplane is at Z = -standing_height.
+        double target_workplane_height = -expected_standing_height; // -150
+
+        std::cout << "Expected standing tip Z: " << target_workplane_height << " mm" << std::endl;
+
+        // Obtain workplane at computed height
+        Workplane standing_plane = analyzer.getWorkplane(0, target_workplane_height);
+        if (standing_plane.empty()) {
+            std::cout << "❌ Standing workplane not found at height " << target_workplane_height << " mm" << std::endl;
+        } else {
+            std::cout << "✅ Standing workplane found (" << standing_plane.size() << " bearings)" << std::endl;
+            // Basic semantic check: bearing 0 and 180 radii should be non-zero and consistent with walkspace map bounds
+            double r0 = 0.0;
+            double r180 = 0.0;
+            double r360 = 0.0;
+            bool ok = true;
+            auto it0 = standing_plane.find(0);
+            if (it0 != standing_plane.end())
+                r0 = it0->second;
+            else
+                ok = false;
+            auto it180 = standing_plane.find(180);
+            if (it180 != standing_plane.end())
+                r180 = it180->second;
+            else
+                ok = false;
+            auto it360 = standing_plane.find(360);
+            if (it360 != standing_plane.end())
+                r360 = it360->second;
+            else
+                ok = false;
+            if (!ok || r0 <= 0 || r180 <= 0) {
+                std::cout << "❌ Invalid radii in standing plane (r0=" << r0 << ", r180=" << r180 << ")" << std::endl;
+            } else if (std::abs(r0 - r360) > 1e-6) {
+                std::cout << "❌ Standing plane symmetry failed (r0 != r360)" << std::endl;
+            } else {
+                std::cout << "✅ Standing plane radii valid (r0=" << r0 << ", r180=" << r180 << ")" << std::endl;
+            }
+            // Cross-check that height lies within global workspace bounds for leg 0
+            WorkspaceBounds wb = analyzer.getWorkspaceBounds(0);
+            if (target_workplane_height < wb.min_height - 1e-3 || target_workplane_height > wb.max_height + 1e-3) {
+                std::cout << "❌ Standing height outside reported bounds (" << wb.min_height << ", " << wb.max_height << ")" << std::endl;
+            } else {
+                std::cout << "✅ Standing height within workspace bounds" << std::endl;
+            }
+        }
+    }
 
     return 0;
 }

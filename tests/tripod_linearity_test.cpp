@@ -78,7 +78,8 @@ int main() {
         std::cerr << "ERROR: Standing pose failed" << std::endl;
         return 1;
     }
-    if (!sys.setGaitType(TRIPOD_GAIT)) {
+    GaitConfiguration tripod_gait = createGaitConfig(TRIPOD_GAIT, params);
+    if (!sys.setGaitConfiguration(tripod_gait)) {
         std::cerr << "ERROR: Failed to set tripod gait" << std::endl;
         return 1;
     }

@@ -854,4 +854,38 @@ Eigen::Vector3d RobotModel::calculateJointLimitCostGradient(const JointAngles &c
     return 0.75 * position_cost_gradient + 0.25 * velocity_cost_gradient;
 }
 
+std::string RobotModel::gaitTypeToString(GaitType gait_type) {
+    switch (gait_type) {
+    case WAVE_GAIT:
+        return "wave_gait";
+    case TRIPOD_GAIT:
+        return "tripod_gait";
+    case RIPPLE_GAIT:
+        return "ripple_gait";
+    case METACHRONAL_GAIT:
+        return "metachronal_gait";
+    case ADAPTIVE_GAIT:
+        return "adaptive_gait";
+    case NO_GAIT:
+    default:
+        return "no_gait";
+    }
+}
+
+GaitType RobotModel::stringToGaitType(const std::string &gait_name) {
+    if (gait_name == "wave_gait") {
+        return WAVE_GAIT;
+    } else if (gait_name == "tripod_gait") {
+        return TRIPOD_GAIT;
+    } else if (gait_name == "ripple_gait") {
+        return RIPPLE_GAIT;
+    } else if (gait_name == "metachronal_gait") {
+        return METACHRONAL_GAIT;
+    } else if (gait_name == "adaptive_gait") {
+        return ADAPTIVE_GAIT;
+    } else {
+        return NO_GAIT;
+    }
+}
+
 // End of file

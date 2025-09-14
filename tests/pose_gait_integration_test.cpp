@@ -1,4 +1,5 @@
 #include "../src/body_pose_config_factory.h"
+#include "../src/gait_config_factory.h"
 #include "../src/hexamotion_constants.h"
 #include "../src/locomotion_system.h"
 #include "test_stubs.h"
@@ -351,7 +352,8 @@ int main() {
     printf("Startup sequence completed in %d iterations\n", startup_iterations);
     addResult(rep, startup_ok, "Startup sequence", sys);
 
-    assert(sys.setGaitType(TRIPOD_GAIT));
+    GaitConfiguration tripod_gait = createGaitConfig(TRIPOD_GAIT, p);
+    assert(sys.setGaitConfiguration(tripod_gait));
     assert(sys.walkForward(100.0));
 
     const double distance = 10.0; // mm

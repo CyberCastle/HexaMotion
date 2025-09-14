@@ -1,6 +1,7 @@
 #ifndef ROBOT_MODEL_H
 #define ROBOT_MODEL_H
 
+#include "gait_types.h" // Shared gait type enumeration
 #include "hexamotion_constants.h"
 #include "math_utils.h"
 #include "precision_config.h"
@@ -167,6 +168,11 @@ struct Parameters {
     double femur_mass = 0.0; //< Femur mass (0 => use lengths only)
     double tibia_mass = 0.0; //< Tibia mass (0 => use lengths only)
 
+    // --- Constraint tolerances ---
+    // Tolerancia para preservar la altura exacta del plano de marcha al aplicar
+    // el constriñimiento geométrico (evita deriva vertical artificial en touchdown)
+    double walk_plane_z_tolerance_mm = WALK_PLANE_Z_TOLERANCE_MM;
+
     // --- Startup (initial standing) normalization configuration ---
     struct StartupNormalizationConfig {
         bool enable_torque_balanced = true; //< Enable torque/energy balanced scaling in LIFT phase
@@ -175,6 +181,53 @@ struct Parameters {
         double accel_deadband = 0.05;       //< Minimum non-zero normalized acceleration after scaling
         double tibia_speed_cap = 0.85;      //< Optional ceiling for tibia speed after scaling
     } startup_norm;
+
+    /**
+     * @brief Global motion and workspace scaling factors (moved from hardcoded implementation in WorkspaceAnalyzer::getScalingFactors()).
+     *
+     * These values previously lived as literal constants (e.g. 0.65, 0.9, 1.0) inside the analyzer. Exposing them here
+     * allows runtime / configuration level tuning (same style as StartupNormalizationConfig) without touching core code.
+     *
+     * Usage notes:
+     *  - collision_scale: when <= 0.0 the validation_config_.safety_margin_factor is used dynamically.
+     *  - safety_margin: generic multiplier applied by controllers (e.g. servo speed clamping) for unified conservative tuning.
+     *  - Keep values in a sane physical range (0.4 – 1.2) to avoid destabilizing stride / velocity estimations.
+     */
+    struct ScalingFactors {
+        double linear_scale = 0.65;      //< Legacy linear scaling (replaces scattered WORKSPACE / WALKSPACE constants)
+        double angular_scale = 1.0;      //< Angular scaling (kept at 1.0 unless deliberate reduction required)
+        double workspace_scale = 0.65;   //< Conservative workspace envelope scaling
+        double collision_scale = 0.0;    //< If <= 0 => derive from ValidationConfig::safety_margin_factor
+        double velocity_scale = 0.9;     //< 10% safety margin for derived velocity limits
+        double acceleration_scale = 1.0; //< Acceleration scaling (placeholder for future tuning)
+        double safety_margin = 0.9;      //< Unified safety margin for servo speed / other conservative clamps
+    } scaling;                           //< Instance accessible as params.scaling
+
+    /**
+     * @brief Workspace & morphology heuristic tuning factors.
+     * All former hardcoded literals in WorkspaceAnalyzer moved here for external configurability.
+     * Keep factors within physically meaningful ranges to avoid destabilizing gait generation.
+     */
+    struct WorkspaceTuning {
+        // Stability & collision
+        double stability_threshold_mm = 10.0; //< Min stability margin to be considered stable
+        double min_leg_separation_mm = 50.0;  //< Minimum planar distance between adjacent leg tips
+
+        // Morphology reach heuristics
+        double morphology_cap_factor = 1.15;           //< Headroom over standing_horizontal_reach for max_reach cap
+        double femur_up_range_factor = 0.85;           //< Upward (positive Z) reachable fraction of femur length
+        double down_range_factor = 0.85;               //< Downward (negative Z) fraction of (femur+tibia)
+        double leg_workspace_height_span_factor = 0.7; //< Percentage of total reach for +/- height span in cached workspace
+
+        // Preferred reach buffer
+        double preferred_min_reach_buffer_factor = 1.1; //< Multiplier over absolute min reach for preferred_min_reach
+
+        // Collision avoidance iterative scaling (adjustForCollisionAvoidance)
+        double collision_adjust_start_scale = 0.9; //< Initial radial scale attempt
+        double collision_adjust_min_scale = 0.5;   //< Minimum radial scale attempt
+        double collision_adjust_step = 0.1;        //< Decrement step per attempt
+        double safe_scale_ratio = 0.7;             //< Fallback ratio of leg_reach when iterative scaling fails
+    } workspace_tuning;                            //< params.workspace_tuning
 };
 
 // Centralized servo angle solution for standing height (previously in body_pose_config_factory)
@@ -183,15 +236,6 @@ struct CalculatedServoAngles {
     double femur; // Femur servo angle (radians)
     double tibia; // Tibia servo angle (radians)
     bool valid;   // Solution validity flag
-};
-
-enum GaitType {
-    NO_GAIT,
-    TRIPOD_GAIT,
-    WAVE_GAIT,
-    RIPPLE_GAIT,
-    METACHRONAL_GAIT,
-    ADAPTIVE_GAIT
 };
 
 enum StepPhase {
@@ -721,8 +765,23 @@ class RobotModel {
     double getStandingHorizontalReach() const;
     // Analytic servo angle computation for target height (tibia vertical assumption)
     static CalculatedServoAngles calculateServoAnglesForHeight(double target_height_mm, const Parameters &params);
+
     /** Static helper for external code needing the same computation without an instance. */
     static double computeStandingHorizontalReach(const Parameters &p);
+
+    /**
+     * @brief Convert GaitType enum to string name
+     * @param gait_type GaitType enum value
+     * @return String representation of the gait type
+     */
+    static std::string gaitTypeToString(GaitType gait_type);
+
+    /**
+     * @brief Convert string name to GaitType enum
+     * @param gait_name String name of the gait
+     * @return GaitType enum value (NO_GAIT if not found)
+     */
+    static GaitType stringToGaitType(const std::string &gait_name);
 
     /** Get the DH position of the leg base (without joint transformations) */
     Point3D getLegBasePosition(int leg_index) const;

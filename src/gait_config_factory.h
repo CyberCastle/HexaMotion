@@ -2,7 +2,9 @@
 #define GAIT_CONFIG_FACTORY_H
 
 #include "gait_config.h"
+#include "gait_types.h" // For GaitType enum
 #include "leg_stepper.h"
+#include "robot_model.h" // For model access
 #include <string>
 #include <vector>
 
@@ -19,6 +21,14 @@ GaitConfiguration createWaveGaitConfig(const Parameters &params);
 GaitConfiguration createTripodGaitConfig(const Parameters &params);
 GaitConfiguration createRippleGaitConfig(const Parameters &params);
 GaitConfiguration createMetachronalGaitConfig(const Parameters &params);
+
+/**
+ * @brief Create gait configuration based on GaitType enum
+ * @param gait_type Type of gait to create
+ * @param params Robot parameters
+ * @return Configured gait of the specified type
+ */
+GaitConfiguration createGaitConfig(GaitType gait_type, const Parameters &params);
 
 // Gait selection configuration
 GaitSelectionConfig createGaitSelectionConfig(const Parameters &params);

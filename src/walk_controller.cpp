@@ -1,6 +1,7 @@
 #include "walk_controller.h"
 #include "body_pose_config.h"
 #include "gait_config_factory.h"
+#include "gait_types.h"
 #include "hexamotion_constants.h"
 #include "leg_stepper.h"
 #include "math_utils.h"
@@ -29,8 +30,9 @@ WalkController::WalkController(RobotModel &m, Leg legs[NUM_LEGS], const BodyPose
     // Initialize gait configuration system (OpenSHC equivalent)
     gait_selection_config_ = createGaitSelectionConfig(model.getParams());
     std::string default_gait_name = model.getParams().gait_type.empty() ? "tripod_gait" : model.getParams().gait_type;
-    GaitType default_gait_type = stringToGaitType(default_gait_name);
-    setGait(default_gait_type);
+    GaitType default_gait_type = RobotModel::stringToGaitType(default_gait_name);
+    GaitConfiguration default_gait_config = createGaitConfig(default_gait_type, model.getParams());
+    setGait(default_gait_config);
 
     // Create LegStepper objects for each leg
     for (int i = 0; i < NUM_LEGS; i++) {
@@ -113,29 +115,14 @@ bool WalkController::setGaitConfiguration(const GaitConfiguration &gait_config) 
     return true;
 }
 
+bool WalkController::setGait(const GaitConfiguration &gait_config) {
+    // Delegate to setGaitConfiguration for consistency
+    return setGaitConfiguration(gait_config);
+}
+
 bool WalkController::setGait(GaitType gait_type) {
-    // Get gait configuration from factory using the robot parameters
-    const Parameters &params = model.getParams();
-    GaitConfiguration gait_config;
-
-    switch (gait_type) {
-    case TRIPOD_GAIT:
-        gait_config = createTripodGaitConfig(params);
-        break;
-    case WAVE_GAIT:
-        gait_config = createWaveGaitConfig(params);
-        break;
-    case RIPPLE_GAIT:
-        gait_config = createRippleGaitConfig(params);
-        break;
-    case METACHRONAL_GAIT:
-        gait_config = createMetachronalGaitConfig(params);
-        break;
-    default:
-        // Unsupported gait type, return false
-        return false;
-    }
-
+    // Create gait configuration using factory and robot parameters
+    GaitConfiguration gait_config = createGaitConfig(gait_type, model.getParams());
     return setGaitConfiguration(gait_config);
 }
 
@@ -341,6 +328,9 @@ void WalkController::init(const Eigen::Vector3d &current_body_position, const Ei
         } // OpenSHC pattern: Initialize current tip pose to default stance position
         // This ensures LegStepper starts with proper stance coordinates
         leg_stepper->setCurrentTipPose(leg_stepper->getDefaultTipPose());
+
+        // Initialize walk plane and normal so swing clearance is oriented correctly from the start
+        leg_stepper->setWalkPlaneNormal(getWalkPlaneNormal());
     }
 
     // Init velocity input variables
@@ -518,6 +508,10 @@ void WalkController::updateWalk(const Point3D &linear_velocity_input, double ang
         // Set velocity once per leg
         leg_stepper->setDesiredVelocity(desired_linear_velocity_, desired_angular_velocity_);
 
+        // Propagate walk plane and its normal from the controller (BodyPoseController) to each LegStepper.
+        // This aligns swing clearance and touchdown direction with the estimated walking surface.
+        leg_stepper->setWalkPlaneNormal(getWalkPlaneNormal());
+
         if (is_active_walking && step_cycle_calculated) {
             // Advance per-leg phase by 1 (keeping global coordination for gait duration)
             int current_phase = leg_stepper->getPhase();
@@ -675,19 +669,4 @@ WalkController::LegTrajectoryInfo WalkController::getLegTrajectoryInfo(int leg_i
     info.velocity = leg_stepper->getCurrentTipVelocity();
 
     return info;
-}
-
-// Helper method implementations
-GaitType WalkController::stringToGaitType(const std::string &gait_name) const {
-    if (gait_name == "tripod_gait") {
-        return TRIPOD_GAIT;
-    } else if (gait_name == "wave_gait") {
-        return WAVE_GAIT;
-    } else if (gait_name == "ripple_gait") {
-        return RIPPLE_GAIT;
-    } else if (gait_name == "metachronal_gait") {
-        return METACHRONAL_GAIT;
-    } else {
-        return NO_GAIT; // Default for unknown gait types
-    }
 }

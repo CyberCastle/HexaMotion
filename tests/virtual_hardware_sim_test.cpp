@@ -582,7 +582,8 @@ int main(int argc, char **argv) {
 
     // 3. Start tripod gait (new API)
     std::cout << "Starting tripod gait..." << std::endl;
-    if (!sys.setGaitType(TRIPOD_GAIT)) {
+    GaitConfiguration tripod_gait = createGaitConfig(TRIPOD_GAIT, params);
+    if (!sys.setGaitConfiguration(tripod_gait)) {
         std::cerr << "ERROR: Failed to set gait type." << std::endl;
         return 1;
     }
