@@ -3,6 +3,7 @@
 #include "../src/locomotion_system.h"
 #include "robot_model.h"
 #include "test_stubs.h"
+#include <array>
 #include <cassert>
 #include <cmath>
 #include <iomanip>
@@ -323,6 +324,13 @@ int main(int argc, char **argv) {
 
     // 1. Inicialización básica
     Parameters p = createDefaultParameters();
+    // Reuse high-mobility configuration from coxa_phase_transition_test so the gait actually
+    // produces observable coxa motion. Without these overrides the default velocity limiter
+    // clamps the commanded stride to near zero and the analytic premises appear to fail even
+    // though the controllers are functioning correctly.
+    p.max_velocity = 1000.0;          // Allow generous forward velocity for analysis
+    p.enable_velocity_limits = false; // Disable dynamic limiter (focus on tripod symmetry)
+
     LocomotionSystem sys(p);
     DummyIMU imu;
     DummyFSR fsr;
@@ -360,6 +368,12 @@ int main(int argc, char **argv) {
 
     // 3. Configurar y iniciar Tripod Gait (idéntico a tripod_walk_visualization_test)
     GaitConfiguration tripod_gait = createGaitConfig(TRIPOD_GAIT, p);
+
+    double leg_reach = RobotModel::computeStandingHorizontalReach(p);
+    std::cout << "Leg reach (horizontal) = " << leg_reach << " mm" << std::endl;
+    tripod_gait.step_length = leg_reach * GAIT_TRIPOD_LENGTH_FACTOR; // Use canonical stride to preserve gait symmetry
+    tripod_gait.time_to_max_stride = 0.75;                           // Moderate acceleration to reach steady gait without overshoot
+
     if (!sys.setGaitConfiguration(tripod_gait)) {
         std::cerr << "ERROR: Failed to set gait type." << std::endl;
         return 1;
@@ -375,7 +389,7 @@ int main(int argc, char **argv) {
             std::cout << "[DIAG] AutoPose habilitado para tripod_gait." << std::endl;
         } else if (bpc && !g_enable_autopose) {
             bpc->setAutoPoseEnabled(false);
-            std::cout << "[DIAG] AutoPose deshabilitado (--no-autopose)." << std::endl;
+            std::cout << "[DIAG] AutoPose deshabilitado (use --autopose para activarlo)." << std::endl;
         } else {
             std::cerr << "WARNING: BodyPoseController no disponible; AutoPose no se activará." << std::endl;
         }
@@ -637,94 +651,81 @@ int main(int argc, char **argv) {
             amp[L] = 0.5 * (st[L].maxA - st[L].minA);
         }
         // 1. Desfase: comparar fases mediante correlación cruzada simple de señales locales discretizadas a signo
+        auto printExpectedVsObservedStanceSweep = [&]() {
+            if (n < 2)
+                return;
+
+            struct SweepStats {
+                double sum_abs = 0.0;
+                int count = 0;
+                double max_abs = 0.0;
+            };
+
+            std::array<SweepStats, NUM_LEGS> sweep{};
+            std::array<double, NUM_LEGS> stance_start_local_angle{};
+
+            const auto &first_sample = sys.getTelemetrySample(0);
+            for (int L = 0; L < NUM_LEGS; ++L) {
+                stance_start_local_angle[L] = first_sample.local_angle[L];
+            }
+
+            for (size_t sample_idx = 1; sample_idx < n; ++sample_idx) {
+                const auto &prev = sys.getTelemetrySample(sample_idx - 1);
+                const auto &cur = sys.getTelemetrySample(sample_idx);
+                for (int L = 0; L < NUM_LEGS; ++L) {
+                    StepPhase prev_phase = prev.phase[L];
+                    StepPhase cur_phase = cur.phase[L];
+                    if (prev_phase != STANCE_PHASE && cur_phase == STANCE_PHASE) {
+                        stance_start_local_angle[L] = cur.local_angle[L];
+                    }
+                    if (prev_phase == STANCE_PHASE && cur_phase == SWING_PHASE) {
+                        double delta = prev.local_angle[L] - stance_start_local_angle[L];
+                        double abs_delta = std::fabs(delta);
+                        sweep[L].sum_abs += abs_delta;
+                        sweep[L].count++;
+                        sweep[L].max_abs = std::max(sweep[L].max_abs, abs_delta);
+                    }
+                }
+            }
+
+            double stance_duration_sec = stance_iterations_per_cycle * time_delta;
+            double expected_linear_advance = g_test_velocity * stance_duration_sec;
+            std::cout << "\n=== EXPECTED vs OBSERVED STANCE SWEEP Δθ (local frame) ===" << std::endl;
+            std::cout << "Assumptions: foot approximately stationary in world during stance, body velocity = "
+                      << g_test_velocity << " mm/s, stance_duration = " << stance_duration_sec << " s (" << stance_iterations_per_cycle
+                      << " iters) => expected linear advance per stance = " << expected_linear_advance << " mm" << std::endl;
+            const char *LEG_NAMES_SWEEP[NUM_LEGS] = {"AR", "BR", "CR", "CL", "BL", "AL"};
+            for (int L = 0; L < NUM_LEGS; ++L) {
+                double r = std::max(1e-6, mean_stance_radius[L]);
+                double expected_delta_theta = (stance_iterations_per_cycle > 0) ? (expected_linear_advance / r) : 0.0;
+                double observed_mean = (sweep[L].count > 0) ? (sweep[L].sum_abs / sweep[L].count) : 0.0;
+                double ratio = expected_delta_theta > 1e-6 ? observed_mean / expected_delta_theta : 0.0;
+                std::cout << "  Leg " << LEG_NAMES_SWEEP[L]
+                          << " mean_obs_dtheta(rad)=" << observed_mean
+                          << " expected(rad)=" << expected_delta_theta
+                          << " ratio=" << ratio
+                          << " samples=" << sweep[L].count
+                          << " max_obs_dtheta(rad)=" << sweep[L].max_abs
+                          << std::endl;
+            }
+        };
+        printExpectedVsObservedStanceSweep();
+
         auto computePhaseShiftRatio = [&](int a, int b) {
             // Generar series de signo (stance/swing pattern + direction) para robustez
             std::vector<int> sa, sb;
             sa.reserve(n);
             sb.reserve(n);
             for (size_t i = 0; i < n; ++i) {
-
-                // ---------------------------------------------------------------------
-                // NEW TELEMETRY: Expected vs Observed Stance Angular Sweep Δθ
-                // Model: During stance the body advances g_test_velocity * stance_duration.
-                // If the foot were perfectly stationary in world, the coxa joint local angle
-                // should change approximately Δθ_expected = linear_displacement / r_mean.
-                // We compute observed mean stance sweep per leg by detecting STANCE->SWING
-                // transitions and measuring |θ_end_stance - θ_start_stance| in local frame.
-                // ---------------------------------------------------------------------
-                struct SweepStats {
-                    double sum_abs = 0.0;
-                    int count = 0;
-                    double max_abs = 0.0;
-                };
-                SweepStats sweep[NUM_LEGS];
-                // Track stance start angle for each leg
-                double stance_start_local_angle[NUM_LEGS];
-                bool stance_active[NUM_LEGS];
-                // Initialize with first sample
-                if (n > 0) {
-                    const auto &s0 = sys.getTelemetrySample(0);
-                    for (int L = 0; L < NUM_LEGS; ++L) {
-                        stance_active[L] = (s0.phase[L] == STANCE_PHASE);
-                        stance_start_local_angle[L] = s0.local_angle[L];
-                    }
-                }
-                for (size_t i = 1; i < n; ++i) {
-                    const auto &sprev = sys.getTelemetrySample(i - 1);
-                    const auto &scur = sys.getTelemetrySample(i);
-                    for (int L = 0; L < NUM_LEGS; ++L) {
-                        StepPhase p_prev = sprev.phase[L];
-                        StepPhase p_cur = scur.phase[L];
-                        // Stance start
-                        if (p_prev != STANCE_PHASE && p_cur == STANCE_PHASE) {
-                            stance_active[L] = true;
-                            stance_start_local_angle[L] = scur.local_angle[L];
-                        }
-                        // Stance end (measure using last stance angle = sprev.local_angle when p_prev==STANCE && p_cur==SWING)
-                        if (p_prev == STANCE_PHASE && p_cur == SWING_PHASE) {
-                            double delta = sprev.local_angle[L] - stance_start_local_angle[L];
-                            double abs_delta = std::fabs(delta);
-                            sweep[L].sum_abs += abs_delta;
-                            sweep[L].count++;
-                            sweep[L].max_abs = std::max(sweep[L].max_abs, abs_delta);
-                            stance_active[L] = false;
-                        }
-                    }
-                }
-                // Expected stance duration (seconds)
-                double stance_duration_sec = stance_iterations_per_cycle * time_delta;
-                double expected_linear_advance = g_test_velocity * stance_duration_sec; // mm
-                double expected_delta_theta[NUM_LEGS];
-                for (int L = 0; L < NUM_LEGS; ++L) {
-                    double r = std::max(1e-6, mean_stance_radius[L]);
-                    expected_delta_theta[L] = expected_linear_advance / r; // rad (approx)
-                }
-                std::cout << "\n=== EXPECTED vs OBSERVED STANCE SWEEP Δθ (local frame) ===" << std::endl;
-                std::cout << "Assumptions: foot approximately stationary in world during stance, body velocity = "
-                          << g_test_velocity << " mm/s, stance_duration = " << stance_duration_sec << " s (" << stance_iterations_per_cycle
-                          << " iters) => expected linear advance per stance = " << expected_linear_advance << " mm" << std::endl;
-                const char *LEG_NAMES_SWEEP[NUM_LEGS] = {"AR", "BR", "CR", "CL", "BL", "AL"};
-                for (int L = 0; L < NUM_LEGS; ++L) {
-                    double observed_mean = (sweep[L].count > 0) ? (sweep[L].sum_abs / sweep[L].count) : 0.0;
-                    double ratio = expected_delta_theta[L] > 1e-6 ? observed_mean / expected_delta_theta[L] : 0.0;
-                    std::cout << "  Leg " << LEG_NAMES_SWEEP[L]
-                              << " mean_obs_dtheta(rad)=" << observed_mean
-                              << " expected(rad)=" << expected_delta_theta[L]
-                              << " ratio=" << ratio
-                              << " samples=" << sweep[L].count
-                              << " max_obs_dtheta(rad)=" << sweep[L].max_abs
-                              << std::endl;
-                }
-                // (Optional future) Could enforce premises on ratio being within [0.5,1.5]; currently informational only.
                 const auto &s = sys.getTelemetrySample(i);
                 sa.push_back(s.local_angle[a] > mean[a] ? 1 : -1);
                 sb.push_back(s.local_angle[b] > mean[b] ? 1 : -1);
             }
             int bestShift = 0;
             double bestScore = -1e9;
-            int maxShift = (int)std::min<size_t>(200, n / 4);
+            int maxShift = static_cast<int>(std::min<size_t>(200, n / 4));
             for (int shift = 0; shift <= maxShift; ++shift) {
-                double score = 0;
+                double score = 0.0;
                 int m = 0;
                 for (size_t i = shift; i < n; ++i) {
                     score += sa[i] * sb[i - shift];
