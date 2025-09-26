@@ -62,6 +62,8 @@ struct Parameters {
 
     double max_velocity;
     double max_angular_velocity;
+    double overshoot_stride_fraction = DEFAULT_OVERSHOOT_STRIDE_FRACTION;   //< Max fraction of stride dedicated to overshoot damping
+    double min_effective_stride_ratio = DEFAULT_MIN_EFFECTIVE_STRIDE_RATIO; //< Minimum stride fraction preserved after overshoot deduction
     double stability_margin;
 
     // Toggle global velocity limiting system (HexaMotion extension).

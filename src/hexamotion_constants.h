@@ -79,6 +79,10 @@
 #define DEFAULT_MAX_LINEAR_VELOCITY 200.0 // Default maximum linear velocity (mm/s)
 #define DEFAULT_MAX_ANGULAR_VELOCITY 90.0 // Default maximum angular velocity (degrees/s)
 
+// Overshoot compensation safety defaults
+#define DEFAULT_OVERSHOOT_STRIDE_FRACTION 0.35 // Maximum fraction of gait stride committed to overshoot compensation
+#define DEFAULT_MIN_EFFECTIVE_STRIDE_RATIO 0.6 // Minimum portion of stride preserved after overshoot deductions
+
 // ========================================================================
 // GAIT CONFIGURATION CONSTANTS (OpenSHC equivalent)
 // ========================================================================
