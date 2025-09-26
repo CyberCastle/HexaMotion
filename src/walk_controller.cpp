@@ -7,8 +7,10 @@
 #include "math_utils.h"
 #include "terrain_adaptation.h"
 #include "velocity_limits.h"
+#include "workspace_analyzer.h"
 #include <algorithm>
 #include <cmath>
+#include <exception>
 #include <iostream>
 #include <memory>
 #include <string>
@@ -560,51 +562,24 @@ Point3D WalkController::calculateOdometry(double time_period) {
 }
 
 void WalkController::generateWalkspace() {
-    // Implement full walkspace calculation like OpenSHC
     walkspace_.clear();
 
-    // Get robot parameters for workspace calculation
-    // Use height-aware horizontal reach from standing pose for walkspace generation
-    double leg_reach = standing_horizontal_reach_;
-    double safe_reach = leg_reach; // Height-aware conservative reach
+    try {
+        WorkspaceAnalyzer &analyzer = model.getWorkspaceAnalyzer();
+        analyzer.generateWorkspace();
+        const auto &analyzer_map = analyzer.getWalkspaceMap();
 
-    // Calculate workspace for each bearing angle
-    for (int bearing = 0; bearing <= 360; bearing += 10) {
-        double bearing_rad = math_utils::degreesToRadians(static_cast<double>(bearing));
-
-        // Calculate workspace radius based on leg geometry and joint limits
-        double max_radius = 0.0;
-
-        for (int leg = 0; leg < NUM_LEGS; leg++) {
-            // Get leg base position
-            Point3D base_pos = model.getLegBasePosition(leg);
-            double base_x = base_pos.x;
-            double base_y = base_pos.y;
-
-            // Calculate reach in bearing direction
-            double target_x = base_x + safe_reach * cos(bearing_rad);
-            double target_y = base_y + safe_reach * sin(bearing_rad);
-
-            // Check if target is reachable by this leg, using current body position
-            // Use inverse kinematics to find angles for this target position
-            Point3D target(target_x, target_y, current_body_position_.z());
-            // For workspace generation, use zero angles as starting point
-            JointAngles zero_angles(0, 0, 0);
-            JointAngles angles = model.inverseKinematicsCurrentGlobalCoordinates(leg, zero_angles, target);
-
-            if (model.checkJointLimits(leg, angles)) {
-                double distance = sqrt((target_x - base_x) * (target_x - base_x) +
-                                       (target_y - base_y) * (target_y - base_y));
-                max_radius = std::max(max_radius, distance);
-            }
+        if (!analyzer_map.empty()) {
+            walkspace_ = analyzer_map; // copy exact bearings from analyzer (OpenSHC parity)
         }
-
-        walkspace_[bearing] = max_radius;
+    } catch (const std::exception &ex) {
+        std::cerr << "WalkController::generateWalkspace failed: " << ex.what() << std::endl;
+        walkspace_.clear();
     }
 
     regenerate_walkspace_ = false;
 
-    // Use unified configuration interface - no more conversions needed!
+    // Regenerate velocity limits using the updated workspace information
     velocity_limits_.generateLimits(current_gait_config_);
 }
 
