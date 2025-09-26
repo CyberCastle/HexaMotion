@@ -655,7 +655,7 @@ Point3D LegStepper::calculateStanceSpanChange() {
     // Clamp height to available range so getWorkplane() never returns empty due to out-of-range.
     double min_h = workspace.begin()->first;
     double max_h = workspace.rbegin()->first;
-    double clamped_height = std::clamp(target_workplane_height, min_h, max_h);
+    double clamped_height = math_utils::clamp(target_workplane_height, min_h, max_h);
 
     Workplane interpolated = analyzer.getWorkplane(leg_index_, clamped_height);
     if (interpolated.empty()) {
