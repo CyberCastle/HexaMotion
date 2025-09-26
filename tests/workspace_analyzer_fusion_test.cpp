@@ -1,10 +1,15 @@
+#include "../src/body_pose_config_factory.h"
+#include "../src/body_pose_controller.h"
 #include "../src/gait_config_factory.h" // Added for createTripodGaitConfig
 #include "../src/hexamotion_constants.h"
+#include "../src/leg.h"
 #include "../src/robot_model.h"
 #include "../src/velocity_limits.h"
+#include "../src/walk_controller.h"
 #include "../src/workspace_analyzer.h"
 #include <cmath>
 #include <iostream>
+#include <vector>
 
 #ifndef M_PI
 #define M_PI 3.14159265358979323846
@@ -29,6 +34,8 @@ int main() {
     params.femur_angle_limits[1] = 75;
     params.tibia_angle_limits[0] = -45;
     params.tibia_angle_limits[1] = 45;
+    params.max_velocity = 70.0;
+    params.max_angular_velocity = 45.0;
 
     RobotModel model(params);
     model.workspaceAnalyzerInitializer(); // Inicializar WorkspaceAnalyzer
@@ -79,6 +86,92 @@ int main() {
         }
     } catch (const std::exception &e) {
         std::cout << "❌ Workspace generation failed: " << e.what() << std::endl;
+    }
+
+    // Validate WalkController::generateWalkspace() produces equivalent data
+    std::cout << "\n=== WalkController::generateWalkspace validation ===" << std::endl;
+    {
+        // Create independent leg instances for the walk controller (avoid reusing FK-only data)
+        Leg wc_legs[NUM_LEGS] = {Leg(0, model), Leg(1, model), Leg(2, model),
+                                 Leg(3, model), Leg(4, model), Leg(5, model)};
+
+        for (int i = 0; i < NUM_LEGS; ++i) {
+            wc_legs[i].initialize(Pose::Identity());
+            wc_legs[i].updateTipPosition();
+        }
+
+        BodyPoseConfiguration pose_config = getDefaultBodyPoseConfig(params);
+        BodyPoseController pose_controller(model, pose_config);
+        pose_controller.setWalkPlanePoseEnabled(true);
+        pose_controller.initializeLegPosers(wc_legs);
+        if (!pose_controller.setStandingPose(wc_legs)) {
+            std::cout << "❌ BodyPoseController failed to apply standing pose" << std::endl;
+        } else {
+            WalkController walk_controller(model, wc_legs, pose_config);
+            walk_controller.setBodyPoseController(&pose_controller);
+
+            // WalkController constructor already calls generateWalkspace(), but re-run to ensure deterministic behaviour
+            walk_controller.generateWalkspace();
+            auto walkspace_wc = walk_controller.getWalkspace();
+            const auto walkspace_analyzer = analyzer.getWalkspaceMap();
+
+            bool walkspace_ok = true;
+            if (walkspace_wc.empty()) {
+                std::cout << "❌ WalkController walkspace map is empty" << std::endl;
+                walkspace_ok = false;
+            } else {
+                std::cout << "✅ WalkController walkspace map generated with " << walkspace_wc.size()
+                          << " bearing entries" << std::endl;
+
+                // Ensure key bearings exist and align (within tolerance) with WorkspaceAnalyzer results
+                const double tolerance = 1e-3;
+
+                // Compare every bearing produced by the analyzer for parity
+                for (const auto &entry : walkspace_analyzer) {
+                    int bearing = entry.first;
+                    auto it_wc = walkspace_wc.find(bearing);
+                    if (it_wc == walkspace_wc.end()) {
+                        std::cout << "❌ WalkController walkspace missing bearing " << bearing << "°" << std::endl;
+                        walkspace_ok = false;
+                        continue;
+                    }
+
+                    double diff = std::abs(it_wc->second - entry.second);
+                    if (diff > tolerance) {
+                        std::cout << "❌ Bearing " << bearing << "° mismatch: WalkController=" << it_wc->second
+                                  << " mm, Analyzer=" << entry.second << " mm (Δ=" << diff << ")" << std::endl;
+                        walkspace_ok = false;
+                    }
+                }
+
+                if (walkspace_wc.size() != walkspace_analyzer.size()) {
+                    for (const auto &entry : walkspace_wc) {
+                        if (walkspace_analyzer.find(entry.first) == walkspace_analyzer.end()) {
+                            std::cout << "❌ WalkController walkspace has unexpected bearing " << entry.first << "°"
+                                      << std::endl;
+                            walkspace_ok = false;
+                        }
+                    }
+                }
+
+                // Validate periodic symmetry (bearing 0 and 360)
+                auto wc0 = walkspace_wc.find(0);
+                auto wc360 = walkspace_wc.find(360);
+                if (wc0 != walkspace_wc.end() && wc360 != walkspace_wc.end() &&
+                    std::abs(wc0->second - wc360->second) < tolerance) {
+                    std::cout << "✅ WalkController walkspace symmetry validated (0° = 360°)" << std::endl;
+                } else {
+                    std::cout << "❌ WalkController walkspace symmetry failed" << std::endl;
+                    walkspace_ok = false;
+                }
+            }
+
+            if (walkspace_ok) {
+                std::cout << "✅ WalkController::generateWalkspace() matches WorkspaceAnalyzer output" << std::endl;
+            } else {
+                std::cout << "❌ WalkController::generateWalkspace() validation failed" << std::endl;
+            }
+        }
     }
 
     // Test validation functions (from WorkspaceValidator)
