@@ -41,7 +41,7 @@ static double g_sym_threshold_stance_deg = 3.0;   // |sum(delta)| máximo permit
 static double g_sym_threshold_swing_deg = 4.0;    // |sum(delta)| máximo permitido en SWING (más tolerancia)
 
 // Acumuladores globales de métricas (máximos absolutos observados)
-static double g_max_abs_sum_stance_pair[3] = {0, 0, 0}; // pares (0,3) (1,4) (2,5)
+static double g_max_abs_sum_stance_pair[3] = {0, 0, 0}; // pares (0,5) (1,4) (2,3)
 static double g_max_abs_sum_swing_pair[3] = {0, 0, 0};
 static int g_sym_violations_stance = 0;
 static int g_sym_violations_swing = 0;
@@ -206,10 +206,10 @@ static void printCoxaStates(const LocomotionSystem &sys, int step, const int tra
     if (swing_count > 0)
         avg_radius_swing /= swing_count;
 
-    // Métricas de simetría por pares opuestos (0,3) (1,4) (2,5)
-    // Nota: Las métricas originales usaban ángulos absolutos; como las coxas opuestas NO tienen offsets que sumen 0
-    // la suma absoluta no es un indicador válido de simetría. Ahora añadimos métricas basadas en deltas respecto
-    // al ángulo inicial (baseline) y solo las mostramos cuando AMBAS patas están en la misma fase STANCE.
+    // Métricas de simetría por pares opuestos (0,5) (1,4) (2,3)
+    // Nota: Las métricas originales usaban ángulos absolutos; aunque ahora los offsets opuestos se cancelan,
+    // preferimos usar métricas basadas en deltas respecto al ángulo inicial (baseline) y solo las mostramos
+    // cuando AMBAS patas están en la misma fase STANCE para aislar desviaciones de trayectoria.
     auto pairMetricsAbs = [&](int a, int b) {
         double sum = coxa_deg[a] + coxa_deg[b];
         double diff = coxa_deg[a] - coxa_deg[b];
@@ -221,9 +221,9 @@ static void printCoxaStates(const LocomotionSystem &sys, int step, const int tra
         return std::make_pair(sum, diff);
     };
 
-    auto p03_abs = pairMetricsAbs(0, 3);
+    auto p05_abs = pairMetricsAbs(0, 5);
     auto p14_abs = pairMetricsAbs(1, 4);
-    auto p25_abs = pairMetricsAbs(2, 5);
+    auto p23_abs = pairMetricsAbs(2, 3);
 
     // Delta (baseline) metrics – stance y swing se evalúan por separado
     auto bothStance = [&](int a, int b) {
@@ -232,17 +232,17 @@ static void printCoxaStates(const LocomotionSystem &sys, int step, const int tra
     auto bothSwing = [&](int a, int b) {
         return sys.getLeg(a).getStepPhase() == SWING_PHASE && sys.getLeg(b).getStepPhase() == SWING_PHASE;
     };
-    std::string p03_delta_str = "--";
+    std::string p05_delta_str = "--";
     std::string p14_delta_str = "--";
-    std::string p25_delta_str = "--";
-    std::string p03_delta_swing_str = "--";
+    std::string p23_delta_str = "--";
+    std::string p05_delta_swing_str = "--";
     std::string p14_delta_swing_str = "--";
-    std::string p25_delta_swing_str = "--";
-    if (bothStance(0, 3)) {
-        auto m = pairMetricsDelta(0, 3);
+    std::string p23_delta_swing_str = "--";
+    if (bothStance(0, 5)) {
+        auto m = pairMetricsDelta(0, 5);
         std::ostringstream oss;
         oss << std::fixed << std::setprecision(1) << m.first << "," << m.second;
-        p03_delta_str = oss.str();
+        p05_delta_str = oss.str();
         double abs_sum = std::fabs(m.first);
         g_max_abs_sum_stance_pair[0] = std::max(g_max_abs_sum_stance_pair[0], abs_sum);
         if (abs_sum > g_sym_threshold_stance_deg)
@@ -258,22 +258,22 @@ static void printCoxaStates(const LocomotionSystem &sys, int step, const int tra
         if (abs_sum > g_sym_threshold_stance_deg)
             g_sym_violations_stance++;
     }
-    if (bothStance(2, 5)) {
-        auto m = pairMetricsDelta(2, 5);
+    if (bothStance(2, 3)) {
+        auto m = pairMetricsDelta(2, 3);
         std::ostringstream oss;
         oss << std::fixed << std::setprecision(1) << m.first << "," << m.second;
-        p25_delta_str = oss.str();
+        p23_delta_str = oss.str();
         double abs_sum = std::fabs(m.first);
         g_max_abs_sum_stance_pair[2] = std::max(g_max_abs_sum_stance_pair[2], abs_sum);
         if (abs_sum > g_sym_threshold_stance_deg)
             g_sym_violations_stance++;
     }
     // Swing symmetry tracking
-    if (bothSwing(0, 3)) {
-        auto m = pairMetricsDelta(0, 3);
+    if (bothSwing(0, 5)) {
+        auto m = pairMetricsDelta(0, 5);
         std::ostringstream oss;
         oss << std::fixed << std::setprecision(1) << m.first << "," << m.second;
-        p03_delta_swing_str = oss.str();
+        p05_delta_swing_str = oss.str();
         double abs_sum = std::fabs(m.first);
         g_max_abs_sum_swing_pair[0] = std::max(g_max_abs_sum_swing_pair[0], abs_sum);
         if (abs_sum > g_sym_threshold_swing_deg)
@@ -289,11 +289,11 @@ static void printCoxaStates(const LocomotionSystem &sys, int step, const int tra
         if (abs_sum > g_sym_threshold_swing_deg)
             g_sym_violations_swing++;
     }
-    if (bothSwing(2, 5)) {
-        auto m = pairMetricsDelta(2, 5);
+    if (bothSwing(2, 3)) {
+        auto m = pairMetricsDelta(2, 3);
         std::ostringstream oss;
         oss << std::fixed << std::setprecision(1) << m.first << "," << m.second;
-        p25_delta_swing_str = oss.str();
+        p23_delta_swing_str = oss.str();
         double abs_sum = std::fabs(m.first);
         g_max_abs_sum_swing_pair[2] = std::max(g_max_abs_sum_swing_pair[2], abs_sum);
         if (abs_sum > g_sym_threshold_swing_deg)
@@ -301,15 +301,15 @@ static void printCoxaStates(const LocomotionSystem &sys, int step, const int tra
     }
 
     std::cout << " R(S/W):" << std::fixed << std::setprecision(0) << avg_radius_stance << "/" << avg_radius_swing
-              << " AbsSym03:" << std::setprecision(1) << p03_abs.first << "," << p03_abs.second
+              << " AbsSym05:" << std::setprecision(1) << p05_abs.first << "," << p05_abs.second
               << " 14:" << p14_abs.first << "," << p14_abs.second
-              << " 25:" << p25_abs.first << "," << p25_abs.second
-              << " dSym03:" << p03_delta_str
+              << " 23:" << p23_abs.first << "," << p23_abs.second
+              << " dSym05:" << p05_delta_str
               << " d14:" << p14_delta_str
-              << " d25:" << p25_delta_str
-              << " dSymW03:" << p03_delta_swing_str
+              << " d23:" << p23_delta_str
+              << " dSymW05:" << p05_delta_swing_str
               << " dW14:" << p14_delta_swing_str
-              << " dW25:" << p25_delta_swing_str;
+              << " dW23:" << p23_delta_swing_str;
 
     std::cout << std::endl;
 }

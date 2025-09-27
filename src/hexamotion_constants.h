@@ -197,18 +197,17 @@ enum SystemState {
 // STANCE CONFIGURATION CONSTANTS (OpenSHC equivalent)
 // ========================================================================
 
-// Per-leg base orientation offsets in radians - symmetric for opposite leg pairs
-// Pairs (index tuples): (0,3)=(-30°,30°), (1,4)=(-90°,90°), (2,5)=(-150°,150°)
-// Correct ordering restores phi_i + phi_j ≈ 0 in local frame for opposite legs
-// and aligns with DH parameter orientation used elsewhere (see tests:
-// coxa_tripod_symmetry_analytic_test expectations).
+// Per-leg base orientation offsets in radians, ordered clockwise from the
+// anterior right leg (AR) to match OpenSHC's default robot configuration.
+// Opposing leg pairs now cancel out (AR+AL, BR+BL, CR+CL), preserving the
+// DH-origin symmetry relied upon by analytic tests and gait factories.
 const double BASE_THETA_OFFSETS[NUM_LEGS] = {
     math_utils::degreesToRadians(-30.0),  // Leg 0 (AR)
     math_utils::degreesToRadians(-90.0),  // Leg 1 (BR)
     math_utils::degreesToRadians(-150.0), // Leg 2 (CR)
-    math_utils::degreesToRadians(30.0),   // Leg 3 (CL)
+    math_utils::degreesToRadians(150.0),  // Leg 3 (CL)
     math_utils::degreesToRadians(90.0),   // Leg 4 (BL)
-    math_utils::degreesToRadians(150.0)   // Leg 5 (AL)
+    math_utils::degreesToRadians(30.0)    // Leg 5 (AL)
 };
 
 #endif // HEXAMOTION_CONSTANTS_H
