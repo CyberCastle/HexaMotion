@@ -211,6 +211,24 @@ inline int roundToInt(double x) {
 }
 
 /**
+ * @brief Round a floating point value to a fixed number of decimal places.
+ *
+ * Direct extraction of the helper previously local to LegStepper (_ls_setPrecision),
+ * kept inline for zero‑overhead usage in tight kinematic loops.
+ *
+ * @param value     Input floating point value.
+ * @param precision Number of decimal digits to keep (>=0).
+ * @return Rounded value with the requested precision.
+ */
+inline double setPrecision(double value, int precision) {
+    if (precision <= 0) {
+        return std::round(value); // fast path for integer rounding
+    }
+    double scale = std::pow(10.0, precision);
+    return std::round(value * scale) / scale;
+}
+
+/**
  * @brief State vector for numerical integration
  */
 template <typename T>

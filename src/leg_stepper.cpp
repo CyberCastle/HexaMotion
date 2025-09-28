@@ -411,11 +411,21 @@ void LegStepper::updateTipPositionIterative(int iteration, double time_delta, bo
         int swing_iteration = current_iteration_ % swing_iterations_;
         step_progress_ = (swing_iterations_ > 0) ? static_cast<double>(swing_iteration) / static_cast<double>(swing_iterations_) : 0.0;
         step_progress_ = std::min(1.0, step_progress_);
+
+        // OpenSHC: update default tip position at start of swing when rough terrain mode enabled
+        if (rough_terrain_mode && swing_iteration == 0) { // swing_iteration==0 corresponds to first iteration pre-increment
+            updateDefaultTipPosition();
+        }
     } else {
         // For stance phase, calculate progress based on stance iterations
         int stance_iteration = current_iteration_ % stance_iterations_;
         step_progress_ = (stance_iterations_ > 0) ? static_cast<double>(stance_iteration) / static_cast<double>(stance_iterations_) : 0.0;
         step_progress_ = std::min(1.0, step_progress_);
+
+        // OpenSHC: update default tip position at start of stance when rough terrain mode enabled
+        if (rough_terrain_mode && stance_iteration == 0) {
+            updateDefaultTipPosition();
+        }
     }
 
     // Update stride (will freeze on first iteration of the phase)
@@ -624,6 +634,73 @@ void LegStepper::updateTipPositionIterative(int iteration, double time_delta, bo
     has_previous_position_ = true;
 }
 
+Point3D LegStepper::calculateStanceSpanChange() {
+    // This method mirrors OpenSHC exactly, operating on the precomputed discrete workplanes.
+    // Direct translation of OpenSHC LegStepper::calculateStanceSpanChange logic
+    // 1. Compute target height (rounded) from default shift.
+    // 2. Clamp target height within this leg's workspace range.
+    // 3. Fetch interpolated workplane via getWorkplane().
+    // 4. Apply bearing selection XOR logic (unchanged) to pick lateral radius (90° or 270°).
+    // 5. Return lateral offset scaled by stance_span_modifier symmetrically.
+
+    Point3D default_shift = default_tip_pose_ - identity_tip_pose_;
+    double target_workplane_height = math_utils::setPrecision(default_shift.z, 3);
+
+    const auto &analyzer = robot_model_.getWorkspaceAnalyzer();
+    Workspace workspace = analyzer.getLegWorkspace(leg_index_);
+    if (workspace.empty()) {
+        return Point3D(0, 0, 0);
+    }
+
+    // Clamp height to available range so getWorkplane() never returns empty due to out-of-range.
+    double min_h = workspace.begin()->first;
+    double max_h = workspace.rbegin()->first;
+    double clamped_height = math_utils::clamp(target_workplane_height, min_h, max_h);
+
+    Workplane interpolated = analyzer.getWorkplane(leg_index_, clamped_height);
+    if (interpolated.empty()) {
+        return Point3D(0, 0, 0); // Safety fallback (should not happen after clamping)
+    }
+
+    // Bearing selection logic preserved from original (XOR to ensure symmetric widening)
+    double stance_span_modifier = stance_span_modifier_;
+    bool positive_y_axis = (identity_tip_pose_.y > 0.0);
+    int bearing = ((positive_y_axis ^ (stance_span_modifier > 0.0)) ? 270 : 90);
+    stance_span_modifier *= (positive_y_axis ? 1.0 : -1.0); // Positive modifier widens both sides
+
+    double radius = 0.0;
+    auto it = interpolated.find(bearing);
+    if (it != interpolated.end()) {
+        radius = it->second;
+    }
+
+    return Point3D(0.0, radius * stance_span_modifier, 0.0);
+}
+
+void LegStepper::updateDefaultTipPosition() {
+    // TODO: Mirrors OpenSHC LegStepper::updateDefaultTipPosition default branch (no external default support yet)
+
+    // 1. Modify identity tip position by stance span change
+    Point3D identity_tip_position = identity_tip_pose_ + calculateStanceSpanChange();
+
+    // TODO
+    // NOTE: OpenSHC transforms through default body pose (not available here); assume identity frame equivalent.
+
+    // 2. Project vector from identity to stance origin onto walk plane normal
+    Point3D identity_to_stance_origin = stance_origin_tip_position_ - identity_tip_position;
+    Point3D projection_to_walk_plane = math_utils::projectVector(identity_to_stance_origin, walk_plane_normal_);
+
+    Point3D new_default_tip_position = identity_tip_position + projection_to_walk_plane;
+
+    // 3. Update default tip pose if movement exceeds IK tolerance (millimeters)
+    Point3D delta = default_tip_pose_ - new_default_tip_position;
+    double delta_norm = std::sqrt(delta.x * delta.x + delta.y * delta.y + delta.z * delta.z);
+    default_tip_pose_ = new_default_tip_position;
+    if (delta_norm > IK_TOLERANCE) {
+        // In OpenSHC this would trigger walker_->setRegenerateWalkspace(); intentionally omitted.
+    }
+}
+
 // Update using internal phase_ (phase_ already incremented externally or will be incremented after call)
 void LegStepper::updateTipPosition(double time_delta, bool rough_terrain_mode, bool force_normal_touchdown) {
     // Derive iteration number for legacy code path from internal phase_.
@@ -667,11 +744,17 @@ bool LegStepper::validateTargetTipPose(const Point3D &target_pose) const {
     // Calculate distance from leg base
     Point3D leg_base = robot_model_.getLegBasePosition(leg_index_);
     Point3D relative_pos = target_pose - leg_base;
-    double distance = std::sqrt(relative_pos.x * relative_pos.x + relative_pos.y * relative_pos.y + relative_pos.z * relative_pos.z);
+    double planar_distance = std::hypot(relative_pos.x, relative_pos.y);
 
-    // Check basic distance constraints
-    if (distance > bounds.max_reach || distance < bounds.min_reach) {
+    // Check basic distance constraints using planar reach definitions.
+    if (planar_distance > bounds.max_reach || planar_distance < bounds.min_reach) {
         return false;
+    }
+
+    if (bounds.has_height_restrictions) {
+        if (target_pose.z < bounds.min_height || target_pose.z > bounds.max_height) {
+            return false;
+        }
     }
 
     // Use detailed workspace validation if available
@@ -708,18 +791,27 @@ Point3D LegStepper::calculateSafeTarget(const Point3D &desired_target) const {
 
     // If constraining still doesn't work, use a fallback strategy
     if (!validateTargetTipPose(safe_target)) {
-        // Fall back to a safe position relative to default pose
-        Point3D direction = desired_target - default_tip_pose_;
-        double original_distance = std::sqrt(direction.x * direction.x + direction.y * direction.y + direction.z * direction.z);
+        // Project the request onto the physical reach cylinder defined for this leg.
+        auto bounds = robot_model_.getWorkspaceAnalyzer().getWorkspaceBounds(leg_index_);
+        Point3D leg_base = robot_model_.getLegBasePosition(leg_index_);
+        Point3D offset = desired_target - leg_base;
+        double planar_offset = std::hypot(offset.x, offset.y);
+        double safe_planar = bounds.max_reach; // Morphological cap already includes safety margin (AGENTS.md)
 
-        if (original_distance > 0.0) {
-            // Scale down the movement to stay within safe bounds
-            auto bounds = robot_model_.getWorkspaceAnalyzer().getWorkspaceBounds(leg_index_);
-            double safe_distance = bounds.max_reach * 0.8; // Use 80% of max reach for safety
-            double scale_factor = std::min(1.0, safe_distance / original_distance);
+        if (planar_offset > safe_planar && planar_offset > 1e-9) {
+            double scale = safe_planar / planar_offset;
+            offset.x *= scale;
+            offset.y *= scale;
+        }
 
-            safe_target = default_tip_pose_ + direction * scale_factor;
-        } else {
+        double clamped_z = desired_target.z;
+        if (bounds.has_height_restrictions) {
+            clamped_z = std::clamp(clamped_z, bounds.min_height, bounds.max_height);
+        }
+
+        safe_target = Point3D(leg_base.x + offset.x, leg_base.y + offset.y, clamped_z);
+
+        if (!validateTargetTipPose(safe_target)) {
             safe_target = default_tip_pose_; // Ultimate fallback
         }
     }
@@ -741,34 +833,26 @@ Point3D LegStepper::calculateSafeStride(const Point3D &desired_stride) const {
     // Check if this target would be reachable
     if (!validateTargetTipPose(potential_target)) {
 
-        // Calculate maximum safe stride in this direction
-        Point3D stride_direction = desired_stride;
-        double stride_magnitude = std::sqrt(stride_direction.x * stride_direction.x +
-                                            stride_direction.y * stride_direction.y +
-                                            stride_direction.z * stride_direction.z);
+        auto bounds = robot_model_.getWorkspaceAnalyzer().getWorkspaceBounds(leg_index_);
+        Point3D leg_base = robot_model_.getLegBasePosition(leg_index_);
 
-        if (stride_magnitude > 0.0) {
-            stride_direction = stride_direction / stride_magnitude; // Normalize
+        Point3D offset = potential_target - leg_base;
+        double planar_offset = std::hypot(offset.x, offset.y);
+        double safe_planar = bounds.max_reach;
 
-            // Get workspace bounds for this leg
-            auto bounds = robot_model_.getWorkspaceAnalyzer().getWorkspaceBounds(leg_index_);
-
-            // Calculate safe stride magnitude
-            // Use 80% of max reach as safety margin
-            double max_safe_displacement = bounds.max_reach * 0.8;
-            Point3D leg_base = robot_model_.getLegBasePosition(leg_index_);
-            Point3D current_offset = default_tip_pose_ - leg_base;
-            double current_distance = std::sqrt(current_offset.x * current_offset.x +
-                                                current_offset.y * current_offset.y +
-                                                current_offset.z * current_offset.z);
-
-            // Maximum additional displacement we can afford
-            double max_additional = max_safe_displacement - current_distance;
-
-            // Scale stride to stay within limits (multiply by 2 because target uses stride * 0.5)
-            double safe_magnitude = std::min(stride_magnitude, max_additional * 2.0);
-            safe_stride = stride_direction * safe_magnitude;
+        if (planar_offset > safe_planar && planar_offset > 1e-9) {
+            double scale = safe_planar / planar_offset;
+            offset.x *= scale;
+            offset.y *= scale;
         }
+
+        double clamped_z = potential_target.z;
+        if (bounds.has_height_restrictions) {
+            clamped_z = std::clamp(clamped_z, bounds.min_height, bounds.max_height);
+        }
+
+        Point3D adjusted_target(leg_base.x + offset.x, leg_base.y + offset.y, clamped_z);
+        safe_stride = (adjusted_target - default_tip_pose_) * 2.0;
     }
 
     return safe_stride;
@@ -798,15 +882,21 @@ void LegStepper::validateAndFixControlNodes(Point3D nodes[5]) const {
                 // Calculate direction from leg base to problematic node
                 Point3D leg_base = robot_model_.getLegBasePosition(leg_index_);
                 Point3D direction = nodes[i] - leg_base;
-                double distance = std::sqrt(direction.x * direction.x + direction.y * direction.y + direction.z * direction.z);
+                double planar_distance = std::hypot(direction.x, direction.y);
 
-                if (distance > 0.0) {
-                    // Get workspace bounds and scale to safe distance
+                if (planar_distance > 0.0) {
+                    // Get workspace bounds and scale to a safe planar radius without pulling inside the neutral stance.
                     auto bounds = robot_model_.getWorkspaceAnalyzer().getWorkspaceBounds(leg_index_);
-                    double safe_distance = bounds.max_reach * 0.75; // Use 75% of max reach
-                    double scale_factor = safe_distance / distance;
+                    double default_planar = std::hypot(default_tip_pose_.x - leg_base.x, default_tip_pose_.y - leg_base.y);
+                    double safe_distance = std::max(bounds.max_reach, default_planar);
+                    double scale_factor = std::min(1.0, safe_distance / planar_distance);
 
-                    safe_node = leg_base + direction * scale_factor;
+                    safe_node.x = leg_base.x + direction.x * scale_factor;
+                    safe_node.y = leg_base.y + direction.y * scale_factor;
+                    safe_node.z = nodes[i].z;
+                    if (bounds.has_height_restrictions) {
+                        safe_node.z = std::clamp(safe_node.z, bounds.min_height, bounds.max_height);
+                    }
                 } else {
                     // Ultimate fallback: use default position
                     safe_node = robot_model_.getLegDefaultPosition(leg_index_);

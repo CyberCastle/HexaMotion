@@ -35,6 +35,10 @@ class VelocityLimits::Impl {
 
         workspace_analyzer_ = std::make_unique<WorkspaceAnalyzer>(model, ComputeConfig::medium(), config);
 
+        // Ensure workspace analyzer precomputes leg bounds + walkspace map before limits request
+        // to avoid falling back to direction-only heuristics (which severely clamp velocities).
+        workspace_analyzer_->initialize();
+
         // Initialize workspace config with physical robot reference height
         // When all servo angles are 0°, robot body is positioned at getDefaultHeightOffset()
         workspace_config_.reference_height = model.getDefaultHeightOffset();
@@ -232,6 +236,15 @@ void VelocityLimits::calculateOvershoot(const GaitConfiguration &gait_config) {
     double max_allowable = 0.25 * walk_r; // at most 25% of effective radius
     raw_overshoot = std::min(raw_overshoot, max_allowable);
 
+    if (gait_config.step_length > 0.0) {
+        // Bound overshoot compensation to a configurable share of the commanded stride so the
+        // acceleration phase never consumes more travel than the gait intended for forward progress.
+        const auto &params = pimpl_->model_.getParams();
+        double fraction = params.overshoot_stride_fraction > 0.0 ? params.overshoot_stride_fraction : DEFAULT_OVERSHOOT_STRIDE_FRACTION;
+        double stride_cap = gait_config.step_length * fraction;
+        raw_overshoot = std::min(raw_overshoot, stride_cap);
+    }
+
     // Apply global scaling & safety margin (kept moderate)
     auto scaling_factors = pimpl_->workspace_analyzer_->getScalingFactors();
     double safety = scaling_factors.safety_margin; // typically <=1
@@ -324,15 +337,23 @@ double VelocityLimits::calculateMaxLinearSpeed(double walkspace_radius, const Ga
     if (gait_config.getStepFrequency() <= 0.0 || gait_config.step_length <= 0.0)
         return 0.0;
 
+    const auto &params = pimpl_->model_.getParams();
     double stride_length = gait_config.step_length;
-    // Overshoot deduction (2x average overshoot) maintains conservative effective stride.
+
+    // Overshoot deduction (2x average overshoot) maintains conservative effective stride,
+    // but never shrink below a minimum fraction of the commanded stride to preserve locomotion.
     double avg_overshoot = (pimpl_->workspace_config_.overshoot_x + pimpl_->workspace_config_.overshoot_y) * 0.5;
-    stride_length = std::max(0.0, stride_length - 2.0 * avg_overshoot);
+    double min_ratio = params.min_effective_stride_ratio > 0.0 ? params.min_effective_stride_ratio : DEFAULT_MIN_EFFECTIVE_STRIDE_RATIO;
+    double min_stride = std::max(0.0, stride_length * min_ratio);
+    double stride_after_overshoot = stride_length - 2.0 * avg_overshoot;
+    if (stride_after_overshoot < 0.0)
+        stride_after_overshoot = 0.0;
+    stride_length = std::max(min_stride, stride_after_overshoot);
+
     double max_speed = stride_length * gait_config.getStepFrequency();
     auto scaling_factors = pimpl_->workspace_analyzer_->getScalingFactors();
     max_speed *= scaling_factors.velocity_scale;
 
-    const auto &params = pimpl_->model_.getParams();
     double global_cap = params.max_velocity > 0.0 ? params.max_velocity : DEFAULT_MAX_LINEAR_VELOCITY;
     double gait_cap = (gait_config.max_velocity > 0.0) ? gait_config.max_velocity : global_cap;
     double configured_cap = std::min(global_cap, gait_cap);

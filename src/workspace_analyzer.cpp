@@ -447,15 +447,27 @@ bool WorkspaceAnalyzer::isPositionReachable(int leg_index, const Point3D &positi
         return false;
     }
 
-    // Basic geometric reachability check
+    // Basic geometric reachability check using planar distance.
+    // WorkspaceBounds::max_reach is defined as a horizontal span, so any
+    // comparison must ignore the vertical component to avoid rejecting
+    // perfectly valid poses that simply sit on the standing plane.
     WorkspaceBounds bounds = getWorkspaceBounds(leg_index);
-    double distance = getDistanceFromBase(leg_index, position);
+    Point3D leg_base = getLegBase(leg_index);
+    double dx = position.x - leg_base.x;
+    double dy = position.y - leg_base.y;
+    double planar_distance = std::hypot(dx, dy);
 
-    if (distance < bounds.min_reach || distance > bounds.max_reach) {
+    if (planar_distance < bounds.min_reach || planar_distance > bounds.max_reach) {
         return false;
     }
 
-    // If IK validation is requested, perform additional joint limit checking
+    if (bounds.has_height_restrictions) {
+        if (position.z < bounds.min_height || position.z > bounds.max_height) {
+            return false;
+        }
+    }
+
+    // If IK validation is requested, perform additional joint limit checking.
     if (use_ik_validation) {
         return checkJointLimits(leg_index, position);
     }

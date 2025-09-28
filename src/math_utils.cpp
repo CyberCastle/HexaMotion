@@ -352,4 +352,7 @@ bool solveLeastSquaresPlane(const double *raw_A, const double *raw_B, int num_po
     return false; // Matrix is singular
 }
 
+// setPrecision is declared inline in the header; keep a weak ODR anchor if needed (not required but available for debugging link symbols)
+// double setPrecision(double value, int precision); // (header-only implementation)
+
 } // namespace math_utils

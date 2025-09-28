@@ -602,7 +602,12 @@ bool LocomotionSystem::update() {
         // STEP 2b: Finalize leg phases (FSR or pure kinematic) after trajectories computed
         updateLegStates();
 
-        // STEP 2c: Apply auto pose modulation to desired tip positions prior to IK so horizontal
+        // STEP 2c: Apply global body pose (translation + rotation) before per‑leg auto pose adjustments.
+        if (body_pose_ctrl) {
+            body_pose_ctrl->applyGlobalBodyPoseToDesiredTips(legs);
+        }
+
+        // STEP 2d: Apply auto pose modulation to desired tip positions prior to IK so horizontal
         // components (x,y,yaw-derived) affect coxa angles (OpenSHC-style stance posing integration).
         if (body_pose_ctrl) {
             body_pose_ctrl->applyAutoPoseToDesiredTips(legs);
