@@ -233,20 +233,18 @@ int main() {
     // Test 7: Verify hexagon symmetry properties
     std::cout << "\n--- Test 7: Hexagon Symmetry Validation ---" << std::endl;
 
-    // Check that opposite legs are symmetric.
-    // NOTE: Physical leg mounting angles (BASE_THETA_OFFSETS) follow the order:
-    // index: 0  -> -30° (AR  = Anterior Right)
-    //        1  -> -90° (BR  = Back Right)
-    //        2  -> -150° (CR = Center Right)
-    //        3  ->  30° (CL  = Center Left)
-    //        4  ->  90° (BL  = Back Left)
-    //        5  -> 150° (AL  = Anterior Left)
-    // Opposite (180° apart) angle pairs are therefore:
-    // (-30°,150°) => indices (0,5)
-    // (-90°, 90°) => indices (1,4)
-    // (-150°,30°) => indices (2,3)
-    // The original test assumed index pairs (0,3),(1,4),(2,5) which do not match the configured geometry
-    // and produced false symmetry violations. We correct the pairing here.
+    // Check that mirrored legs (angle offsets summing to zero) share the same X coordinate and opposite Y.
+    // BASE_THETA_OFFSETS is ordered as follows:
+    //   0 -> -30° (AR = Anterior Right)
+    //   1 -> -90° (BR = Back Right)
+    //   2 -> -150° (CR = Center Right)
+    //   3 ->  150° (CL = Center Left)
+    //   4 ->   90° (BL = Back Left)
+    //   5 ->   30° (AL = Anterior Left)
+    // After the OpenSHC alignment, the mirrored pairs that cancel their offsets (θ_leg_a + θ_leg_b = 0)
+    // are (0,5), (1,4) and (2,3). In this configuration the feet sit on parallel Y axes, so their
+    // X components should match and Y components should be opposite. The previous origin-symmetry check
+    // (pos_a + pos_b ≈ 0) was therefore invalid and raised false positives.
     int leg_pairs[3][2] = {{0, 5}, {1, 4}, {2, 3}};
 
     for (int p_idx = 0; p_idx < 3; ++p_idx) {
@@ -256,8 +254,8 @@ int main() {
         Point3D pos1 = analytic_model.getAnalyticLegBasePosition(leg1);
         Point3D pos2 = analytic_model.getAnalyticLegBasePosition(leg2);
 
-        // Opposite legs should be symmetric about origin
-        double symmetry_error_x = std::abs(pos1.x + pos2.x);
+        // Mirrored legs should share X and oppose Y while remaining coplanar in Z.
+        double symmetry_error_x = std::abs(pos1.x - pos2.x);
         double symmetry_error_y = std::abs(pos1.y + pos2.y);
         double symmetry_error_z = std::abs(pos1.z - pos2.z);
 
