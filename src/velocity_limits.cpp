@@ -35,6 +35,10 @@ class VelocityLimits::Impl {
 
         workspace_analyzer_ = std::make_unique<WorkspaceAnalyzer>(model, ComputeConfig::medium(), config);
 
+        // Ensure workspace analyzer precomputes leg bounds + walkspace map before limits request
+        // to avoid falling back to direction-only heuristics (which severely clamp velocities).
+        workspace_analyzer_->initialize();
+
         // Initialize workspace config with physical robot reference height
         // When all servo angles are 0°, robot body is positioned at getDefaultHeightOffset()
         workspace_config_.reference_height = model.getDefaultHeightOffset();

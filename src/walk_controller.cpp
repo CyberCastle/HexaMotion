@@ -114,6 +114,10 @@ bool WalkController::setGaitConfiguration(const GaitConfiguration &gait_config) 
     // Update gait selection config
     gait_selection_config_.current_gait = gait_config.gait_name;
 
+    // Regenerate velocity limits so stride/acceleration envelopes reflect the active gait parameters.
+    // This keeps bearing-based clamps in sync with caller-provided overrides (e.g., custom step_length).
+    velocity_limits_.generateLimits(current_gait_config_);
+
     return true;
 }
 
