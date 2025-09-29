@@ -32,6 +32,14 @@ LegStepper::LegStepper(int leg_index, const Point3D &identity_tip_pose, Leg &leg
     target_tip_pose_ = identity_tip_pose_;
     current_tip_pose_ = identity_tip_pose_;
 
+    // Pre-compute the leg-aligned basis once so that per-iteration projections can reuse it without
+    // incurring additional trigonometric cost. This mirrors the fixed DH frame assigned to each leg.
+    base_angle_rad_ = BASE_THETA_OFFSETS[leg_index_ % NUM_LEGS];
+    double cos_base = std::cos(base_angle_rad_);
+    double sin_base = std::sin(base_angle_rad_);
+    forward_unit_ = Point3D(cos_base, sin_base, 0.0);
+    lateral_unit_ = Point3D(-sin_base, cos_base, 0.0);
+
     // Initialize state management
     at_correct_phase_ = false;
     completed_first_step_ = false;
@@ -590,6 +598,32 @@ void LegStepper::updateTipPositionIterative(int iteration, double time_delta, bo
 
         // Initialize stance origin if needed (hybrid anti-drift extension).
         if (stance_iteration == 1) {
+
+            // At stance entry, compare the touchdown pose against the frozen swing target. Any residual lateral
+            // offset is projected onto the leg-aligned axis and bled off immediately. This keeps opposing legs
+            // synchronized for any gait while avoiding artificial symmetry enforcement or interference with
+            // commanded turning motions.
+            Point3D stance_target = target_frozen_ ? frozen_target_tip_pose_ : target_tip_pose_;
+            Point3D touchdown_residual = current_tip_pose_ - stance_target;
+            double residual_lateral = computeLateralComponent(touchdown_residual);
+            double lateral_abs = std::abs(residual_lateral);
+            double hard_threshold = params.drift_hard_threshold_mm;
+            double soft_threshold = params.drift_soft_threshold_mm;
+            bool rectilinear_command = isRectilinearCommand();
+            if (lateral_abs > soft_threshold && (rectilinear_command || lateral_abs > hard_threshold)) {
+                double correction_gain = 1.0;
+                if (lateral_abs <= hard_threshold) {
+                    correction_gain = math_utils::clamp(params.drift_soft_blend_alpha, 0.0, 1.0);
+                }
+                if (correction_gain > 0.0) {
+                    Point3D correction = lateral_unit_ * (residual_lateral * correction_gain);
+                    current_tip_pose_ = current_tip_pose_ - correction;
+#ifdef COXA_STRIDE_TESTING_ENABLED
+                    debug_state_.current_tip_pose = current_tip_pose_;
+#endif
+                }
+            }
+
             Point3D touchdown_offset = current_tip_pose_ - default_tip_pose_;
             double offset_norm = std::sqrt(touchdown_offset.x * touchdown_offset.x +
                                            touchdown_offset.y * touchdown_offset.y +
@@ -1033,4 +1067,44 @@ Point3D LegStepper::calculateCurrentTipVelocity() const {
     }
 
     return current_velocity;
+}
+
+/**
+ * @brief Check whether the current velocity request represents straight-line motion.
+ *
+ * When a yaw component is present we preserve the lateral residual so that the leg can
+ * follow the commanded rotation. Purely translational commands benefit from aggressive
+ * lateral cleanup to keep opposing legs synchronized without introducing steering bias.
+ */
+bool LegStepper::isRectilinearCommand() const {
+    const double angular_epsilon = 1e-6;
+    if (std::abs(desired_angular_velocity_) > angular_epsilon) {
+        return false;
+    }
+
+    double planar_speed_sq = desired_linear_velocity_.x * desired_linear_velocity_.x +
+                             desired_linear_velocity_.y * desired_linear_velocity_.y;
+    return planar_speed_sq > 1e-6;
+}
+
+/**
+ * @brief Project a world-frame vector onto the leg's forward axis.
+ */
+double LegStepper::computeForwardComponent(const Point3D &vec) const {
+    return vec.x * forward_unit_.x + vec.y * forward_unit_.y;
+}
+
+/**
+ * @brief Project a world-frame vector onto the leg's lateral axis.
+ */
+double LegStepper::computeLateralComponent(const Point3D &vec) const {
+    return vec.x * lateral_unit_.x + vec.y * lateral_unit_.y;
+}
+
+/**
+ * @brief Remove the lateral component of a vector while preserving forward and vertical terms.
+ */
+Point3D LegStepper::removeLateralComponent(const Point3D &vec) const {
+    double lateral_component = computeLateralComponent(vec);
+    return vec - (lateral_unit_ * lateral_component);
 }

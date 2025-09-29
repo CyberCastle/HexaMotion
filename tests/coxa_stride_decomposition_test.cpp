@@ -200,8 +200,8 @@ int main() {
         previous_phase[i] = system.getLeg(i).getStepPhase();
     }
 
-    const int REQUIRED_STANCE_TRANSITIONS = 10;
-    const int MAX_UPDATE_STEPS = 1200;
+    const int REQUIRED_STANCE_TRANSITIONS = 100;
+    const int MAX_UPDATE_STEPS = 4800;
     const int MAX_PAIR_ROWS = 12;
     int stance_transition_samples = 0;
     int total_phase_changes = 0;

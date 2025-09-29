@@ -34,7 +34,7 @@
 // Parámetros por defecto (pueden sobre-escribirse por CLI)
 // --------------------------------------------------------------------------------------
 static double g_test_velocity = 300.0;            // mm/s
-static int g_required_swing_transitions = 5;      // Transiciones STANCE->SWING por pata
+static int g_required_swing_transitions = 20;     // Transiciones STANCE->SWING por pata
 static int g_max_steps = 1200;                    // Límite de seguridad
 static bool g_show_only_phase_transitions = true; // Modo compacto por defecto
 static double g_sym_threshold_stance_deg = 3.0;   // |sum(delta)| máximo permitido en STANCE
@@ -334,10 +334,10 @@ int main(int argc, char **argv) {
 
     // 1. Inicialización básica
     Parameters p = createDefaultParameters();
-    p.max_velocity = 1000.0;              // mm/s (límite alto para no interferir)
-    p.enable_velocity_limits = false;     // Desactivar limitación dinámica (test de coxas)
-    p.enable_phase_end_snap = false;      // Desactivar snap de fin de fase (test de coxas)
-    p.enable_workspace_constrain = false; // Desactivar workspace constraint (test de coxas)
+    p.max_velocity = 1000.0; // mm/s (límite alto para no interferir)
+    // p.enable_velocity_limits = false;     // Desactivar limitación dinámica (test de coxas)
+    // p.enable_phase_end_snap = false;      // Desactivar snap de fin de fase (test de coxas)
+    // p.enable_workspace_constrain = false; // Desactivar workspace constraint (test de coxas)
     LocomotionSystem sys(p);
     DummyIMU imu;
     DummyFSR fsr;
