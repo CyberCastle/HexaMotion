@@ -55,7 +55,7 @@ struct Parameters {
     // fsr_touchdown_threshold: minimum historical rolling average to consider contact (hysteresis enter)
     // fsr_liftoff_threshold: maximum historical rolling average to consider release (hysteresis exit)
     // fsr_min_pressure: minimum normalized/raw pressure/average to validate physical contact and reject false positives
-    double fsr_touchdown_threshold = 0.7; //< Average contact value (0-1) to switch to STANC
+    double fsr_touchdown_threshold = 0.7; //< Average contact value (0-1) to switch to STANCE
     double fsr_liftoff_threshold = 0.3;   //< Average contact value (0-1) to switch to SWING
     double fsr_min_pressure = 0.05;       //< Minimum normalized value (0-1) to trust reported contact (legacy raw=10 maps ≈0.05)
     double fsr_max_pressure = 0.9;        //< Maximum expected normalized pressure (0-1). 1.0 = saturated/full contact (used for clamping/validation)
