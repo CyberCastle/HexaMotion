@@ -626,7 +626,7 @@ bool BodyPoseController::stepInitialStandingPoseTransition(Leg legs[NUM_LEGS], d
                                                            double out_vel[NUM_LEGS][DOF_PER_LEG],
                                                            double out_acc[NUM_LEGS][DOF_PER_LEG]) {
     if (!initial_standing_active_) {
-        return false; // nothing to advance
+        return true; // nothing to advance, but not an error
     }
     if (dt <= 0.0) {
         dt = model.getTimeDelta();
@@ -714,8 +714,8 @@ bool BodyPoseController::stepInitialStandingPoseTransition(Leg legs[NUM_LEGS], d
             }
             return true; // continue with new phase
         }
-        return false; // still aligning
-    } else {          // LIFT phase
+        return true; // still aligning (not yet finished)
+    } else {         // LIFT phase
         for (int l = 0; l < NUM_LEGS; ++l) {
             JointAngles ja = legs[l].getJointAngles();
             for (int j = 1; j < DOF_PER_LEG; ++j) { // femur, tibia
@@ -755,7 +755,7 @@ bool BodyPoseController::stepInitialStandingPoseTransition(Leg legs[NUM_LEGS], d
             initial_standing_active_ = false;
             return true;
         }
-        return false; // still lifting
+        return true; // still lifting (not yet finished)
     }
 }
 
