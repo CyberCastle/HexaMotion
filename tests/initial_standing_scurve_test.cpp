@@ -81,7 +81,9 @@ int main() {
             batch_cmds.push_back(bc);
             return true;
         }
-        double getJointAngle(int leg, int joint) override { return last_angles[leg][joint]; }
+        double getJointAngle(int leg, int joint) override {
+            return math_utils::degreesToRadians(last_angles[leg][joint]);
+        }
         bool isJointMoving(int, int) override { return true; }
         bool enableTorque(int, int, bool) override { return true; }
         void nextIter(int i) { current_iter_ = i; }

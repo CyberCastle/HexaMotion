@@ -565,7 +565,7 @@ class IServoInterface {
         return setJointAngleAndSpeed(leg_index, joint_index, angle, speed);
     }
 
-    /** Retrieve the current joint angle. */
+    /** Retrieve the current joint angle (radians). */
     virtual double getJointAngle(int leg_index, int joint_index) = 0;
 
     /** Check if a joint is currently moving. */

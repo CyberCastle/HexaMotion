@@ -313,8 +313,9 @@ class AngleVisualizationServo : public IServoInterface {
 
     double getJointAngle(int leg, int joint) override {
         if (leg >= 0 && leg < NUM_LEGS && joint >= 0 && joint < 3) {
-            // Return current simulated position with small noise
-            return current_angles_[leg][joint] + (rand() % 100 - 50) * 0.001;
+            // Return current simulated position with small noise (convert to radians)
+            double angle_deg = current_angles_[leg][joint] + (rand() % 100 - 50) * 0.001;
+            return math_utils::degreesToRadians(angle_deg);
         }
         return 0.0;
     }
