@@ -90,6 +90,23 @@ LegStepper::LegStepper(int leg_index, const Point3D &identity_tip_pose, Leg &leg
     previous_tip_pose_ = identity_tip_pose_;
     has_previous_position_ = false;
     time_step_ = params.time_delta; // Unified time step
+
+#ifdef COXA_STRIDE_TESTING_ENABLED
+    debug_state_.identity_tip_pose = identity_tip_pose_;
+    debug_state_.default_tip_pose = default_tip_pose_;
+    debug_state_.current_tip_pose = current_tip_pose_;
+    debug_state_.raw_target_pose = identity_tip_pose_;
+    debug_state_.composed_pose = identity_tip_pose_;
+    debug_state_.stride_linear = Point3D(0, 0, 0);
+    debug_state_.stride_angular = Point3D(0, 0, 0);
+    debug_state_.stride_total = Point3D(0, 0, 0);
+    debug_state_.frozen_stride_total = Point3D(0, 0, 0);
+    debug_state_.active_stride = Point3D(0, 0, 0);
+    debug_state_.last_delta = Point3D(0, 0, 0);
+    debug_state_.iteration = 0;
+    debug_state_.step_state = step_state_;
+    debug_state_.step_progress = 0.0;
+#endif
 }
 
 void LegStepper::setDesiredVelocity(const Point3D &linear_velocity, double angular_velocity) {
@@ -178,23 +195,33 @@ void LegStepper::updateStride() {
 
     // Use StepCycle configuration values (OpenSHC equivalent calculation)
     double on_ground_ratio = double(step_cycle_.stance_period_) / double(step_cycle_.period_);
-    stride_vector_ = stride_vector_ * (on_ground_ratio / step_cycle_.frequency_);
+    double stride_scale = (on_ground_ratio / step_cycle_.frequency_);
+    stride_vector_ = stride_vector_ * stride_scale;
+
+    // Track individual contributions after scaling for debug/analysis purposes
+    Point3D linear_scaled = stride_vector_linear * stride_scale;
+    Point3D angular_scaled = stride_vector_ - linear_scaled;
 
     // Apply stride validation and safety constraints
     // stride_vector_ = calculateSafeStride(stride_vector_);
 
     // Freeze stride if not yet frozen for current phase
     if (!stride_frozen_) {
-        frozen_stride_vector_linear_ = stride_vector_linear * (on_ground_ratio / step_cycle_.frequency_);
-        // recompute angular component scaled the same way
-        Point3D stride_vector_angular_scaled = (stride_vector_ - stride_vector_linear * (on_ground_ratio / step_cycle_.frequency_));
-        frozen_stride_vector_angular_ = stride_vector_angular_scaled; // already scaled
+        frozen_stride_vector_linear_ = linear_scaled;
+        frozen_stride_vector_angular_ = angular_scaled; // already scaled
         frozen_stride_vector_total_ = stride_vector_;
         stride_frozen_ = true;
     }
 
     // Swing clearance (OpenSHC formula) using validated & normalized plane normal
     swing_clearance_ = walk_plane_normal_ * step_clearance_height_;
+
+#ifdef COXA_STRIDE_TESTING_ENABLED
+    debug_state_.stride_linear = linear_scaled;
+    debug_state_.stride_angular = angular_scaled;
+    debug_state_.stride_total = stride_vector_;
+    debug_state_.frozen_stride_total = frozen_stride_vector_total_;
+#endif
 }
 
 void LegStepper::beginSwingPhase() {
@@ -389,11 +416,27 @@ void LegStepper::updateTipPositionIterative(int iteration, double time_delta, bo
     // Single cached reference to parameters (avoid repeated getParams() bindings further below)
     const Parameters &params = params_;
 
+#ifdef COXA_STRIDE_TESTING_ENABLED
+    debug_state_.iteration = iteration;
+    debug_state_.step_state = step_state_;
+    debug_state_.identity_tip_pose = identity_tip_pose_;
+#endif
+
     // OpenSHC: Handle FORCE_STOP state
     if (step_state_ == STEP_FORCE_STOP) {
         // Force stance position and stop iteration
         step_progress_ = 0.0;
         current_tip_pose_ = identity_tip_pose_;
+#ifdef COXA_STRIDE_TESTING_ENABLED
+        debug_state_.step_progress = step_progress_;
+        debug_state_.default_tip_pose = default_tip_pose_;
+        debug_state_.active_stride = Point3D(0, 0, 0);
+        debug_state_.raw_target_pose = identity_tip_pose_;
+        debug_state_.composed_pose = identity_tip_pose_;
+        debug_state_.last_delta = Point3D(0, 0, 0);
+        debug_state_.current_tip_pose = current_tip_pose_;
+        debug_state_.frozen_stride_total = frozen_stride_vector_total_;
+#endif
         return;
     }
 
@@ -428,12 +471,22 @@ void LegStepper::updateTipPositionIterative(int iteration, double time_delta, bo
         }
     }
 
+#ifdef COXA_STRIDE_TESTING_ENABLED
+    debug_state_.step_progress = step_progress_;
+    debug_state_.step_state = step_state_;
+#endif
+
     // Update stride (will freeze on first iteration of the phase)
     updateStride();
 
     // Mid-stride target from default pose using frozen stride for stability
     Point3D active_stride = stride_frozen_ ? frozen_stride_vector_total_ : stride_vector_;
     Point3D raw_target = default_tip_pose_ + active_stride * 0.5;
+#ifdef COXA_STRIDE_TESTING_ENABLED
+    debug_state_.default_tip_pose = default_tip_pose_;
+    debug_state_.identity_tip_pose = identity_tip_pose_;
+    debug_state_.active_stride = active_stride;
+#endif
     if (!target_frozen_) {
         if (params_.enable_workspace_constrain) {
             target_tip_pose_ = calculateSafeTarget(raw_target);
@@ -445,6 +498,11 @@ void LegStepper::updateTipPositionIterative(int iteration, double time_delta, bo
     } else {
         target_tip_pose_ = frozen_target_tip_pose_;
     }
+
+#ifdef COXA_STRIDE_TESTING_ENABLED
+    debug_state_.raw_target_pose = raw_target;
+    debug_state_.composed_pose = default_tip_pose_ + active_stride;
+#endif
 
     if (step_state_ == STEP_SWING) {
         // Initialize swing period on first iteration
@@ -501,12 +559,18 @@ void LegStepper::updateTipPositionIterative(int iteration, double time_delta, bo
         }
         // Update current tip pose based on calculated delta position
         // OpenSHC pattern: accumulate delta position to current tip pose
+#ifdef COXA_STRIDE_TESTING_ENABLED
+        debug_state_.last_delta = delta_pos;
+#endif
         Point3D next_pose = current_tip_pose_ + delta_pos;
         if (params_.enable_workspace_constrain) {
             current_tip_pose_ = robot_model_.getWorkspaceAnalyzer().constrainToGeometricWorkspace(leg_index_, next_pose);
         } else {
             current_tip_pose_ = next_pose;
         }
+#ifdef COXA_STRIDE_TESTING_ENABLED
+        debug_state_.current_tip_pose = current_tip_pose_;
+#endif
 
         // Calculate velocity for this iteration (OpenSHC pattern)
         current_tip_velocity_ = delta_pos / time_delta;
@@ -599,11 +663,17 @@ void LegStepper::updateTipPositionIterative(int iteration, double time_delta, bo
         generateStanceControlNodes(stride_scaler);
         double time_input = stance_iteration * stance_delta_t_;
         Point3D delta_pos = math_utils::quarticBezierDot(stance_nodes_, time_input) * stance_delta_t_;
+#ifdef COXA_STRIDE_TESTING_ENABLED
+        debug_state_.last_delta = delta_pos;
+#endif
         current_tip_pose_ += delta_pos;
         // Keep stance motion constrained to the walking plane when not in rough terrain mode
         if ((!rough_terrain_mode || force_normal_touchdown) && !params.use_fsr_contact) {
             current_tip_pose_.z = default_tip_pose_.z;
         }
+#ifdef COXA_STRIDE_TESTING_ENABLED
+        debug_state_.current_tip_pose = current_tip_pose_;
+#endif
         current_tip_velocity_ = delta_pos / time_delta;
     }
 
@@ -625,6 +695,13 @@ void LegStepper::updateTipPositionIterative(int iteration, double time_delta, bo
             }
         }
     }
+
+#ifdef COXA_STRIDE_TESTING_ENABLED
+    debug_state_.current_tip_pose = current_tip_pose_;
+    debug_state_.frozen_stride_total = frozen_stride_vector_total_;
+    debug_state_.step_state = step_state_;
+    debug_state_.step_progress = step_progress_;
+#endif
 
     // Update velocity tracking for comprehensive safety validation
     if (has_previous_position_) {

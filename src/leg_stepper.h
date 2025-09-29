@@ -75,6 +75,30 @@ class LegStepper {
     double getVerticalDrift() const { return vertical_drift_; }
 #endif
 
+#ifdef COXA_STRIDE_TESTING_ENABLED
+    /**
+     * @brief Snapshot exposing stride composition and delta integration for dedicated diagnostics.
+     */
+    struct DebugState {
+        Point3D stride_linear{0, 0, 0};         ///< Scaled linear stride contribution (global frame)
+        Point3D stride_angular{0, 0, 0};        ///< Scaled angular stride contribution (global frame)
+        Point3D stride_total{0, 0, 0};          ///< Combined stride vector applied during current phase
+        Point3D frozen_stride_total{0, 0, 0};   ///< Cached stride frozen at phase start
+        Point3D default_tip_pose{0, 0, 0};      ///< Current default pose used as base reference
+        Point3D identity_tip_pose{0, 0, 0};     ///< Identity pose assigned at construction
+        Point3D active_stride{0, 0, 0};         ///< Active stride selected for current iteration (frozen or live)
+        Point3D raw_target_pose{0, 0, 0};       ///< Target pose computed before workspace constraint
+        Point3D composed_pose{0, 0, 0};         ///< default_tip_pose + active_stride (full composition)
+        Point3D last_delta{0, 0, 0};            ///< Incremental delta applied this iteration
+        Point3D current_tip_pose{0, 0, 0};      ///< Resulting tip pose after integration
+        int iteration = 0;                      ///< Iteration index provided by controller
+        StepState step_state = STEP_FORCE_STOP; ///< Step state at the time of capture
+        double step_progress = 0.0;             ///< Normalized phase progress [0,1]
+    };
+
+    const DebugState &getDebugState() const { return debug_state_; }
+#endif
+
     // Debug getters for velocity troubleshooting
     Point3D getDesiredLinearVelocity() const { return desired_linear_velocity_; }
     double getDesiredAngularVelocity() const { return desired_angular_velocity_; }
@@ -261,6 +285,10 @@ class LegStepper {
     Point3D previous_tip_pose_;
     bool has_previous_position_;
     double time_step_;
+
+#ifdef COXA_STRIDE_TESTING_ENABLED
+    DebugState debug_state_;
+#endif
 
 #ifdef TESTING_ENABLED
     // --- Drift tracking (hybrid anti-drift support) --- (testing builds only)
