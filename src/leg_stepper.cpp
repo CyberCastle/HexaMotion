@@ -917,7 +917,7 @@ Point3D LegStepper::calculateSafeTarget(const Point3D &desired_target) const {
 
         double clamped_z = desired_target.z;
         if (bounds.has_height_restrictions) {
-            clamped_z = std::clamp(clamped_z, bounds.min_height, bounds.max_height);
+            clamped_z = math_utils::clamp(clamped_z, bounds.min_height, bounds.max_height);
         }
 
         safe_target = Point3D(leg_base.x + offset.x, leg_base.y + offset.y, clamped_z);
@@ -959,7 +959,7 @@ Point3D LegStepper::calculateSafeStride(const Point3D &desired_stride) const {
 
         double clamped_z = potential_target.z;
         if (bounds.has_height_restrictions) {
-            clamped_z = std::clamp(clamped_z, bounds.min_height, bounds.max_height);
+            clamped_z = math_utils::clamp(clamped_z, bounds.min_height, bounds.max_height);
         }
 
         Point3D adjusted_target(leg_base.x + offset.x, leg_base.y + offset.y, clamped_z);
@@ -1006,7 +1006,7 @@ void LegStepper::validateAndFixControlNodes(Point3D nodes[5]) const {
                     safe_node.y = leg_base.y + direction.y * scale_factor;
                     safe_node.z = nodes[i].z;
                     if (bounds.has_height_restrictions) {
-                        safe_node.z = std::clamp(safe_node.z, bounds.min_height, bounds.max_height);
+                        safe_node.z = math_utils::clamp(safe_node.z, bounds.min_height, bounds.max_height);
                     }
                 } else {
                     // Ultimate fallback: use default position
