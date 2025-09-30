@@ -28,6 +28,9 @@ class BodyPoseController::LegPoserImpl {
     LegPoser poser_;
 };
 
+// Definition of static constexpr member declared in header
+constexpr int BodyPoseController::tripod_leg_groups[2][3];
+
 BodyPoseController::BodyPoseController(RobotModel &m, const BodyPoseConfiguration &config)
     : model(m), body_pose_config(config), auto_pose_enabled(false), current_gait_type_(TRIPOD_GAIT),
       trajectory_in_progress(false), trajectory_progress(0.0), trajectory_step_count(0),
