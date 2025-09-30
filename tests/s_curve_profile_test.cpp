@@ -1,4 +1,5 @@
 #include "../src/s_curve_profile.h"
+#include <algorithm>
 #include <cassert>
 #include <cmath>
 #include <iostream>
@@ -84,6 +85,42 @@ int main() {
         auto s = prof.sample(0.5);
         expectNear(s.position, 1.23, 1e-12, "Zero displacement pos");
         expectNear(s.velocity, 0.0, 1e-12, "Zero displacement vel");
+    }
+
+    {
+        std::cout << "Test 5: Parabolic fallback honors velocity limit" << std::endl;
+        // Tiny move where the jerk-limited solution would overrun vmax.
+        SCurveProfile prof(0.0, 1e-3, 0.05, 0.2, 5.0);
+        assert(prof.valid());
+        assert(prof.isParabolicFallback());
+        expectNear(prof.cruiseVelocity(), 0.0, 1e-9, "Parabolic fallback has no cruise");
+
+        double T = prof.totalTime();
+        double max_vel = 0.0;
+        for (int i = 0; i <= 200; ++i) {
+            double t = (T * i) / 200.0;
+            auto s = prof.sample(t);
+            max_vel = std::max(max_vel, std::fabs(s.velocity));
+        }
+        if (max_vel > 0.05 + 1e-6) {
+            std::cerr << "Parabolic fallback exceeded vmax: " << max_vel << std::endl;
+            return 1;
+        }
+    }
+
+    {
+        std::cout << "Test 6: Accessors expose peak kinematics" << std::endl;
+        SCurveProfile prof(0.0, 2.0, 1.0, 0.8, 10.0);
+        assert(prof.valid());
+        double peak_v = prof.peakVelocity();
+        // For this configuration the profile should reach cruise velocity.
+        expectNear(peak_v, prof.cruiseVelocity(), 1e-9, "Peak velocity should equal cruise velocity when cruise present");
+        auto durations = prof.segmentDurations();
+        double accumulated = 0.0;
+        for (double d : durations) {
+            accumulated += d;
+        }
+        expectNear(accumulated, prof.totalTime(), 1e-6, "Segment durations must sum to total time");
     }
 
     std::cout << "All S-curve profile tests passed." << std::endl;

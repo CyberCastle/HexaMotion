@@ -1236,8 +1236,8 @@ bool LocomotionSystem::stepInitialStandingPose() {
     double speeds[NUM_LEGS][3];
     double accels[NUM_LEGS][3];
 
-    // Heuristic max velocity (degrees/s) consistent with earlier logic
-    double vmax_deg = params.default_servo_speed; // heuristic max speed (deg/s) for normalization
+    // Normalize commanded speed/accel against configured servo limits (deg/s)
+    double vmax_deg = (params.max_angular_velocity > 0.0) ? params.max_angular_velocity : DEFAULT_MAX_ANGULAR_VELOCITY;
     double amax_deg = vmax_deg * 4.0;
 
     // Precompute torque-balanced weight factors (relative) once (lazy static cache)

@@ -305,7 +305,10 @@ class BodyPoseController {
     /** Active flag accessor for the initial standing pose transition */
     bool isInitialStandingPoseActive() const { return initial_standing_active_; }
     /** True if in alignment (coxa) phase */
-    bool isInitialStandingAlignmentPhase() const { return initial_standing_active_ && initial_standing_phase_ == InitialStandingPhase::ALIGN; }
+    bool isInitialStandingAlignmentPhase() const {
+        return initial_standing_active_ && (initial_standing_phase_ == InitialStandingPhase::ALIGN_GROUP_A ||
+                                            initial_standing_phase_ == InitialStandingPhase::ALIGN_GROUP_B);
+    }
     /** Set tolerance (radians) used to validate coxa alignment */
     void setInitialStandingAlignmentTolerance(double radians) { initial_standing_align_tolerance_ = radians; }
     /** Returns true if all coxa joints are within alignment tolerance of target (valid during ALIGN phase) */
@@ -420,11 +423,14 @@ class BodyPoseController {
     bool initial_standing_active_ = false;
     double initial_standing_time_ = 0.0;
     double initial_standing_total_time_ = 0.0;
-    enum class InitialStandingPhase { ALIGN,
-                                      LIFT };
-    InitialStandingPhase initial_standing_phase_ = InitialStandingPhase::ALIGN;
+    enum class InitialStandingPhase {
+        ALIGN_GROUP_A,
+        ALIGN_GROUP_B,
+        LIFT
+    };
+    InitialStandingPhase initial_standing_phase_ = InitialStandingPhase::ALIGN_GROUP_A;
+    int initial_standing_align_group_index_ = 0;
     // For phase 2 lazy profile creation
-    bool initial_standing_lift_profiles_created_ = false;
     double initial_standing_align_tolerance_ = math_utils::degreesToRadians(1.0); // default 1 degree
     // S-curve profiles per joint for initial standing pose
     SCurveProfile *initial_standing_profiles_[NUM_LEGS][DOF_PER_LEG] = {nullptr};
@@ -432,6 +438,9 @@ class BodyPoseController {
     // Walk plane pose helper methods
     Point3D calculateWalkPlaneNormal(Leg legs[NUM_LEGS]) const;
     double calculateWalkPlaneHeight(Leg legs[NUM_LEGS]) const;
+
+    bool prepareInitialStandingLiftPhase(Leg legs[NUM_LEGS]);
+    bool prepareNextAlignmentGroup(Leg legs[NUM_LEGS], int start_group_index);
 
     // Tripod gait leg groupings (OpenSHC compatible)
     // Group A: AR (0), CR (2), BL (4) - Anterior Right, Center Right, Back Left

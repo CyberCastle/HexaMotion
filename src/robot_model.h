@@ -180,9 +180,9 @@ struct Parameters {
     struct StartupNormalizationConfig {
         bool enable_torque_balanced = true; //< Enable torque/energy balanced scaling in LIFT phase
         double alpha = 0.6;                 //< Exponent smoothing factor for weight factors (0.5-0.8 recommended)
-        double speed_deadband = 0.05;       //< Minimum non-zero normalized speed after scaling
-        double accel_deadband = 0.05;       //< Minimum non-zero normalized acceleration after scaling
-        double tibia_speed_cap = 0.85;      //< Optional ceiling for tibia speed after scaling
+        double speed_deadband = 0.2;        //< Minimum non-zero normalized speed after scaling
+        double accel_deadband = 0.1;        //< Minimum non-zero normalized acceleration after scaling
+        double tibia_speed_cap = 1.0;       //< Optional ceiling for tibia speed after scaling (1.0 disables extra cap)
     } startup_norm;
 
     /**

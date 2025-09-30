@@ -2,12 +2,15 @@
 #include "../src/locomotion_system.h"
 #include "robot_model.h"
 #include "test_stubs.h"
+#include <algorithm>
 #include <cassert>
 #include <cmath>
 #include <cstdlib>
 #include <ctime>
 #include <iomanip>
 #include <iostream>
+#include <sstream>
+#include <string>
 
 /**
  * @brief Test: Validate non-blocking S-curve initial standing pose establishment.
@@ -22,6 +25,84 @@
 static double randRange(double a, double b) {
     double r = (double)std::rand() / (double)RAND_MAX;
     return a + (b - a) * r;
+}
+
+static std::string formatAngleCell(double value_deg, double delta_deg) {
+    std::ostringstream oss;
+    oss.setf(std::ios::fixed);
+    oss << std::setprecision(1);
+    oss << std::setw(5) << value_deg << " (" << std::showpos << std::setw(5) << delta_deg << std::noshowpos << ")";
+    return oss.str();
+}
+
+static void printAngleSnapshot(const LocomotionSystem &sys, const JointAngles target_rad[NUM_LEGS], int iter,
+                               const BodyPoseController *ctrl) {
+    std::ios old_state(nullptr);
+    old_state.copyfmt(std::cout);
+
+    double values[DOF_PER_LEG][NUM_LEGS];
+    double deltas[DOF_PER_LEG][NUM_LEGS];
+    double max_delta = 0.0;
+
+    for (int l = 0; l < NUM_LEGS; ++l) {
+        JointAngles q = sys.getLeg(l).getJointAngles();
+        double target_coxa_deg = math_utils::radiansToDegrees(target_rad[l].coxa);
+        double target_femur_deg = math_utils::radiansToDegrees(target_rad[l].femur);
+        double target_tibia_deg = math_utils::radiansToDegrees(target_rad[l].tibia);
+
+        double coxa_deg = math_utils::radiansToDegrees(q.coxa);
+        double femur_deg = math_utils::radiansToDegrees(q.femur);
+        double tibia_deg = math_utils::radiansToDegrees(q.tibia);
+
+        double delta_coxa = coxa_deg - target_coxa_deg;
+        double delta_femur = femur_deg - target_femur_deg;
+        double delta_tibia = tibia_deg - target_tibia_deg;
+
+        values[0][l] = coxa_deg;
+        values[1][l] = femur_deg;
+        values[2][l] = tibia_deg;
+        deltas[0][l] = delta_coxa;
+        deltas[1][l] = delta_femur;
+        deltas[2][l] = delta_tibia;
+
+        max_delta = std::max({max_delta, std::fabs(delta_coxa), std::fabs(delta_femur), std::fabs(delta_tibia)});
+    }
+
+    const char *phase_label = "-";
+    if (ctrl && ctrl->isInitialStandingPoseActive()) {
+        phase_label = ctrl->isInitialStandingAlignmentPhase() ? "ALIGN" : "LIFT";
+    }
+
+    std::cout.setf(std::ios::fixed);
+    std::cout << std::setprecision(2);
+    std::cout << "Iter " << std::setw(3) << iter << " | Phase " << std::setw(5) << phase_label
+              << " | max |Δ| " << std::setw(5) << max_delta << "°" << std::endl;
+
+    std::cout << "Joint ";
+    for (int l = 0; l < NUM_LEGS; ++l) {
+        std::ostringstream label;
+        label << "L" << l;
+        std::cout << "| " << std::setw(13) << label.str() << " ";
+    }
+    std::cout << std::endl;
+
+    std::cout << "------+";
+    for (int l = 0; l < NUM_LEGS; ++l) {
+        std::cout << "----------------";
+    }
+    std::cout << std::endl;
+
+    const char *joint_labels[DOF_PER_LEG] = {"Coxa", "Femur", "Tibia"};
+    for (int j = 0; j < DOF_PER_LEG; ++j) {
+        std::cout << std::setw(5) << joint_labels[j] << " |";
+        for (int l = 0; l < NUM_LEGS; ++l) {
+            std::cout << " " << std::setw(13) << formatAngleCell(values[j][l], deltas[j][l]);
+        }
+        std::cout << std::endl;
+    }
+
+    std::cout << std::endl;
+    std::cout.copyfmt(old_state);
 }
 
 int main() {
@@ -87,6 +168,11 @@ int main() {
         bool isJointMoving(int, int) override { return true; }
         bool enableTorque(int, int, bool) override { return true; }
         void nextIter(int i) { current_iter_ = i; }
+        void seedInitialAngles(int leg, const JointAngles &angles_rad) {
+            last_angles[leg][0] = math_utils::radiansToDegrees(angles_rad.coxa);
+            last_angles[leg][1] = math_utils::radiansToDegrees(angles_rad.femur);
+            last_angles[leg][2] = math_utils::radiansToDegrees(angles_rad.tibia);
+        }
 
       private:
         int current_iter_ = 0;
@@ -107,6 +193,7 @@ int main() {
         initial_angles[l].femur = math_utils::degreesToRadians(randRange(params.femur_angle_limits[0], params.femur_angle_limits[1]));
         initial_angles[l].tibia = math_utils::degreesToRadians(randRange(params.tibia_angle_limits[0], params.tibia_angle_limits[1]));
         sys.getLeg(l).setJointAngles(initial_angles[l]);
+        servo.seedInitialAngles(l, initial_angles[l]);
     }
 
     // Begin transition via locomotion API
@@ -173,21 +260,12 @@ int main() {
                 }
             }
             std::cout << std::endl;
+            std::cout << std::fixed << std::setprecision(2);
         }
 
         // Consolidated per-iteration joint angles (degrees) from internal leg state (radians -> deg)
         if (iter % 10 == 0 || iter < 5) { // Show first 5 and every 10th iteration
-            std::cout << std::setprecision(1);
-            std::cout << "Iter " << std::setw(3) << iter << " | ";
-            for (int l = 0; l < NUM_LEGS; ++l) {
-                JointAngles q = sys.getLeg(l).getJointAngles();
-                double coxa_deg = math_utils::radiansToDegrees(q.coxa);
-                double femur_deg = math_utils::radiansToDegrees(q.femur);
-                double tibia_deg = math_utils::radiansToDegrees(q.tibia);
-                std::cout << "L" << l << "(" << std::setw(4) << coxa_deg << ","
-                          << std::setw(4) << femur_deg << "," << std::setw(4) << tibia_deg << ") ";
-            }
-            std::cout << std::endl;
+            printAngleSnapshot(sys, target_rad, iter, ctrl);
         }
         // Alignment detection using controller phase + joint angle comparison
         if (ctrl && ctrl->isInitialStandingPoseActive() && ctrl->isInitialStandingAlignmentPhase()) {
