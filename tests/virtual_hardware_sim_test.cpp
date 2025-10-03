@@ -313,8 +313,9 @@ class AngleVisualizationServo : public IServoInterface {
 
     double getJointAngle(int leg, int joint) override {
         if (leg >= 0 && leg < NUM_LEGS && joint >= 0 && joint < 3) {
-            // Return current simulated position with small noise
-            return current_angles_[leg][joint] + (rand() % 100 - 50) * 0.001;
+            // Return current simulated position with small noise (convert to radians)
+            double angle_deg = current_angles_[leg][joint] + (rand() % 100 - 50) * 0.001;
+            return math_utils::degreesToRadians(angle_deg);
         }
         return 0.0;
     }
@@ -571,13 +572,101 @@ int main(int argc, char **argv) {
         return 1;
     }
 
-    // 2. Set standing pose and show initial angles
-    std::cout << "\nSetting initial standing pose..." << std::endl;
-    if (!sys.setStandingPose()) {
-        std::cerr << "ERROR: Failed to set standing pose." << std::endl;
+    // 2. Establish standing pose using jerk-limited S-curve transition
+    std::cout << "\nStarting initial standing pose S-curve transition..." << std::endl;
+    bool s_curve_started = sys.establishInitialStandingPose();
+    if (!s_curve_started && !sys.isInitialStandingPoseActive()) {
+        std::cerr << "ERROR: Failed to start initial standing pose transition." << std::endl;
         return 1;
     }
 
+    BodyPoseController *pose_ctrl = sys.getBodyPoseController();
+    int scurve_iter = 0;
+    int max_scurve_iters = 600; // will be expanded dynamically based on progress feedback
+
+    while (sys.isInitialStandingPoseActive()) {
+        if (scurve_iter >= max_scurve_iters) {
+            std::cerr << "ERROR: Initial standing pose transition exceeded estimated iteration budget (" << max_scurve_iters << ")." << std::endl;
+            return 1;
+        }
+        servos.updateStep(-scurve_iter);
+
+        if (!sys.stepInitialStandingPose()) {
+            std::cerr << "ERROR: stepInitialStandingPose() failed at iteration " << scurve_iter << std::endl;
+            return 1;
+        }
+
+        if (pose_ctrl) {
+            double normalized = pose_ctrl->getInitialStandingPoseProgress(); // 0.0-1.0
+            if (scurve_iter % 20 == 0) {
+                double progress_pct = normalized * 100.0;
+                std::cout << "Initial standing pose progress: " << std::fixed << std::setprecision(1) << progress_pct << "% ";
+                if (pose_ctrl->isInitialStandingAlignmentPhase()) {
+                    std::cout << "[ALIGN]";
+                } else {
+                    std::cout << "[LIFT]";
+                }
+                std::cout << std::endl;
+                std::cout << std::defaultfloat;
+            }
+
+            if (normalized > 0.0) {
+                int estimated_iters = static_cast<int>(std::ceil((scurve_iter + 1) / normalized));
+                // add generous buffer to account for jerk profile tapering
+                estimated_iters += 100;
+                if (estimated_iters > max_scurve_iters) {
+                    max_scurve_iters = estimated_iters;
+                }
+            }
+        }
+
+        scurve_iter++;
+    }
+
+    std::cout << "Initial standing pose transition completed in " << scurve_iter << " iterations." << std::endl;
+
+    // Validate that resulting standing pose matches configured default stance
+    const auto &default_stance_positions = pose_config.leg_stance_positions;
+    const auto &default_standing_joints = pose_config.standing_pose_joints;
+    const double angle_tolerance_deg = 0.25;  // strict alignment tolerance
+    const double position_tolerance_mm = 0.5; // workspace tolerance in millimeters
+    bool angles_match = true;
+    bool positions_match = true;
+
+    for (int leg = 0; leg < NUM_LEGS; ++leg) {
+        const Leg &leg_ref = sys.getLeg(leg);
+        JointAngles current_angles = leg_ref.getJointAngles();
+        StandingPoseJoints target_angles = default_standing_joints[leg];
+
+        double coxa_err = std::fabs(math_utils::radiansToDegrees(current_angles.coxa - target_angles.coxa));
+        double femur_err = std::fabs(math_utils::radiansToDegrees(current_angles.femur - target_angles.femur));
+        double tibia_err = std::fabs(math_utils::radiansToDegrees(current_angles.tibia - target_angles.tibia));
+
+        if (coxa_err > angle_tolerance_deg || femur_err > angle_tolerance_deg || tibia_err > angle_tolerance_deg) {
+            std::cerr << "ERROR: Standing pose joint mismatch on leg " << leg
+                      << " (Δcoxa=" << coxa_err << "°, Δfemur=" << femur_err << "°, Δtibia=" << tibia_err << "°)" << std::endl;
+            angles_match = false;
+        }
+
+        Point3D current_tip = leg_ref.getCurrentTipPositionGlobal();
+        const auto &expected_tip = default_stance_positions[leg];
+        double dx = std::fabs(current_tip.x - expected_tip.x);
+        double dy = std::fabs(current_tip.y - expected_tip.y);
+        double dz = std::fabs(current_tip.z - expected_tip.z);
+        if (dx > position_tolerance_mm || dy > position_tolerance_mm || dz > position_tolerance_mm) {
+            std::cerr << "ERROR: Standing pose tip mismatch on leg " << leg
+                      << " (|Δx|=" << dx << "mm, |Δy|=" << dy << "mm, |Δz|=" << dz
+                      << "mm)" << std::endl;
+            positions_match = false;
+        }
+    }
+
+    if (!angles_match || !positions_match) {
+        std::cerr << "ERROR: Standing pose after S-curve transition does not match default configuration." << std::endl;
+        return 1;
+    }
+
+    std::cout << "Standing pose validated against getDefaultStandPositions and standing_pose_joints." << std::endl;
     servos.printCurrentAngles();
 
     // 3. Start tripod gait (new API)

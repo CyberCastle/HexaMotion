@@ -1,3 +1,4 @@
+#include "hexamotion_constants.h"
 #include "math_utils.h"
 #include "robot_model.h"
 #include <cmath>
@@ -31,8 +32,6 @@ int main() {
     std::cout << std::fixed << std::setprecision(3);
     std::cout << "=== DH Parameter Validation Test ===" << std::endl;
 
-    static const double BASE_THETA_OFFSETS[NUM_LEGS] = {-30.0f, -90.0f, -150.0f, 150.0f, 90.0f, 30.0f};
-
     JointAngles q(0, 0, 0);
     bool ok = true;
 
@@ -40,7 +39,7 @@ int main() {
     std::cout << "\n--- Test 1: Global Forward Kinematics Validation ---" << std::endl;
     for (int leg = 0; leg < NUM_LEGS; ++leg) {
         Point3D pos = model.forwardKinematicsGlobalCoordinates(leg, q);
-        double theta_rad = math_utils::degreesToRadians(BASE_THETA_OFFSETS[leg]);
+        double theta_rad = BASE_THETA_OFFSETS[leg];
         double reach = p.hexagon_radius + p.coxa_length + p.femur_length;
         double expected_x = reach * cos(theta_rad);
         double expected_y = reach * sin(theta_rad);
@@ -205,12 +204,10 @@ int main() {
  */
 Point3D transformGlobalToLocal(const RobotModel &model, int leg, const Point3D &global_pos) {
     // Get the leg base position and orientation from DH parameters
-    static const double BASE_THETA_OFFSETS[NUM_LEGS] = {-30.0f, -90.0f, -150.0f, 150.0f, 90.0f, 30.0f};
     const Parameters &params = model.getParams();
 
     // Calculate leg base position
-    double base_angle_deg = BASE_THETA_OFFSETS[leg];
-    double base_angle_rad = math_utils::degreesToRadians(base_angle_deg);
+    double base_angle_rad = BASE_THETA_OFFSETS[leg];
     double base_x = params.hexagon_radius * cos(base_angle_rad);
     double base_y = params.hexagon_radius * sin(base_angle_rad);
 
@@ -237,12 +234,10 @@ Point3D transformGlobalToLocal(const RobotModel &model, int leg, const Point3D &
  */
 Point3D transformLocalToGlobal(const RobotModel &model, int leg, const Point3D &local_pos) {
     // Get the leg base position and orientation from DH parameters
-    static const double BASE_THETA_OFFSETS[NUM_LEGS] = {-30.0f, -90.0f, -150.0f, 150.0f, 90.0f, 30.0f};
     const Parameters &params = model.getParams();
 
     // Calculate leg base position
-    double base_angle_deg = BASE_THETA_OFFSETS[leg];
-    double base_angle_rad = math_utils::degreesToRadians(base_angle_deg);
+    double base_angle_rad = BASE_THETA_OFFSETS[leg];
     double base_x = params.hexagon_radius * cos(base_angle_rad);
     double base_y = params.hexagon_radius * sin(base_angle_rad);
 

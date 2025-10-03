@@ -62,6 +62,21 @@ class SCurveProfile {
     /** True if computation succeeded (distance >= 0 always true). */
     bool valid() const { return total_time_ > 0.0; }
 
+    /** Peak acceleration actually used (rad/s^2 or deg/s^2 depending on caller units). */
+    double peakAcceleration() const { return a_peak_; }
+
+    /** Cruise velocity achieved (0 when the move is too short to reach vmax). */
+    double cruiseVelocity() const { return v_cruise_; }
+
+    /** Peak velocity reached by the generated profile. */
+    double peakVelocity() const;
+
+    /** Segment durations (t1..t7) for inspection and testing. */
+    const std::array<double, 7> &segmentDurations() const { return dt_; }
+
+    /** True when the solver fell back to a constant-acceleration (parabolic) profile. */
+    bool isParabolicFallback() const { return parabolic_profile_; }
+
     /**
      * @brief Sample the profile at time t.
      * @param t Time from 0..totalTime (clamped).
@@ -99,10 +114,17 @@ class SCurveProfile {
     std::array<State, 8> seg_state_{}; // index i = start of segment i (0..7), 7=end
 
     double total_time_{0.0};
+    // Parabolic fallback state (used when the jerk-limited solver would exceed vmax).
+    bool parabolic_profile_{false};
+    double parabolic_accel_{0.0};
+    double parabolic_time_half_{0.0};
+    double parabolic_peak_velocity_{0.0};
 
     void computeProfile();
     void buildCumulative();
     void precomputeStates();
+    void precomputeParabolicStates();
+    void buildParabolicProfile();
 };
 
 #endif // S_CURVE_PROFILE_H

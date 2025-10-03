@@ -310,6 +310,11 @@ inline Parameters createDefaultParameters() {
     // Disable smooth trajectory features for unit tests
     params.smooth_trajectory.use_current_servo_positions = false;
     params.smooth_trajectory.enable_pose_interpolation = false;
+
+    // Startup normalization defaults tuned for brisk but safe S-curve transitions
+    params.startup_norm.speed_deadband = 0.2;
+    params.startup_norm.accel_deadband = 0.1;
+    params.startup_norm.tibia_speed_cap = 1.0;
     return params;
 }
 

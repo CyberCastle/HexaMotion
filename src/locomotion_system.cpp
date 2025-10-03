@@ -1223,10 +1223,19 @@ bool LocomotionSystem::stepInitialStandingPose() {
     double velocities[NUM_LEGS][3];
     double accelerations[NUM_LEGS][3];
 
-    if (!body_pose_ctrl->stepInitialStandingPoseTransition(legs, dt, positions, velocities, accelerations)) {
-        // stepping failed
-        last_error = STATE_ERROR;
-        return false;
+    for (int i = 0; i < NUM_LEGS; ++i) {
+        JointAngles ja = legs[i].getJointAngles();
+        positions[i][0] = ja.coxa;
+        positions[i][1] = ja.femur;
+        positions[i][2] = ja.tibia;
+        velocities[i][0] = velocities[i][1] = velocities[i][2] = 0.0;
+        accelerations[i][0] = accelerations[i][1] = accelerations[i][2] = 0.0;
+    }
+
+    bool sample_ready = body_pose_ctrl->stepInitialStandingPoseTransition(legs, dt, positions, velocities, accelerations);
+    if (!sample_ready && !body_pose_ctrl->isInitialStandingPoseActive()) {
+        // Transition finished this tick with no fresh sample; nothing to publish
+        return true;
     }
 
     // Map radian joint state to servo commands each iteration
@@ -1236,8 +1245,8 @@ bool LocomotionSystem::stepInitialStandingPose() {
     double speeds[NUM_LEGS][3];
     double accels[NUM_LEGS][3];
 
-    // Heuristic max velocity (degrees/s) consistent with earlier logic
-    double vmax_deg = params.default_servo_speed; // heuristic max speed (deg/s) for normalization
+    // Normalize commanded speed/accel against configured servo limits (deg/s)
+    double vmax_deg = (params.max_angular_velocity > 0.0) ? params.max_angular_velocity : DEFAULT_MAX_ANGULAR_VELOCITY;
     double amax_deg = vmax_deg * 4.0;
 
     // Precompute torque-balanced weight factors (relative) once (lazy static cache)

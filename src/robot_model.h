@@ -133,15 +133,16 @@ struct Parameters {
     // resetting to the default tip pose. This yields smoother, continuous trajectories (OpenSHC-style continuity)
     // at the cost of potential long-term drift. When false, an anti-drift policy resets (or blends toward) the
     // calibrated default tip pose at the start of stance for deterministic repeatability.
-    // NOTE: Actual default here is 'true' (continuity). Comment previously stated the opposite; corrected for coherence.
     bool preserve_swing_end_pose = true; // true = continuity (default), false = anti-drift (uses hybrid reset logic below)
 
-    // --- Hybrid anti-drift (applies only when preserve_swing_end_pose == false) ---
-    // If the touchdown pose is close enough to default (distance <= drift_soft_threshold_mm) we blend partially
-    // toward default instead of hard snapping to remove micro-drift without visual discontinuity. If distance
-    // exceeds drift_hard_threshold_mm we force a hard reset to default. Distances in millimeters.
-    double drift_soft_threshold_mm = 2.0; //< Within this distance: apply soft blend instead of hard reset
-    double drift_hard_threshold_mm = 8.0; //< Beyond this distance: force hard reset (snap)
+    // --- Drift management thresholds ---
+    // Shared by both continuity and hybrid reset modes. In continuity (preserve_swing_end_pose=true) these values
+    // gate the lateral residual cleanup executed at stance entry so that rectilinear commands remain tightly
+    // synchronized while allowing rotation commands to keep their intentional offset. When continuity is disabled,
+    // the same thresholds also decide whether to blend toward or snap back to the calibrated default tip pose.
+    // Distances expressed in millimeters.
+    double drift_soft_threshold_mm = 2.0; //< Within this distance: apply soft blend (or mild lateral cleanup)
+    double drift_hard_threshold_mm = 8.0; //< Beyond this distance: force hard reset / correction snap
     double drift_soft_blend_alpha = 0.5;  //< Blend factor (0..1) for soft correction (0.5 = halfway to default)
 
 #ifdef TESTING_ENABLED
@@ -179,9 +180,9 @@ struct Parameters {
     struct StartupNormalizationConfig {
         bool enable_torque_balanced = true; //< Enable torque/energy balanced scaling in LIFT phase
         double alpha = 0.6;                 //< Exponent smoothing factor for weight factors (0.5-0.8 recommended)
-        double speed_deadband = 0.05;       //< Minimum non-zero normalized speed after scaling
-        double accel_deadband = 0.05;       //< Minimum non-zero normalized acceleration after scaling
-        double tibia_speed_cap = 0.85;      //< Optional ceiling for tibia speed after scaling
+        double speed_deadband = 0.2;        //< Minimum non-zero normalized speed after scaling
+        double accel_deadband = 0.1;        //< Minimum non-zero normalized acceleration after scaling
+        double tibia_speed_cap = 1.0;       //< Optional ceiling for tibia speed after scaling (1.0 disables extra cap)
     } startup_norm;
 
     /**
@@ -564,7 +565,7 @@ class IServoInterface {
         return setJointAngleAndSpeed(leg_index, joint_index, angle, speed);
     }
 
-    /** Retrieve the current joint angle. */
+    /** Retrieve the current joint angle (radians). */
     virtual double getJointAngle(int leg_index, int joint_index) = 0;
 
     /** Check if a joint is currently moving. */
