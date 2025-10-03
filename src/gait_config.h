@@ -1,6 +1,7 @@
 #ifndef GAIT_CONFIG_H
 #define GAIT_CONFIG_H
 
+#include "gait_types.h" // Centralized gait enum
 #include "hexamotion_constants.h"
 #include <array>
 #include <cmath>
@@ -73,6 +74,7 @@ struct LegOffsetMultipliers {
  */
 struct GaitConfiguration {
     std::string gait_name;        //< Name of the gait (e.g., "tripod_gait", "wave_gait")
+    GaitType gait_type;           //< Type of gait from GaitType enum
     GaitPhaseConfig phase_config; //< Phase timing configuration
     LegOffsetMultipliers offsets; //< Leg offset multipliers
 
@@ -157,6 +159,51 @@ struct GaitConfiguration {
 
     double getStepCycleTime() const {
         return 1.0 / getStepFrequency();
+    }
+
+    /**
+     * @brief Get gait type as string
+     * @return String representation of the gait type
+     */
+    std::string getGaitTypeString() const {
+        // Use the stored string name which matches the enum conversion
+        return gait_name;
+    }
+
+    /**
+     * @brief Check if gait supports rough terrain
+     * @return true if gait is suitable for rough terrain
+     */
+    bool isTerrainAdaptive() const {
+        return supports_rough_terrain;
+    }
+
+    /**
+     * @brief Check if gait is a tripod-style (two-group) gait
+     * @return true if gait uses two alternating groups
+     */
+    bool isTripodStyle() const {
+        return (gait_type == TRIPOD_GAIT ||
+                (phase_config.stance_phase + phase_config.swing_phase) <= 4);
+    }
+
+    /**
+     * @brief Get number of simultaneous support legs
+     * Estimates how many legs are typically in stance phase
+     * @return Number of legs providing support
+     */
+    int getTypicalSupportLegCount() const {
+        if (gait_type == TRIPOD_GAIT) {
+            return 3; // Tripod: 3 legs in stance
+        } else if (gait_type == WAVE_GAIT) {
+            return 5; // Wave: typically 5 legs in stance
+        } else if (gait_type == RIPPLE_GAIT) {
+            return 4; // Ripple: typically 4 legs in stance
+        } else {
+            // General estimation based on duty cycle
+            double stance_ratio = getStanceRatio();
+            return static_cast<int>(std::round(stance_ratio * NUM_LEGS));
+        }
     }
 };
 

@@ -129,7 +129,9 @@ int main() {
     }
 
     Eigen::Vector3d small_translation(5.0f, 5.0f, 0.0f); // 5mm translation
-    Eigen::Vector3d small_rotation(2.0f, 2.0f, 2.0f);    // 2 degree rotation
+    // Rotaciones deben estar en radianes (límite ~0.25 rad). 2° -> ~0.0349 rad.
+    double small_rot_rad = math_utils::degreesToRadians(2.0);
+    Eigen::Vector3d small_rotation(small_rot_rad, small_rot_rad, small_rot_rad); // 2° en radianes
 
     bool small_pose_result = pc.setBodyPose(small_translation, small_rotation, legs);
     assert(small_pose_result && "Small body pose change should succeed (within limits)");
@@ -152,7 +154,9 @@ int main() {
 
     // Test pose that should exceed limits
     Eigen::Vector3d large_translation(100.0f, 100.0f, 100.0f); // 100mm translation (should exceed limits)
-    Eigen::Vector3d large_rotation(30.0f, 30.0f, 30.0f);       // 30 degree rotation (should exceed limits)
+    // 30° -> ~0.5236 rad (exceeds 0.25 rad limit)
+    double large_rot_rad = math_utils::degreesToRadians(30.0);
+    Eigen::Vector3d large_rotation(large_rot_rad, large_rot_rad, large_rot_rad); // 30° en radianes
 
     // Store positions before attempting large pose
     Point3D before_large_pose_positions[NUM_LEGS];
@@ -508,15 +512,17 @@ int main() {
 
     // Test extreme poses that should fail
     Eigen::Vector3d extreme_pos(1000.0, 1000.0, 1000.0);
-    Eigen::Vector3d extreme_orient(180.0, 180.0, 180.0);
+    // 180° -> PI rad (claramente fuera de los límites pero mantenemos semántica)
+    double extreme_rad = math_utils::degreesToRadians(180.0);
+    Eigen::Vector3d extreme_orient(extreme_rad, extreme_rad, extreme_rad);
 
     bool extreme_result = pc.checkBodyPoseLimits(extreme_pos, extreme_orient);
     assert(!extreme_result && "Extreme pose should be rejected by checkBodyPoseLimits");
     std::cout << "✓ Extreme pose correctly rejected: result=" << extreme_result << std::endl;
 
     // Test valid pose within limits
-    Eigen::Vector3d valid_pos(5.0, 5.0, 5.0);    // Well within 25mm limit
-    Eigen::Vector3d valid_orient(2.0, 2.0, 2.0); // Small rotation
+    Eigen::Vector3d valid_pos(5.0, 5.0, 5.0);                                  // Well within 25mm limit
+    Eigen::Vector3d valid_orient(small_rot_rad, small_rot_rad, small_rot_rad); // Pequeña rotación válida (2°)
 
     bool valid_result = pc.checkBodyPoseLimits(valid_pos, valid_orient);
     assert(valid_result && "Valid pose should be accepted by checkBodyPoseLimits");
@@ -525,9 +531,10 @@ int main() {
     // Test boundary conditions
     const auto &config = pc.getBodyPoseConfig();
     Eigen::Vector3d boundary_pos(config.max_translation.x - 1.0, config.max_translation.y - 1.0, config.max_translation.z - 1.0);
-    Eigen::Vector3d boundary_orient(math_utils::radiansToDegrees(config.max_rotation.roll) - 1.0,
-                                    math_utils::radiansToDegrees(config.max_rotation.pitch) - 1.0,
-                                    math_utils::radiansToDegrees(config.max_rotation.yaw) - 1.0);
+    // Usar valores justo por debajo del límite (restamos 0.01 rad)
+    Eigen::Vector3d boundary_orient(config.max_rotation.roll - 0.01,
+                                    config.max_rotation.pitch - 0.01,
+                                    config.max_rotation.yaw - 0.01);
 
     bool boundary_result = pc.checkBodyPoseLimits(boundary_pos, boundary_orient);
     assert(boundary_result && "Boundary pose should be accepted");
@@ -629,6 +636,59 @@ int main() {
     } else {
         std::cout << "✓ Trajectory system validation: minimal movement=" << total_movement << "mm" << std::endl;
     }
+
+    // === NEW TEST: Global body rotation application (pre-IK) ===
+    std::cout << "\n=== Testing Global Body Pose Rotation Application (10° roll) ===" << std::endl;
+
+    // Ensure auto-pose disabled to isolate global transform
+    pc.setAutoPoseEnabled(false);
+    // Keep walk plane pose disabled so our custom pose is not recomputed
+    pc.setWalkPlanePoseEnabled(false);
+
+    // Capture original desired tip positions (use current tip positions as canonical desired trajectory output)
+    Point3D original_desired[NUM_LEGS];
+    for (int i = 0; i < NUM_LEGS; ++i) {
+        // Use current tip position as if produced by gait planner
+        original_desired[i] = legs[i].getCurrentTipPositionGlobal();
+        legs[i].setDesiredTipPosition(original_desired[i]);
+    }
+
+    // Create a custom walk plane pose with 10° roll around X axis and clearance translation only
+    const BodyPoseConfiguration &cfg_ref = pc.getBodyPoseConfig();
+    double roll_deg = 10.0;
+    double roll_rad = math_utils::degreesToRadians(roll_deg);
+    Eigen::Quaterniond q_roll(Eigen::AngleAxisd(roll_rad, Eigen::Vector3d::UnitX()));
+    Pose custom_pose(Point3D(0.0, 0.0, cfg_ref.body_clearance), q_roll);
+    pc.setWalkPlanePose(custom_pose); // Stored internally as walk_plane_pose_ (still disabled for recompute)
+
+    // Propagate pose state (updateCurrentPose will copy walk_plane_pose_ into body_pose_current_ without modifying it)
+    pc.updateCurrentPose(0.0, legs);
+
+    // Apply the global body pose rotation to desired tips
+    pc.applyGlobalBodyPoseToDesiredTips(legs);
+
+    // Verify rotated coordinates for at least one leg with |y| > 1.0 to guarantee visible effect
+    int tested_legs = 0;
+    double tolerance = 1e-6; // Numerical tolerance for rotation application
+    for (int i = 0; i < NUM_LEGS; ++i) {
+        Point3D before = original_desired[i];
+        if (std::fabs(before.y) < 1.0) {
+            continue; // Skip near X-axis where roll has minimal effect on Y/Z coupling
+        }
+        Point3D after = legs[i].getDesiredTipPosition();
+        // Manual rotation around X (translation expected to be zero because pose.z == clearance and code subtracts clearance)
+        double y_expected = before.y * std::cos(roll_rad) - before.z * std::sin(roll_rad);
+        double z_expected = before.y * std::sin(roll_rad) + before.z * std::cos(roll_rad);
+        // X should remain unchanged under pure roll
+        assert(std::fabs(after.x - before.x) < tolerance && "Roll rotation should not change X coordinate");
+        assert(std::fabs(after.y - y_expected) < 1e-3 && "Y coordinate should match expected roll rotation (1e-3 mm tolerance)");
+        assert(std::fabs(after.z - z_expected) < 1e-3 && "Z coordinate should match expected roll rotation (1e-3 mm tolerance)");
+        tested_legs++;
+        // Test only one qualifying leg to avoid over-constraining if later adjustments modify stance geometry
+        break;
+    }
+    assert(tested_legs > 0 && "No leg with sufficient |y| found to validate roll rotation");
+    std::cout << "✓ Global body pose 10° roll correctly rotated desired tip position for a qualifying leg" << std::endl;
 
     std::cout << "\n=== All Comprehensive Tests with Result Validation Completed ===" << std::endl;
     std::cout << "pose_controller_test executed successfully with validated results" << std::endl;

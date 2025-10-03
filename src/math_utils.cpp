@@ -6,13 +6,6 @@
 
 // Utility function implementations
 namespace math_utils {
-double degreesToRadians(double degrees) {
-    return degrees * DEGREES_TO_RADIANS_FACTOR;
-}
-
-double radiansToDegrees(double radians) {
-    return radians * RADIANS_TO_DEGREES_FACTOR;
-}
 
 double normalizeAngle(double angle) {
     while (angle > HALF_ROTATION_DEGREES)
@@ -299,6 +292,12 @@ Point3D projectVector(const Point3D &vector, const Point3D &onto) {
     return Point3D(onto.x * scale, onto.y * scale, onto.z * scale);
 }
 
+Point3D rejectVector(const Point3D &vector, const Point3D &onto) {
+    // r = a - proj_b(a)
+    Point3D proj = projectVector(vector, onto);
+    return Point3D(vector.x - proj.x, vector.y - proj.y, vector.z - proj.z);
+}
+
 bool solveLeastSquaresPlane(const double *raw_A, const double *raw_B, int num_points, double &a, double &b, double &c) {
 
     // Build normal equations: A^T * A * x = A^T * b
@@ -352,5 +351,8 @@ bool solveLeastSquaresPlane(const double *raw_A, const double *raw_B, int num_po
 
     return false; // Matrix is singular
 }
+
+// setPrecision is declared inline in the header; keep a weak ODR anchor if needed (not required but available for debugging link symbols)
+// double setPrecision(double value, int precision); // (header-only implementation)
 
 } // namespace math_utils

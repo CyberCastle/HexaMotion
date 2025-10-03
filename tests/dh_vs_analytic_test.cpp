@@ -55,7 +55,9 @@ int main() {
     }
 
     // Test with non-zero angles
-    JointAngles test_angles(15.0 * M_PI / 180.0, -30.0 * M_PI / 180.0, 20.0 * M_PI / 180.0);
+    JointAngles test_angles(math_utils::degreesToRadians(15.0),
+                            math_utils::degreesToRadians(-30.0),
+                            math_utils::degreesToRadians(20.0));
     for (int leg = 0; leg < NUM_LEGS; ++leg) {
         Point3D analytic_pos = analytic_model.forwardKinematicsGlobalCoordinatesAnalytic(leg, test_angles);
         Point3D dh_pos = model.forwardKinematicsGlobalCoordinates(leg, test_angles);
@@ -218,9 +220,9 @@ int main() {
             angle_difference = 2.0 * M_PI - angle_difference;
         }
 
-        std::cout << "  Calculated angle=" << calculated_angle * 180.0 / M_PI
-                  << "° (expected=" << expected_angle * 180.0 / M_PI
-                  << "°) error=" << angle_difference * 180.0 / M_PI << "°" << std::endl;
+        std::cout << "  Calculated angle=" << math_utils::radiansToDegrees(calculated_angle)
+                  << "° (expected=" << math_utils::radiansToDegrees(expected_angle)
+                  << "°) error=" << math_utils::radiansToDegrees(angle_difference) << "°" << std::endl;
 
         if (angle_difference > 1e-6) {
             std::cout << "  ⚠️  Angle calculation incorrect for leg " << leg << std::endl;
@@ -231,20 +233,18 @@ int main() {
     // Test 7: Verify hexagon symmetry properties
     std::cout << "\n--- Test 7: Hexagon Symmetry Validation ---" << std::endl;
 
-    // Check that opposite legs are symmetric.
-    // NOTE: Physical leg mounting angles (BASE_THETA_OFFSETS) follow the order:
-    // index: 0  -> -30° (AR  = Anterior Right)
-    //        1  -> -90° (BR  = Back Right)
-    //        2  -> -150° (CR = Center Right)
-    //        3  ->  30° (CL  = Center Left)
-    //        4  ->  90° (BL  = Back Left)
-    //        5  -> 150° (AL  = Anterior Left)
-    // Opposite (180° apart) angle pairs are therefore:
-    // (-30°,150°) => indices (0,5)
-    // (-90°, 90°) => indices (1,4)
-    // (-150°,30°) => indices (2,3)
-    // The original test assumed index pairs (0,3),(1,4),(2,5) which do not match the configured geometry
-    // and produced false symmetry violations. We correct the pairing here.
+    // Check that mirrored legs (angle offsets summing to zero) share the same X coordinate and opposite Y.
+    // BASE_THETA_OFFSETS is ordered as follows:
+    //   0 ->  30° (AR = Anterior Right)
+    //   1 ->  90° (BR = Back Right)
+    //   2 -> 150° (CR = Center Right)
+    //   3 -> -150° (CL = Center Left)
+    //   4 ->  -90° (BL = Back Left)
+    //   5 ->  -30° (AL = Anterior Left)
+    // After the OpenSHC alignment, the mirrored pairs that cancel their offsets (θ_leg_a + θ_leg_b = 0)
+    // are (0,5), (1,4) and (2,3). In this configuration the feet sit on parallel Y axes, so their
+    // X components should match and Y components should be opposite. The previous origin-symmetry check
+    // (pos_a + pos_b ≈ 0) was therefore invalid and raised false positives.
     int leg_pairs[3][2] = {{0, 5}, {1, 4}, {2, 3}};
 
     for (int p_idx = 0; p_idx < 3; ++p_idx) {
@@ -254,8 +254,8 @@ int main() {
         Point3D pos1 = analytic_model.getAnalyticLegBasePosition(leg1);
         Point3D pos2 = analytic_model.getAnalyticLegBasePosition(leg2);
 
-        // Opposite legs should be symmetric about origin
-        double symmetry_error_x = std::abs(pos1.x + pos2.x);
+        // Mirrored legs should share X and oppose Y while remaining coplanar in Z.
+        double symmetry_error_x = std::abs(pos1.x - pos2.x);
         double symmetry_error_y = std::abs(pos1.y + pos2.y);
         double symmetry_error_z = std::abs(pos1.z - pos2.z);
 
@@ -299,11 +299,11 @@ int main() {
         if (diff < 0)
             diff += 2.0 * M_PI;
         // Expected +60° between successive sorted legs
-        double expected = 60.0 * M_PI / 180.0;
+        double expected = math_utils::degreesToRadians(60.0);
         double err = std::abs(diff - expected);
         std::cout << "Legs (sorted) " << leg_angles[k].idx << "->" << leg_angles[next].idx
-                  << " angle diff=" << diff * 180.0 / M_PI << "° (expected="
-                  << expected * 180.0 / M_PI << "°) error=" << err * 180.0 / M_PI << "°" << std::endl;
+                  << " angle diff=" << math_utils::radiansToDegrees(diff) << "° (expected="
+                  << math_utils::radiansToDegrees(expected) << "°) error=" << math_utils::radiansToDegrees(err) << "°" << std::endl;
         if (err > 1e-6) {
             spacing_ok = false;
         }

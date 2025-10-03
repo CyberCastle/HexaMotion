@@ -34,7 +34,6 @@ int main() {
     std::cout << "=== Advanced IK Round-Trip Validation Test ===" << std::endl;
     std::cout << "Using validated positions from simple_ik_test as reference" << std::endl;
 
-    static const double BASE_THETA_OFFSETS[NUM_LEGS] = {-30.0f, -90.0f, -150.0f, 30.0f, 90.0f, 150.0f};
     bool ok = true;
 
     // Test 1: Round-Trip FK-IK validation using known good positions from simple_ik_test
@@ -43,8 +42,8 @@ int main() {
 
     // Validated joint configurations from simple_ik_test (converted to radians)
     JointAngles test_configurations[4] = {
-        JointAngles(0, 0, 0),                                 // Zero configuration
-        JointAngles(0, 20 * M_PI / 180.0, 20 * M_PI / 180.0), // 20° femur/tibia
+        JointAngles(0, 0, 0),                                                                   // Zero configuration
+        JointAngles(0, math_utils::degreesToRadians(20.0), math_utils::degreesToRadians(20.0)), // 20° femur/tibia
         JointAngles(math_utils::degreesToRadians(10.0), math_utils::degreesToRadians(-20.0), math_utils::degreesToRadians(15.0)),
         JointAngles(0.0, math_utils::degreesToRadians(-30.0), math_utils::degreesToRadians(30.0))};
 

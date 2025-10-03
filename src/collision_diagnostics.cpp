@@ -63,10 +63,10 @@ class CollisionDiagnostics {
             double angle1 = leg * 60.0f;
             double angle2 = next_leg * 60.0f;
 
-            Point3D base1(p.hexagon_radius * cos(angle1 * M_PI / 180.0f),
-                          p.hexagon_radius * sin(angle1 * M_PI / 180.0f), 0);
-            Point3D base2(p.hexagon_radius * cos(angle2 * M_PI / 180.0f),
-                          p.hexagon_radius * sin(angle2 * M_PI / 180.0f), 0);
+            Point3D base1(p.hexagon_radius * cos(math_utils::degreesToRadians(angle1)),
+                          p.hexagon_radius * sin(math_utils::degreesToRadians(angle1)), 0);
+            Point3D base2(p.hexagon_radius * cos(math_utils::degreesToRadians(angle2)),
+                          p.hexagon_radius * sin(math_utils::degreesToRadians(angle2)), 0);
 
             bool overlap = WorkspaceAnalyzer::checkWorkspaceOverlap(
                 base1, safe_reach, base2, safe_reach, 20.0f);

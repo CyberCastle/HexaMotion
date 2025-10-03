@@ -1,13 +1,16 @@
 #include "walk_controller.h"
 #include "body_pose_config.h"
 #include "gait_config_factory.h"
+#include "gait_types.h"
 #include "hexamotion_constants.h"
 #include "leg_stepper.h"
 #include "math_utils.h"
 #include "terrain_adaptation.h"
 #include "velocity_limits.h"
+#include "workspace_analyzer.h"
 #include <algorithm>
 #include <cmath>
+#include <exception>
 #include <iostream>
 #include <memory>
 #include <string>
@@ -29,8 +32,9 @@ WalkController::WalkController(RobotModel &m, Leg legs[NUM_LEGS], const BodyPose
     // Initialize gait configuration system (OpenSHC equivalent)
     gait_selection_config_ = createGaitSelectionConfig(model.getParams());
     std::string default_gait_name = model.getParams().gait_type.empty() ? "tripod_gait" : model.getParams().gait_type;
-    GaitType default_gait_type = stringToGaitType(default_gait_name);
-    setGait(default_gait_type);
+    GaitType default_gait_type = RobotModel::stringToGaitType(default_gait_name);
+    GaitConfiguration default_gait_config = createGaitConfig(default_gait_type, model.getParams());
+    setGait(default_gait_config);
 
     // Create LegStepper objects for each leg
     for (int i = 0; i < NUM_LEGS; i++) {
@@ -110,32 +114,21 @@ bool WalkController::setGaitConfiguration(const GaitConfiguration &gait_config) 
     // Update gait selection config
     gait_selection_config_.current_gait = gait_config.gait_name;
 
+    // Regenerate velocity limits so stride/acceleration envelopes reflect the active gait parameters.
+    // This keeps bearing-based clamps in sync with caller-provided overrides (e.g., custom step_length).
+    velocity_limits_.generateLimits(current_gait_config_);
+
     return true;
 }
 
+bool WalkController::setGait(const GaitConfiguration &gait_config) {
+    // Delegate to setGaitConfiguration for consistency
+    return setGaitConfiguration(gait_config);
+}
+
 bool WalkController::setGait(GaitType gait_type) {
-    // Get gait configuration from factory using the robot parameters
-    const Parameters &params = model.getParams();
-    GaitConfiguration gait_config;
-
-    switch (gait_type) {
-    case TRIPOD_GAIT:
-        gait_config = createTripodGaitConfig(params);
-        break;
-    case WAVE_GAIT:
-        gait_config = createWaveGaitConfig(params);
-        break;
-    case RIPPLE_GAIT:
-        gait_config = createRippleGaitConfig(params);
-        break;
-    case METACHRONAL_GAIT:
-        gait_config = createMetachronalGaitConfig(params);
-        break;
-    default:
-        // Unsupported gait type, return false
-        return false;
-    }
-
+    // Create gait configuration using factory and robot parameters
+    GaitConfiguration gait_config = createGaitConfig(gait_type, model.getParams());
     return setGaitConfiguration(gait_config);
 }
 
@@ -156,6 +149,7 @@ void WalkController::applyGaitConfigToLegSteppers(const GaitConfiguration &gait_
         // Set gait-specific parameters (not part of StepCycle)
         leg_stepper->setSwingWidth(gait_config.swing_width);
         leg_stepper->setStepClearanceHeight(gait_config.swing_height);
+        leg_stepper->setStanceSpanModifier(gait_config.stance_span_modifier); // OpenSHC stance_span_modifier propagation
 
         // Calculate phase offset using OpenSHC formula
         // OpenSHC: step_offset = (base_step_offset * multiplier) % step.period_
@@ -231,6 +225,10 @@ VelocityLimits::LimitValues WalkController::getVelocityLimits(double bearing_deg
 }
 
 VelocityLimits::LimitValues WalkController::applyVelocityLimits(double vx, double vy, double omega) const {
+    // If velocity limiting disabled, pass through raw command
+    if (!model.getParams().enable_velocity_limits) {
+        return VelocityLimits::LimitValues(std::abs(vx), std::abs(vy), std::abs(omega), 0.0); // magnitude container (angular_accel unused)
+    }
     // Calculate bearing from velocity components
     double bearing = VelocityLimits::calculateBearing(vx, vy);
 
@@ -265,6 +263,9 @@ VelocityLimits::LimitValues WalkController::applyVelocityLimits(double vx, doubl
 }
 
 bool WalkController::validateVelocityCommand(double vx, double vy, double omega) const {
+    if (!model.getParams().enable_velocity_limits) {
+        return true; // Always accept when disabling limits
+    }
     return velocity_limits_.validateVelocityInputs(vx, vy, omega);
 }
 
@@ -334,6 +335,9 @@ void WalkController::init(const Eigen::Vector3d &current_body_position, const Ei
         } // OpenSHC pattern: Initialize current tip pose to default stance position
         // This ensures LegStepper starts with proper stance coordinates
         leg_stepper->setCurrentTipPose(leg_stepper->getDefaultTipPose());
+
+        // Initialize walk plane and normal so swing clearance is oriented correctly from the start
+        leg_stepper->setWalkPlaneNormal(getWalkPlaneNormal());
     }
 
     // Init velocity input variables
@@ -386,34 +390,40 @@ void WalkController::updateWalk(const Point3D &linear_velocity_input, double ang
     double limited_angular_velocity;
 
     if (walk_state_ != WALK_STOPPING && has_velocity_command) {
-        // Calculate bearing once for velocity limits
-        const double bearing_rad = atan2(linear_velocity_input.y, linear_velocity_input.x);
-        const double bearing_degrees = bearing_rad * 180.0 / M_PI + (bearing_rad < 0 ? 360.0 : 0.0);
-        const VelocityLimits::LimitValues limits = velocity_limits_.getLimit(bearing_degrees);
+        // Centralized velocity limiting: reuse applyVelocityLimits (single source of truth)
+        VelocityLimits::LimitValues base_limits = applyVelocityLimits(
+            linear_velocity_input.x, linear_velocity_input.y, angular_velocity_input);
 
-        // Apply velocity magnitude limiting efficiently
-        const double input_magnitude = sqrt(linear_velocity_input.x * linear_velocity_input.x +
-                                            linear_velocity_input.y * linear_velocity_input.y);
-        const double scale_factor = (input_magnitude > limits.linear_x && input_magnitude > 0.0) ? limits.linear_x / input_magnitude : 1.0;
+        // Target velocities after directional & coupling limits
+        Point3D target_linear_velocity(base_limits.linear_x, base_limits.linear_y, 0.0);
+        double target_angular_velocity = base_limits.angular_z;
 
-        new_linear_velocity = linear_velocity_input * scale_factor;
-        double new_angular_velocity = math_utils::clamp(angular_velocity_input, -limits.angular_z, limits.angular_z);
+        // Acceleration (rate) limiting: only apply if acceleration constraint > 0
+        double accel_limit = base_limits.acceleration; // already scaled if angular coupling applied
+        if (accel_limit > 0.0) {
+            // Linear rate limiting
+            Point3D diff = target_linear_velocity - desired_linear_velocity_;
+            double diff_mag = std::sqrt(diff.x * diff.x + diff.y * diff.y);
+            double max_step = accel_limit * time_delta_;
+            if (diff_mag > max_step && diff_mag > 1e-9) {
+                double scale = max_step / diff_mag;
+                limited_linear_velocity = desired_linear_velocity_ + diff * scale;
+            } else {
+                limited_linear_velocity = target_linear_velocity;
+            }
 
-        // OpenSHC: Optimized acceleration limiting
-        const Point3D linear_diff = new_linear_velocity - desired_linear_velocity_;
-        const double linear_diff_mag = sqrt(linear_diff.x * linear_diff.x + linear_diff.y * linear_diff.y);
-        const double max_linear_change = limits.acceleration * time_delta_;
-
-        if (linear_diff_mag <= max_linear_change) {
-            limited_linear_velocity = new_linear_velocity;
+            // Angular rate limiting (reuse same accel limit; separate angular limit could be added later)
+            double angular_diff = target_angular_velocity - desired_angular_velocity_;
+            double max_ang_step = accel_limit * time_delta_;
+            if (std::abs(angular_diff) > max_ang_step) {
+                angular_diff = (angular_diff > 0 ? max_ang_step : -max_ang_step);
+            }
+            limited_angular_velocity = desired_angular_velocity_ + angular_diff;
         } else {
-            const double norm_factor = max_linear_change / linear_diff_mag;
-            limited_linear_velocity = desired_linear_velocity_ + linear_diff * norm_factor;
+            // No acceleration constraint configured: take target directly
+            limited_linear_velocity = target_linear_velocity;
+            limited_angular_velocity = target_angular_velocity;
         }
-
-        const double angular_diff = new_angular_velocity - desired_angular_velocity_;
-        const double max_angular_change = limits.acceleration * time_delta_;
-        limited_angular_velocity = desired_angular_velocity_ + math_utils::clamp(angular_diff, -max_angular_change, max_angular_change);
     } else {
         // Zero velocities for stopping/stopped
         limited_linear_velocity = Point3D(0, 0, 0);
@@ -505,6 +515,10 @@ void WalkController::updateWalk(const Point3D &linear_velocity_input, double ang
         // Set velocity once per leg
         leg_stepper->setDesiredVelocity(desired_linear_velocity_, desired_angular_velocity_);
 
+        // Propagate walk plane and its normal from the controller (BodyPoseController) to each LegStepper.
+        // This aligns swing clearance and touchdown direction with the estimated walking surface.
+        leg_stepper->setWalkPlaneNormal(getWalkPlaneNormal());
+
         if (is_active_walking && step_cycle_calculated) {
             // Advance per-leg phase by 1 (keeping global coordination for gait duration)
             int current_phase = leg_stepper->getPhase();
@@ -552,51 +566,24 @@ Point3D WalkController::calculateOdometry(double time_period) {
 }
 
 void WalkController::generateWalkspace() {
-    // Implement full walkspace calculation like OpenSHC
     walkspace_.clear();
 
-    // Get robot parameters for workspace calculation
-    // Use height-aware horizontal reach from standing pose for walkspace generation
-    double leg_reach = standing_horizontal_reach_;
-    double safe_reach = leg_reach; // Height-aware conservative reach
+    try {
+        WorkspaceAnalyzer &analyzer = model.getWorkspaceAnalyzer();
+        analyzer.generateWorkspace();
+        const auto &analyzer_map = analyzer.getWalkspaceMap();
 
-    // Calculate workspace for each bearing angle
-    for (int bearing = 0; bearing <= 360; bearing += 10) {
-        double bearing_rad = bearing * M_PI / 180.0;
-
-        // Calculate workspace radius based on leg geometry and joint limits
-        double max_radius = 0.0;
-
-        for (int leg = 0; leg < NUM_LEGS; leg++) {
-            // Get leg base position
-            Point3D base_pos = model.getLegBasePosition(leg);
-            double base_x = base_pos.x;
-            double base_y = base_pos.y;
-
-            // Calculate reach in bearing direction
-            double target_x = base_x + safe_reach * cos(bearing_rad);
-            double target_y = base_y + safe_reach * sin(bearing_rad);
-
-            // Check if target is reachable by this leg, using current body position
-            // Use inverse kinematics to find angles for this target position
-            Point3D target(target_x, target_y, current_body_position_.z());
-            // For workspace generation, use zero angles as starting point
-            JointAngles zero_angles(0, 0, 0);
-            JointAngles angles = model.inverseKinematicsCurrentGlobalCoordinates(leg, zero_angles, target);
-
-            if (model.checkJointLimits(leg, angles)) {
-                double distance = sqrt((target_x - base_x) * (target_x - base_x) +
-                                       (target_y - base_y) * (target_y - base_y));
-                max_radius = std::max(max_radius, distance);
-            }
+        if (!analyzer_map.empty()) {
+            walkspace_ = analyzer_map; // copy exact bearings from analyzer (OpenSHC parity)
         }
-
-        walkspace_[bearing] = max_radius;
+    } catch (const std::exception &ex) {
+        std::cerr << "WalkController::generateWalkspace failed: " << ex.what() << std::endl;
+        walkspace_.clear();
     }
 
     regenerate_walkspace_ = false;
 
-    // Use unified configuration interface - no more conversions needed!
+    // Regenerate velocity limits using the updated workspace information
     velocity_limits_.generateLimits(current_gait_config_);
 }
 
@@ -662,19 +649,4 @@ WalkController::LegTrajectoryInfo WalkController::getLegTrajectoryInfo(int leg_i
     info.velocity = leg_stepper->getCurrentTipVelocity();
 
     return info;
-}
-
-// Helper method implementations
-GaitType WalkController::stringToGaitType(const std::string &gait_name) const {
-    if (gait_name == "tripod_gait") {
-        return TRIPOD_GAIT;
-    } else if (gait_name == "wave_gait") {
-        return WAVE_GAIT;
-    } else if (gait_name == "ripple_gait") {
-        return RIPPLE_GAIT;
-    } else if (gait_name == "metachronal_gait") {
-        return METACHRONAL_GAIT;
-    } else {
-        return NO_GAIT; // Default for unknown gait types
-    }
 }

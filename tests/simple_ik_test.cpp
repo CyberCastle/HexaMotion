@@ -34,7 +34,6 @@ int main() {
     std::cout << std::fixed << std::setprecision(3);
     std::cout << "=== Inverse Kinematics Validation Test ===" << std::endl;
 
-    static const double BASE_THETA_OFFSETS[NUM_LEGS] = {-30.0f, -90.0f, -150.0f, 30.0f, 90.0f, 150.0f};
     bool ok = true;
 
     // Test 1: Simple Horizontal Test (original functionality)
@@ -88,7 +87,7 @@ int main() {
     std::cout << "\n--- Test 3: Enhanced IK-FK Coherence Validation ---" << std::endl;
     for (int leg = 0; leg < NUM_LEGS; ++leg) {
         // Use the same relative joint angles for every leg (converted from degrees to radians)
-        JointAngles test_angles(0, 20 * M_PI / 180.0, 20 * M_PI / 180.0); // 0°, 20°, 20° -> 0, 0.349, 0.349 rad
+        JointAngles test_angles(0, math_utils::degreesToRadians(20.0), math_utils::degreesToRadians(20.0)); // 0°, 20°, 20° -> 0, 0.349, 0.349 rad
         Point3D target = model.forwardKinematicsGlobalCoordinates(leg, test_angles);
 
         // Usa test_angles como estimación inicial

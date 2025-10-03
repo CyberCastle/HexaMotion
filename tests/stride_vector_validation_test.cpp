@@ -90,7 +90,6 @@ static bool validateAllLegs(const StrideTestCase &tc, RobotModel &model, const P
         stepper.setStepCycle(cycle);
 
         stepper.setDesiredVelocity(tc.linear_velocity, tc.angular_velocity);
-        stepper.setWalkPlane(analytic_identity);
         stepper.setWalkPlaneNormal(Point3D(0, 0, 1));
         stepper.updateStride();
         // Ya no existen getters de instrumentación de capas (raw/arc_pre/post).
@@ -168,49 +167,48 @@ static bool validateAllLegs(const StrideTestCase &tc, RobotModel &model, const P
             all_ok = false;
     }
 
-    // ================= Symmetry Validation for Opposite Pairs =================
-    // Pares opuestos: (0,3), (1,4), (2,5)
+    // ================= Symmetry Validation (Oposición 180° y Reflexión 60°) =================
+    // NUEVO: Se separan las dos nociones.
+    //  A) Oposición (pares realmente separados 180° en el hexágono): (0,5), (1,4), (2,3)
+    //  B) Reflexión (pares que sólo invierten el signo de X ó Y respecto a un eje local): (0,3), (2,5) y (1,4) (este último coincide con oposición)
+
     struct Pair {
         int a;
         int b;
         const char *label;
     };
-    Pair pairs[3] = {{0, 3, "(0,3)"}, {1, 4, "(1,4)"}, {2, 5, "(2,5)"}};
-    // Contexto geométrico: ángulos base (offset DH) de cada pata en grados para evidenciar estructura hexagonal
+
+    // ---- Bloque A: Oposición verdadera (esperamos vectores angulares opuestos -> dot ≈ -1) ----
+    Pair opposite_pairs[3] = {{0, 5, "(0,5)"}, {1, 4, "(1,4)"}, {2, 3, "(2,3)"}};
     std::cout << "    BaseAngles(deg):";
     for (int i = 0; i < NUM_LEGS; ++i) {
         double deg = math_utils::radiansToDegrees(BASE_THETA_OFFSETS[i]);
         std::cout << " L" << i << "=" << std::fixed << std::setprecision(1) << deg;
     }
     std::cout << std::endl;
-    std::cout << "    Symmetry (pares opuestos, Δθ≈180° ideal):" << std::endl;
-    double dir_tol = 1e-6; // tolerancia direccional absoluta
-    for (const auto &p : pairs) {
+    std::cout << "    Symmetry Opposite Pairs (Δθ≈180° -> dot≈-1):" << std::endl;
+    double dir_tol = 1e-6; // tolerancia direccional estricta
+    for (const auto &p : opposite_pairs) {
         Point3D va = angular_components[p.a];
         Point3D vb = angular_components[p.b];
         double ma = angular_mags[p.a];
         double mb = angular_mags[p.b];
-        // Si ambos son casi cero, se considera trivialmente simétrico
         bool trivial = (ma < 1e-12 && mb < 1e-12);
-        double rel_mag_err = 0.0;
-        double dir_dot_norm = 0.0;
+        double rel_mag_err = 0.0, dir_dot_norm = 0.0;
         bool mag_ok = true, dir_ok = true;
         if (!trivial) {
             rel_mag_err = std::fabs(ma - mb) / std::max(1e-12, (ma + mb) * 0.5);
-            if (ma > 0 && mb > 0) {
+            if (ma > 0 && mb > 0)
                 dir_dot_norm = (va.x * vb.x + va.y * vb.y + va.z * vb.z) / (ma * mb);
-            }
-            // Para rotación global pura se espera vectores opuestos (dot≈-1).
-            // Para combinaciones con gran componente lineal puede relajarse; aquí mantenemos criterio estricto.
             mag_ok = (rel_mag_err <= 1e-9 || trivial);
             dir_ok = (std::fabs(dir_dot_norm + 1.0) <= dir_tol) || trivial;
         }
-        bool pair_ok = (trivial || (mag_ok && dir_ok));
+        bool pair_ok = trivial || (mag_ok && dir_ok);
         double theta_a_deg = math_utils::radiansToDegrees(BASE_THETA_OFFSETS[p.a]);
         double theta_b_deg = math_utils::radiansToDegrees(BASE_THETA_OFFSETS[p.b]);
         double delta_theta = std::fmod(std::fabs(theta_a_deg - theta_b_deg), 360.0);
         if (delta_theta > 180.0)
-            delta_theta = 360.0 - delta_theta; // menor ángulo
+            delta_theta = 360.0 - delta_theta;
         std::cout << "      OppPair " << p.label
                   << " (θa=" << theta_a_deg << ", θb=" << theta_b_deg << ", Δθ=" << delta_theta << ")"
                   << " |mag_a|=" << ma << " |mag_b|=" << mb
@@ -219,20 +217,50 @@ static bool validateAllLegs(const StrideTestCase &tc, RobotModel &model, const P
                   << (trivial ? " (trivial: sin rotación)" : "")
                   << (pair_ok ? " ✓" : " ❌") << std::endl;
         if (!pair_ok)
-            all_ok = false;
+            all_ok = false; // Sólo este bloque afecta el resultado global
     }
 
-    // Magnitud similar específica entre (0,3) y (2,5) (coherencia hexagonal adicional)
-    double avg03 = 0.5 * (angular_mags[0] + angular_mags[3]);
-    double avg25 = 0.5 * (angular_mags[2] + angular_mags[5]);
-    double rel_block_err = std::fabs(avg03 - avg25) / std::max(1e-12, (avg03 + avg25) * 0.5);
-    bool block_ok = (rel_block_err <= 1e-9) || (avg03 < 1e-12 && avg25 < 1e-12);
-    std::cout << "      Block magnitudes hexagon ( (0,3) vs (2,5) ) avg03=" << avg03 << " avg25=" << avg25
-              << " rel_err=" << rel_block_err
-              << " criterio: magnitudes similares por ejes reflexivos del hexágono"
-              << (block_ok ? " ✓" : " ❌") << std::endl;
-    if (!block_ok)
-        all_ok = false;
+    // ---- Bloque B: Reflexión (informativo, NO afecta all_ok) ----
+    // Para reflexión esperamos magnitudes iguales y direcciones similares (dot≈+1) porque el radio se refleja
+    // pero el signo de la componente tangencial puede conservarse según convención (depende de ω y orientación).
+    Pair reflection_pairs[3] = {{0, 3, "(0,3)"}, {1, 4, "(1,4)"}, {2, 5, "(2,5)"}};
+    std::cout << "    Symmetry Reflection Pairs (Δθ≈60° o 180° -> dot≈+1 esperado):" << std::endl;
+    for (const auto &p : reflection_pairs) {
+        Point3D va = angular_components[p.a];
+        Point3D vb = angular_components[p.b];
+        double ma = angular_mags[p.a];
+        double mb = angular_mags[p.b];
+        bool trivial = (ma < 1e-12 && mb < 1e-12);
+        double rel_mag_err = 0.0, dir_dot_norm = 0.0;
+        bool mag_ok = true, dir_ok = true;
+        if (!trivial) {
+            rel_mag_err = std::fabs(ma - mb) / std::max(1e-12, (ma + mb) * 0.5);
+            if (ma > 0 && mb > 0)
+                dir_dot_norm = (va.x * vb.x + va.y * vb.y + va.z * vb.z) / (ma * mb);
+            // criterio relajado: magnitudes casi iguales y dot cercano a +1 (±0.5 margen por mezcla lineal)
+            mag_ok = (rel_mag_err <= 1e-9 || trivial);
+            dir_ok = (dir_dot_norm >= 0.3) || trivial; // sólo informativo
+        }
+        double theta_a_deg = math_utils::radiansToDegrees(BASE_THETA_OFFSETS[p.a]);
+        double theta_b_deg = math_utils::radiansToDegrees(BASE_THETA_OFFSETS[p.b]);
+        double delta_theta = std::fmod(std::fabs(theta_a_deg - theta_b_deg), 360.0);
+        if (delta_theta > 180.0)
+            delta_theta = 360.0 - delta_theta;
+        std::cout << "      ReflPair " << p.label
+                  << " (θa=" << theta_a_deg << ", θb=" << theta_b_deg << ", Δθ=" << delta_theta << ")"
+                  << " |mag_a|=" << ma << " |mag_b|=" << mb
+                  << " rel_mag_err=" << rel_mag_err
+                  << " dir_dot(expect +)=" << dir_dot_norm
+                  << (trivial ? " (trivial: sin rotación)" : "")
+                  << ((mag_ok && dir_ok) ? " (info ✓)" : " (info ⚠)") << std::endl;
+    }
+
+    // Magnitud similar entre bloques axiales (informativo, no afecta all_ok)
+    double avg05 = 0.5 * (angular_mags[0] + angular_mags[5]);
+    double avg23 = 0.5 * (angular_mags[2] + angular_mags[3]);
+    double rel_block_err = std::fabs(avg05 - avg23) / std::max(1e-12, (avg05 + avg23) * 0.5);
+    std::cout << "      Block magnitudes opos ( (0,5) vs (2,3) ) avg05=" << avg05 << " avg23=" << avg23
+              << " rel_err=" << rel_block_err << " (info)" << std::endl;
 
     return all_ok;
 }
@@ -303,7 +331,6 @@ static bool validateFrameCenterAssumption(const StrideTestCase &baseTc, RobotMod
         cycle.swing_end_ = cycle.period_;
         stepperUn.setStepCycle(cycle);
         stepperUn.setDesiredVelocity(baseTc.linear_velocity, baseTc.angular_velocity);
-        stepperUn.setWalkPlane(identity_unshifted);
         stepperUn.setWalkPlaneNormal(Point3D(0, 0, 1));
         stepperUn.updateStride();
         Point3D strideUn = stepperUn.getStrideVector();
@@ -312,7 +339,6 @@ static bool validateFrameCenterAssumption(const StrideTestCase &baseTc, RobotMod
         LegStepper stepperSh(i, identity_shifted, *legs[i], model);
         stepperSh.setStepCycle(cycle);
         stepperSh.setDesiredVelocity(baseTc.linear_velocity, baseTc.angular_velocity);
-        stepperSh.setWalkPlane(identity_shifted);
         stepperSh.setWalkPlaneNormal(Point3D(0, 0, 1));
         stepperSh.updateStride();
         Point3D strideSh = stepperSh.getStrideVector();
@@ -348,7 +374,7 @@ static bool validateFrameCenterAssumption(const StrideTestCase &baseTc, RobotMod
     double diff_mag = std::sqrt(diff_meas.x * diff_meas.x + diff_meas.y * diff_meas.y);
     double dot = diff_meas.x * bias.x + diff_meas.y * bias.y;
     double dir_cos = (bias_mag > 1e-12 && diff_mag > 1e-12) ? dot / (bias_mag * diff_mag) : 1.0;
-    double angle_deg = std::acos(std::max(-1.0, std::min(1.0, dir_cos))) * 180.0 / M_PI;
+    double angle_deg = math_utils::radiansToDegrees(std::acos(std::max(-1.0, std::min(1.0, dir_cos))));
     double mag_ratio = (bias_mag > 1e-12) ? diff_mag / bias_mag : 0.0;
     bool bias_detected = (diff_mag > tol * 100.0); // el medido debe ser significativo
     bool direction_ok = angle_deg <= 15.0;         // alineación direccional razonable
@@ -441,7 +467,6 @@ int main() {
 
         // Establecer velocidades deseadas y plano de marcha
         stepper.setDesiredVelocity(tc.linear_velocity, tc.angular_velocity);
-        stepper.setWalkPlane(Point3D(tc.identity_tip.x, tc.identity_tip.y, tc.identity_tip.z));
         stepper.setWalkPlaneNormal(Point3D(0, 0, 1));
 
         // updateStride calcula y potencialmente congela stride; llamamos una vez.

@@ -5,6 +5,7 @@
 #include "../src/leg_stepper.h"
 #include "../src/walk_controller.h"
 #include "../src/workspace_analyzer.h"
+#include "math_utils.h"
 #include "test_stubs.h"
 #include <algorithm>
 #include <cassert>
@@ -47,9 +48,9 @@ void debugTipPositionGeneration(LegStepper &stepper, Leg &leg, const RobotModel 
     std::cout << "Traditional IK - Success: " << (traditional_ik_success ? "YES" : "NO") << ", Error: " << traditional_ik_error << " mm" << std::endl;
     std::cout << "Delta-based IK - Success: " << (delta_ik_success ? "YES" : "NO") << ", Error: " << delta_ik_error << " mm" << std::endl;
     std::cout << "Initial actual position: (" << delta_actual_pos.x << ", " << delta_actual_pos.y << ", " << delta_actual_pos.z << ")" << std::endl;
-    std::cout << "Initial joint angles (deg): coxa=" << (new_angles.coxa * 180.0 / M_PI)
-              << "°, femur=" << (new_angles.femur * 180.0 / M_PI)
-              << "°, tibia=" << (new_angles.tibia * 180.0 / M_PI) << "°" << std::endl;
+    std::cout << "Initial joint angles (deg): coxa=" << math_utils::radiansToDegrees(new_angles.coxa)
+              << "°, femur=" << math_utils::radiansToDegrees(new_angles.femur)
+              << "°, tibia=" << math_utils::radiansToDegrees(new_angles.tibia) << "°" << std::endl;
 
     // Check if initial position is reachable
     bool is_reachable = isPositionReachable(model, leg.getLegId(), initial_position);
@@ -184,9 +185,9 @@ void debugTipPositionGeneration(LegStepper &stepper, Leg &leg, const RobotModel 
         bool delta_ik_success = true; // Always successful with advanced IK
 
         // Convert joint angles from radians to degrees
-        double coxa_deg = angles_after.coxa * 180.0 / M_PI;
-        double femur_deg = angles_after.femur * 180.0 / M_PI;
-        double tibia_deg = angles_after.tibia * 180.0 / M_PI;
+        double coxa_deg = math_utils::radiansToDegrees(angles_after.coxa);
+        double femur_deg = math_utils::radiansToDegrees(angles_after.femur);
+        double tibia_deg = math_utils::radiansToDegrees(angles_after.tibia);
 
         // Calculate radio (distance from origin in XY plane)
         double radio = std::sqrt(pos_bezier.x * pos_bezier.x + pos_bezier.y * pos_bezier.y);
@@ -358,7 +359,7 @@ void debugTipPositionGeneration(LegStepper &stepper, Leg &leg, const RobotModel 
             printf("❌ Invalid joint limits at iteration %d: position (%.3f, %.3f, %.3f)\n",
                    iteration, pos.x, pos.y, pos.z);
             printf("   Joint angles: coxa=%.1f°, femur=%.1f°, tibia=%.1f°\n",
-                   angles.coxa * 180.0 / M_PI, angles.femur * 180.0 / M_PI, angles.tibia * 180.0 / M_PI);
+                   math_utils::radiansToDegrees(angles.coxa), math_utils::radiansToDegrees(angles.femur), math_utils::radiansToDegrees(angles.tibia));
             all_valid = false;
         }
     }
@@ -439,14 +440,14 @@ void debugTipPositionGeneration(LegStepper &stepper, Leg &leg, const RobotModel 
         double xy_displacement = xy_delta.norm();
 
         // Convert joint angles to degrees
-        double coxa_deg = angles_after.coxa * 180.0 / M_PI;
-        double femur_deg = angles_after.femur * 180.0 / M_PI;
-        double tibia_deg = angles_after.tibia * 180.0 / M_PI;
+        double coxa_deg = math_utils::radiansToDegrees(angles_after.coxa);
+        double femur_deg = math_utils::radiansToDegrees(angles_after.femur);
+        double tibia_deg = math_utils::radiansToDegrees(angles_after.tibia);
 
         // Calculate joint angle deltas from initial stance position
-        double coxa_delta = (angles_after.coxa - initial_stance_angles.coxa) * 180.0 / M_PI;
-        double femur_delta = (angles_after.femur - initial_stance_angles.femur) * 180.0 / M_PI;
-        double tibia_delta = (angles_after.tibia - initial_stance_angles.tibia) * 180.0 / M_PI;
+        double coxa_delta = math_utils::radiansToDegrees(angles_after.coxa - initial_stance_angles.coxa);
+        double femur_delta = math_utils::radiansToDegrees(angles_after.femur - initial_stance_angles.femur);
+        double tibia_delta = math_utils::radiansToDegrees(angles_after.tibia - initial_stance_angles.tibia);
 
         // Analyze movement pattern
         std::string movement_analysis = "";
@@ -493,9 +494,9 @@ void debugTipPositionGeneration(LegStepper &stepper, Leg &leg, const RobotModel 
     total_xy_movement.z = 0;
     double total_xy_displacement = total_xy_movement.norm();
 
-    double total_coxa_change = (final_stance_angles.coxa - initial_stance_angles.coxa) * 180.0 / M_PI;
-    double total_femur_change = (final_stance_angles.femur - initial_stance_angles.femur) * 180.0 / M_PI;
-    double total_tibia_change = (final_stance_angles.tibia - initial_stance_angles.tibia) * 180.0 / M_PI;
+    double total_coxa_change = math_utils::radiansToDegrees(final_stance_angles.coxa - initial_stance_angles.coxa);
+    double total_femur_change = math_utils::radiansToDegrees(final_stance_angles.femur - initial_stance_angles.femur);
+    double total_tibia_change = math_utils::radiansToDegrees(final_stance_angles.tibia - initial_stance_angles.tibia);
 
     std::cout << "\n=== STANCE PHASE ANALYSIS ===" << std::endl;
     std::cout << "Total XY displacement: " << total_xy_displacement << " mm" << std::endl;
@@ -606,9 +607,9 @@ int main() {
         Point3D pos = test_legs[i].getCurrentTipPositionGlobal();
         JointAngles angles = test_legs[i].getJointAngles();
         std::cout << "Leg " << i << " standing position: (" << pos.x << ", " << pos.y << ", " << pos.z << ")" << std::endl;
-        std::cout << "  Joint angles (deg): coxa=" << (angles.coxa * 180.0 / M_PI)
-                  << "°, femur=" << (angles.femur * 180.0 / M_PI)
-                  << "°, tibia=" << (angles.tibia * 180.0 / M_PI) << "°" << std::endl;
+        std::cout << "  Joint angles (deg): coxa=" << math_utils::radiansToDegrees(angles.coxa)
+                  << "°, femur=" << math_utils::radiansToDegrees(angles.femur)
+                  << "°, tibia=" << math_utils::radiansToDegrees(angles.tibia) << "°" << std::endl;
     }
 
     // Get leg's identity pose from BodyPoseConfiguration (OpenSHC equivalent)

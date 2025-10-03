@@ -6,6 +6,7 @@
  * @file robot_model.cpp
  * @brief Implementation of the kinematic robot model.
  */
+#include <algorithm>
 #include <limits>
 #include <math.h>
 #include <memory>
@@ -120,7 +121,7 @@ void RobotModel::initializeDH() {
 JointAngles RobotModel::solveIK(int leg, const Point3D &local_target, JointAngles current) const {
     const double tolerance = IK_TOLERANCE;
     const double dls_coefficient = IK_DLS_COEFFICIENT;
-    const double max_angle_change = IK_MAX_ANGLE_STEP * DEGREES_TO_RADIANS_FACTOR; // Max angle change per iteration
+    const double max_angle_change = math_utils::degreesToRadians(IK_MAX_ANGLE_STEP); // Max angle change per iteration
 
     for (int iter = 0; iter < params.ik.max_iterations; ++iter) {
         // Calculate current position in local leg frame using FK
@@ -447,6 +448,86 @@ double RobotModel::getLegReach() const {
     return params.femur_length + params.tibia_length;
 }
 
+double RobotModel::computeStandingHorizontalReach(const Parameters &p) {
+    // Reuse shared femur angle computation (no duplication of trig logic)
+    bool ok = false;
+    double femur_angle = 0.0;
+    // Internal lambda replicating height feasibility logic (shared with angle solver)
+    auto computeFemur = [&](double target_height_mm, bool &valid) -> double {
+        valid = false;
+        if (p.femur_length <= 0.0 || p.tibia_length <= 0.0 || p.coxa_length < 0.0)
+            return 0.0;
+        double min_h = std::max(0.0, p.tibia_length - p.femur_length);
+        double max_h = p.tibia_length + p.femur_length;
+        if (target_height_mm < min_h || target_height_mm > max_h)
+            return 0.0;                                                          // invalid
+        double sin_theta = (target_height_mm - p.tibia_length) / p.femur_length; // sin(femur)
+        sin_theta = math_utils::clamp(sin_theta, -1.0, 1.0);
+        valid = true;
+        return std::asin(sin_theta);
+    };
+    femur_angle = computeFemur(p.standing_height, ok);
+    if (!ok) {
+        return p.coxa_length; // conservative fallback
+    }
+    double horizontal_proj = p.femur_length * std::cos(femur_angle);
+    return p.coxa_length + horizontal_proj;
+}
+
+double RobotModel::getStandingHorizontalReach() const {
+    return computeStandingHorizontalReach(params);
+}
+
+CalculatedServoAngles RobotModel::calculateServoAnglesForHeight(double target_height_mm, const Parameters &params) {
+    CalculatedServoAngles result{0.0, 0.0, 0.0, false};
+    // Based on analytic_robot_model.cpp leg transform:
+    // T = T_base * R_coxa * T_coxa * R_femur * T_femur * R_tibia * T_tibia
+    //
+    // For leg height calculation with coxa = 0° (radial stance):
+    // - T_base: hexagon_radius in XY plane (Z = 0)
+    // - R_coxa: rotation around Z axis (coxa = 0°)
+    // - T_coxa: translation along X axis (coxa_length)
+    // - R_femur: rotation around Y axis (femur angle)
+    // - T_femur: translation along X axis (femur_length)
+    // - R_tibia: rotation around Y axis (tibia angle)
+    // - T_tibia: translation along Z axis (-tibia_length)
+
+    // With coxa = 0°, the Z component of foot position is:
+    // Z = -femur_length * sin(femur_angle) - tibia_length * cos(femur_angle + tibia_angle)
+    //
+    // For standing pose, we want tibia to be vertical (pointing down):
+    // femur_angle + tibia_angle = 0° (so tibia points straight down)
+    // Therefore: tibia_angle = -femur_angle
+    //
+    // Substituting:
+    // Z = -femur_length * sin(femur_angle) - tibia_length * cos(0°)
+    // Z = -femur_length * sin(femur_angle) - tibia_length
+    //
+    // Solving for femur_angle:
+    // target_height = -femur_length * sin(femur_angle) - tibia_length
+    // sin(femur_angle) = -(target_height + tibia_length) / femur_length
+
+    // Convert to signed Z frame convention used in prior derivation
+    double target_z = -target_height_mm;
+    double sin_femur = -(target_z + params.tibia_length) / params.femur_length;
+    if (sin_femur < -1.0 || sin_femur > 1.0)
+        return result; // impossible
+    double femur_rad = std::asin(sin_femur);
+    double tibia_rad = -femur_rad; // keeps tibia vertical
+
+    double femur_deg = math_utils::radiansToDegrees(femur_rad);
+    double tibia_deg = math_utils::radiansToDegrees(tibia_rad);
+    if (femur_deg < params.femur_angle_limits[0] || femur_deg > params.femur_angle_limits[1])
+        return result;
+    if (tibia_deg < params.tibia_angle_limits[0] || tibia_deg > params.tibia_angle_limits[1])
+        return result;
+    result.coxa = 0.0;
+    result.femur = femur_rad;
+    result.tibia = tibia_rad;
+    result.valid = true;
+    return result;
+}
+
 double RobotModel::getDefaultHeightOffset() const {
     // Return the default height offset used in the robot model
     return params.default_height_offset;
@@ -567,7 +648,7 @@ Point3D RobotModel::makeReachable(int leg_index, const Point3D &reference_tip_po
 
         // Calculate bearing (angle) and radius
         double bearing_rad = atan2(relative_pos.y, relative_pos.x);
-        double bearing_deg = bearing_rad * 180.0 / M_PI;
+        double bearing_deg = math_utils::radiansToDegrees(bearing_rad);
 
         // Normalize bearing to [0, 360)
         if (bearing_deg < 0)
@@ -771,6 +852,40 @@ Eigen::Vector3d RobotModel::calculateJointLimitCostGradient(const JointAngles &c
 
     // Blend: emphasize position limits (75%) while still considering velocity (25%)
     return 0.75 * position_cost_gradient + 0.25 * velocity_cost_gradient;
+}
+
+std::string RobotModel::gaitTypeToString(GaitType gait_type) {
+    switch (gait_type) {
+    case WAVE_GAIT:
+        return "wave_gait";
+    case TRIPOD_GAIT:
+        return "tripod_gait";
+    case RIPPLE_GAIT:
+        return "ripple_gait";
+    case METACHRONAL_GAIT:
+        return "metachronal_gait";
+    case ADAPTIVE_GAIT:
+        return "adaptive_gait";
+    case NO_GAIT:
+    default:
+        return "no_gait";
+    }
+}
+
+GaitType RobotModel::stringToGaitType(const std::string &gait_name) {
+    if (gait_name == "wave_gait") {
+        return WAVE_GAIT;
+    } else if (gait_name == "tripod_gait") {
+        return TRIPOD_GAIT;
+    } else if (gait_name == "ripple_gait") {
+        return RIPPLE_GAIT;
+    } else if (gait_name == "metachronal_gait") {
+        return METACHRONAL_GAIT;
+    } else if (gait_name == "adaptive_gait") {
+        return ADAPTIVE_GAIT;
+    } else {
+        return NO_GAIT;
+    }
 }
 
 // End of file

@@ -1,4 +1,6 @@
+#include "gait_config_factory.h"
 #include "gait_config.h"
+#include "gait_types.h"
 #include "hexamotion_constants.h"
 #include "robot_model.h"
 #include <algorithm>
@@ -130,14 +132,19 @@ void ensureBalancedIfNeeded(GaitConfiguration &cfg) {
 GaitConfiguration createWaveGaitConfig(const Parameters &params) {
     GaitConfiguration config;
     config.gait_name = "wave_gait";
+    config.gait_type = WAVE_GAIT;
     config.phase_config.stance_phase = 10;
     config.phase_config.swing_phase = 2;
     config.phase_config.phase_offset = 2;
     config.offsets.multipliers = {
         {"AR", 2}, {"BR", 3}, {"CR", 4}, {"CL", 1}, {"BL", 0}, {"AL", 5}};
 
-    // Calculated parameters using OpenSHC equivalent constants
-    double leg_reach = params.coxa_length + params.femur_length + params.tibia_length;
+    // Calculated parameters (CONSISTENT stride definition):
+    // We intentionally base step_length on the height‑aware standing horizontal reach rather than the
+    // naive (coxa + femur + tibia) sum. The tibia contributes negligible horizontal projection in the
+    // configured standing pose (tibia approximately vertical). Using standing_horizontal_reach keeps
+    // planning, workspace sizing and velocity limits aligned.
+    double leg_reach = RobotModel::computeStandingHorizontalReach(params); // conservative horizontal reach
     config.step_length = leg_reach * GAIT_WAVE_LENGTH_FACTOR;
     config.swing_height = params.standing_height * GAIT_WAVE_HEIGHT_FACTOR;
     config.body_clearance = params.standing_height;
@@ -146,7 +153,8 @@ GaitConfiguration createWaveGaitConfig(const Parameters &params) {
     config.swing_width = 3.0;                      // mm - smaller lateral shift for wave gait (more conservative)
     config.step_frequency = params.step_frequency; // Hz - configurable global step frequency
 
-    config.max_velocity = 50.0;
+    // Use global parameters max_velocity (caps overall linear speed); factory no longer hardcodes
+    config.max_velocity = params.max_velocity; // Previously 50.0
     config.stability_factor = 0.95;
     config.supports_rough_terrain = true;
     config.time_to_max_stride = 2.0;   // Default conservative value for wave gait
@@ -168,6 +176,7 @@ GaitConfiguration createWaveGaitConfig(const Parameters &params) {
 GaitConfiguration createTripodGaitConfig(const Parameters &params) {
     GaitConfiguration config;
     config.gait_name = "tripod_gait";
+    config.gait_type = TRIPOD_GAIT;
     config.phase_config.stance_phase = 2;
     config.phase_config.swing_phase = 2;
     config.phase_config.phase_offset = 2;
@@ -180,8 +189,8 @@ GaitConfiguration createTripodGaitConfig(const Parameters &params) {
     config.offsets.multipliers = {
         {"AR", 0}, {"BR", 1}, {"CR", 0}, {"CL", 1}, {"BL", 0}, {"AL", 1}};
 
-    // Calculated parameters using OpenSHC equivalent constants
-    double leg_reach = params.coxa_length + params.femur_length + params.tibia_length;
+    // Consistent stride basis (see wave gait comment): use horizontal standing reach, not full coxa+femur+tibia sum.
+    double leg_reach = RobotModel::computeStandingHorizontalReach(params);
     config.step_length = leg_reach * GAIT_TRIPOD_LENGTH_FACTOR;
     config.swing_height = params.standing_height * GAIT_TRIPOD_HEIGHT_FACTOR;
     config.body_clearance = params.standing_height;
@@ -190,7 +199,8 @@ GaitConfiguration createTripodGaitConfig(const Parameters &params) {
     config.swing_width = 5.0;                      // mm - OpenSHC standard lateral shift at mid-swing
     config.step_frequency = params.step_frequency; // Hz - configurable global step frequency
 
-    config.max_velocity = 100.0;
+    // Use global parameters max_velocity instead of fixed 100.0
+    config.max_velocity = params.max_velocity;
     config.stability_factor = 0.75;
     config.supports_rough_terrain = false;
     config.time_to_max_stride = 1.5;    // Faster than wave gait
@@ -211,6 +221,7 @@ GaitConfiguration createTripodGaitConfig(const Parameters &params) {
 GaitConfiguration createRippleGaitConfig(const Parameters &params) {
     GaitConfiguration config;
     config.gait_name = "ripple_gait";
+    config.gait_type = RIPPLE_GAIT;
 
     // OpenSHC gait.yaml parameters
     config.phase_config.stance_phase = 4;
@@ -222,8 +233,8 @@ GaitConfiguration createRippleGaitConfig(const Parameters &params) {
         {"AR", 2}, {"BR", 0}, {"CR", 4}, {"CL", 1}, {"BL", 3}, {"AL", 5}}; // OpenSHC mapping
     ensureBalancedIfNeeded(config);                                        // No-op (6 distinct groups)
 
-    // Calculated parameters using OpenSHC equivalent constants
-    double leg_reach = params.coxa_length + params.femur_length + params.tibia_length;
+    // Consistent stride basis (see wave gait comment): use horizontal standing reach, not full coxa+femur+tibia sum.
+    double leg_reach = RobotModel::computeStandingHorizontalReach(params);
     config.step_length = leg_reach * GAIT_RIPPLE_LENGTH_FACTOR;
     config.swing_height = params.standing_height * GAIT_RIPPLE_HEIGHT_FACTOR;
     config.body_clearance = params.standing_height;
@@ -232,7 +243,8 @@ GaitConfiguration createRippleGaitConfig(const Parameters &params) {
     config.swing_width = 7.0;                      // mm - larger lateral shift for ripple gait (more dynamic)
     config.step_frequency = params.step_frequency; // Hz - configurable global step frequency
 
-    config.max_velocity = 150.0;           // Faster movement
+    // Use global parameters max_velocity instead of fixed 150.0 (ripple faster movement characteristic now driven by params)
+    config.max_velocity = params.max_velocity;
     config.stability_factor = 0.60;        // Moderate stability
     config.supports_rough_terrain = false; // Less suitable for rough terrain
     config.stance_span_modifier = 0.2;     // OpenSHC: valor por defecto para tripod gait
@@ -254,6 +266,7 @@ GaitConfiguration createRippleGaitConfig(const Parameters &params) {
 GaitConfiguration createMetachronalGaitConfig(const Parameters &params) {
     GaitConfiguration config;
     config.gait_name = "metachronal_gait";
+    config.gait_type = METACHRONAL_GAIT;
 
     // Adaptive parameters based on wave gait
     config.phase_config.stance_phase = 8; // Slightly faster than wave
@@ -265,8 +278,8 @@ GaitConfiguration createMetachronalGaitConfig(const Parameters &params) {
         {"AR", 2}, {"BR", 3}, {"CR", 4}, {"CL", 1}, {"BL", 0}, {"AL", 5}}; // Wave-style mapping
     ensureBalancedIfNeeded(config);                                        // No-op (multi-group)
 
-    // Calculated parameters using OpenSHC equivalent constants
-    double leg_reach = params.coxa_length + params.femur_length + params.tibia_length;
+    // Consistent stride basis (see wave gait comment): use horizontal standing reach, not full coxa+femur+tibia sum.
+    double leg_reach = RobotModel::computeStandingHorizontalReach(params);
     config.step_length = leg_reach * GAIT_METACHRONAL_LENGTH_FACTOR;
     config.swing_height = params.standing_height * GAIT_METACHRONAL_HEIGHT_FACTOR;
     config.body_clearance = params.standing_height;
@@ -275,7 +288,8 @@ GaitConfiguration createMetachronalGaitConfig(const Parameters &params) {
     config.swing_width = 4.0;                      // mm - moderate lateral shift for metachronal gait (adaptive)
     config.step_frequency = params.step_frequency; // Hz - configurable global step frequency
 
-    config.max_velocity = 80.0;     // Adaptive speed
+    // Use global parameters max_velocity instead of fixed 80.0 (adaptive gait shares the same global cap)
+    config.max_velocity = params.max_velocity;
     config.stability_factor = 0.85; // High stability with adaptation
     config.supports_rough_terrain = true;
     config.stance_span_modifier = 0.15; // OpenSHC: valor por defecto para ripple gait
@@ -287,6 +301,32 @@ GaitConfiguration createMetachronalGaitConfig(const Parameters &params) {
     // Set control loop resolution for generateStepCycle()
     config.time_delta = params.time_delta;
     return config;
+}
+
+/**
+ * @brief Create gait configuration based on GaitType enum
+ * @param gait_type Type of gait to create
+ * @param params Robot parameters
+ * @return Configured gait of the specified type
+ */
+GaitConfiguration createGaitConfig(GaitType gait_type, const Parameters &params) {
+    switch (gait_type) {
+    case WAVE_GAIT:
+        return createWaveGaitConfig(params);
+    case TRIPOD_GAIT:
+        return createTripodGaitConfig(params);
+    case RIPPLE_GAIT:
+        return createRippleGaitConfig(params);
+    case METACHRONAL_GAIT:
+        return createMetachronalGaitConfig(params);
+    case ADAPTIVE_GAIT:
+        // For adaptive gait, use metachronal as base configuration
+        return createMetachronalGaitConfig(params);
+    case NO_GAIT:
+    default:
+        // Return default tripod gait for invalid types
+        return createTripodGaitConfig(params);
+    }
 }
 
 /**

@@ -2,16 +2,28 @@
 #define MATH_UTILS_H
 
 #include <ArduinoEigen.h>
+#include <cmath>
+
+#ifndef M_PI
+#define M_PI 3.14159265358979323846
+#endif
 
 struct Point3D; // forward declaration
 
 namespace math_utils {
+
+// Standard gravity acceleration (mm/s^2) - BIPM definition (9.80665 m/s^2)
+constexpr double GRAVITY_ACCELERATION = 9806.65;
+
 /** Convert degrees to radians. */
-double degreesToRadians(double degrees);
+constexpr inline double degreesToRadians(double degrees) { return degrees * (M_PI / 180.0); }
+
 /** Convert radians to degrees. */
-double radiansToDegrees(double radians);
+constexpr inline double radiansToDegrees(double radians) { return radians * (180.0 / M_PI); }
+
 /** Normalize an angle to the [-180,180] range. */
 double normalizeAngle(double angle);
+
 /**
  * Rotate a 3D point by roll/pitch/yaw angles (radians).
  */
@@ -33,8 +45,17 @@ double pointToLineDistance(const Point3D &point, const Point3D &line_start, cons
 
 /** Cross product of two 3D vectors. */
 Point3D crossProduct(const Point3D &a, const Point3D &b);
-/** Project a vector onto another vector. */
+/**
+ * Project a vector onto another vector.
+ * Reference: https://en.wikipedia.org/wiki/Vector_projection
+ */
 Point3D projectVector(const Point3D &vector, const Point3D &onto);
+
+/**
+ * Vector rejection of a onto b, defined as a - proj_b(a).
+ * Reference: https://en.wikipedia.org/wiki/Vector_projection#Vector_rejection
+ */
+Point3D rejectVector(const Point3D &vector, const Point3D &onto);
 
 /** Rotation matrix about X axis (angle in radians). */
 Eigen::Matrix3d rotationMatrixX(double angle);
@@ -187,6 +208,24 @@ inline T clamped(T value, T min_value, T max_value) {
  */
 inline int roundToInt(double x) {
     return (x >= 0) ? static_cast<int>(x + 0.5) : -static_cast<int>(0.5 - x);
+}
+
+/**
+ * @brief Round a floating point value to a fixed number of decimal places.
+ *
+ * Direct extraction of the helper previously local to LegStepper (_ls_setPrecision),
+ * kept inline for zero‑overhead usage in tight kinematic loops.
+ *
+ * @param value     Input floating point value.
+ * @param precision Number of decimal digits to keep (>=0).
+ * @return Rounded value with the requested precision.
+ */
+inline double setPrecision(double value, int precision) {
+    if (precision <= 0) {
+        return std::round(value); // fast path for integer rounding
+    }
+    double scale = std::pow(10.0, precision);
+    return std::round(value * scale) / scale;
 }
 
 /**

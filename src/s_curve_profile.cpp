@@ -1,5 +1,7 @@
 #include "s_curve_profile.h"
 
+#include <algorithm>
+
 /**
  * Implementation notes:
  * We construct a symmetric 7‑segment profile. Strategy:
@@ -11,8 +13,17 @@
  */
 
 void SCurveProfile::computeProfile() {
+    parabolic_profile_ = false;
+    parabolic_accel_ = 0.0;
+    parabolic_time_half_ = 0.0;
+    parabolic_peak_velocity_ = 0.0;
+    a_peak_ = 0.0;
+    v_cruise_ = 0.0;
+    total_time_ = 0.0;
+    dt_.fill(0.0);
+    t_cum_.fill(0.0);
+
     if (displacement_ < 1e-12) {
-        total_time_ = 0.0;
         return;
     }
 
@@ -73,6 +84,8 @@ void SCurveProfile::computeProfile() {
         // Not enough distance to reach vmax. Need to reduce a or drop segments.
         // Approach: binary search on a_peak to match half distance = displacement_/2.
         double low_a = 1e-9, high_a = a;
+        double a_limit_from_velocity = std::sqrt(vmax_ * j);
+        high_a = std::min(high_a, a_limit_from_velocity);
         double target_half = displacement_ / 2.0;
         for (int i = 0; i < 40; i++) {
             double mid_a = 0.5 * (low_a + high_a);
@@ -94,18 +107,24 @@ void SCurveProfile::computeProfile() {
                 low_a = mid_a; // can try higher
             }
         }
-        a_peak_ = low_a;
+        a_peak_ = std::max(low_a, 1e-9);
         double tj_new = a_peak_ / j;
         // recompute half distance with triangular jerk-limited acceleration (no plateau)
         double p1 = j * pow(tj_new, 3) / 6.0;
         double v1 = 0.5 * j * tj_new * tj_new;
         double p3 = (v1)*tj_new + 0.5 * a_peak_ * tj_new * tj_new - j * pow(tj_new, 3) / 6.0; // ta=0
         double p_half = p1 + p3;
+
         // Mirror for decel -> total distance = 2*p_half. Slight mismatch due to rounding: absorb into cruise (none) via scale factor on velocity.
-        double scale = displacement_ / (2.0 * p_half);
-        if (scale < 0.999 || scale > 1.001) {
-            // adjust effective jerk proportionally (simpler) to scale distances; this changes time proportionally.
-            // Equivalent to scaling position outputs later. We'll keep scale for sampling.
+        double target_total = 2.0 * p_half;
+        double scale = displacement_ / std::max(target_total, 1e-9);
+        double v_peak_triangular = (a_peak_ * a_peak_) / j;
+        if (v_peak_triangular > vmax_ * (1.0 + 1e-6) || scale < 0.999 || scale > 1.001) {
+
+            // For extremely short moves the jerk-limited profile would overshoot limits, so fall back to a
+            // constant-acceleration (parabolic) profile that guarantees the velocity bound.
+            buildParabolicProfile();
+            return;
         }
         v_cruise_ = 0.0; // no cruise
         dt_[0] = tj_new;
@@ -162,6 +181,11 @@ void SCurveProfile::buildCumulative() {
 }
 
 void SCurveProfile::precomputeStates() {
+    if (parabolic_profile_) {
+        precomputeParabolicStates();
+        return;
+    }
+
     // Integrate segment by segment accumulating position, velocity, accel.
     double p = 0, v = 0, a = 0;
     seg_state_[0] = {p, v, a};
@@ -170,7 +194,8 @@ void SCurveProfile::precomputeStates() {
     for (int i = 0; i < 7; i++) {
         double dt = dt_[i];
         switch (i) {
-        case 0: // accel ramps 0->a_peak (a(t)=j*t)
+        case 0:
+            // accel ramps 0->a_peak (a(t)=j*t)
             // velocity gain: 0.5*j*dt^2
             // position gain: j*dt^3/6
             v += 0.5 * j * dt * dt;
@@ -223,7 +248,110 @@ void SCurveProfile::precomputeStates() {
     }
 }
 
+// Precompute the states used by the constant-acceleration fallback. The layout mirrors the
+// 7-segment structure so downstream sampling logic can stay unchanged (segments with zero duration
+// simply reuse the nearest meaningful state).
+void SCurveProfile::precomputeParabolicStates() {
+    double dir = direction_;
+    double start = start_angle_;
+    double t_half = parabolic_time_half_;
+    double accel_mag = parabolic_accel_;
+    double accel_signed = dir * accel_mag;
+    double peak_pos = start + dir * 0.5 * accel_mag * t_half * t_half;
+    double peak_vel = dir * parabolic_peak_velocity_;
+
+    // Segment starts borrow the same representation as the jerk-limited profile so the sampler can
+    // reuse its switch statement without special-casing the fallback profile.
+    seg_state_[0] = {start, 0.0, 0.0};                   // start
+    seg_state_[1] = {start, 0.0, accel_signed};          // acceleration ramp begins
+    seg_state_[2] = {peak_pos, peak_vel, accel_signed};  // peak velocity at mid-flight
+    seg_state_[3] = seg_state_[2];                       // cruise segment collapsed
+    seg_state_[4] = seg_state_[2];                       // mirror of seg3
+    seg_state_[5] = {peak_pos, peak_vel, -accel_signed}; // deceleration starts
+    seg_state_[6] = {target_angle_, 0.0, -accel_signed}; // just before coming to rest
+    seg_state_[7] = {target_angle_, 0.0, 0.0};           // end
+}
+
+// Build a symmetric parabolic move (constant +/-accel) that respects the configured velocity cap.
+// This path is only chosen when the jerk-limited solver would produce a peak velocity beyond vmax.
+void SCurveProfile::buildParabolicProfile() {
+    parabolic_profile_ = true;
+
+    double disp = std::max(displacement_, 1e-12);
+    double accel_limit = std::min(amax_input_, std::max(1e-12, vmax_ * vmax_ / disp));
+    parabolic_accel_ = accel_limit;
+    parabolic_time_half_ = std::sqrt(disp / parabolic_accel_);
+    parabolic_peak_velocity_ = parabolic_accel_ * parabolic_time_half_;
+
+    if (parabolic_peak_velocity_ > vmax_) {
+        parabolic_accel_ = std::min(amax_input_, vmax_ * vmax_ / disp);
+        parabolic_time_half_ = std::sqrt(disp / parabolic_accel_);
+        parabolic_peak_velocity_ = std::min(vmax_, parabolic_accel_ * parabolic_time_half_);
+    }
+
+    a_peak_ = parabolic_accel_;
+    v_cruise_ = 0.0;
+
+    dt_[0] = 0.0;
+    dt_[1] = parabolic_time_half_;
+    dt_[2] = 0.0;
+    dt_[3] = 0.0;
+    dt_[4] = 0.0;
+    dt_[5] = parabolic_time_half_;
+    dt_[6] = 0.0;
+
+    buildCumulative();
+    precomputeParabolicStates();
+    total_time_ = t_cum_[7];
+}
+
+double SCurveProfile::peakVelocity() const {
+    if (parabolic_profile_) {
+        return parabolic_peak_velocity_;
+    }
+    if (v_cruise_ > 0.0) {
+        return v_cruise_;
+    }
+    if (a_peak_ <= 0.0 || jmax_ <= 0.0) {
+        return 0.0;
+    }
+    // For a purely jerk-limited triangular profile the peak velocity reached after the acceleration
+    // phase is a^2 / j (derived from integrating the jerk ramps). This applies when no cruise occurs.
+    return (a_peak_ * a_peak_) / jmax_;
+}
+
 SCurveProfile::Sample SCurveProfile::sample(double t) const {
+    if (parabolic_profile_) {
+        if (total_time_ <= 0.0) {
+            return {start_angle_, 0.0, 0.0};
+        }
+        if (t <= 0.0) {
+            return {start_angle_, 0.0, direction_ * parabolic_accel_};
+        }
+        if (t >= total_time_) {
+            return {target_angle_, 0.0, 0.0};
+        }
+
+        double t_half = parabolic_time_half_;
+        double a_signed = direction_ * parabolic_accel_;
+        double peak_vel_signed = direction_ * parabolic_peak_velocity_;
+        double peak_pos = start_angle_ + direction_ * 0.5 * parabolic_accel_ * t_half * t_half;
+
+        if (t <= t_half) {
+            double v = a_signed * t;
+            double p = start_angle_ + direction_ * 0.5 * parabolic_accel_ * t * t;
+            // Rising phase: constant acceleration up to the midpoint.
+            return {p, v, a_signed};
+        }
+
+        double t_dec = t - t_half;
+        double a_neg = -a_signed;
+        double p = peak_pos + peak_vel_signed * t_dec + 0.5 * a_neg * t_dec * t_dec;
+        double v = peak_vel_signed + a_neg * t_dec;
+        // Falling phase: symmetric deceleration to the target angle.
+        return {p, v, a_neg};
+    }
+
     if (total_time_ <= 0.0) {
         return {start_angle_, 0.0, 0.0};
     }

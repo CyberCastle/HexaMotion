@@ -75,6 +75,30 @@ class LegStepper {
     double getVerticalDrift() const { return vertical_drift_; }
 #endif
 
+#ifdef COXA_STRIDE_TESTING_ENABLED
+    /**
+     * @brief Snapshot exposing stride composition and delta integration for dedicated diagnostics.
+     */
+    struct DebugState {
+        Point3D stride_linear{0, 0, 0};         ///< Scaled linear stride contribution (global frame)
+        Point3D stride_angular{0, 0, 0};        ///< Scaled angular stride contribution (global frame)
+        Point3D stride_total{0, 0, 0};          ///< Combined stride vector applied during current phase
+        Point3D frozen_stride_total{0, 0, 0};   ///< Cached stride vector frozen at phase start
+        Point3D active_stride{0, 0, 0};         ///< Active stride selected for current iteration (frozen or live)
+        Point3D raw_target_pose{0, 0, 0};       ///< Target pose computed before workspace constraint
+        Point3D default_tip_pose{0, 0, 0};      ///< Default pose serving as nominal reference
+        Point3D identity_tip_pose{0, 0, 0};     ///< Identity pose assigned at construction
+        Point3D composed_pose{0, 0, 0};         ///< default_tip_pose + active_stride (full composition)
+        Point3D last_delta{0, 0, 0};            ///< Incremental delta applied this iteration
+        Point3D current_tip_pose{0, 0, 0};      ///< Resulting tip pose after integration
+        int iteration = 0;                      ///< Iteration index provided by controller
+        StepState step_state = STEP_FORCE_STOP; ///< Step state at the time of capture
+        double step_progress = 0.0;             ///< Normalized phase progress [0,1]
+    };
+
+    const DebugState &getDebugState() const { return debug_state_; }
+#endif
+
     // Debug getters for velocity troubleshooting
     Point3D getDesiredLinearVelocity() const { return desired_linear_velocity_; }
     double getDesiredAngularVelocity() const { return desired_angular_velocity_; }
@@ -108,8 +132,6 @@ class LegStepper {
     void setSwingOriginTipVelocity(const Point3D &velocity) { swing_origin_tip_velocity_ = velocity; }
     void setCompletedFirstStep(bool completed) { completed_first_step_ = completed; }
     void setAtCorrectPhase(bool at_correct) { at_correct_phase_ = at_correct; }
-    void setWalkPlane(const Point3D &walk_plane) { walk_plane_ = walk_plane; }
-    Point3D getWalkPlane() const { return walk_plane_; }
     void setWalkPlaneNormal(const Point3D &walk_plane_normal) { walk_plane_normal_ = walk_plane_normal; }
     Point3D getWalkPlaneNormal() const { return walk_plane_normal_; }
 
@@ -122,6 +144,9 @@ class LegStepper {
     double getSwingWidth() const { return swing_width_; }
     void setStepClearanceHeight(double step_clearance_height) { step_clearance_height_ = step_clearance_height; }
     double getStepClearanceHeight() const { return step_clearance_height_; }
+    // Stance span modifier (OpenSHC: stance_span_modifier) applied to default tip position lateral spread
+    void setStanceSpanModifier(double m) { stance_span_modifier_ = m; }
+    double getStanceSpanModifier() const { return stance_span_modifier_; }
 
     // OpenSHC-specific workflow methods
     void initializeSwingPeriod(int iteration);
@@ -144,8 +169,6 @@ class LegStepper {
     Point3D constrainToWorkspace(const Point3D &target_pose) const;
     Point3D calculateSafeTarget(const Point3D &desired_target) const;
 
-    // Velocity limiting and validation methods (Step 2 implementation)
-    Point3D validateAndLimitVelocities(const Point3D &linear_velocity, double angular_velocity);
     Point3D calculateSafeStride(const Point3D &desired_stride) const;
 
     // VelocityLimits integration for enhanced safety
@@ -173,8 +196,20 @@ class LegStepper {
     // Control node validation methods (Step 4 implementation)
     void validateAndFixControlNodes(Point3D nodes[5]) const;
 
+    // Helpers for leg-frame projections and rectilinear detection used by stance drift mitigation.
+    bool isRectilinearCommand() const;
+    double computeForwardComponent(const Point3D &vec) const;
+    double computeLateralComponent(const Point3D &vec) const;
+    Point3D removeLateralComponent(const Point3D &vec) const;
+
     // OpenSHC-style stride scaler calculation
     double calculateStanceStrideScaler();
+
+    // === OpenSHC replicated methods for lateral stance span adjustment ===
+    // Calculate lateral change applied to identity tip position based on stance_span_modifier (bearing 90/270 logic)
+    Point3D calculateStanceSpanChange();
+    // Update default tip position projecting stance origin onto walk plane after applying stance span change
+    void updateDefaultTipPosition();
 
   private:
     // Basic properties
@@ -188,11 +223,13 @@ class LegStepper {
     Point3D origin_tip_pose_;
     Point3D target_tip_pose_;
     Point3D current_tip_pose_; //< Current tip pose calculated by stepper
+    double base_angle_rad_;    //< DH base orientation for this leg (radians)
+    Point3D forward_unit_;     //< Unit vector pointing along the leg's forward axis in world frame
+    Point3D lateral_unit_;     //< Unit vector orthogonal to forward axis within the walking plane
 
     // Walking state
     Point3D desired_linear_velocity_;
     double desired_angular_velocity_;
-    Point3D walk_plane_;
     Point3D walk_plane_normal_;
     Point3D stride_vector_;
     Point3D current_tip_velocity_;
@@ -222,8 +259,9 @@ class LegStepper {
     int current_iteration_;
 
     // Gait configuration parameters (not part of StepCycle)
-    double swing_width_;           // Lateral shift at mid-swing (OpenSHC mid_lateral_shift)
-    double step_clearance_height_; // Step clearance height (equivalent to OpenSHC walker_->getStepClearance())
+    double swing_width_;                // Lateral shift at mid-swing (OpenSHC mid_lateral_shift)
+    double step_clearance_height_;      // Step clearance height (equivalent to OpenSHC walker_->getStepClearance())
+    double stance_span_modifier_ = 0.0; // OpenSHC stance_span_modifier (range typically [-1.0, 1.0])
 
     // Swing state management (OpenSHC style)
     bool swing_initialized_;
@@ -256,6 +294,10 @@ class LegStepper {
     Point3D previous_tip_pose_;
     bool has_previous_position_;
     double time_step_;
+
+#ifdef COXA_STRIDE_TESTING_ENABLED
+    DebugState debug_state_;
+#endif
 
 #ifdef TESTING_ENABLED
     // --- Drift tracking (hybrid anti-drift support) --- (testing builds only)

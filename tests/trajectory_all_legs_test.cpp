@@ -164,7 +164,7 @@ void analyzeAllLegsTrajectory(Leg test_legs[NUM_LEGS], LegStepper steppers[NUM_L
                 printf(" %3d | %6d/%2d | (%7.1f,%7.1f,%7.1f) | (%6.1f,%6.1f,%6.1f) | (%6.2f,%6.2f,%6.2f) | %12.1f | %s\n",
                        ++step_counter, i, swing_iterations,
                        current_pos.x, current_pos.y, current_pos.z,
-                       new_angles.coxa * 180.0 / M_PI, new_angles.femur * 180.0 / M_PI, new_angles.tibia * 180.0 / M_PI,
+                       math_utils::radiansToDegrees(new_angles.coxa), math_utils::radiansToDegrees(new_angles.femur), math_utils::radiansToDegrees(new_angles.tibia),
                        coxa_vel, femur_vel, tibia_vel,
                        distance_from_base,
                        valid_joints ? "✓" : "❌");
@@ -267,7 +267,7 @@ void analyzeAllLegsTrajectory(Leg test_legs[NUM_LEGS], LegStepper steppers[NUM_L
                 printf(" %3d | %6d/%2d | (%7.1f,%7.1f,%7.1f) | (%6.1f,%6.1f,%6.1f) | (%6.2f,%6.2f,%6.2f) | %11.3f | %s\n",
                        ++step_counter, i, total_iterations,
                        current_pos.x, current_pos.y, current_pos.z,
-                       new_angles.coxa * 180.0 / M_PI, new_angles.femur * 180.0 / M_PI, new_angles.tibia * 180.0 / M_PI,
+                       math_utils::radiansToDegrees(new_angles.coxa), math_utils::radiansToDegrees(new_angles.femur), math_utils::radiansToDegrees(new_angles.tibia),
                        coxa_vel, femur_vel, tibia_vel,
                        accumulated_xy_distance,
                        force_estimate.c_str());
@@ -283,7 +283,7 @@ void analyzeAllLegsTrajectory(Leg test_legs[NUM_LEGS], LegStepper steppers[NUM_L
         double total_xy_magnitude = total_xy_displacement.norm();
 
         JointAngles final_angles = test_legs[leg_id].getJointAngles();
-        double total_coxa_change = (final_angles.coxa - initial_stance_angles.coxa) * 180.0 / M_PI;
+        double total_coxa_change = math_utils::radiansToDegrees(final_angles.coxa - initial_stance_angles.coxa);
 
         std::cout << "     Resumen: Desp. XY total = " << total_xy_magnitude << " mm, ";
         std::cout << "Cambio coxa total = " << total_coxa_change << "°" << std::endl;
@@ -503,9 +503,9 @@ int main() {
         Point3D pos = test_legs[i].getCurrentTipPositionGlobal();
         JointAngles angles = test_legs[i].getJointAngles();
         std::cout << "Pata " << i << " - Position: (" << pos.x << ", " << pos.y << ", " << pos.z << ")";
-        std::cout << " - Angles: (" << (angles.coxa * 180.0 / M_PI) << "°, "
-                  << (angles.femur * 180.0 / M_PI) << "°, "
-                  << (angles.tibia * 180.0 / M_PI) << "°)" << std::endl;
+        std::cout << " - Angles: (" << math_utils::radiansToDegrees(angles.coxa) << "°, "
+                  << math_utils::radiansToDegrees(angles.femur) << "°, "
+                  << math_utils::radiansToDegrees(angles.tibia) << "°)" << std::endl;
     }
 
     // Create LegSteppers for all legs

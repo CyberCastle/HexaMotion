@@ -22,7 +22,7 @@ class VelocityLimits::Impl {
     LimitMap limit_map_;
     std::array<double, 360> angular_accel_map_{}; // Separate angular acceleration per bearing
     WorkspaceConfig workspace_config_;
-    GaitConfig current_gait_config_;
+    GaitConfiguration current_gait_config_;
     double angular_velocity_scaling_;
 
     explicit Impl(const RobotModel &model)
@@ -35,12 +35,16 @@ class VelocityLimits::Impl {
 
         workspace_analyzer_ = std::make_unique<WorkspaceAnalyzer>(model, ComputeConfig::medium(), config);
 
+        // Ensure workspace analyzer precomputes leg bounds + walkspace map before limits request
+        // to avoid falling back to direction-only heuristics (which severely clamp velocities).
+        workspace_analyzer_->initialize();
+
         // Initialize workspace config with physical robot reference height
         // When all servo angles are 0°, robot body is positioned at getDefaultHeightOffset()
         workspace_config_.reference_height = model.getDefaultHeightOffset();
 
         // Initialize with default gait configuration
-        current_gait_config_ = GaitConfig();
+        current_gait_config_ = GaitConfiguration();
     }
 };
 
@@ -52,7 +56,7 @@ VelocityLimits::VelocityLimits(const RobotModel &model)
 
 VelocityLimits::~VelocityLimits() = default;
 
-void VelocityLimits::generateLimits(const GaitConfig &gait_config) {
+void VelocityLimits::generateLimits(const GaitConfiguration &gait_config) {
     pimpl_->current_gait_config_ = gait_config;
 
     // Use WorkspaceValidator instead of custom workspace calculation
@@ -76,20 +80,7 @@ VelocityLimits::LimitValues VelocityLimits::getLimit(double bearing_degrees) con
     return interpolateLimits(normalized_bearing);
 }
 
-// Unified configuration interface overloads
-void VelocityLimits::generateLimits(const GaitConfiguration &gait_config) {
-    // Convert unified configuration to internal format
-    GaitConfig internal_config;
-    internal_config.frequency = gait_config.getStepFrequency();
-    internal_config.stance_ratio = gait_config.getStanceRatio();
-    internal_config.swing_ratio = gait_config.getSwingRatio();
-    internal_config.time_to_max_stride = gait_config.time_to_max_stride;
-
-    // Use existing implementation
-    generateLimits(internal_config);
-}
-
-void VelocityLimits::calculateWorkspace(const GaitConfig &gait_config) {
+void VelocityLimits::calculateWorkspace(const GaitConfiguration &gait_config) {
     // Replace complex workspace calculation with WorkspaceValidator
 
     // Get workspace bounds for all legs
@@ -98,10 +89,11 @@ void VelocityLimits::calculateWorkspace(const GaitConfig &gait_config) {
 
     for (int leg = 0; leg < NUM_LEGS; ++leg) {
         auto bounds = pimpl_->workspace_analyzer_->getWorkspaceBounds(leg);
-
-        // Use the most restrictive values across all legs
+        // bounds.max_reach already morphology‑capped (~standing_horizontal_reach * 1.15)
         min_walkspace_radius = std::min(min_walkspace_radius, bounds.max_reach);
-        min_stance_radius = std::min(min_stance_radius, bounds.max_reach * 0.8);
+        // stance radius should remain anchored to hexagon + standing horizontal reach;
+        // here we approximate a per‑leg stance proxy but later we rely on analyzer constraints.
+        min_stance_radius = std::min(min_stance_radius, bounds.preferred_max_reach + pimpl_->model_.getParams().hexagon_radius);
     }
 
     // Apply safety scaling
@@ -119,18 +111,6 @@ void VelocityLimits::calculateWorkspace(const GaitConfig &gait_config) {
         std::max(pimpl_->workspace_config_.walkspace_radius, 0.05);
     pimpl_->workspace_config_.stance_radius =
         std::max(pimpl_->workspace_config_.stance_radius, 0.03);
-}
-
-void VelocityLimits::calculateWorkspace(const GaitConfiguration &gait_config) {
-    // Convert unified configuration to internal format
-    GaitConfig internal_config;
-    internal_config.frequency = gait_config.getStepFrequency();
-    internal_config.stance_ratio = gait_config.getStanceRatio();
-    internal_config.swing_ratio = gait_config.getSwingRatio();
-    internal_config.time_to_max_stride = gait_config.time_to_max_stride;
-
-    // Use existing implementation
-    calculateWorkspace(internal_config);
 }
 
 VelocityLimits::LimitValues VelocityLimits::scaleVelocityLimits(
@@ -166,6 +146,10 @@ VelocityLimits::LimitValues VelocityLimits::scaleVelocityLimits(
 }
 
 bool VelocityLimits::validateVelocityInputs(double vx, double vy, double omega) const {
+    // Global bypass (debug / external safety control)
+    if (!pimpl_->model_.getParams().enable_velocity_limits) {
+        return true;
+    }
     double bearing = calculateBearing(vx, vy);
     LimitValues limits = getLimit(bearing);
 
@@ -228,14 +212,17 @@ VelocityLimits::LimitValues VelocityLimits::applyAccelerationLimits(
     return limited_velocities;
 }
 
-void VelocityLimits::calculateOvershoot(const GaitConfig &gait_config) {
+void VelocityLimits::calculateOvershoot(const GaitConfiguration &gait_config) {
 
     // Physical basis: if accelerating from rest to v_max with constant a_max, distance = 0.5 * (v_max^2 / a_max)
     // Additionally, if ramp time (t_ramp = time_to_max_stride) is specified,
     // theoretical distance under constant accel is 0.5 * a * t_ramp^2.
     // We'll compute both and take the minimum (more conservative), then cap to a fraction of walkspace radius.
 
-    auto constraints = pimpl_->workspace_analyzer_->calculateVelocityConstraints(0, 0.0); // forward
+    // Use gait parameters for a forward bearing (0°) to get consistent morphology-aware constraints
+    auto constraints = pimpl_->workspace_analyzer_->calculateVelocityConstraints(0, 0.0,
+                                                                                 gait_config.getStepFrequency(),
+                                                                                 gait_config.getStanceRatio());
     double v_max = constraints.max_linear_velocity;
     double a_max = std::max(1e-6, constraints.max_acceleration); // avoid div by zero
     double t_ramp = std::max(0.0, gait_config.time_to_max_stride);
@@ -249,6 +236,15 @@ void VelocityLimits::calculateOvershoot(const GaitConfig &gait_config) {
     double max_allowable = 0.25 * walk_r; // at most 25% of effective radius
     raw_overshoot = std::min(raw_overshoot, max_allowable);
 
+    if (gait_config.step_length > 0.0) {
+        // Bound overshoot compensation to a configurable share of the commanded stride so the
+        // acceleration phase never consumes more travel than the gait intended for forward progress.
+        const auto &params = pimpl_->model_.getParams();
+        double fraction = params.overshoot_stride_fraction > 0.0 ? params.overshoot_stride_fraction : DEFAULT_OVERSHOOT_STRIDE_FRACTION;
+        double stride_cap = gait_config.step_length * fraction;
+        raw_overshoot = std::min(raw_overshoot, stride_cap);
+    }
+
     // Apply global scaling & safety margin (kept moderate)
     auto scaling_factors = pimpl_->workspace_analyzer_->getScalingFactors();
     double safety = scaling_factors.safety_margin; // typically <=1
@@ -261,20 +257,8 @@ void VelocityLimits::calculateOvershoot(const GaitConfig &gait_config) {
     pimpl_->workspace_config_.scaled_walkspace_radius = pimpl_->workspace_config_.walkspace_radius;
 }
 
-void VelocityLimits::updateGaitParameters(const GaitConfig &gait_config) {
-    generateLimits(gait_config);
-}
-
 void VelocityLimits::updateGaitParameters(const GaitConfiguration &gait_config) {
-    // Convert unified configuration to internal format
-    GaitConfig internal_config;
-    internal_config.frequency = gait_config.getStepFrequency();
-    internal_config.stance_ratio = gait_config.getStanceRatio();
-    internal_config.swing_ratio = gait_config.getSwingRatio();
-    internal_config.time_to_max_stride = gait_config.time_to_max_stride;
-
-    // Use existing implementation
-    generateLimits(internal_config);
+    generateLimits(gait_config);
 }
 
 const VelocityLimits::WorkspaceConfig &VelocityLimits::getWorkspaceConfig() const {
@@ -338,49 +322,41 @@ double VelocityLimits::calculateBearing(double vx, double vy) {
     return normalizeBearing(bearing_deg);
 }
 
-double VelocityLimits::calculateMaxLinearSpeed(double walkspace_radius,
-                                               double on_ground_ratio, double frequency) const {
-
-    // Unified stride-based formula rationale:
-    //  1. Gait length factor: we treat 'on_ground_ratio' as the provisional stride fraction and
-    //     clamp it to [GAIT_MIN_LENGTH_FACTOR, GAIT_MAX_LENGTH_FACTOR] to keep commanded stride
-    //     within morphological / stability bounds.
-    //  2. Raw stride length: leg_reach * gait_length_factor (leg_reach = coxa+femur+tibia total reach).
-    //  3. Overshoot deduction: subtract 2 * average_overshoot (stance + swing phases) where
-    //       average_overshoot = 0.5 * (overshoot_x + overshoot_y)
-    //     Overshoot itself is physics-derived: min(v^2/(2a), 0.5 * a * t_ramp^2), capped at 25% of
-    //     walkspace radius and scaled by safety margin. Deducting twice ensures the effective stride
-    //     fits comfortably inside the reachable boundary over a full accelerate/decelerate cycle.
-    //  4. Temporal scaling: max_speed = effective_stride_length * frequency (one stride per cycle).
-    //  5. Velocity scaling: apply workspace_analyzer velocity_scale (tunable global attenuation).
-    //  6. Capping: enforce configured model cap (params.max_velocity) plus a hard safety ceiling.
-    //
-    // Differences vs removed "compatibility" (OpenSHC diameter traversal) approach:
-    //  - We do not use (2 * scaled_radius) / (stance_ratio / f); that method inflated theoretical
-    //    maxima beyond realistic stride-based reach under current tuning and produced noisy
-    //    divergence diagnostics.
-    //  - Overshoot is handled additively (subtractive correction) instead of the multiplicative
-    //    rational shrink used by stance+swing overshoot in OpenSHC, simplifying reasoning and
-    //    avoiding dual pathway maintenance.
-    //  - A single coherent formula improves predictability for controllers and tests.
-    //  - If strict OpenSHC replication is ever needed, it can be reintroduced as an offline
-    //    reference computation, not an active limiting branch.
-    if (frequency <= 0.0)
+double VelocityLimits::calculateMaxLinearSpeed(double walkspace_radius, const GaitConfiguration &gait_config) const {
+    // Updated stride-based formula:
+    //  1. Use gait_config.step_length directly. This value is already derived from the
+    //     standing horizontal reach via GAIT_*_LENGTH_FACTOR in gait_config_factory.cpp.
+    //  2. Deduct overshoot (2 * avg_overshoot) to ensure the executed stride comfortably fits
+    //     inside the available walkspace radius across accelerate/decelerate phases.
+    //  3. Convert to speed: v = effective_stride_length * step_frequency.
+    //  4. Apply global velocity scaling (workspace analyzer).
+    //  5. Cap by BOTH global model params.max_velocity and gait_config.max_velocity (if >0) and a
+    //     hard engineering ceiling to prevent runaway values in misconfiguration.
+    //  6. Guard: if frequency <= 0 or step_length <= 0 return 0.
+    (void)walkspace_radius; // Retained in signature for future adaptive scaling (currently unused directly).
+    if (gait_config.getStepFrequency() <= 0.0 || gait_config.step_length <= 0.0)
         return 0.0;
 
-    double leg_reach = pimpl_->model_.getLegReach();
-    double provisional_factor = on_ground_ratio;
-    double gait_length_factor = math_utils::clamp<double>(provisional_factor, GAIT_MIN_LENGTH_FACTOR, GAIT_MAX_LENGTH_FACTOR);
-    double stride_length = leg_reach * gait_length_factor;
+    const auto &params = pimpl_->model_.getParams();
+    double stride_length = gait_config.step_length;
 
-    // Overshoot deduction (2x average overshoot) maintains conservative effective stride.
+    // Overshoot deduction (2x average overshoot) maintains conservative effective stride,
+    // but never shrink below a minimum fraction of the commanded stride to preserve locomotion.
     double avg_overshoot = (pimpl_->workspace_config_.overshoot_x + pimpl_->workspace_config_.overshoot_y) * 0.5;
-    stride_length = std::max(0.0, stride_length - 2.0 * avg_overshoot);
-    double max_speed = stride_length * frequency;
+    double min_ratio = params.min_effective_stride_ratio > 0.0 ? params.min_effective_stride_ratio : DEFAULT_MIN_EFFECTIVE_STRIDE_RATIO;
+    double min_stride = std::max(0.0, stride_length * min_ratio);
+    double stride_after_overshoot = stride_length - 2.0 * avg_overshoot;
+    if (stride_after_overshoot < 0.0)
+        stride_after_overshoot = 0.0;
+    stride_length = std::max(min_stride, stride_after_overshoot);
+
+    double max_speed = stride_length * gait_config.getStepFrequency();
     auto scaling_factors = pimpl_->workspace_analyzer_->getScalingFactors();
     max_speed *= scaling_factors.velocity_scale;
-    const auto &params = pimpl_->model_.getParams();
-    double configured_cap = params.max_velocity > 0.0 ? params.max_velocity : DEFAULT_MAX_LINEAR_VELOCITY;
+
+    double global_cap = params.max_velocity > 0.0 ? params.max_velocity : DEFAULT_MAX_LINEAR_VELOCITY;
+    double gait_cap = (gait_config.max_velocity > 0.0) ? gait_config.max_velocity : global_cap;
+    double configured_cap = std::min(global_cap, gait_cap);
 
     return std::min({max_speed, configured_cap, 5000.0});
 }
@@ -402,8 +378,8 @@ double VelocityLimits::calculateMaxAngularSpeed(double max_linear_speed, double 
 
     // params.max_angular_velocity is assumed in degrees/s per constants; convert if >0
     double configured_cap_rad = (params.max_angular_velocity > 0.0)
-                                    ? params.max_angular_velocity * DEGREES_TO_RADIANS_FACTOR
-                                    : (DEFAULT_MAX_ANGULAR_VELOCITY * DEGREES_TO_RADIANS_FACTOR);
+                                    ? math_utils::degreesToRadians(params.max_angular_velocity)
+                                    : math_utils::degreesToRadians(DEFAULT_MAX_ANGULAR_VELOCITY);
     return std::min({max_angular, configured_cap_rad, 10.0});
 }
 
@@ -424,7 +400,7 @@ double VelocityLimits::calculateMaxAcceleration(double max_speed, double time_to
 }
 
 VelocityLimits::LimitValues VelocityLimits::calculateLimitsForBearing(
-    double bearing_degrees, const GaitConfig &gait_config) const {
+    double bearing_degrees, const GaitConfiguration &gait_config) const {
 
     // Use WorkspaceValidator instead of complex leg analysis
 
@@ -433,7 +409,9 @@ VelocityLimits::LimitValues VelocityLimits::calculateLimitsForBearing(
     VelocityConstraints most_restrictive;
 
     for (int leg = 0; leg < NUM_LEGS; ++leg) {
-        auto constraints = pimpl_->workspace_analyzer_->calculateVelocityConstraints(leg, bearing_degrees);
+        auto constraints = pimpl_->workspace_analyzer_->calculateVelocityConstraints(leg, bearing_degrees,
+                                                                                     gait_config.getStepFrequency(),
+                                                                                     gait_config.getStanceRatio());
 
         // Use the most restrictive constraints
         if (leg == 0 || constraints.workspace_radius < min_effective_radius) {
@@ -443,9 +421,7 @@ VelocityLimits::LimitValues VelocityLimits::calculateLimitsForBearing(
     }
 
     // Calculate limits based on the most constraining constraints
-    double max_linear_speed = calculateMaxLinearSpeed(min_effective_radius,
-                                                      gait_config.stance_ratio,
-                                                      gait_config.frequency);
+    double max_linear_speed = calculateMaxLinearSpeed(min_effective_radius, gait_config);
 
     double max_angular_speed = calculateMaxAngularSpeed(max_linear_speed,
                                                         pimpl_->workspace_config_.stance_radius);
@@ -468,8 +444,9 @@ VelocityLimits::LimitValues VelocityLimits::calculateLimitsForBearing(
     }
 
     // Ensure stance radius never exceeds walkspace (sanity) and is morphologically plausible
-    if (pimpl_->workspace_config_.stance_radius > pimpl_->workspace_config_.walkspace_radius) {
-        pimpl_->workspace_config_.stance_radius = pimpl_->workspace_config_.walkspace_radius;
+    if (pimpl_->workspace_config_.stance_radius > pimpl_->workspace_config_.walkspace_radius * 2.0) {
+        // Guard only against pathological mismatch; allow stance > walkspace (hexagon radius term) normally.
+        pimpl_->workspace_config_.stance_radius = pimpl_->workspace_config_.walkspace_radius * 2.0;
     }
 
     // Final guard: linear limit should not exceed circumference constraint for instantaneous rotation

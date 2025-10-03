@@ -42,7 +42,7 @@ constexpr int MAX_STEPS = 600;
 
 // Utility to convert radians to degrees
 static double toDegrees(double radians) {
-    return radians * 180.0 / M_PI;
+    return math_utils::radiansToDegrees(radians);
 }
 
 /**
@@ -178,7 +178,8 @@ int main() {
               << std::endl;
 
     // 3. Setup and Start Tripod Gait (new API): select gait, set velocities, then startWalking()
-    if (!sys.setGaitType(TRIPOD_GAIT)) {
+    GaitConfiguration tripod_gait = createGaitConfig(TRIPOD_GAIT, p);
+    if (!sys.setGaitConfiguration(tripod_gait)) {
         std::cerr << "ERROR: Failed to set gait type." << std::endl;
         return 1;
     }

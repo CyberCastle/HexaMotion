@@ -55,70 +55,225 @@ void WorkspaceAnalyzer::initialize() {
 // ========================================================================
 
 void WorkspaceAnalyzer::generateWorkspace() {
+    // ----------------------------------------------------------------------------
+    // OpenSHC-equivalent walkspace normalization with HexaMotion morphology context
+    // ----------------------------------------------------------------------------
+    // Morphological considerations from AGENTS.md:
+    //  - Tibia is vertical at 0° (no horizontal contribution at identity pose)
+    //  - Standing horizontal reach = coxa_length + femur_length * cos(femur_angle_standing)
+    //  - Default height is derived from default_height_offset + standing_height (configurable)
+    //  - Symmetry enforced across opposing leg pairs
+    // This method replicates OpenSHC::WalkController::generateWalkspace two‑stage process:
+    //    1) Initial per-bearing min radius without workspace overlap (adjacent-leg constraint)
+    //    2) Per-leg refinement using interpolated workplane & default shift intersection
+    // Result: walkspace_map_ (bearing -> radius) symmetric & normalized.
+
     walkspace_map_.clear();
 
-    // Generate walkspace for all legs (using OpenSHC-style caching)
-    for (int leg = 0; leg < NUM_LEGS; leg++) {
-        generateWalkspaceForLeg(leg); // Will use cache if already generated
-    }
-
-    // Pre-calculate leg base positions and adjacent distances to avoid redundant calculations
-    Point3D leg_origins[NUM_LEGS];
-    double adjacent_distances[NUM_LEGS];
-
-    JointAngles zero_angles(0, 0, 0);
+    // Ensure per-leg 3D workspaces exist (cached generation)
     for (int leg = 0; leg < NUM_LEGS; ++leg) {
-        Pose leg_origin_pose = model_.getPoseRobotFrame(leg, zero_angles, Pose::Identity());
-        leg_origins[leg] = leg_origin_pose.position;
-
-        // Calculate minimum distance to adjacent legs
-        int adjacent1 = (leg + 1) % NUM_LEGS;
-        int adjacent2 = (leg + NUM_LEGS - 1) % NUM_LEGS;
-
-        Pose adj1_pose = model_.getPoseRobotFrame(adjacent1, zero_angles, Pose::Identity());
-        Pose adj2_pose = model_.getPoseRobotFrame(adjacent2, zero_angles, Pose::Identity());
-
-        double dist_to_adj1 = math_utils::distance(leg_origins[leg], adj1_pose.position) / 2.0f;
-        double dist_to_adj2 = math_utils::distance(leg_origins[leg], adj2_pose.position) / 2.0f;
-
-        adjacent_distances[leg] = std::min(dist_to_adj1, dist_to_adj2);
+        generateWalkspaceForLeg(leg);
     }
 
-    // Generate walkspace for each bearing
-    for (int bearing = 0; bearing <= 360; bearing += BEARING_STEP) {
-        double min_radius = MAX_WORKSPACE_RADIUS;
-        double bearing_rad = math_utils::degreesToRadians(bearing);
+    const Parameters &params = model_.getParams();
+    bool allow_overlap = params.overlapping_walkspaces; // OpenSHC parameter parity
 
-        // Find minimum radius across all legs for this bearing
-        for (int leg = 0; leg < NUM_LEGS; leg++) {
-            // Use pre-generated workspace data
-            Workplane workplane = getWorkplane(leg, 0.0); // Use ground level workplane
+    // Stage 1: Populate walkspace with maximum values constrained by adjacent legs (no overlap)
+    // Equivalent to OpenSHC loop over legs computing distance & bearing to adjacents.
+    for (int leg = 0; leg < NUM_LEGS; ++leg) {
+        int adjacent_leg_1 = (leg + 1) % NUM_LEGS;
+        int adjacent_leg_2 = (leg + NUM_LEGS - 1) % NUM_LEGS;
 
-            if (!workplane.empty()) {
-                auto bearing_it = workplane.find(bearing);
-                if (bearing_it != workplane.end()) {
-                    min_radius = std::min(min_radius, bearing_it->second);
+        // Identity tip positions (use zero angles FK). Identity pose: all angles = 0 (tibia vertical).
+        JointAngles zero(0, 0, 0);
+        Point3D default_tip_position = model_.forwardKinematicsGlobalCoordinates(leg, zero); // same for identity XY
+        Point3D adjacent_1_tip = model_.forwardKinematicsGlobalCoordinates(adjacent_leg_1, zero);
+        Point3D adjacent_2_tip = model_.forwardKinematicsGlobalCoordinates(adjacent_leg_2, zero);
+
+        // Distances to adjacent legs (half-distance rule like OpenSHC)
+        double distance_to_adjacent_leg_1 = math_utils::distance(default_tip_position, adjacent_1_tip) / 2.0;
+        double distance_to_adjacent_leg_2 = math_utils::distance(default_tip_position, adjacent_2_tip) / 2.0;
+
+        // Bearings to adjacent legs
+        double bearing_to_adjacent_leg_1 = math_utils::radiansToDegrees(
+            atan2(adjacent_1_tip.y - default_tip_position.y, adjacent_1_tip.x - default_tip_position.x));
+        double bearing_to_adjacent_leg_2 = math_utils::radiansToDegrees(
+            atan2(adjacent_2_tip.y - default_tip_position.y, adjacent_2_tip.x - default_tip_position.x));
+
+        for (int bearing = 0; bearing <= 360; bearing += BEARING_STEP) {
+            int bearing_diff_1 = std::abs(static_cast<int>(bearing_to_adjacent_leg_1) - bearing);
+            int bearing_diff_2 = std::abs(static_cast<int>(bearing_to_adjacent_leg_2) - bearing);
+            if (bearing_diff_1 > 180)
+                bearing_diff_1 = 360 - bearing_diff_1;
+            if (bearing_diff_2 > 180)
+                bearing_diff_2 = 360 - bearing_diff_2;
+
+            double distance_to_overlap_1 = MAX_WORKSPACE_RADIUS;
+            double distance_to_overlap_2 = MAX_WORKSPACE_RADIUS;
+
+            if (!allow_overlap) {
+                if ((bearing_diff_1 < 90 || bearing_diff_1 > 270) && distance_to_adjacent_leg_1 > 0.0) {
+                    double cos_val = std::cos(math_utils::degreesToRadians(static_cast<double>(bearing_diff_1)));
+                    if (std::abs(cos_val) > 1e-6)
+                        distance_to_overlap_1 = distance_to_adjacent_leg_1 / cos_val;
+                }
+                if ((bearing_diff_2 < 90 || bearing_diff_2 > 270) && distance_to_adjacent_leg_2 > 0.0) {
+                    double cos_val = std::cos(math_utils::degreesToRadians(static_cast<double>(bearing_diff_2)));
+                    if (std::abs(cos_val) > 1e-6)
+                        distance_to_overlap_2 = distance_to_adjacent_leg_2 / cos_val;
                 }
             }
 
-            // Apply bearing direction constraint using pre-calculated adjacent distances
-            double projected_reach = adjacent_distances[leg];
+            double min_distance = allow_overlap ? MAX_WORKSPACE_RADIUS
+                                                : std::min(distance_to_overlap_1, distance_to_overlap_2);
+            min_distance = std::min(min_distance, MAX_WORKSPACE_RADIUS);
 
-            // Only apply cosine correction if cosine is significant (not near 90°, 270°)
-            if (std::abs(cos(bearing_rad)) > 0.1) {
-                projected_reach = adjacent_distances[leg] / std::abs(cos(bearing_rad));
+            auto existing = walkspace_map_.find(bearing);
+            if (existing != walkspace_map_.end()) {
+                if (min_distance < existing->second)
+                    existing->second = min_distance;
+            } else {
+                walkspace_map_[bearing] = min_distance;
             }
-
-            min_radius = std::min(min_radius, projected_reach);
         }
-
-        walkspace_map_[bearing] = std::max(min_radius, 0.0);
     }
 
-    // Ensure symmetry (OpenSHC equivalent)
+    // Stage 2: Per-leg refinement using interpolated workplane at target default height.
+    // Compute conservative standing horizontal reach (no tibia horizontal component) once.
+    double standing_horizontal_reach = RobotModel::computeStandingHorizontalReach(params);
+
+    for (int leg = 0; leg < NUM_LEGS; ++leg) {
+        // Base geometric references
+        Point3D base_pos = model_.getLegBasePosition(leg);
+        double base_angle = model_.getLegBaseAngleOffset(leg);
+
+        // Identity tip (XY aligned with base + coxa + horizontal femur projection).
+        // Morphology (AGENTS.md):
+        //   identity_z_global   = default_height_offset (≈ -208, tibia vertical)
+        //   standing_z_global   = -standing_height      (≈ -150)
+        //   required_shift_z    = standing_z_global - identity_z_global = (-standing_height) - (default_height_offset) = +58
+        // Because here identity plane was set to 0, we must encode only the DIFFERENCE, not a raw global Z sum.
+        Point3D identity_tip_position(
+            base_pos.x + standing_horizontal_reach * std::cos(base_angle),
+            base_pos.y + standing_horizontal_reach * std::sin(base_angle),
+            0.0); // artificial local frame baseline
+
+        // Default_z_local = standing_z_global - identity_z_global
+        double default_z = (-params.standing_height) - model_.getDefaultHeightOffset();
+        Point3D default_tip_position = identity_tip_position; // XY identical in symmetric pose
+        default_tip_position.z = default_z;
+
+        Point3D default_shift = default_tip_position - identity_tip_position; // (0,0, +shift)
+
+        // Target workplane height is vertical shift relative to identity plane
+        double target_workplane_height = default_shift.z; // matches OpenSHC usage of default_shift[2]
+        Workplane workplane = getWorkplane(leg, target_workplane_height);
+        if (workplane.empty()) {
+            continue; // cannot refine without workplane data
+        }
+
+        for (auto &entry : walkspace_map_) {
+            int bearing = entry.first;
+            double radius = entry.second; // current global min
+
+            // If no shift, direct radius from workplane
+            if (default_shift.x == 0.0 && default_shift.y == 0.0 && std::abs(default_shift.z) < 1e-9) {
+                auto itw = workplane.find(bearing);
+                if (itw != workplane.end()) {
+                    double candidate = itw->second;
+                    if (candidate < radius) {
+                        entry.second = candidate;
+                        int opposite_bearing = (bearing + 180) % 360;
+                        walkspace_map_[opposite_bearing] = candidate; // enforce symmetry
+                    }
+                }
+                continue;
+            }
+
+            // OpenSHC intersection method (simplified; assumes ordered workplane bearings)
+            // Build a synthetic point in desired bearing direction with max radius
+            double bearing_rad = math_utils::degreesToRadians(static_cast<double>(bearing));
+            Point3D new_point(MAX_WORKSPACE_RADIUS * std::cos(bearing_rad),
+                              MAX_WORKSPACE_RADIUS * std::sin(bearing_rad), 0.0);
+
+            // Iterate consecutive bearing segments
+            double refined_radius = radius; // start with current
+            for (auto it = workplane.begin(); it != workplane.end(); ++it) {
+                auto next_it = std::next(it);
+                if (next_it == workplane.end())
+                    break; // need a pair
+
+                int bearing_1 = it->first;
+                int bearing_2 = next_it->first;
+                double r1 = it->second;
+                double r2 = next_it->second;
+
+                // Reference points (subtract default shift to simulate shifted default tip frame)
+                double b1_rad = math_utils::degreesToRadians(static_cast<double>(bearing_1));
+                double b2_rad = math_utils::degreesToRadians(static_cast<double>(bearing_2));
+                Point3D p1(r1 * std::cos(b1_rad) - default_shift.x,
+                           r1 * std::sin(b1_rad) - default_shift.y,
+                           0.0);
+                Point3D p2(r2 * std::cos(b2_rad) - default_shift.x,
+                           r2 * std::sin(b2_rad) - default_shift.y,
+                           0.0);
+
+                // Colinear checks (vector cross product magnitude ~ 0 in 2D -> parallel)
+                double cross1 = p1.x * new_point.y - p1.y * new_point.x;
+                double cross2 = p2.x * new_point.y - p2.y * new_point.x;
+                double new_cross = (p1.x * p2.y - p1.y * p2.x);
+                (void)new_cross; // reserved for extended diagnostics
+
+                // If new_point direction aligns exactly with reference
+                if (std::abs(cross1) < 1e-9) {
+                    refined_radius = std::min(refined_radius, math_utils::magnitude(Point3D(p1.x, p1.y, 0.0)));
+                    break;
+                } else if (std::abs(cross2) < 1e-9) {
+                    refined_radius = std::min(refined_radius, math_utils::magnitude(Point3D(p2.x, p2.y, 0.0)));
+                    break;
+                } else {
+                    // Check if new_point direction lies between p1 and p2 (same sign test)
+                    double c1 = (p1.x * new_point.y - p1.y * new_point.x) * (p1.x * p2.y - p1.y * p2.x);
+                    double c2 = (p2.x * new_point.y - p2.y * new_point.x) * (p2.x * p1.y - p2.y * p1.x);
+                    if (c1 >= 0.0 && c2 >= 0.0) {
+                        // Compute normal to segment (p1->p2)
+                        double dx = p2.x - p1.x;
+                        double dy = p2.y - p1.y;
+                        // Two candidate normals
+                        Point3D n1(dy, -dx, 0.0);
+                        Point3D n2(-dy, dx, 0.0);
+                        // Choose one pointing roughly towards new_point
+                        double dot1 = n1.x * new_point.x + n1.y * new_point.y;
+                        Point3D normal = (dot1 >= 0.0) ? n1 : n2;
+                        double normal_len = std::sqrt(normal.x * normal.x + normal.y * normal.y);
+                        if (normal_len > 1e-9) {
+                            normal.x /= normal_len;
+                            normal.y /= normal_len;
+                            // Projection magnitudes
+                            double proj_new = new_point.x * normal.x + new_point.y * normal.y;
+                            double proj_p1 = p1.x * normal.x + p1.y * normal.y;
+                            if (std::abs(proj_new) > 1e-9) {
+                                double ratio = std::abs(proj_p1 / proj_new);
+                                double candidate = ratio * MAX_WORKSPACE_RADIUS;
+                                refined_radius = std::min(refined_radius, candidate);
+                            }
+                        }
+                        break;
+                    }
+                }
+            }
+
+            if (refined_radius < entry.second) {
+                entry.second = refined_radius;
+                int opposite_bearing = (bearing + 180) % 360;
+                walkspace_map_[opposite_bearing] = refined_radius; // enforce symmetry
+            }
+        }
+    }
+
+    // Final symmetry enforcement & closing bearing
     walkspace_map_[360] = walkspace_map_[0];
 
-    // Update analysis info
     analysis_info_.walkspace_map_generated = true;
     analysis_info_.walkspace_radii = walkspace_map_;
 }
@@ -292,15 +447,27 @@ bool WorkspaceAnalyzer::isPositionReachable(int leg_index, const Point3D &positi
         return false;
     }
 
-    // Basic geometric reachability check
+    // Basic geometric reachability check using planar distance.
+    // WorkspaceBounds::max_reach is defined as a horizontal span, so any
+    // comparison must ignore the vertical component to avoid rejecting
+    // perfectly valid poses that simply sit on the standing plane.
     WorkspaceBounds bounds = getWorkspaceBounds(leg_index);
-    double distance = getDistanceFromBase(leg_index, position);
+    Point3D leg_base = getLegBase(leg_index);
+    double dx = position.x - leg_base.x;
+    double dy = position.y - leg_base.y;
+    double planar_distance = std::hypot(dx, dy);
 
-    if (distance < bounds.min_reach || distance > bounds.max_reach) {
+    if (planar_distance < bounds.min_reach || planar_distance > bounds.max_reach) {
         return false;
     }
 
-    // If IK validation is requested, perform additional joint limit checking
+    if (bounds.has_height_restrictions) {
+        if (position.z < bounds.min_height || position.z > bounds.max_height) {
+            return false;
+        }
+    }
+
+    // If IK validation is requested, perform additional joint limit checking.
     if (use_ik_validation) {
         return checkJointLimits(leg_index, position);
     }
@@ -378,7 +545,13 @@ WorkspaceAnalyzer::WalkspaceResult WorkspaceAnalyzer::analyzeWalkspace(const Poi
 
     // Calculate stability margin
     result.stability_margin = calculateStabilityMargin(leg_positions);
-    result.is_stable = result.stability_margin > STABILITY_THRESHOLD;
+    {
+        const auto &wt = model_.getParams().workspace_tuning;
+        double stability_threshold = (wt.stability_threshold_mm > 0.0)
+                                         ? wt.stability_threshold_mm
+                                         : DEFAULT_STABILITY_THRESHOLD;
+        result.is_stable = result.stability_margin > stability_threshold;
+    }
 
     // Calculate support polygon
     calculateSupportPolygon(leg_positions, result.support_polygon);
@@ -451,24 +624,50 @@ WorkspaceAnalyzer::getWorkspaceBounds(int leg_index) const {
     const Parameters &params = model_.getParams();
     Point3D leg_base = getLegBase(leg_index);
 
-    // Calculate theoretical reach limits
-    double total_leg_length = params.coxa_length + params.femur_length + params.tibia_length;
-    double theoretical_min = std::abs(params.femur_length - params.tibia_length);
+    // --- Morphology-aware reach calculations (AGENTS.md) ---
+    // Standing horizontal reach excludes tibia (vertical at standing pose):
+    double standing_horizontal_reach = RobotModel::computeStandingHorizontalReach(params);
+    // Flat theoretical extension (maximum geometric envelope):
+    double flat_extension_reach = params.coxa_length + params.femur_length + params.tibia_length; // upper bound
 
-    // Apply safety factors from configuration
-    bounds.max_reach = total_leg_length * validation_config_.safety_margin_factor;
+    // Conservative operational vs absolute reach handling (morphology aligned):
+    //  - standing_horizontal_reach is the usable horizontal span in the symmetric standing pose
+    //  - flat_extension_reach is the theoretical geometric envelope (rarely achievable dynamically)
+    //  - We cap the effective max_reach close above standing reach to avoid overestimating lateral capability
+    //    while still allowing a modest buffer for dynamic extension (IK stretch, terrain adaptation, etc.).
+    //  - Safety margin factor is applied but then clamped by a morphology cap (15% over standing reach) so that
+    //    downstream velocity planners using bounds.max_reach do not inflate stride/velocity limits.
+    double physical_candidate = flat_extension_reach * validation_config_.safety_margin_factor;
+    const auto &wt = params.workspace_tuning; // direct access (accessors removed for MCU efficiency)
+    double morphology_cap_factor = (wt.morphology_cap_factor > 0.1) ? wt.morphology_cap_factor : 1.15;
+    double morphology_cap = standing_horizontal_reach * morphology_cap_factor; // configurable headroom
+    bounds.max_reach = std::max(standing_horizontal_reach, std::min(physical_candidate, morphology_cap));
+
+    // Minimum useful reach: fraction of coxa length (keeps IK well-conditioned near base)
     bounds.min_reach = params.coxa_length * validation_config_.minimum_reach_factor;
 
-    // Set preferred reach values (using the theoretical minimum calculation)
-    bounds.preferred_max_reach = total_leg_length * validation_config_.safety_margin_factor;
-    bounds.preferred_min_reach = theoretical_min * validation_config_.minimum_reach_factor;
+    // Preferred band: anchored on morphology (standing pose) rather than extreme extension
+    bounds.preferred_max_reach = standing_horizontal_reach; // ideal operating radial distance
+    double preferred_min_reach_buffer = (wt.preferred_min_reach_buffer_factor >= 1.0 &&
+                                         wt.preferred_min_reach_buffer_factor <= 1.5)
+                                            ? wt.preferred_min_reach_buffer_factor
+                                            : 1.1;
+    bounds.preferred_min_reach = bounds.min_reach * preferred_min_reach_buffer; // configurable buffer
 
-    // Height bounds applying physical height offset
-    // When angles are 0°, the robot is at z = getDefaultHeightOffset() (physical reference)
-    double reach_range = total_leg_length * 0.7; // Use a more realistic range of 70%
-    bounds.min_height = reference_height_offset_ - reach_range;
-    bounds.max_height = reference_height_offset_ + reach_range;
+    // Height bounds (Option B semantics):
+    //   standing_height = absolute vertical distance body->foot in nominal standing pose => standing plane Z = -standing_height.
+    //   reference_height_offset_ = physical Z at identity (all joint angles 0°, tibia vertical).
+    // We ensure upward allowance covers either heuristic femur arc or required lift so that the standing plane
+    // (if above identity) lies within [min_height, max_height].
+    double femur_up_range_factor = (wt.femur_up_range_factor > 0.0) ? wt.femur_up_range_factor : 0.85;
+    double heuristic_up_range = params.femur_length * femur_up_range_factor; // historical conservative heuristic (configurable)
+    double up_range = std::max(heuristic_up_range, params.standing_height);  // ensure standing plane inside bounds
+    double down_range_factor = (wt.down_range_factor > 0.0) ? wt.down_range_factor : 0.85;
+    double down_range = (params.femur_length + params.tibia_length) * down_range_factor; // downward reach (body lowering)
+    bounds.min_height = reference_height_offset_ - down_range;                           // more negative (down)
+    bounds.max_height = reference_height_offset_ + up_range;                             // more positive (up)
 
+    bounds.has_height_restrictions = true;
     bounds.center_position = leg_base;
 
     return bounds;
@@ -483,61 +682,66 @@ WorkspaceAnalyzer::calculateVelocityConstraints(int leg_index, double bearing_de
         return constraints; // Return empty constraints for invalid inputs
     }
 
-    // Get workspace bounds for this leg
+    // Get morphology-aware workspace bounds
     WorkspaceBounds bounds = getWorkspaceBounds(leg_index);
 
-    // Calculate effective workspace radius based on bearing
-    double leg_angle = model_.getLegBaseAngleOffset(leg_index) * RADIANS_TO_DEGREES_FACTOR;
-    double bearing_offset = std::abs(bearing_degrees - leg_angle);
-    if (bearing_offset > 180.0f) {
-        bearing_offset = 360.0f - bearing_offset;
-    }
-
-    // Efficiency decreases as we move away from leg's natural direction
-    double directional_efficiency = std::cos(math_utils::degreesToRadians(bearing_offset));
-
-    // Powered cosine attenuation with safety floor:
-    // Rationale: We want stronger degradation for oblique bearings than a linear cos() but
-    // without collapsing the effective walkspace to near-zero (which starves forward velocity tests)
-    // when one leg orientation is highly misaligned. We take:
-    //   raw = max(0, cos(theta))
-    //   eff = max(raw^k, FLOOR)
-    // with k > 1 giving smoother near-axis retention (raw≈1 -> eff≈1) and faster falloff for mid angles.
-    // A floor preserves minimum stride viability while still allowing significant directional shaping.
-    {
-        double raw = std::max(0.0, directional_efficiency); // remove negative (backwards not contributing to forward workspace)
+    // Prefer actual generated walkspace radius for this bearing (normalized global limit)
+    double walkspace_radius = getWalkspaceRadius(bearing_degrees);
+    if (walkspace_radius <= 0.0) {
+        // Fallback: directional efficiency scaling if walkspace not yet generated
+        double leg_angle = math_utils::radiansToDegrees(model_.getLegBaseAngleOffset(leg_index));
+        double bearing_offset = std::abs(bearing_degrees - leg_angle);
+        if (bearing_offset > 180.0)
+            bearing_offset = 360.0 - bearing_offset;
+        double directional_efficiency = std::cos(math_utils::degreesToRadians(bearing_offset));
+        double raw = std::max(0.0, directional_efficiency);
         double powered = (raw > 0.0) ? std::pow(raw, DIRECTIONAL_EFFICIENCY_EXPONENT) : 0.0;
         directional_efficiency = std::max(powered, DIRECTIONAL_EFFICIENCY_FLOOR);
+        walkspace_radius = bounds.max_reach * directional_efficiency;
+    }
+    constraints.workspace_radius = walkspace_radius;
+
+    // Stance radius based on AGENTS.md: hexagon_radius + standing_horizontal_reach
+    double standing_horizontal_reach = RobotModel::computeStandingHorizontalReach(model_.getParams());
+    constraints.stance_radius = model_.getParams().hexagon_radius + standing_horizontal_reach;
+    if (constraints.stance_radius <= 0.0) {
+        // fallback to previous heuristic if parameters invalid
+        constraints.stance_radius = std::max(1.0, bounds.max_reach * 0.8);
     }
 
-    constraints.workspace_radius = bounds.max_reach * directional_efficiency;
-    constraints.stance_radius = bounds.max_reach * 0.8f; // For angular calculations
-
-    // Calculate velocity limits based on gait parameters
-    double cycle_time = stance_ratio / gait_frequency;
+    // Calculate velocity limits based on gait parameters (morphology-aware revision):
+    // Legacy approach used full workspace_radius diameter traversal in one stance cycle, which
+    // overestimates speed when workspace_radius > standing_horizontal_reach. We now base the
+    // nominal stride on an "operational radius" = min(workspace_radius, standing_horizontal_reach * 1.0).
+    // This preserves OpenSHC normalization of the walkspace map itself, while bounding kinematic
+    // velocity derivation to realistic lateral capability (tibia vertical at identity pose).
+    double cycle_time = stance_ratio / gait_frequency; // stance phase duration
     if (cycle_time > 0.0f) {
-        // Maximum linear speed: can traverse workspace diameter in one cycle
-        constraints.max_linear_velocity = (constraints.workspace_radius * 2.0f) / cycle_time;
-
-        // Apply scaling factors
         ScalingFactors scaling = getScalingFactors();
-        constraints.max_linear_velocity *= scaling.velocity_scale;
 
-        // Maximum angular speed
-        constraints.max_angular_velocity = constraints.max_linear_velocity / constraints.stance_radius;
+        double operational_radius = std::min(constraints.workspace_radius, standing_horizontal_reach);
+        // Use diameter of operational radius as conservative stride envelope per stance cycle
+        double nominal_stride = operational_radius * 2.0;
+        // Apply velocity_scale AFTER deriving stride-based raw velocity
+        double raw_linear_velocity = nominal_stride / cycle_time;
+        constraints.max_linear_velocity = raw_linear_velocity * scaling.velocity_scale;
+
+        // Angular speed derived from linear / stance radius (already morphology-based)
+        constraints.max_angular_velocity = (constraints.stance_radius > 1e-6)
+                                               ? (constraints.max_linear_velocity / constraints.stance_radius)
+                                               : 0.0;
         constraints.max_angular_velocity *= scaling.angular_scale;
 
-        // Maximum acceleration (reach max speed in 2 seconds)
-        constraints.max_acceleration = constraints.max_linear_velocity / 2.0f;
-        constraints.max_acceleration *= scaling.acceleration_scale;
+        // Acceleration heuristic: reach max speed in ~2s then apply scaling (kept for compatibility)
+        constraints.max_acceleration = (constraints.max_linear_velocity / 2.0) * scaling.acceleration_scale;
     }
 
     // Apply reasonable safety limits (use robot configuration instead of hard tiny caps)
     const auto &params = model_.getParams();
     double linear_cap = (params.max_velocity > 0.0) ? params.max_velocity : DEFAULT_MAX_LINEAR_VELOCITY;
     double angular_cap = (params.max_angular_velocity > 0.0)
-                             ? params.max_angular_velocity * DEGREES_TO_RADIANS_FACTOR
-                             : (DEFAULT_MAX_ANGULAR_VELOCITY * DEGREES_TO_RADIANS_FACTOR);
+                             ? math_utils::degreesToRadians(params.max_angular_velocity)
+                             : math_utils::degreesToRadians(DEFAULT_MAX_ANGULAR_VELOCITY);
     // Acceleration cap heuristic: reach max speed in ~1s => cap >= linear_cap
     double accel_cap = std::max(linear_cap, constraints.max_acceleration);
 
@@ -554,21 +758,25 @@ WorkspaceAnalyzer::calculateVelocityConstraints(int leg_index, double bearing_de
 
 ScalingFactors WorkspaceAnalyzer::getScalingFactors() const {
     ScalingFactors factors;
+    // Retrieve centralized tunable scaling parameters from robot configuration.
+    // This replaces previously hardcoded constants so external configuration can adjust motion behavior.
+    const Parameters &params = model_.getParams();
+    const auto &cfg = params.scaling; // Parameters::ScalingFactors
 
-    // These scaling factors replace the scattered constants across the codebase:
-    // - WORKSPACE_SCALING_FACTOR (0.8f) -> workspace_scale (0.65f) - more conservative
-    // - WALKSPACE_SCALING_FACTOR (0.65f) -> workspace_scale (0.65f) - consistent
-    // - DEFAULT_ANGULAR_SCALING (1.0f) -> angular_scale (1.0f) - maintained
-    // - Various safety margins -> unified safety_margin (0.9f)
+    // Direct copies (keep legacy defaults if user has not changed them in Parameters)
+    factors.linear_scale = cfg.linear_scale;
+    factors.angular_scale = cfg.angular_scale;
+    factors.workspace_scale = cfg.workspace_scale;
+    factors.velocity_scale = cfg.velocity_scale;
+    factors.acceleration_scale = cfg.acceleration_scale;
+    factors.safety_margin = cfg.safety_margin;
 
-    factors.workspace_scale = 0.65f;                                   // Conservative workspace scaling
-    factors.linear_scale = 0.65f;                                      // Consistent with existing walkspace analysis
-    factors.velocity_scale = 0.9f;                                     // 10% safety margin for velocity calculations
-    factors.angular_scale = 1.0f;                                      // No scaling for angular velocities by default
-    factors.acceleration_scale = 1.0f;                                 // No scaling for acceleration by default
-    factors.collision_scale = validation_config_.safety_margin_factor; // Use configured safety margin
+    // collision_scale: fallback to validation_config_.safety_margin_factor when unset / non-positive
+    factors.collision_scale = (cfg.collision_scale > 0.0)
+                                  ? cfg.collision_scale
+                                  : validation_config_.safety_margin_factor;
 
-    return factors;
+    return factors; // Unified scaling factors now parameter-driven
 }
 
 void WorkspaceAnalyzer::updateSafetyMargin(double margin) {
@@ -588,12 +796,12 @@ double WorkspaceAnalyzer::calculateLimitProximity(int leg_index, const JointAngl
     const Parameters &params = model_.getParams();
 
     // Convert angle limits from degrees to radians
-    double coxa_min_rad = params.coxa_angle_limits[0] * M_PI / 180.0;
-    double coxa_max_rad = params.coxa_angle_limits[1] * M_PI / 180.0;
-    double femur_min_rad = params.femur_angle_limits[0] * M_PI / 180.0;
-    double femur_max_rad = params.femur_angle_limits[1] * M_PI / 180.0;
-    double tibia_min_rad = params.tibia_angle_limits[0] * M_PI / 180.0;
-    double tibia_max_rad = params.tibia_angle_limits[1] * M_PI / 180.0;
+    double coxa_min_rad = math_utils::degreesToRadians(params.coxa_angle_limits[0]);
+    double coxa_max_rad = math_utils::degreesToRadians(params.coxa_angle_limits[1]);
+    double femur_min_rad = math_utils::degreesToRadians(params.femur_angle_limits[0]);
+    double femur_max_rad = math_utils::degreesToRadians(params.femur_angle_limits[1]);
+    double tibia_min_rad = math_utils::degreesToRadians(params.tibia_angle_limits[0]);
+    double tibia_max_rad = math_utils::degreesToRadians(params.tibia_angle_limits[1]);
 
     // Calculate limit proximity (OpenSHC-style)
     // (1.0 = furthest possible from limit, 0.0 = equal to limit)
@@ -676,6 +884,14 @@ Point3D WorkspaceAnalyzer::constrainToGeometricWorkspace(int leg_index, const Po
     double physical_max_reach = params.coxa_length + params.femur_length + params.tibia_length;
     double max_reach = physical_max_reach * validation_config_.safety_margin_factor;
 
+    // NOTE (Morphology / AGENTS.md): This method intentionally uses the absolute physical reach
+    // (coxa + femur + tibia) as a hard geometric constraint. The operative "preferred"
+    // horizontal reach used for walkspace normalization (standing_horizontal_reach) is
+    // smaller and incorporated elsewhere (getWorkspaceBounds, velocity constraints, and
+    // generateWorkspace). We keep this function focused on enforcing the true physical
+    // maximum so that upstream planners can still reason about margin between preferred
+    // and absolute reach without double‑clipping.
+
     // Ensure we never exceed the physical maximum, even if safety factor is > 1.0
     max_reach = std::min(max_reach, physical_max_reach);
 
@@ -691,7 +907,16 @@ Point3D WorkspaceAnalyzer::constrainToGeometricWorkspace(int leg_index, const Po
     Point3D constrained = target;
     constrained.x = leg_base.x + (target.x - leg_base.x) * scale;
     constrained.y = leg_base.y + (target.y - leg_base.y) * scale;
-    constrained.z = leg_base.z + (target.z - leg_base.z) * scale;
+
+    // Preserve Z near the standing/walking plane to avoid artificial vertical drift.
+    // If the target Z is already close to the default walking plane, keep it unchanged.
+    const double standing_plane_z = model_.getLegDefaultPosition(leg_index).z;
+    const double z_tol = model_.getParams().walk_plane_z_tolerance_mm; // runtime-configurable tolerance
+    if (std::abs(target.z - standing_plane_z) <= z_tol) {
+        constrained.z = target.z; // keep exact plane height
+    } else {
+        constrained.z = leg_base.z + (target.z - leg_base.z) * scale;
+    }
 
     return constrained;
 }
@@ -751,13 +976,15 @@ bool WorkspaceAnalyzer::wouldCollideWithAdjacent(int leg_index, const Point3D &t
 
     // Check collision with left adjacent leg
     double distance_to_left = getDistance2D(target_position, adjacent_positions[left_adjacent]);
-    if (distance_to_left < MIN_LEG_SEPARATION) {
+    const auto &wt = model_.getParams().workspace_tuning;
+    double min_leg_sep = (wt.min_leg_separation_mm > 0.0) ? wt.min_leg_separation_mm : DEFAULT_MIN_LEG_SEPARATION;
+    if (distance_to_left < min_leg_sep) {
         return true;
     }
 
     // Check collision with right adjacent leg
     double distance_to_right = getDistance2D(target_position, adjacent_positions[right_adjacent]);
-    if (distance_to_right < MIN_LEG_SEPARATION) {
+    if (distance_to_right < min_leg_sep) {
         return true;
     }
 
@@ -783,7 +1010,19 @@ bool WorkspaceAnalyzer::adjustForCollisionAvoidance(int leg_index, Point3D &targ
 
     if (distance > 0.001f) {
         // Start with 90% scale and iteratively reduce if still colliding
-        for (double scale = 0.9f; scale >= 0.5f; scale -= 0.1f) {
+        const auto &wt = model_.getParams().workspace_tuning;
+        double start_scale = (wt.collision_adjust_start_scale > 0.0 && wt.collision_adjust_start_scale <= 1.5)
+                                 ? wt.collision_adjust_start_scale
+                                 : 0.9;
+        double min_scale = (wt.collision_adjust_min_scale > 0.0 && wt.collision_adjust_min_scale < 1.0)
+                               ? wt.collision_adjust_min_scale
+                               : 0.5;
+        double step = (wt.collision_adjust_step > 0.0 && wt.collision_adjust_step < 0.5)
+                          ? wt.collision_adjust_step
+                          : 0.1;
+        double safe_scale_ratio = (wt.safe_scale_ratio > 0.0 && wt.safe_scale_ratio <= 1.0) ? wt.safe_scale_ratio : 0.7;
+
+        for (double scale = start_scale; scale >= min_scale; scale -= step) {
             Point3D test_position;
             test_position.x = base_x + dx * scale;
             test_position.y = base_y + dy * scale;
@@ -796,7 +1035,9 @@ bool WorkspaceAnalyzer::adjustForCollisionAvoidance(int leg_index, Point3D &targ
         }
 
         // If we couldn't find a good scale, use minimum safe distance
-        double safe_scale = math_utils::clamp<double>((leg_reach * 0.7) / distance, 0.5, std::numeric_limits<double>::infinity());
+        double safe_scale = math_utils::clamp<double>((leg_reach * safe_scale_ratio) / distance,
+                                                      min_scale,
+                                                      std::numeric_limits<double>::infinity());
         target_position.x = base_x + dx * safe_scale;
         target_position.y = base_y + dy * safe_scale;
         return true;
@@ -899,7 +1140,11 @@ void WorkspaceAnalyzer::calculateLegWorkspaceBounds(int leg_index) {
 
     // Apply physical height offset: when angles are 0°, the robot is at z = getDefaultHeightOffset()
     // Workspace heights are centered on this reference position
-    double reach_range = total_reach * 0.7; // Use a more realistic range of 70% of total reach
+    const auto &wt = params.workspace_tuning;
+    double span_factor = wt.leg_workspace_height_span_factor;
+    if (span_factor <= 0.05 || span_factor > 1.0)
+        span_factor = 0.7;                          // fallback
+    double reach_range = total_reach * span_factor; // Configurable percentage of total reach
     bounds.min_height = reference_height_offset_ - reach_range;
     bounds.max_height = reference_height_offset_ + reach_range;
 }
@@ -964,7 +1209,7 @@ void WorkspaceAnalyzer::generateWalkspaceForLeg(int leg_index) {
     double layer_step = (height_max - height_min) / WORKSPACE_LAYERS;
 
     for (int b = 0; b <= 360; b += BEARING_STEP) {
-        double rad = b * M_PI / 180.0;
+        double rad = math_utils::degreesToRadians(static_cast<double>(b));
 
         // Calculate max_allowed_radius for this bearing
         double max_allowed_radius = MAX_WORKSPACE_RADIUS;

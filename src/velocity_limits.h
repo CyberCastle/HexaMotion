@@ -68,25 +68,11 @@ class VelocityLimits {
                             reference_height(0.0f) {}
     };
 
-    /**
-     * @brief Gait parameters affecting limit calculations.
-     */
-    struct GaitConfig {
-        double frequency;          // Step frequency (Hz)
-        double stance_ratio;       // Ratio of stance phase (0.0 - 1.0)
-        double swing_ratio;        // Ratio of swing phase (0.0 - 1.0)
-        double time_to_max_stride; // Time to reach maximum stride (s)
-
-        GaitConfig() : frequency(1.0f), stance_ratio(0.6f), swing_ratio(0.4f),
-                       time_to_max_stride(2.0f) {}
-    };
-
     explicit VelocityLimits(const RobotModel &model);
     ~VelocityLimits(); // Needed for PIMPL idiom
 
     // Main velocity limiting functions (equivalent to OpenSHC's generateLimits/getLimit)
-    void generateLimits(const GaitConfig &gait_config);
-    void generateLimits(const GaitConfiguration &gait_config); // Unified configuration interface
+    void generateLimits(const GaitConfiguration &gait_config);
     LimitValues getLimit(double bearing_degrees) const;
 
     // Angular acceleration map access (separate from general LimitValues for focused queries)
@@ -94,8 +80,7 @@ class VelocityLimits {
     std::array<double, 360> getAngularAccelerationMap() const;   // Raw per-bearing angular acceleration
 
     // Workspace generation and calculation
-    void calculateWorkspace(const GaitConfig &gait_config);
-    void calculateWorkspace(const GaitConfiguration &gait_config); // Unified configuration interface
+    void calculateWorkspace(const GaitConfiguration &gait_config);
     const WorkspaceConfig &getWorkspaceConfig() const;
 
     // Physical robot configuration
@@ -115,29 +100,14 @@ class VelocityLimits {
                                         double dt) const;
 
     // Overshoot compensation
-    void calculateOvershoot(const GaitConfig &gait_config);
+    void calculateOvershoot(const GaitConfiguration &gait_config);
     double getOvershootX() const;
     double getOvershootY() const;
 
     // Configuration and parameter updates
-    void updateGaitParameters(const GaitConfig &gait_config);
-    void updateGaitParameters(const GaitConfiguration &gait_config); // Unified configuration interface
+    void updateGaitParameters(const GaitConfiguration &gait_config);
     void setSafetyMargin(double margin);
     void setAngularVelocityScaling(double scaling);
-
-    // NOTE: Removed OpenSHC diameter traversal formula because:
-    //  1) Its overshoot scaling model (multiplicative rational reduction) diverges from the
-    //     stride-based reach fraction used here, producing incomparable magnitudes.
-    //  2) It inflated theoretical max speed (2*R / (stance_ratio/f)) far beyond practical
-    //     stride-based limits after velocity scaling and safety margins, yielding persistent
-    //     diagnostic divergence noise.
-    //  3) The simplified physics-based overshoot (min(v^2/2a, 0.5 a t^2) capped) is integrated
-    //     symmetrically in stride length deduction; duplicating a second overshoot pathway added
-    //     maintenance complexity without actionable benefit.
-    //  4) Downstream consumers require a single coherent limit surface for predictability and
-    //     tuning; dual-mode branching obscured regression sources.
-    //  If strict OpenSHC parity is ever required, reintroduce via a separate adapter/utility
-    //  that outputs a reference map for analysis only (not in-line limiting logic).
 
     // Debug and analysis functions
     LimitValues getMaxLimits() const;
@@ -158,12 +128,12 @@ class VelocityLimits {
     int getBearingIndex(double bearing_degrees) const;
 
     // Internal calculation methods (now implemented via WorkspaceValidator)
-    double calculateMaxLinearSpeed(double walkspace_radius, double on_ground_ratio,
-                                   double frequency) const;
+    // Use gait_config.step_length directly (already derived from standing horizontal reach)
+    double calculateMaxLinearSpeed(double walkspace_radius, const GaitConfiguration &gait_config) const;
     double calculateMaxAngularSpeed(double max_linear_speed, double stance_radius) const;
     double calculateMaxAcceleration(double max_speed, double time_to_max) const;
     LimitValues calculateLimitsForBearing(double bearing_degrees,
-                                          const GaitConfig &gait_config) const;
+                                          const GaitConfiguration &gait_config) const;
 };
 
 #endif // VELOCITY_LIMITS_H

@@ -5,6 +5,7 @@
 #include "../src/leg_stepper.h"
 #include "../src/walk_controller.h"
 #include "../src/workspace_analyzer.h"
+#include "math_utils.h"
 #include "test_stubs.h"
 #include <algorithm>
 #include <cassert>
@@ -193,9 +194,9 @@ LegAnalysisResult analyzeLegTrajectory(int leg_id, LegStepper &stepper, Leg &leg
     total_xy_movement.z = 0;
     result.total_xy_displacement = total_xy_movement.norm();
 
-    result.coxa_movement = std::abs((final_stance_angles.coxa - initial_stance_angles.coxa) * 180.0 / M_PI);
-    result.femur_movement = std::abs((final_stance_angles.femur - initial_stance_angles.femur) * 180.0 / M_PI);
-    result.tibia_movement = std::abs((final_stance_angles.tibia - initial_stance_angles.tibia) * 180.0 / M_PI);
+    result.coxa_movement = std::abs(math_utils::radiansToDegrees(final_stance_angles.coxa - initial_stance_angles.coxa));
+    result.femur_movement = std::abs(math_utils::radiansToDegrees(final_stance_angles.femur - initial_stance_angles.femur));
+    result.tibia_movement = std::abs(math_utils::radiansToDegrees(final_stance_angles.tibia - initial_stance_angles.tibia));
 
     result.correct_stance_pattern = (result.coxa_movement > result.femur_movement) &&
                                     (result.coxa_movement > result.tibia_movement);
@@ -430,9 +431,9 @@ void printDetailedLegTrajectory(int leg_id, LegStepper &stepper, Leg &leg, const
         leg.setJointAngles(new_angles);
         JointAngles angles_after = leg.getJointAngles();
 
-        double coxa_deg = angles_after.coxa * 180.0 / M_PI;
-        double femur_deg = angles_after.femur * 180.0 / M_PI;
-        double tibia_deg = angles_after.tibia * 180.0 / M_PI;
+        double coxa_deg = math_utils::radiansToDegrees(angles_after.coxa);
+        double femur_deg = math_utils::radiansToDegrees(angles_after.femur);
+        double tibia_deg = math_utils::radiansToDegrees(angles_after.tibia);
         double radio = std::sqrt(pos_bezier.x * pos_bezier.x + pos_bezier.y * pos_bezier.y);
         double delta_radio = radio - initial_radio;
 
@@ -462,9 +463,9 @@ void printDetailedLegTrajectory(int leg_id, LegStepper &stepper, Leg &leg, const
         leg.setJointAngles(new_angles);
         JointAngles angles_after = leg.getJointAngles();
 
-        double coxa_deg = angles_after.coxa * 180.0 / M_PI;
-        double femur_deg = angles_after.femur * 180.0 / M_PI;
-        double tibia_deg = angles_after.tibia * 180.0 / M_PI;
+        double coxa_deg = math_utils::radiansToDegrees(angles_after.coxa);
+        double femur_deg = math_utils::radiansToDegrees(angles_after.femur);
+        double tibia_deg = math_utils::radiansToDegrees(angles_after.tibia);
         double radio = std::sqrt(pos_stance.x * pos_stance.x + pos_stance.y * pos_stance.y);
         double delta_radio = radio - initial_radio;
 
@@ -482,17 +483,17 @@ void analyzeStanceGeometry(const std::vector<LegAnalysisResult> &results, const 
     std::cout << std::string(80, '=') << std::endl;
 
     std::cout << "Movement velocity: (" << velocity.x << ", " << velocity.y << ", " << velocity.z << ") mm/s" << std::endl;
-    std::cout << "Movement direction angle: " << (std::atan2(velocity.y, velocity.x) * 180.0 / M_PI) << "°" << std::endl;
+    std::cout << "Movement direction angle: " << math_utils::radiansToDegrees(std::atan2(velocity.y, velocity.x)) << "°" << std::endl;
 
     std::cout << "\nLeg | Position (x, y) | Leg Angle | Rel to Movement | Coxa Move | Tibia Move | Pattern" << std::endl;
     std::cout << "----+-----------------+-----------+-----------------+-----------+------------+--------" << std::endl;
 
     for (const auto &result : results) {
         // Calculate leg angle from origin
-        double leg_angle = std::atan2(result.initial_position.y, result.initial_position.x) * 180.0 / M_PI;
+        double leg_angle = math_utils::radiansToDegrees(std::atan2(result.initial_position.y, result.initial_position.x));
 
         // Calculate relative angle to movement direction
-        double movement_angle = std::atan2(velocity.y, velocity.x) * 180.0 / M_PI;
+        double movement_angle = math_utils::radiansToDegrees(std::atan2(velocity.y, velocity.x));
         double relative_angle = leg_angle - movement_angle;
 
         // Normalize to [-180, 180]
@@ -520,11 +521,11 @@ void analyzeStanceGeometry(const std::vector<LegAnalysisResult> &results, const 
     std::cout << "\nOPTIMAL MOVEMENT SUGGESTIONS:" << std::endl;
     for (const auto &result : results) {
         if (!result.correct_stance_pattern) {
-            double leg_angle = std::atan2(result.initial_position.y, result.initial_position.x) * 180.0 / M_PI;
+            double leg_angle = math_utils::radiansToDegrees(std::atan2(result.initial_position.y, result.initial_position.x));
             double optimal_angle = leg_angle + 45.0; // 45° offset for better coxa utilization
 
-            double optimal_vel_x = 50.0 * std::cos(optimal_angle * M_PI / 180.0);
-            double optimal_vel_y = 50.0 * std::sin(optimal_angle * M_PI / 180.0);
+            double optimal_vel_x = 50.0 * std::cos(math_utils::degreesToRadians(optimal_angle));
+            double optimal_vel_y = 50.0 * std::sin(math_utils::degreesToRadians(optimal_angle));
 
             printf("  Leg %d: Try velocity (%.1f, %.1f) for better coxa dominance\n",
                    result.leg_id, optimal_vel_x, optimal_vel_y);
@@ -601,7 +602,7 @@ int main() {
         JointAngles angles = hexapod_legs[i].getJointAngles();
         printf(" %2d | (%8.3f, %8.3f, %8.3f) | %6.1f | %6.1f | %6.1f\n",
                i, pos.x, pos.y, pos.z,
-               angles.coxa * 180.0 / M_PI, angles.femur * 180.0 / M_PI, angles.tibia * 180.0 / M_PI);
+               math_utils::radiansToDegrees(angles.coxa), math_utils::radiansToDegrees(angles.femur), math_utils::radiansToDegrees(angles.tibia));
     }
 
     // Create LegSteppers for all 6 legs

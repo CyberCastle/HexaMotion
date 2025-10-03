@@ -1,6 +1,7 @@
 #ifndef ROBOT_MODEL_H
 #define ROBOT_MODEL_H
 
+#include "gait_types.h" // Shared gait type enumeration
 #include "hexamotion_constants.h"
 #include "math_utils.h"
 #include "precision_config.h"
@@ -12,14 +13,6 @@
 // Forward declaration para evitar dependencias circulares
 class WorkspaceAnalyzer;
 struct ValidationConfig;
-
-// System configuration
-#define NUM_LEGS 6
-#define DOF_PER_LEG 3
-#define TOTAL_DOF (NUM_LEGS * DOF_PER_LEG)
-
-// Numerical differentiation step for Jacobians
-#define JACOBIAN_DELTA 0.001f
 
 /**
  * @brief Robot configuration parameters.
@@ -62,14 +55,21 @@ struct Parameters {
     // fsr_touchdown_threshold: minimum historical rolling average to consider contact (hysteresis enter)
     // fsr_liftoff_threshold: maximum historical rolling average to consider release (hysteresis exit)
     // fsr_min_pressure: minimum normalized/raw pressure/average to validate physical contact and reject false positives
-    double fsr_touchdown_threshold = 0.7; //< Average contact value (0-1) to switch to STANC
+    double fsr_touchdown_threshold = 0.7; //< Average contact value (0-1) to switch to STANCE
     double fsr_liftoff_threshold = 0.3;   //< Average contact value (0-1) to switch to SWING
     double fsr_min_pressure = 0.05;       //< Minimum normalized value (0-1) to trust reported contact (legacy raw=10 maps ≈0.05)
     double fsr_max_pressure = 0.9;        //< Maximum expected normalized pressure (0-1). 1.0 = saturated/full contact (used for clamping/validation)
 
     double max_velocity;
     double max_angular_velocity;
+    double overshoot_stride_fraction = DEFAULT_OVERSHOOT_STRIDE_FRACTION;   //< Max fraction of stride dedicated to overshoot damping
+    double min_effective_stride_ratio = DEFAULT_MIN_EFFECTIVE_STRIDE_RATIO; //< Minimum stride fraction preserved after overshoot deduction
     double stability_margin;
+
+    // Toggle global velocity limiting system (HexaMotion extension).
+    // When false, VelocityLimits generation/validation is bypassed and commanded velocities
+    // are passed through (still subject to any downstream physical clamping).
+    bool enable_velocity_limits = true; //< Enable bearing-based dynamic velocity limiting
 
     // Global gait tempo (Hz). Used by GaitConfiguration::generateStepCycle() to derive the
     // nominal (pre‑normalization) cycle duration: raw_iterations ≈ (1 / step_frequency) / time_delta.
@@ -133,15 +133,16 @@ struct Parameters {
     // resetting to the default tip pose. This yields smoother, continuous trajectories (OpenSHC-style continuity)
     // at the cost of potential long-term drift. When false, an anti-drift policy resets (or blends toward) the
     // calibrated default tip pose at the start of stance for deterministic repeatability.
-    // NOTE: Actual default here is 'true' (continuity). Comment previously stated the opposite; corrected for coherence.
     bool preserve_swing_end_pose = true; // true = continuity (default), false = anti-drift (uses hybrid reset logic below)
 
-    // --- Hybrid anti-drift (applies only when preserve_swing_end_pose == false) ---
-    // If the touchdown pose is close enough to default (distance <= drift_soft_threshold_mm) we blend partially
-    // toward default instead of hard snapping to remove micro-drift without visual discontinuity. If distance
-    // exceeds drift_hard_threshold_mm we force a hard reset to default. Distances in millimeters.
-    double drift_soft_threshold_mm = 2.0; //< Within this distance: apply soft blend instead of hard reset
-    double drift_hard_threshold_mm = 8.0; //< Beyond this distance: force hard reset (snap)
+    // --- Drift management thresholds ---
+    // Shared by both continuity and hybrid reset modes. In continuity (preserve_swing_end_pose=true) these values
+    // gate the lateral residual cleanup executed at stance entry so that rectilinear commands remain tightly
+    // synchronized while allowing rotation commands to keep their intentional offset. When continuity is disabled,
+    // the same thresholds also decide whether to blend toward or snap back to the calibrated default tip pose.
+    // Distances expressed in millimeters.
+    double drift_soft_threshold_mm = 2.0; //< Within this distance: apply soft blend (or mild lateral cleanup)
+    double drift_hard_threshold_mm = 8.0; //< Beyond this distance: force hard reset / correction snap
     double drift_soft_blend_alpha = 0.5;  //< Blend factor (0..1) for soft correction (0.5 = halfway to default)
 
 #ifdef TESTING_ENABLED
@@ -170,23 +171,74 @@ struct Parameters {
     double femur_mass = 0.0; //< Femur mass (0 => use lengths only)
     double tibia_mass = 0.0; //< Tibia mass (0 => use lengths only)
 
+    // --- Constraint tolerances ---
+    // Tolerancia para preservar la altura exacta del plano de marcha al aplicar
+    // el constriñimiento geométrico (evita deriva vertical artificial en touchdown)
+    double walk_plane_z_tolerance_mm = WALK_PLANE_Z_TOLERANCE_MM;
+
     // --- Startup (initial standing) normalization configuration ---
     struct StartupNormalizationConfig {
         bool enable_torque_balanced = true; //< Enable torque/energy balanced scaling in LIFT phase
         double alpha = 0.6;                 //< Exponent smoothing factor for weight factors (0.5-0.8 recommended)
-        double speed_deadband = 0.05;       //< Minimum non-zero normalized speed after scaling
-        double accel_deadband = 0.05;       //< Minimum non-zero normalized acceleration after scaling
-        double tibia_speed_cap = 0.85;      //< Optional ceiling for tibia speed after scaling
+        double speed_deadband = 0.2;        //< Minimum non-zero normalized speed after scaling
+        double accel_deadband = 0.1;        //< Minimum non-zero normalized acceleration after scaling
+        double tibia_speed_cap = 1.0;       //< Optional ceiling for tibia speed after scaling (1.0 disables extra cap)
     } startup_norm;
+
+    /**
+     * @brief Global motion and workspace scaling factors (moved from hardcoded implementation in WorkspaceAnalyzer::getScalingFactors()).
+     *
+     * These values previously lived as literal constants (e.g. 0.65, 0.9, 1.0) inside the analyzer. Exposing them here
+     * allows runtime / configuration level tuning (same style as StartupNormalizationConfig) without touching core code.
+     *
+     * Usage notes:
+     *  - collision_scale: when <= 0.0 the validation_config_.safety_margin_factor is used dynamically.
+     *  - safety_margin: generic multiplier applied by controllers (e.g. servo speed clamping) for unified conservative tuning.
+     *  - Keep values in a sane physical range (0.4 – 1.2) to avoid destabilizing stride / velocity estimations.
+     */
+    struct ScalingFactors {
+        double linear_scale = 0.65;      //< Legacy linear scaling (replaces scattered WORKSPACE / WALKSPACE constants)
+        double angular_scale = 1.0;      //< Angular scaling (kept at 1.0 unless deliberate reduction required)
+        double workspace_scale = 0.65;   //< Conservative workspace envelope scaling
+        double collision_scale = 0.0;    //< If <= 0 => derive from ValidationConfig::safety_margin_factor
+        double velocity_scale = 0.9;     //< 10% safety margin for derived velocity limits
+        double acceleration_scale = 1.0; //< Acceleration scaling (placeholder for future tuning)
+        double safety_margin = 0.9;      //< Unified safety margin for servo speed / other conservative clamps
+    } scaling;                           //< Instance accessible as params.scaling
+
+    /**
+     * @brief Workspace & morphology heuristic tuning factors.
+     * All former hardcoded literals in WorkspaceAnalyzer moved here for external configurability.
+     * Keep factors within physically meaningful ranges to avoid destabilizing gait generation.
+     */
+    struct WorkspaceTuning {
+        // Stability & collision
+        double stability_threshold_mm = 10.0; //< Min stability margin to be considered stable
+        double min_leg_separation_mm = 50.0;  //< Minimum planar distance between adjacent leg tips
+
+        // Morphology reach heuristics
+        double morphology_cap_factor = 1.15;           //< Headroom over standing_horizontal_reach for max_reach cap
+        double femur_up_range_factor = 0.85;           //< Upward (positive Z) reachable fraction of femur length
+        double down_range_factor = 0.85;               //< Downward (negative Z) fraction of (femur+tibia)
+        double leg_workspace_height_span_factor = 0.7; //< Percentage of total reach for +/- height span in cached workspace
+
+        // Preferred reach buffer
+        double preferred_min_reach_buffer_factor = 1.1; //< Multiplier over absolute min reach for preferred_min_reach
+
+        // Collision avoidance iterative scaling (adjustForCollisionAvoidance)
+        double collision_adjust_start_scale = 0.9; //< Initial radial scale attempt
+        double collision_adjust_min_scale = 0.5;   //< Minimum radial scale attempt
+        double collision_adjust_step = 0.1;        //< Decrement step per attempt
+        double safe_scale_ratio = 0.7;             //< Fallback ratio of leg_reach when iterative scaling fails
+    } workspace_tuning;                            //< params.workspace_tuning
 };
 
-enum GaitType {
-    NO_GAIT,
-    TRIPOD_GAIT,
-    WAVE_GAIT,
-    RIPPLE_GAIT,
-    METACHRONAL_GAIT,
-    ADAPTIVE_GAIT
+// Centralized servo angle solution for standing height (previously in body_pose_config_factory)
+struct CalculatedServoAngles {
+    double coxa;  // Coxa servo angle (radians)
+    double femur; // Femur servo angle (radians)
+    double tibia; // Tibia servo angle (radians)
+    bool valid;   // Solution validity flag
 };
 
 enum StepPhase {
@@ -260,7 +312,7 @@ struct Pose {
 
     explicit Pose(const Point3D &pos, const Eigen::Vector3d &euler_angles_deg)
         : position(pos) {
-        Eigen::Vector3d euler_rad = euler_angles_deg * M_PI / 180.0f;
+        Eigen::Vector3d euler_rad = euler_angles_deg * math_utils::degreesToRadians(1.0);
         rotation = Eigen::AngleAxisd(euler_rad.z(), Eigen::Vector3d::UnitZ()) *
                    Eigen::AngleAxisd(euler_rad.y(), Eigen::Vector3d::UnitY()) *
                    Eigen::AngleAxisd(euler_rad.x(), Eigen::Vector3d::UnitX());
@@ -513,7 +565,7 @@ class IServoInterface {
         return setJointAngleAndSpeed(leg_index, joint_index, angle, speed);
     }
 
-    /** Retrieve the current joint angle. */
+    /** Retrieve the current joint angle (radians). */
     virtual double getJointAngle(int leg_index, int joint_index) = 0;
 
     /** Check if a joint is currently moving. */
@@ -702,6 +754,37 @@ class RobotModel {
      * @return Maximum reach distance
      */
     double getLegReach() const;
+
+    /**
+     * @brief Compute horizontal standing reach (coxa pivot to foot projection) for configured standing_height.
+     * Uses morphology described in AGENTS.md: tibia assumed vertical in nominal standing pose (femur+tibia angle ≈ 0).
+     * Derivation:
+     *   target_z = -standing_height = -femur_length * sin(femur_angle) - tibia_length
+     *   => sin(femur_angle) = (standing_height - tibia_length) / femur_length
+     *   horizontal_projection = femur_length * cos(femur_angle)
+     *   standing_horizontal_reach = coxa_length + horizontal_projection
+     * Fallback: if standing_height invalid (out of feasible range) returns conservative coxa_length.
+     */
+    double getStandingHorizontalReach() const;
+    // Analytic servo angle computation for target height (tibia vertical assumption)
+    static CalculatedServoAngles calculateServoAnglesForHeight(double target_height_mm, const Parameters &params);
+
+    /** Static helper for external code needing the same computation without an instance. */
+    static double computeStandingHorizontalReach(const Parameters &p);
+
+    /**
+     * @brief Convert GaitType enum to string name
+     * @param gait_type GaitType enum value
+     * @return String representation of the gait type
+     */
+    static std::string gaitTypeToString(GaitType gait_type);
+
+    /**
+     * @brief Convert string name to GaitType enum
+     * @param gait_name String name of the gait
+     * @return GaitType enum value (NO_GAIT if not found)
+     */
+    static GaitType stringToGaitType(const std::string &gait_name);
 
     /** Get the DH position of the leg base (without joint transformations) */
     Point3D getLegBasePosition(int leg_index) const;
