@@ -1,5 +1,6 @@
 #include "body_pose_config.h"
 #include "body_pose_config_factory.h"
+#include "hexamotion_constants.h"
 #include "math_utils.h"
 #include "robot_model.h"
 #include <algorithm>
@@ -212,9 +213,6 @@ std::vector<LegConfiguration> calculateAllLegsConfiguration(const RobotModel &mo
                                                             AngleSolution &base_solution) {
     std::vector<LegConfiguration> leg_configs;
 
-    // Offsets angulares para cada pata (BASE_THETA_OFFSETS en grados)
-    const double BASE_THETA_OFFSETS_DEG[6] = {-30.0, -90.0, -150.0, 150.0, 90.0, 30.0};
-
     std::cout << "\nCalculando configuraciones para las 6 patas:" << std::endl;
     std::cout << "Pata | Coxa° | Femur° | Tibia° | Pos_X   | Pos_Y   | Pos_Z   | H_Error | T_Angle" << std::endl;
     std::cout << "-----|-------|--------|--------|---------|---------|---------|---------|--------" << std::endl;
@@ -222,7 +220,7 @@ std::vector<LegConfiguration> calculateAllLegsConfiguration(const RobotModel &mo
     for (int leg = 0; leg < 6; leg++) {
         LegConfiguration config;
         config.leg_index = leg;
-        config.base_angle_deg = BASE_THETA_OFFSETS_DEG[leg];
+        config.base_angle_deg = math_utils::radiansToDegrees(BASE_THETA_OFFSETS[leg]);
 
         // Usar la solución base para fémur y tibia, coxa permanece en 0°
         config.joint_angles = JointAngles(

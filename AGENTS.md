@@ -62,14 +62,14 @@ Current internal DH/base orientation offsets (degrees) come directly from `BASE_
 
 | Index | Name | Meaning        | Angle (°) |
 | ----- | ---- | -------------- | --------- |
-| 0     | AR   | Anterior Right | -30       |
-| 1     | BR   | Back Right     | -90       |
-| 2     | CR   | Center Right   | -150      |
-| 3     | CL   | Center Left    | +150      |
-| 4     | BL   | Back Left      | +90       |
-| 5     | AL   | Anterior Left  | +30       |
+| 0     | AR   | Anterior Right | +30       |
+| 1     | BR   | Back Right     | +90       |
+| 2     | CR   | Center Right   | +150      |
+| 3     | CL   | Center Left    | -150      |
+| 4     | BL   | Back Left      | -90       |
+| 5     | AL   | Anterior Left  | -30       |
 
-Forward still points along +X. External tools assuming leg0 at 0° should account for the global -30° rotation.
+Forward still points along +X. External tools assuming leg0 at 0° should account for the global +30° rotation.
 
 Opposite leg pairs now cancel their base offsets: (AR + AL) = 0°, (BR + BL) = 0° and (CR + CL) = 0°. This matches
 OpenSHC's DH conventions and keeps tripod symmetry expectations intact after the correction.
