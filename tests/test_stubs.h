@@ -311,10 +311,7 @@ inline Parameters createDefaultParameters() {
     params.smooth_trajectory.use_current_servo_positions = false;
     params.smooth_trajectory.enable_pose_interpolation = false;
 
-    // Startup normalization defaults tuned for brisk but safe S-curve transitions
-    params.startup_norm.speed_deadband = 0.2;
-    params.startup_norm.accel_deadband = 0.1;
-    params.startup_norm.tibia_speed_cap = 1.0;
+    // Startup normalization defaults tuned for brisk but safe standing transitions
     return params;
 }
 

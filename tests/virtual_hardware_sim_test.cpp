@@ -572,58 +572,52 @@ int main(int argc, char **argv) {
         return 1;
     }
 
-    // 2. Establish standing pose using jerk-limited S-curve transition
-    std::cout << "\nStarting initial standing pose S-curve transition..." << std::endl;
-    bool s_curve_started = sys.establishInitialStandingPose();
-    if (!s_curve_started && !sys.isInitialStandingPoseActive()) {
+    // 2. Establish standing pose using initial standing transition
+    std::cout << "\nStarting initial standing pose transition..." << std::endl;
+    bool standing_started = sys.establishInitialStandingPose();
+    if (!standing_started && !sys.isInitialStandingPoseActive()) {
         std::cerr << "ERROR: Failed to start initial standing pose transition." << std::endl;
         return 1;
     }
 
     BodyPoseController *pose_ctrl = sys.getBodyPoseController();
-    int scurve_iter = 0;
-    int max_scurve_iters = 600; // will be expanded dynamically based on progress feedback
+    int standing_iter = 0;
+    int max_standing_iters = 600; // will be expanded dynamically based on progress feedback
 
     while (sys.isInitialStandingPoseActive()) {
-        if (scurve_iter >= max_scurve_iters) {
-            std::cerr << "ERROR: Initial standing pose transition exceeded estimated iteration budget (" << max_scurve_iters << ")." << std::endl;
+        if (standing_iter >= max_standing_iters) {
+            std::cerr << "ERROR: Initial standing pose transition exceeded estimated iteration budget (" << max_standing_iters << ")." << std::endl;
             return 1;
         }
-        servos.updateStep(-scurve_iter);
+        servos.updateStep(-standing_iter);
 
         if (!sys.stepInitialStandingPose()) {
-            std::cerr << "ERROR: stepInitialStandingPose() failed at iteration " << scurve_iter << std::endl;
+            std::cerr << "ERROR: stepInitialStandingPose() failed at iteration " << standing_iter << std::endl;
             return 1;
         }
 
         if (pose_ctrl) {
             double normalized = pose_ctrl->getInitialStandingPoseProgress(); // 0.0-1.0
-            if (scurve_iter % 20 == 0) {
+            if (standing_iter % 20 == 0) {
                 double progress_pct = normalized * 100.0;
-                std::cout << "Initial standing pose progress: " << std::fixed << std::setprecision(1) << progress_pct << "% ";
-                if (pose_ctrl->isInitialStandingAlignmentPhase()) {
-                    std::cout << "[ALIGN]";
-                } else {
-                    std::cout << "[LIFT]";
-                }
-                std::cout << std::endl;
+                std::cout << "Initial standing pose progress: " << std::fixed << std::setprecision(1) << progress_pct << "%" << std::endl;
                 std::cout << std::defaultfloat;
             }
 
             if (normalized > 0.0) {
-                int estimated_iters = static_cast<int>(std::ceil((scurve_iter + 1) / normalized));
+                int estimated_iters = static_cast<int>(std::ceil((standing_iter + 1) / normalized));
                 // add generous buffer to account for jerk profile tapering
                 estimated_iters += 100;
-                if (estimated_iters > max_scurve_iters) {
-                    max_scurve_iters = estimated_iters;
+                if (estimated_iters > max_standing_iters) {
+                    max_standing_iters = estimated_iters;
                 }
             }
         }
 
-        scurve_iter++;
+        standing_iter++;
     }
 
-    std::cout << "Initial standing pose transition completed in " << scurve_iter << " iterations." << std::endl;
+    std::cout << "Initial standing pose transition completed in " << standing_iter << " iterations." << std::endl;
 
     // Validate that resulting standing pose matches configured default stance
     const auto &default_stance_positions = pose_config.leg_stance_positions;
@@ -662,7 +656,7 @@ int main(int argc, char **argv) {
     }
 
     if (!angles_match || !positions_match) {
-        std::cerr << "ERROR: Standing pose after S-curve transition does not match default configuration." << std::endl;
+        std::cerr << "ERROR: Standing pose after transition does not match default configuration." << std::endl;
         return 1;
     }
 

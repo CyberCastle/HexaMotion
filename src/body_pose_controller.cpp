@@ -559,101 +559,6 @@ void BodyPoseController::resetTrajectory() {
     trajectory_step_count = 0;
 }
 
-bool BodyPoseController::prepareNextAlignmentGroup(Leg legs[NUM_LEGS], int start_group_index) {
-    for (int g = start_group_index; g < 2; ++g) {
-        double group_time = 0.0;
-        for (int idx = 0; idx < 3; ++idx) {
-            int leg_index = tripod_leg_groups[g][idx];
-            auto *profile = initial_standing_profiles_[leg_index][0];
-            if (profile) {
-                group_time = std::max(group_time, profile->totalTime());
-            }
-        }
-
-        if (group_time > 0.0) {
-            initial_standing_align_group_index_ = g;
-            initial_standing_phase_ = (g == 0) ? InitialStandingPhase::ALIGN_GROUP_A : InitialStandingPhase::ALIGN_GROUP_B;
-            initial_standing_total_time_ = group_time;
-            initial_standing_time_ = 0.0;
-            return true;
-        }
-
-        // No remaining motion for this group - ensure joints are exactly at targets and release any profiles.
-        for (int idx = 0; idx < 3; ++idx) {
-            int leg_index = tripod_leg_groups[g][idx];
-            if (initial_standing_profiles_[leg_index][0]) {
-                delete initial_standing_profiles_[leg_index][0];
-                initial_standing_profiles_[leg_index][0] = nullptr;
-            }
-            StandingPoseJoints sj = body_pose_config.standing_pose_joints[leg_index];
-            JointAngles ja = legs[leg_index].getJointAngles();
-            ja.coxa = sj.coxa;
-            legs[leg_index].setJointAngles(ja);
-        }
-    }
-    return false;
-}
-
-bool BodyPoseController::prepareInitialStandingLiftPhase(Leg legs[NUM_LEGS]) {
-    const Parameters &params = model.getParams();
-    double vmax_deg = (params.max_angular_velocity > 0.0) ? params.max_angular_velocity : DEFAULT_MAX_ANGULAR_VELOCITY;
-    double vmax = math_utils::degreesToRadians(vmax_deg);
-    double amax = vmax * 4.0;
-    double jmax = amax * 10.0;
-
-    initial_standing_phase_ = InitialStandingPhase::LIFT;
-    initial_standing_time_ = 0.0;
-    initial_standing_total_time_ = 0.0;
-
-    for (int l = 0; l < NUM_LEGS; ++l) {
-        JointAngles ja = legs[l].getJointAngles();
-        StandingPoseJoints sj = body_pose_config.standing_pose_joints[l];
-        if (initial_standing_profiles_[l][1]) {
-            delete initial_standing_profiles_[l][1];
-            initial_standing_profiles_[l][1] = nullptr;
-        }
-        if (initial_standing_profiles_[l][2]) {
-            delete initial_standing_profiles_[l][2];
-            initial_standing_profiles_[l][2] = nullptr;
-        }
-
-        double cur_femur = ja.femur;
-        double tgt_femur = sj.femur;
-        if (std::fabs(cur_femur - tgt_femur) > 1e-6) {
-            auto *pf = new SCurveProfile();
-            pf->init(cur_femur, tgt_femur, vmax, amax, jmax);
-            initial_standing_profiles_[l][1] = pf;
-            initial_standing_total_time_ = std::max(initial_standing_total_time_, pf->totalTime());
-        }
-
-        double cur_tibia = ja.tibia;
-        double tgt_tibia = sj.tibia;
-        if (std::fabs(cur_tibia - tgt_tibia) > 1e-6) {
-            auto *pt = new SCurveProfile();
-            pt->init(cur_tibia, tgt_tibia, vmax, amax, jmax);
-            initial_standing_profiles_[l][2] = pt;
-            initial_standing_total_time_ = std::max(initial_standing_total_time_, pt->totalTime());
-        }
-    }
-
-    if (initial_standing_total_time_ <= 0.0) {
-        for (int l = 0; l < NUM_LEGS; ++l) {
-            JointAngles ja = legs[l].getJointAngles();
-            Point3D pos = model.forwardKinematicsGlobalCoordinates(l, ja);
-            legs[l].setCurrentTipPositionGlobal(pos);
-            legs[l].setStepPhase(STANCE_PHASE);
-            if (leg_posers_[l]) {
-                leg_posers_[l]->get()->setTargetPosition(pos);
-                leg_posers_[l]->get()->resetStepToPosition();
-            }
-        }
-        initial_standing_active_ = false;
-        return false;
-    }
-
-    return true;
-}
-
 bool BodyPoseController::beginInitialStandingPoseTransition(Leg legs[NUM_LEGS]) {
     if (initial_standing_active_) {
         return true; // already active
@@ -661,61 +566,11 @@ bool BodyPoseController::beginInitialStandingPoseTransition(Leg legs[NUM_LEGS]) 
     if (!getLegPoser(0)) {
         initializeLegPosers(legs);
     }
-    const Parameters &params = model.getParams();
 
-    // Allocate / reset profiles
-    for (int l = 0; l < NUM_LEGS; ++l) {
-        for (int j = 0; j < DOF_PER_LEG; ++j) {
-            delete initial_standing_profiles_[l][j];
-            initial_standing_profiles_[l][j] = nullptr;
-        }
-    }
-
-    double vmax_deg = (params.max_angular_velocity > 0.0) ? params.max_angular_velocity : DEFAULT_MAX_ANGULAR_VELOCITY;
-    double vmax = math_utils::degreesToRadians(vmax_deg);
-    double amax = vmax * 4.0;
-    double jmax = amax * 10.0;
-
-    // Phase 1: only align coxa joints to target orientation (leave femur/tibia unchanged for now)
-    initial_standing_total_time_ = 0.0;
-    initial_standing_phase_ = InitialStandingPhase::ALIGN_GROUP_A;
-    for (int l = 0; l < NUM_LEGS; ++l) {
-        JointAngles ja = legs[l].getJointAngles();
-        StandingPoseJoints sj = body_pose_config.standing_pose_joints[l];
-        double current = ja.coxa;
-        double target = sj.coxa;
-        if (std::fabs(current - target) < 1e-6) {
-            initial_standing_profiles_[l][0] = nullptr; // already aligned
-            continue;
-        }
-        auto *p = new SCurveProfile();
-        p->init(current, target, vmax, amax, jmax);
-        initial_standing_profiles_[l][0] = p;
-    }
-
-    initial_standing_total_time_ = 0.0;
-    if (!prepareNextAlignmentGroup(legs, 0)) {
-        if (!prepareInitialStandingLiftPhase(legs)) {
-            initial_standing_active_ = false;
-            initial_standing_time_ = 0.0;
-            return true;
-        }
-    }
-
-    initial_standing_time_ = 0.0;
+    // Use OpenSHC-style Bezier tip trajectories for standing up.
+    initial_standing_use_bezier_ = true;
+    resetSequenceStates();
     initial_standing_active_ = true;
-    return true;
-}
-
-bool BodyPoseController::isInitialStandingAligned(const Leg legs[NUM_LEGS]) const {
-    if (!initial_standing_active_)
-        return false;
-    for (int l = 0; l < NUM_LEGS; ++l) {
-        StandingPoseJoints sj = body_pose_config.standing_pose_joints[l];
-        double cur = legs[l].getJointAngles().coxa;
-        if (std::fabs(cur - sj.coxa) > initial_standing_align_tolerance_)
-            return false;
-    }
     return true;
 }
 
@@ -726,78 +581,30 @@ bool BodyPoseController::stepInitialStandingPoseTransition(Leg legs[NUM_LEGS], d
     if (!initial_standing_active_) {
         return false; // nothing to advance
     }
-    if (dt <= 0.0) {
-        dt = model.getTimeDelta();
-        if (dt <= 0.0)
-            dt = 0.02;
-    }
-    initial_standing_time_ = std::min(initial_standing_time_ + dt, initial_standing_total_time_);
-    double t = initial_standing_time_;
 
-    // Phase handling
-    if (initial_standing_phase_ == InitialStandingPhase::ALIGN_GROUP_A || initial_standing_phase_ == InitialStandingPhase::ALIGN_GROUP_B) {
-        int group = initial_standing_align_group_index_;
-        for (int idx = 0; idx < 3; ++idx) {
-            int l = tripod_leg_groups[group][idx];
-            JointAngles ja = legs[l].getJointAngles();
-            auto *p = initial_standing_profiles_[l][0];
-            if (p) {
-                auto s = p->sample(t);
-                ja.coxa = s.position;
-                if (out_pos)
-                    out_pos[l][0] = s.position;
-                if (out_vel)
-                    out_vel[l][0] = s.velocity;
-                if (out_acc)
-                    out_acc[l][0] = s.acceleration;
-            }
-            legs[l].setJointAngles(ja);
-        }
-        bool align_done = (initial_standing_time_ >= initial_standing_total_time_ - 1e-9);
-        if (align_done) {
-            for (int idx = 0; idx < 3; ++idx) {
-                int l = tripod_leg_groups[group][idx];
-                if (initial_standing_profiles_[l][0]) {
-                    delete initial_standing_profiles_[l][0];
-                    initial_standing_profiles_[l][0] = nullptr;
-                }
-                StandingPoseJoints sj = body_pose_config.standing_pose_joints[l];
-                JointAngles ja = legs[l].getJointAngles();
-                ja.coxa = sj.coxa;
-                legs[l].setJointAngles(ja);
-            }
+    if (initial_standing_use_bezier_) {
+        bool complete = executeStartupSequence(legs);
 
-            if (!prepareNextAlignmentGroup(legs, group + 1)) {
-                if (!prepareInitialStandingLiftPhase(legs)) {
-                    return true;
-                }
-            }
-            return true;
-        }
-        return false; // still aligning current tripod
-    } else {          // LIFT phase
         for (int l = 0; l < NUM_LEGS; ++l) {
             JointAngles ja = legs[l].getJointAngles();
-            for (int j = 1; j < DOF_PER_LEG; ++j) { // femur, tibia
-                auto *p = initial_standing_profiles_[l][j];
-                if (!p)
-                    continue;
-                auto s = p->sample(t);
-                if (j == 1)
-                    ja.femur = s.position;
-                else
-                    ja.tibia = s.position;
-                if (out_pos)
-                    out_pos[l][j] = s.position;
-                if (out_vel)
-                    out_vel[l][j] = s.velocity;
-                if (out_acc)
-                    out_acc[l][j] = s.acceleration;
+            if (out_pos) {
+                out_pos[l][0] = ja.coxa;
+                out_pos[l][1] = ja.femur;
+                out_pos[l][2] = ja.tibia;
             }
-            legs[l].setJointAngles(ja);
+            if (out_vel) {
+                out_vel[l][0] = 0.0;
+                out_vel[l][1] = 0.0;
+                out_vel[l][2] = 0.0;
+            }
+            if (out_acc) {
+                out_acc[l][0] = 0.0;
+                out_acc[l][1] = 0.0;
+                out_acc[l][2] = 0.0;
+            }
         }
-        bool lift_done = (initial_standing_time_ >= initial_standing_total_time_ - 1e-9);
-        if (lift_done) {
+
+        if (complete) {
             for (int l = 0; l < NUM_LEGS; ++l) {
                 JointAngles ja = legs[l].getJointAngles();
                 Point3D pos = model.forwardKinematicsGlobalCoordinates(l, ja);
@@ -807,16 +614,15 @@ bool BodyPoseController::stepInitialStandingPoseTransition(Leg legs[NUM_LEGS], d
                     leg_posers_[l]->get()->setTargetPosition(pos);
                     leg_posers_[l]->get()->resetStepToPosition();
                 }
-                for (int j = 1; j < DOF_PER_LEG; ++j) {
-                    delete initial_standing_profiles_[l][j];
-                    initial_standing_profiles_[l][j] = nullptr;
-                }
             }
             initial_standing_active_ = false;
-            return true;
+            initial_standing_use_bezier_ = false;
         }
-        return false; // still lifting
+
+        return complete;
     }
+
+    return false;
 }
 
 // Tripod leg coordination for stance transition (OpenSHC equivalent)
@@ -957,9 +763,9 @@ bool BodyPoseController::executeStartupSequence(Leg legs[NUM_LEGS]) {
 
     // Timings now use configurable global step_frequency (OpenSHC semantics)
     double step_frequency = model.getParams().step_frequency;
-    double horiz_time = 1.0 / step_frequency;           // Normalized horizontal transition time
-    double vert_time = 3.0 / step_frequency;            // Normalized vertical transition time
-    double lift_height = body_pose_config.swing_height; // Use swing height for horizontal phase
+    double horiz_time = 1.0 / step_frequency; // Normalized horizontal transition time
+    double vert_time = 3.0 / step_frequency;  // Normalized vertical transition time
+    double lift_height = initial_standing_use_bezier_ ? 0.0 : body_pose_config.swing_height;
 
     bool sequence_complete = false;
 

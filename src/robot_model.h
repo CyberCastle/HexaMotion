@@ -164,26 +164,10 @@ struct Parameters {
     double phase_end_snap_tolerance_mm = 1.0; //< Distance tolerance (mm) for hard snap
     double phase_end_snap_alpha = 1.0;        //< Blend factor (1.0 hard snap, <1.0 partial correction)
 
-    // --- Segment mass properties (optional) ---
-    // When > 0 they are used for relative torque computation in startup normalization.
-    // Units: kilograms (or any consistent unit; only ratios are used).
-    double coxa_mass = 0.0;  //< Coxa mass (0 => use lengths only)
-    double femur_mass = 0.0; //< Femur mass (0 => use lengths only)
-    double tibia_mass = 0.0; //< Tibia mass (0 => use lengths only)
-
     // --- Constraint tolerances ---
     // Tolerancia para preservar la altura exacta del plano de marcha al aplicar
     // el constriñimiento geométrico (evita deriva vertical artificial en touchdown)
     double walk_plane_z_tolerance_mm = WALK_PLANE_Z_TOLERANCE_MM;
-
-    // --- Startup (initial standing) normalization configuration ---
-    struct StartupNormalizationConfig {
-        bool enable_torque_balanced = true; //< Enable torque/energy balanced scaling in LIFT phase
-        double alpha = 0.6;                 //< Exponent smoothing factor for weight factors (0.5-0.8 recommended)
-        double speed_deadband = 0.2;        //< Minimum non-zero normalized speed after scaling
-        double accel_deadband = 0.1;        //< Minimum non-zero normalized acceleration after scaling
-        double tibia_speed_cap = 1.0;       //< Optional ceiling for tibia speed after scaling (1.0 disables extra cap)
-    } startup_norm;
 
     /**
      * @brief Global motion and workspace scaling factors (moved from hardcoded implementation in WorkspaceAnalyzer::getScalingFactors()).

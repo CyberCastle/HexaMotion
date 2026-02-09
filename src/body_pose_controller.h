@@ -6,7 +6,6 @@
 #include "leg.h"
 #include "leg_poser.h"
 #include "robot_model.h"
-#include "s_curve_profile.h" // SCurveProfile definition for initial standing transition
 #include <ArduinoEigen.h>
 #include <memory>
 #include <vector>
@@ -281,9 +280,7 @@ class BodyPoseController {
     bool isTrajectoryInProgress() const { return trajectory_in_progress; }
 
     /**
-     * @brief Begin jerk-limited initial standing pose transition (non-blocking).
-     * @details Creates 7-segment S-curve motion profiles (in radians) from current leg joint angles to configured
-     *          standing pose angles and arms the internal state machine. Does not publish servo commands.
+     * @brief Begin initial standing pose transition using OpenSHC-style Bezier tip trajectories (non-blocking).
      * @return true if a transition was started or immediately finished (already at target). Use isInitialStandingPoseActive() to know if ongoing.
      */
     bool beginInitialStandingPoseTransition(Leg legs[NUM_LEGS]);
@@ -304,18 +301,11 @@ class BodyPoseController {
 
     /** Active flag accessor for the initial standing pose transition */
     bool isInitialStandingPoseActive() const { return initial_standing_active_; }
-    /** True if in alignment (coxa) phase */
-    bool isInitialStandingAlignmentPhase() const {
-        return initial_standing_active_ && (initial_standing_phase_ == InitialStandingPhase::ALIGN_GROUP_A ||
-                                            initial_standing_phase_ == InitialStandingPhase::ALIGN_GROUP_B);
-    }
-    /** Set tolerance (radians) used to validate coxa alignment */
-    void setInitialStandingAlignmentTolerance(double radians) { initial_standing_align_tolerance_ = radians; }
-    /** Returns true if all coxa joints are within alignment tolerance of target (valid during ALIGN phase) */
-    bool isInitialStandingAligned(const Leg legs[NUM_LEGS]) const;
     /** Progress [0,1] of the initial standing pose transition (0 if inactive) */
     double getInitialStandingPoseProgress() const {
-        return initial_standing_total_time_ > 0.0 ? math_utils::clamp(initial_standing_time_ / initial_standing_total_time_, 0.0, 1.0) : 0.0;
+        if (!initial_standing_active_)
+            return 0.0;
+        return math_utils::clamp(static_cast<double>(getStartupProgressPercent()) / 100.0, 0.0, 1.0);
     }
 
     // Walk plane pose system (OpenSHC equivalent)
@@ -419,28 +409,13 @@ class BodyPoseController {
     Point3D walk_plane_position_nodes[5];            //< Position control nodes for quartic Bézier
     Eigen::Quaterniond walk_plane_rotation_nodes[5]; //< Rotation control nodes for quartic Bézier
 
-    // Initial standing pose S-curve transition state
+    // Initial standing pose transition state
     bool initial_standing_active_ = false;
-    double initial_standing_time_ = 0.0;
-    double initial_standing_total_time_ = 0.0;
-    enum class InitialStandingPhase {
-        ALIGN_GROUP_A,
-        ALIGN_GROUP_B,
-        LIFT
-    };
-    InitialStandingPhase initial_standing_phase_ = InitialStandingPhase::ALIGN_GROUP_A;
-    int initial_standing_align_group_index_ = 0;
-    // For phase 2 lazy profile creation
-    double initial_standing_align_tolerance_ = math_utils::degreesToRadians(1.0); // default 1 degree
-    // S-curve profiles per joint for initial standing pose
-    SCurveProfile *initial_standing_profiles_[NUM_LEGS][DOF_PER_LEG] = {nullptr};
+    bool initial_standing_use_bezier_ = false;
 
     // Walk plane pose helper methods
     Point3D calculateWalkPlaneNormal(Leg legs[NUM_LEGS]) const;
     double calculateWalkPlaneHeight(Leg legs[NUM_LEGS]) const;
-
-    bool prepareInitialStandingLiftPhase(Leg legs[NUM_LEGS]);
-    bool prepareNextAlignmentGroup(Leg legs[NUM_LEGS], int start_group_index);
 
     // Tripod gait leg groupings (OpenSHC compatible)
     // Group A: AR (0), CR (2), BL (4) - Anterior Right, Center Right, Back Left

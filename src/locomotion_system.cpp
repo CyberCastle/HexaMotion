@@ -1183,7 +1183,7 @@ void LocomotionSystem::publishJointAnglesToServos() {
 }
 
 // =====================================================================================
-// INITIAL STANDING POSE ESTABLISHMENT (jerk-limited smooth transition)
+// INITIAL STANDING POSE ESTABLISHMENT (OpenSHC-style Bezier transition)
 // =====================================================================================
 bool LocomotionSystem::establishInitialStandingPose() {
     if (!servo_interface || !body_pose_ctrl) {
@@ -1249,45 +1249,6 @@ bool LocomotionSystem::stepInitialStandingPose() {
     double vmax_deg = (params.max_angular_velocity > 0.0) ? params.max_angular_velocity : DEFAULT_MAX_ANGULAR_VELOCITY;
     double amax_deg = vmax_deg * 4.0;
 
-    // Precompute torque-balanced weight factors (relative) once (lazy static cache)
-    static bool weight_factors_initialized = false;
-    static double weight_factor[3] = {1.0, 1.0, 1.0};
-    if (!weight_factors_initialized) {
-        // Quasi-static torque proxy:
-        // tau_joint ≈ (m_segment * g * L_segment/2) + (m_distal_total * g * L_segment)
-        // If masses are not defined (>0) assume mass proportional to length.
-        double Lc = params.coxa_length > 1e-6 ? params.coxa_length : 1.0;
-        double Lf = params.femur_length > 1e-6 ? params.femur_length : 1.0;
-        double Lt = params.tibia_length > 1e-6 ? params.tibia_length : 1.0;
-        double mc = params.coxa_mass > 0.0 ? params.coxa_mass : Lc; // fallback proporcional
-        double mf = params.femur_mass > 0.0 ? params.femur_mass : Lf;
-        double mt = params.tibia_mass > 0.0 ? params.tibia_mass : Lt;
-        // Distal accumulated masses
-        double distal_femur = mt;     // femur ve tibia distal
-        double distal_coxa = mf + mt; // coxa ve femur + tibia
-        double tau_coxa = mc * Lc * 0.5 + distal_coxa * Lc;
-        double tau_femur = mf * Lf * 0.5 + distal_femur * Lf;
-        double tau_tibia = mt * Lt * 0.5; // tibia solo propia
-        // Normalize relative to coxa
-        double alpha = params.startup_norm.alpha;
-        weight_factor[0] = 1.0; // coxa baseline
-        weight_factor[1] = pow(tau_femur / tau_coxa, alpha);
-        weight_factor[2] = pow(tau_tibia / tau_coxa, alpha);
-        // Safety clamps
-        for (int k = 0; k < 3; ++k) {
-            if (weight_factor[k] < 1e-3)
-                weight_factor[k] = 1e-3;
-            if (weight_factor[k] > 10.0)
-                weight_factor[k] = 10.0;
-        }
-        weight_factors_initialized = true;
-    }
-
-    bool in_lift_phase = body_pose_ctrl->isInitialStandingPoseActive() && !body_pose_ctrl->isInitialStandingAlignmentPhase();
-    bool apply_torque_balanced = in_lift_phase && params.startup_norm.enable_torque_balanced;
-    double v_dead = params.startup_norm.speed_deadband;
-    double a_dead = params.startup_norm.accel_deadband;
-
     for (int i = 0; i < NUM_LEGS; ++i) {
         for (int j = 0; j < 3; ++j) {
             double pos_rad = positions[i][j];
@@ -1305,26 +1266,10 @@ bool LocomotionSystem::stepInitialStandingPose() {
             double speed_mult = vmax_deg > 1e-6 ? fabs(vel_deg) / vmax_deg : 0.0;
             double acc_deg = math_utils::radiansToDegrees(acc_rad);
             double accel_mult = amax_deg > 1e-6 ? fabs(acc_deg) / amax_deg : 0.0;
-            if (apply_torque_balanced) {
-                double wf = weight_factor[j];
-                if (wf > 1e-6) {
-                    speed_mult /= wf;
-                    accel_mult /= wf;
-                }
-            }
-            // Deadbands
-            if (speed_mult < v_dead)
-                speed_mult = v_dead;
-            if (accel_mult < a_dead)
-                accel_mult = a_dead;
             if (speed_mult > 1.0)
                 speed_mult = 1.0;
             if (accel_mult > 1.0)
                 accel_mult = 1.0;
-            // Optional tibia speed cap
-            if (apply_torque_balanced && j == 2 && params.startup_norm.tibia_speed_cap > 0.0 && speed_mult > params.startup_norm.tibia_speed_cap) {
-                speed_mult = params.startup_norm.tibia_speed_cap;
-            }
             speeds[i][j] = speed_mult;
             accels[i][j] = accel_mult;
         }
