@@ -4,30 +4,41 @@ This file defines the guidelines for contributing to HexaMotion.
 
 ## Objective
 
-This library provides locomotion control for a hexapod robot based on the Arduino Giga R1. The robot body forms a hexagon with legs spaced 60° apart, each leg having three joints for 3DOF. It includes inverse kinematics using DH parameters and Jacobians, orientation and pose control, gait planning and error handling. The interfaces `IIMUInterface`, `IFSRInterface` and `IServoInterface` must be implemented to connect the IMU, FSR sensors and smart servos.
+HexaMotion is a 1:1 port of OpenSHC without ROS support. It brings OpenSHC's locomotion logic to MCU targets such as the STM32H7 (Arduino Giga R1) for a hexapod robot with a hexagonal body, six legs spaced 60 degrees apart, and three joints per leg. It includes inverse kinematics using DH parameters and Jacobians, orientation and pose control, gait planning and error handling. The interfaces `IIMUInterface`, `IFSRInterface` and `IServoInterface` must be implemented to connect the IMU, FSR sensors and smart servos.
+
+Key differences from OpenSHC:
+
+- Supports only 3DOF per leg.
+- Supports only six legs.
+- `LocomotionSystem` orchestrates the control classes, analogous to how a ROS script orchestrates publishers and subscriptions in OpenSHC.
+- No YAML configuration files; everything is configured through the `Parameters` structure.
+- OpenSHC logic is split into specific classes so the code is more readable and maintainable; the current HexaMotion organization follows this.
+- Includes tests to verify hexapod kinematics and dynamics logic.
+- Certain configurations are handled via factory patterns.
+- No dynamic configuration support.
 
 ## Code Style
 
--   Use C++11.
--   Four-space indentation with no tabs.
--   Place the opening brace on the same line as the declaration.
--   Document public functions using Doxygen-style comments (`/** ... */`) and in English.
+- Use C++11.
+- Four-space indentation with no tabs.
+- Place the opening brace on the same line as the declaration.
+- Document public functions using Doxygen-style comments (`/** ... */`) and in English.
 
 ## Development
 
--   Don't create arduino examples.
--   Clone the repository with all submodules.
--   Implementation files live exclusively in the `src` and `include` directories.
--   The `tests` folder only contains code for validating fixes.
--   The `OpenSHC` directory holds the reference code used as a base for HexaMotion.
--   When implementing or modifying functionality, review the `OpenSHC` folder first so the implementation remains equivalent.
--   To test changes, run the tests inside the `tests` folder.
+- Don't create arduino examples.
+- Clone the repository with all submodules.
+- Implementation files live exclusively in the `src` and `include` directories.
+- The `tests` folder only contains code for validating fixes.
+- The `OpenSHC` directory holds the reference code used as a base for HexaMotion.
+- When implementing or modifying functionality, review the `OpenSHC` folder first so the implementation remains equivalent.
+- To test changes, run the tests inside the `tests` folder.
 
 ## Testing
 
--   Run the unit tests before submitting changes.
--   Install the Eigen dependency by running `tests/setup.sh` if needed.
--   Build the tests with `make` inside the `tests` directory.
+- Run the unit tests before submitting changes.
+- Install the Eigen dependency by running `tests/setup.sh` if needed.
+- Build the tests with `make` inside the `tests` directory.
 
 ```bash
 cd tests
@@ -41,16 +52,16 @@ Each test executable can be run individually.
 
 These are the characteristics of a real robot, used to test this library.
 
--   robot height: 208 mm (with all angles in local position equals to 0º)
--   default standing height 150 mm
--   robot weight: 6.5 Kg
--   body hexagon radius: 200 mm
--   coxa length: 50 mm
--   coxa weight: 54 g
--   femur length: 101 mm
--   femur weight: 150 g
--   tibia length: 208 mm
--   tibia weight: 200 g
+- robot height: 208 mm (with all angles in local position equals to 0º)
+- default standing height 150 mm
+- robot weight: 6.5 Kg
+- body hexagon radius: 200 mm
+- coxa length: 50 mm
+- coxa weight: 54 g
+- femur length: 101 mm
+- femur weight: 150 g
+- tibia length: 208 mm
+- tibia weight: 200 g
 
 **Note:** Physically, if the robot has all servo angles at 0°, the femur remains horizontal, in line with the coxa. The tibia, on the other hand, remains vertical, perpendicular to the ground. This allows the robot to stand stably by default when all angles are at 0°. Due to the aforementioned peculiarity, the robot's body will be positioned at z = -208, this value being the length of the tibia equal to the default height.
 
@@ -84,8 +95,8 @@ Stance and walkspace radii are now derived from the kinematics of the configured
 
 Standing pose definition:
 
--   Tibia is vertical (femur_angle + tibia_angle = 0)
--   Body height = `standing_height`
+- Tibia is vertical (femur_angle + tibia_angle = 0)
+- Body height = `standing_height`
 
 Given femur_length = 101 mm, tibia_length = 208 mm, standing_height = 150 mm:
 
@@ -110,9 +121,9 @@ hexagon_radius + standing_horizontal_reach ≈ 200 + 132.8 = 332.8 mm
 
 Implementation details:
 
--   `BodyPoseConfiguration::standing_horizontal_reach` stores this value (computed from the configured standing pose joints).
--   Fallback stance initialization and walkspace generation now use this standing horizontal reach directly (no additional 0.65 scaling) because it is already conservative relative to maximum flat extension.
--   Previous documentation claiming (coxa + femur + tibia = 359 mm) overstated usable horizontal reach; tibia length is mostly vertical in standing pose and should not be added for horizontal radius computation.
+- `BodyPoseConfiguration::standing_horizontal_reach` stores this value (computed from the configured standing pose joints).
+- Fallback stance initialization and walkspace generation now use this standing horizontal reach directly (no additional 0.65 scaling) because it is already conservative relative to maximum flat extension.
+- Previous documentation claiming (coxa + femur + tibia = 359 mm) overstated usable horizontal reach; tibia length is mostly vertical in standing pose and should not be added for horizontal radius computation.
 
 This change ensures gait planning, stride limits, and circular trajectory validation remain consistent with the maintained body height, preventing overestimation that could command unreachable lateral positions at higher angular velocities.
 
@@ -143,10 +154,10 @@ p.tibia_angle_limits[1] = 45;
 
 ## Commit Messages
 
--   Use imperative mood in English. Example: "Add new gait option".
--   Keep the summary under 72 characters.
+- Use imperative mood in English. Example: "Add new gait option".
+- Keep the summary under 72 characters.
 
 ## Pull Requests
 
--   Include a summary of the changes made.
--   Mention any known limitations or additional steps.
+- Include a summary of the changes made.
+- Mention any known limitations or additional steps.
