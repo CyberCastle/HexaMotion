@@ -4,7 +4,7 @@ This file defines the guidelines for contributing to HexaMotion.
 
 ## Objective
 
-HexaMotion is a 1:1 port of OpenSHC without ROS support. It brings OpenSHC's locomotion logic to MCU targets such as the STM32H7 (Arduino Giga R1) for a hexapod robot with a hexagonal body, six legs spaced 60 degrees apart, and three joints per leg. It includes inverse kinematics using DH parameters and Jacobians, orientation and pose control, gait planning and error handling. The interfaces `IIMUInterface`, `IFSRInterface` and `IServoInterface` must be implemented to connect the IMU, FSR sensors and smart servos.
+HexaMotion is a 1:1 port of OpenSHC without ROS support. It brings OpenSHC's locomotion logic to MCU targets such as the STM32H7 (Arduino Giga R1) for a hexapod robot with a hexagonal body, six legs spaced 60 degrees apart, and three joints per leg. It includes inverse kinematics using DH parameters and Jacobians, orientation and pose control, gait planning and error handling. The interfaces `IIMUInterface`, `IFSRInterface` and `IServoInterface` must be implemented to connect the IMU, FSR sensors and smart servos. HexaMotion does NOT support ROS natively.
 
 Key differences from OpenSHC:
 
@@ -13,6 +13,7 @@ Key differences from OpenSHC:
 - `LocomotionSystem` orchestrates the control classes, analogous to how a ROS script orchestrates publishers and subscriptions in OpenSHC.
 - No YAML configuration files; everything is configured through the `Parameters` structure.
 - OpenSHC logic is split into specific classes so the code is more readable and maintainable; the current HexaMotion organization follows this.
+- Class/data structures and naming (classes, constants, globals, locals) follow a semantic, self-documenting pattern, so some names differ from OpenSHC while keeping 1:1 logic.
 - Includes tests to verify hexapod kinematics and dynamics logic.
 - Certain configurations are handled via factory patterns.
 - No dynamic configuration support.
