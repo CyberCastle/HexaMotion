@@ -10,6 +10,7 @@ Key differences from OpenSHC:
 
 - Supports only 3DOF per leg.
 - Supports only six legs.
+- AMBLE_GAIT is not supported with current morphology/constraints.
 - `LocomotionSystem` orchestrates the control classes, analogous to how a ROS script orchestrates publishers and subscriptions in OpenSHC.
 - No YAML configuration files; everything is configured through the `Parameters` structure.
 - OpenSHC logic is split into specific classes so the code is more readable and maintainable; the current HexaMotion organization follows this.
