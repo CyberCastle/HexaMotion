@@ -72,6 +72,9 @@ bool LocomotionSystem::initialize(IIMUInterface *imu, IFSRInterface *fsr, IServo
     admittance_ctrl = new AdmittanceController(model, imu_interface, fsr_interface);
     velocity_controller = new CartesianVelocityController(model);
 
+    // Enable IMU pose compensation by default if configured
+    body_pose_ctrl->setIMUPoseEnabled(params.body_comp.enable);
+
     // Initialize LegPosers in BodyPoseController
     body_pose_ctrl->initializeLegPosers(legs);
 
@@ -510,6 +513,18 @@ bool LocomotionSystem::setBodyPose(const Eigen::Vector3d &position, const Eigen:
     }
 }
 
+bool LocomotionSystem::setManualBodyPoseInput(const Eigen::Vector3d &position, const Eigen::Vector3d &orientation) {
+    if (!body_pose_ctrl) {
+        last_error = PARAMETER_ERROR;
+        return false;
+    }
+
+    body_pose_ctrl->setManualPoseInput(Point3D(position.x(), position.y(), position.z()),
+                                       Point3D(orientation.x(), orientation.y(), orientation.z()));
+    body_pose_ctrl->setManualPoseEnabled(true);
+    return true;
+}
+
 bool LocomotionSystem::isSmoothMovementInProgress() const {
     return body_pose_ctrl->isTrajectoryInProgress();
 }
@@ -550,6 +565,14 @@ bool LocomotionSystem::update() {
     if (!updateSensorsParallel()) {
         last_error = SENSOR_ERROR;
         return false;
+    }
+
+    if (walk_ctrl) {
+        walk_ctrl->updateTerrainAdaptation(fsr_interface, imu_interface);
+    }
+
+    if (body_pose_ctrl && imu_interface) {
+        body_pose_ctrl->setIMUData(imu_interface->readIMU());
     }
 
     // Update FSR contact history early (for swing adaptation inside LegStepper) WITHOUT final phase assignment

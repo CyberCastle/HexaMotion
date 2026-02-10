@@ -155,6 +155,32 @@ class Leg {
      */
     Eigen::Matrix3d getJacobian() const;
 
+    // ===== LEG STATE (OpenSHC equivalent) =====
+
+    /**
+     * @brief Get current leg state (walking, manual, transitioning).
+     * @return Current LegState
+     */
+    LegState getLegState() const { return leg_state_; }
+
+    /**
+     * @brief Set current leg state.
+     * @param state New LegState
+     */
+    void setLegState(LegState state) { leg_state_ = state; }
+
+    /**
+     * @brief Get swing progress for this leg (0.0 to 1.0 during swing, -1.0 if not swinging).
+     * @return Swing progress value
+     */
+    double getSwingProgress() const { return swing_progress_; }
+
+    /**
+     * @brief Set swing progress value.
+     * @param progress Swing progress (0.0 to 1.0, or -1.0 if not swinging)
+     */
+    void setSwingProgress(double progress) { swing_progress_ = progress; }
+
     // ===== GAIT AND CONTACT STATE =====
 
     /**
@@ -310,6 +336,12 @@ class Leg {
      */
     void reset();
 
+    /**
+     * @brief Get default tip position (stance position).
+     * @return Default tip position in world coordinates
+     */
+    Point3D getDefaultTipPosition() const { return default_tip_position_; }
+
     // ===== UTILITY FUNCTIONS =====
 
     /**
@@ -344,6 +376,10 @@ class Leg {
     JointAngles joint_angles_; //< Current joint angles (coxa, femur, tibia)
     Point3D tip_position_;     //< Current tip position in world coordinates
     Point3D base_position_;    //< Leg base position in world coordinates
+
+    // ===== LEG STATE =====
+    LegState leg_state_;    //< Current leg state (walking, manual, transitioning)
+    double swing_progress_; //< Swing progress (0.0-1.0 during swing, -1.0 otherwise)
 
     // ===== GAIT STATE =====
     StepPhase step_phase_; //< Current step phase

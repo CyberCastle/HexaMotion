@@ -5,7 +5,7 @@
 #include "body_pose_controller.h"
 #include "gait_config.h"
 #include "gait_config_factory.h"
-#include "gait_types.h"  // Include for GaitType definition
+#include "gait_types.h"  // Include for GaitType, LegState, WalkState definitions
 #include "leg_stepper.h" // Include for LegStepper definition
 #include "math_utils.h"
 #include "robot_model.h"
@@ -13,28 +13,6 @@
 #include "velocity_limits.h"
 #include <map>
 #include <memory>
-
-/**
- * @brief Leg states for state machine control (OpenSHC equivalent)
- */
-enum LegState {
-    LEG_WALKING,                //< The leg is in a 'walking' state - participates in walking cycle
-    LEG_MANUAL,                 //< The leg is in a 'manual' state - able to move via manual manipulation inputs
-    LEG_STATE_COUNT,            //< Misc enum defining number of LegStates
-    LEG_WALKING_TO_MANUAL = -1, //< The leg is in 'walking to manual' state - transitioning from 'walking' to 'manual' state
-    LEG_MANUAL_TO_WALKING = -2, //< The leg is in 'manual to walking' state - transitioning from 'manual' to 'walking' state
-};
-
-/**
- * @brief Walk states for walk controller cycle (OpenSHC equivalent)
- */
-enum WalkState {
-    WALK_STARTING,    //< The walk controller cycle is in 'starting' state (transitioning from 'stopped' to 'moving')
-    WALK_MOVING,      //< The walk controller cycle is in a 'moving' state (the primary walking state)
-    WALK_STOPPING,    //< The walk controller cycle is in a 'stopping' state (transitioning from 'moving' to 'stopped')
-    WALK_STOPPED,     //< The walk controller cycle is in a 'stopped' state (state whilst velocity input is zero)
-    WALK_STATE_COUNT, //< Misc enum defining number of Walk States
-};
 
 /**
  * @brief Complete walking controller with OpenSHC architecture
@@ -81,6 +59,46 @@ class WalkController {
      * @brief Calculate odometry for the given time period
      */
     Pose calculateOdometry(double time_period);
+
+    /**
+     * @brief Update manual leg control with tip velocity inputs (OpenSHC equivalent).
+     *
+     * Two modes are available via Parameters::manual_leg:
+     * - joint_control: maps velocity inputs to coxa/tibia joint positions directly (3DOF only)
+     * - tip_control: moves tip in cartesian space in the robot frame
+     *
+     * @param primary_leg_index Index of the primary selected leg (-1 if none)
+     * @param primary_tip_velocity Velocity input for the primary leg tip
+     * @param secondary_leg_index Index of the secondary selected leg (-1 if none)
+     * @param secondary_tip_velocity Velocity input for the secondary leg tip
+     */
+    void updateManual(int primary_leg_index, const Eigen::Vector3d &primary_tip_velocity,
+                      int secondary_leg_index, const Eigen::Vector3d &secondary_tip_velocity);
+
+    /**
+     * @brief Update manual leg control with direct cartesian tip positions (OpenSHC equivalent).
+     *
+     * @param primary_leg_index Index of the primary selected leg (-1 if none)
+     * @param primary_tip_position Desired tip position for the primary leg
+     * @param secondary_leg_index Index of the secondary selected leg (-1 if none)
+     * @param secondary_tip_position Desired tip position for the secondary leg
+     */
+    void updateManual(int primary_leg_index, const Point3D &primary_tip_position,
+                      int secondary_leg_index, const Point3D &secondary_tip_position);
+
+    /**
+     * @brief Get interpolated limit for a given velocity command from a bearing-based limit map (OpenSHC equivalent).
+     *
+     * Calculates per-leg stride bearing from combined linear + angular velocity,
+     * interpolates the limit map bounding that bearing, and returns the minimum across all legs.
+     *
+     * @param linear_velocity_input Desired linear body velocity
+     * @param angular_velocity_input Desired angular body velocity
+     * @param limit The bearing-based limit map (e.g., walkspace_, max_linear_speed_)
+     * @return Smallest interpolated limit across all legs
+     */
+    double getLimit(const Eigen::Vector2d &linear_velocity_input, double angular_velocity_input,
+                    const std::map<int, double> &limit) const;
 
     /**
      * @brief Set body pose controller reference for walk plane functionality
@@ -130,6 +148,7 @@ class WalkController {
     void setExternalDefault(int leg_index, const TerrainAdaptation::ExternalTarget &default_pos);
     const TerrainAdaptation::WalkPlane &getTerrainWalkPlane() const;
     const TerrainAdaptation::ExternalTarget &getExternalTarget(int leg_index) const;
+    const TerrainAdaptation::ExternalTarget &getExternalDefault(int leg_index) const;
     const TerrainAdaptation::StepPlane &getStepPlane(int leg_index) const;
     bool hasTouchdownDetection(int leg_index) const;
     const VelocityLimits::LimitValues &getCurrentVelocities() const;
@@ -137,6 +156,13 @@ class WalkController {
     // Terrain adaptation accessors for LegStepper
     const TerrainAdaptation &getTerrainAdaptation() const { return terrain_adaptation_; }
     RobotModel &getModel() { return model; }
+
+    /**
+     * @brief Update terrain adaptation state with latest sensor data
+     * @param fsr_interface FSR interface (may be nullptr)
+     * @param imu_interface IMU interface (may be nullptr)
+     */
+    void updateTerrainAdaptation(IFSRInterface *fsr_interface, IIMUInterface *imu_interface);
 
     // Gait configuration management methods (OpenSHC equivalent)
     /**

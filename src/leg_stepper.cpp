@@ -542,6 +542,24 @@ void LegStepper::updateTipPositionIterative(int iteration, double time_delta, bo
             ground_contact = leg_.isInContact();
         }
 
+        // Rough terrain handling: external target, step plane, and reactive probing
+        if (rough_terrain_mode) {
+            if (external_target_.defined) {
+                target_tip_pose_ = external_target_.position;
+                if (external_target_.swing_clearance > 0.0) {
+                    swing_clearance_ = walk_plane_normal_ * external_target_.swing_clearance;
+                }
+            } else if (touchdown_detection_) {
+                if (step_plane_valid_) {
+                    Point3D target_tip_position = step_plane_position_;
+                    Point3D difference = target_tip_position - target_tip_pose_;
+                    target_tip_pose_ = target_tip_pose_ + math_utils::projectVector(difference, walk_plane_normal_);
+                } else {
+                    target_tip_pose_.z -= STEP_DEPTH_DEFAULT;
+                }
+            }
+        }
+
         // OpenSHC: regenerate ALL swing control nodes EVERY iteration
         generatePrimarySwingControlNodes();
         generateSecondarySwingControlNodes(ground_contact);
@@ -609,6 +627,11 @@ void LegStepper::updateTipPositionIterative(int iteration, double time_delta, bo
 
         // Initialize stance origin if needed (hybrid anti-drift extension).
         if (stance_iteration == 1) {
+
+            // Reset external target after swing completion (OpenSHC behavior)
+            if (external_target_.defined) {
+                external_target_.defined = false;
+            }
 
             // At stance entry, compare the touchdown pose against the frozen swing target. Any residual lateral
             // offset is projected onto the leg-aligned axis and bled off immediately. This keeps opposing legs
@@ -800,13 +823,16 @@ Point3D LegStepper::calculateStanceSpanChange() {
 }
 
 void LegStepper::updateDefaultTipPosition() {
-    // TODO: Mirrors OpenSHC LegStepper::updateDefaultTipPosition default branch (no external default support yet)
+    // Generate new default tip pose from external request if present
+    if (external_default_.defined) {
+        default_tip_pose_ = external_default_.position;
+        return;
+    }
 
     // 1. Modify identity tip position by stance span change
     Point3D identity_tip_position = identity_tip_pose_ + calculateStanceSpanChange();
 
-    // TODO
-    // NOTE: OpenSHC transforms through default body pose (not available here); assume identity frame equivalent.
+    // NOTE: OpenSHC transforms through default body pose; HexaMotion uses body frame identity.
 
     // 2. Project vector from identity to stance origin onto walk plane normal
     Point3D identity_to_stance_origin = stance_origin_tip_position_ - identity_tip_position;

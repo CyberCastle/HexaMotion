@@ -206,12 +206,20 @@ const TerrainAdaptation::ExternalTarget &WalkController::getExternalTarget(int l
     return terrain_adaptation_.getExternalTarget(leg_index);
 }
 
+const TerrainAdaptation::ExternalTarget &WalkController::getExternalDefault(int leg_index) const {
+    return terrain_adaptation_.getExternalDefault(leg_index);
+}
+
 const TerrainAdaptation::StepPlane &WalkController::getStepPlane(int leg_index) const {
     return terrain_adaptation_.getStepPlane(leg_index);
 }
 
 bool WalkController::hasTouchdownDetection(int leg_index) const {
     return terrain_adaptation_.hasTouchdownDetection(leg_index);
+}
+
+void WalkController::updateTerrainAdaptation(IFSRInterface *fsr_interface, IIMUInterface *imu_interface) {
+    terrain_adaptation_.update(fsr_interface, imu_interface);
 }
 
 Point3D WalkController::estimateGravity() const {
@@ -504,6 +512,9 @@ void WalkController::updateWalk(const Point3D &linear_velocity_input, double ang
     StepCycle step_cycle;
     bool step_cycle_calculated = false;
 
+    const bool rough_terrain_mode = terrain_adaptation_.isRoughTerrainModeEnabled();
+    const bool force_normal_touchdown = terrain_adaptation_.isForceNormalTouchdownEnabled();
+
     if (is_active_walking) {
         // Use configured step frequency from gait configuration (OpenSHC pattern)
         step_cycle = current_gait_config_.generateStepCycle();
@@ -522,6 +533,29 @@ void WalkController::updateWalk(const Point3D &linear_velocity_input, double ang
         // Propagate walk plane and its normal from the controller (BodyPoseController) to each LegStepper.
         // This aligns swing clearance and touchdown direction with the estimated walking surface.
         leg_stepper->setWalkPlaneNormal(getWalkPlaneNormal());
+
+        // Push terrain adaptation data into the leg stepper (OpenSHC-style external targets)
+        TerrainAdaptation::ExternalTarget ext_target = terrain_adaptation_.getExternalTarget(static_cast<int>(i));
+        LegStepperExternalTarget ls_target;
+        ls_target.position = ext_target.position;
+        ls_target.swing_clearance = ext_target.swing_clearance;
+        ls_target.frame_id = ext_target.frame_id;
+        ls_target.timestamp = ext_target.timestamp;
+        ls_target.defined = ext_target.defined;
+        leg_stepper->setExternalTarget(ls_target);
+
+        TerrainAdaptation::ExternalTarget ext_default = terrain_adaptation_.getExternalDefault(static_cast<int>(i));
+        LegStepperExternalTarget ls_default;
+        ls_default.position = ext_default.position;
+        ls_default.swing_clearance = ext_default.swing_clearance;
+        ls_default.frame_id = ext_default.frame_id;
+        ls_default.timestamp = ext_default.timestamp;
+        ls_default.defined = ext_default.defined;
+        leg_stepper->setExternalDefault(ls_default);
+
+        const auto &step_plane = terrain_adaptation_.getStepPlane(static_cast<int>(i));
+        leg_stepper->setStepPlane(step_plane.position, step_plane.normal, step_plane.valid);
+        leg_stepper->setTouchdownDetection(terrain_adaptation_.hasTouchdownDetection(static_cast<int>(i)));
 
         if (is_active_walking && step_cycle_calculated) {
             // Advance per-leg phase by 1 (keeping global coordination for gait duration)
@@ -584,7 +618,7 @@ void WalkController::updateWalk(const Point3D &linear_velocity_input, double ang
             bool in_swing = (leg_stepper->getStepState() == STEP_SWING);
             legs_array_[i].setStepPhase(in_swing ? SWING_PHASE : STANCE_PHASE);
             // Local phase-based tip update
-            leg_stepper->updateTipPosition(time_delta_, false, false);
+            leg_stepper->updateTipPosition(time_delta_, rough_terrain_mode, force_normal_touchdown);
         } else {
             // Force stance for non-active states
             legs_array_[i].setStepPhase(STANCE_PHASE);
@@ -609,6 +643,160 @@ Pose WalkController::calculateOdometry(double time_period) {
     Eigen::Quaterniond rotation_delta(
         Eigen::AngleAxisd(desired_angular_velocity_ * time_period, Eigen::Vector3d::UnitZ()));
     return Pose(position_delta, rotation_delta);
+}
+
+////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+// OpenSHC equivalent: WalkController::getLimit
+////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+double WalkController::getLimit(const Eigen::Vector2d &linear_velocity_input, double angular_velocity_input,
+                                const std::map<int, double> &limit) const {
+    if (limit.empty()) {
+        return 0.0;
+    }
+
+    double min_limit = 1e9; // Large sentinel (OpenSHC UNASSIGNED_VALUE equivalent)
+    for (size_t i = 0; i < leg_steppers_.size() && i < NUM_LEGS; ++i) {
+        const auto &leg_stepper = leg_steppers_[i];
+        Point3D tip_position = leg_stepper->getCurrentTipPose();
+        // Rotation normal perpendicular to tip radius on the z-plane
+        Eigen::Vector2d rotation_normal(-tip_position.y, tip_position.x);
+        Eigen::Vector2d stride_vector = linear_velocity_input + angular_velocity_input * rotation_normal;
+
+        int bearing = math_utils::mod(math_utils::roundToInt(math_utils::radiansToDegrees(
+                                          atan2(stride_vector[1], stride_vector[0]))),
+                                      360);
+
+        // Find bounding bearings in the limit map
+        auto upper_it = limit.lower_bound(bearing);
+        if (upper_it == limit.end()) {
+            upper_it = limit.begin();
+        }
+        int upper_bound = upper_it->first;
+
+        int lower_bound = math_utils::mod(upper_bound - BEARING_STEP, 360);
+        // Adjust for wrap-around
+        int adj_bearing = bearing + ((bearing < lower_bound) ? 360 : 0);
+        int adj_upper = upper_bound + ((upper_bound < lower_bound) ? 360 : 0);
+
+        double control_input = 0.0;
+        int range = adj_upper - lower_bound;
+        if (range > 0) {
+            control_input = static_cast<double>(adj_bearing - lower_bound) / range;
+        }
+
+        // Safe lookup with mod to handle wrap-around
+        double lower_val = 0.0;
+        double upper_val = 0.0;
+        auto lb_it = limit.find(lower_bound);
+        auto ub_it = limit.find(math_utils::mod(upper_bound, 360));
+        if (lb_it != limit.end())
+            lower_val = lb_it->second;
+        if (ub_it != limit.end())
+            upper_val = ub_it->second;
+
+        double limit_interpolation = math_utils::interpolate(lower_val, upper_val, control_input);
+        min_limit = std::min(min_limit, limit_interpolation);
+    }
+    return min_limit;
+}
+
+////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+// OpenSHC equivalent: WalkController::updateManual (velocity-based)
+////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+void WalkController::updateManual(int primary_leg_index, const Eigen::Vector3d &primary_tip_velocity,
+                                  int secondary_leg_index, const Eigen::Vector3d &secondary_tip_velocity) {
+    const Parameters &params = model.getParams();
+    for (size_t i = 0; i < leg_steppers_.size() && i < NUM_LEGS; ++i) {
+        // Only process legs in MANUAL state (checked via external leg_states_ in StateController)
+        // Caller is responsible for ensuring only MANUAL legs are targeted
+        auto &leg_stepper = leg_steppers_[i];
+        Leg &leg = legs_array_[i];
+
+        bool is_selected = (static_cast<int>(i) == primary_leg_index ||
+                            static_cast<int>(i) == secondary_leg_index);
+        if (!is_selected)
+            continue;
+
+        Eigen::Vector3d tip_velocity_input = Eigen::Vector3d::Zero();
+        if (static_cast<int>(i) == primary_leg_index) {
+            tip_velocity_input = primary_tip_velocity;
+        } else if (static_cast<int>(i) == secondary_leg_index) {
+            tip_velocity_input = secondary_tip_velocity;
+        }
+
+        if (tip_velocity_input.norm() < 1e-9)
+            continue;
+
+        if (params.manual_leg.joint_control) {
+            // Joint control: velocity inputs x/y/z mapped to coxa/tibia joint positions (OpenSHC 3DOF path)
+            double coxa_joint_velocity = tip_velocity_input[1] * params.manual_leg.max_rotation_velocity * time_delta_;
+            double tibia_joint_velocity = tip_velocity_input[0] * params.manual_leg.max_rotation_velocity * time_delta_;
+
+            // Get current joint angles, modify, and set back
+            JointAngles angles = leg.getJointAngles();
+            angles.coxa += math_utils::radiansToDegrees(coxa_joint_velocity);
+            angles.tibia += math_utils::radiansToDegrees(tibia_joint_velocity);
+
+            // Clamp to joint limits
+            angles.coxa = std::max(params.coxa_angle_limits[0], std::min(params.coxa_angle_limits[1], angles.coxa));
+            angles.tibia = std::max(params.tibia_angle_limits[0], std::min(params.tibia_angle_limits[1], angles.tibia));
+
+            leg.setJointAngles(angles);
+            leg.updateTipPosition(); // FK update
+            leg_stepper->setCurrentTipPose(leg.getCurrentTipPositionGlobal());
+        } else {
+            // Tip control: move tip in cartesian space (OpenSHC tip_control path)
+            Point3D desired_tip = leg.getDesiredTipPosition();
+            Point3D current_tip = leg.getCurrentTipPositionGlobal();
+            double ik_error = Point3D(desired_tip.x - current_tip.x,
+                                      desired_tip.y - current_tip.y,
+                                      desired_tip.z - current_tip.z)
+                                  .norm();
+
+            Eigen::Vector3d tip_position_change = tip_velocity_input *
+                                                  params.manual_leg.max_translation_velocity * time_delta_;
+
+            // If IK error exceeds tolerance, reverse direction (OpenSHC pattern)
+            if (ik_error >= IK_TOLERANCE) {
+                Eigen::Vector3d error_dir(desired_tip.x - current_tip.x,
+                                          desired_tip.y - current_tip.y,
+                                          desired_tip.z - current_tip.z);
+                error_dir.normalize();
+                tip_position_change = -tip_position_change.norm() * error_dir;
+            }
+
+            Point3D current_pose = leg_stepper->getCurrentTipPose();
+            Point3D new_tip_position(current_pose.x + tip_position_change[0],
+                                     current_pose.y + tip_position_change[1],
+                                     current_pose.z + tip_position_change[2]);
+            leg_stepper->setCurrentTipPose(new_tip_position);
+        }
+    }
+}
+
+////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+// OpenSHC equivalent: WalkController::updateManual (cartesian position-based)
+////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+void WalkController::updateManual(int primary_leg_index, const Point3D &primary_tip_position,
+                                  int secondary_leg_index, const Point3D &secondary_tip_position) {
+    for (size_t i = 0; i < leg_steppers_.size() && i < NUM_LEGS; ++i) {
+        auto &leg_stepper = leg_steppers_[i];
+        bool is_selected = (static_cast<int>(i) == primary_leg_index ||
+                            static_cast<int>(i) == secondary_leg_index);
+        if (!is_selected)
+            continue;
+
+        Point3D tip_position_input;
+        if (static_cast<int>(i) == primary_leg_index) {
+            tip_position_input = primary_tip_position;
+        } else if (static_cast<int>(i) == secondary_leg_index) {
+            tip_position_input = secondary_tip_position;
+        }
+
+        if (tip_position_input.norm() > 1e-9) {
+            leg_stepper->setCurrentTipPose(tip_position_input);
+        }
+    }
 }
 
 void WalkController::generateWalkspace() {

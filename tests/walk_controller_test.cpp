@@ -260,18 +260,14 @@ void testExternalTargetHandling(LegStepper &stepper, Leg &leg) {
     target.frame_id = "robot_frame";
     target.defined = true;
 
-    // Note: External target management not currently implemented in LegStepper
-    // This functionality may be handled at a higher level (WalkController)
-    /*
     stepper.setExternalTarget(target);
 
     // Verify target was set (basic verification)
     LegStepperExternalTarget retrieved = stepper.getExternalTarget();
     assert(retrieved.defined);
     assert(retrieved.frame_id == target.frame_id);
-    */
 
-    std::cout << "  ✅ External target handling skipped (not implemented in current LegStepper)" << std::endl;
+    std::cout << "  ✅ External target handling passed" << std::endl;
 }
 
 void testWalkStateTransitions(LegStepper &stepper) {
@@ -1112,8 +1108,15 @@ int main() {
             results.stride_magnitude = new_stride.norm();
             results.stride_vector_updates_passed = (results.stride_magnitude > 5.0);
 
-            // Test 7: External Target Handling (skip - not implemented)
-            results.external_target_handling_passed = true; // Skip test
+            // Test 7: External Target Handling
+            LegStepperExternalTarget target;
+            target.position = Point3D(50.0, 30.0, 208.0);
+            target.swing_clearance = 15.0;
+            target.frame_id = "robot_frame";
+            target.defined = true;
+            stepper.setExternalTarget(target);
+            LegStepperExternalTarget retrieved = stepper.getExternalTarget();
+            results.external_target_handling_passed = (retrieved.defined && retrieved.frame_id == target.frame_id);
 
             // Test 8: Walk State Transitions
             StepState states[] = {STEP_SWING, STEP_STANCE, STEP_FORCE_STANCE, STEP_FORCE_STOP};

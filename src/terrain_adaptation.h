@@ -190,6 +190,13 @@ class TerrainAdaptation {
     const ExternalTarget &getExternalTarget(int leg_index) const;
 
     /**
+     * @brief Get external default for specific leg
+     * @param leg_index Leg index (0-5)
+     * @return External default if defined
+     */
+    const ExternalTarget &getExternalDefault(int leg_index) const;
+
+    /**
      * @brief Get step plane detection for specific leg
      * @param leg_index Leg index (0-5)
      * @return Step plane if detected

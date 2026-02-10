@@ -62,6 +62,11 @@ class LegPoser {
     inline ExternalTarget getExternalTarget() const { return external_target_; }
     inline Pose getAutoPose() const { return auto_pose_; }
     inline bool getLegCompletedStep() const { return leg_completed_step_; }
+    /**
+     * @brief Get the default (stance) tip position for this leg.
+     * @return Default tip position from the associated Leg object
+     */
+    inline Point3D getDefaultTipPose() const { return leg_.getDefaultTipPosition(); }
 
     // Transition sequence helpers (OpenSHC parity)
     /** Reset stored transition poses for sequence generation. */
@@ -128,6 +133,27 @@ class LegPoser {
         first_iteration_ = true;
         master_iteration_count_ = 0;
     }
+
+    /**
+     * @brief Set the desired joint configuration for transitionConfiguration.
+     * @param coxa Target coxa angle (radians)
+     * @param femur Target femur angle (radians)
+     * @param tibia Target tibia angle (radians)
+     */
+    inline void setDesiredConfiguration(double coxa, double femur, double tibia) {
+        desired_config_coxa_ = coxa;
+        desired_config_femur_ = femur;
+        desired_config_tibia_ = tibia;
+        desired_config_set_ = true;
+    }
+
+    /**
+     * @brief Uses a cubic bezier curve to smoothly transition joint positions from current
+     * to target configuration (OpenSHC LegPoser::transitionConfiguration equivalent).
+     * @param transition_time The time period in which to complete this transition (seconds)
+     * @return Progress percentage (0-100), 100 indicates completion
+     */
+    int transitionConfiguration(double transition_time);
 
     /**
      * @brief Uses bezier curves to smoothly update the desired tip position of the leg
@@ -212,6 +238,17 @@ class LegPoser {
 
     double physical_reference_height_;  //< Physical reference height (z = getDefaultHeightOffset() when all angles are 0°)
     Point3D admittance_delta_{0, 0, 0}; //< Latest admittance (compliance) delta applied when apply_delta=true
+
+    // transitionConfiguration state (OpenSHC LegPoser parity)
+    bool desired_config_set_ = false;    //< Flag if desired configuration has been set
+    bool config_first_iteration_ = true; //< First iteration flag for configuration transition
+    int config_iteration_count_ = 0;     //< Iteration counter for configuration transition
+    double desired_config_coxa_ = 0.0;   //< Target coxa angle (radians)
+    double desired_config_femur_ = 0.0;  //< Target femur angle (radians)
+    double desired_config_tibia_ = 0.0;  //< Target tibia angle (radians)
+    double origin_config_coxa_ = 0.0;    //< Origin coxa angle (radians)
+    double origin_config_femur_ = 0.0;   //< Origin femur angle (radians)
+    double origin_config_tibia_ = 0.0;   //< Origin tibia angle (radians)
 };
 
 #endif // LEG_POSER_H

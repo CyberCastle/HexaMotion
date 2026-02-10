@@ -283,6 +283,14 @@ class LocomotionSystem {
     /** Set body pose with position and orientation (orientation in radians) */
     bool setBodyPose(const Eigen::Vector3d &position, const Eigen::Vector3d &orientation);
 
+    /**
+     * @brief Set manual body pose input for walking pose composition.
+     * @param position Body translation (mm)
+     * @param orientation Body rotation (roll,pitch,yaw in radians)
+     * @return True if accepted
+     */
+    bool setManualBodyPoseInput(const Eigen::Vector3d &position, const Eigen::Vector3d &orientation);
+
     /** Check if smooth movement is in progress */
     bool isSmoothMovementInProgress() const;
 
@@ -326,6 +334,8 @@ class LocomotionSystem {
     const Leg &getLeg(int leg_index) const { return legs[leg_index]; }
     /** Get leg object by index (mutable). */
     Leg &getLeg(int leg_index) { return legs[leg_index]; }
+    /** Get pointer to legs array (for batch operations like poseForLegManipulation). */
+    Leg *getLegsArray() { return legs; }
 
     // Setters
     /** Replace the current parameter set. */

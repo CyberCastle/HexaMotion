@@ -68,6 +68,165 @@ Eigen::Matrix3d rotationMatrixZ(double angle);
 Eigen::Vector3d quaternionToEuler(const Eigen::Vector4d &quaternion);
 /** Convert Euler angles (radians) to quaternion. */
 Eigen::Vector4d eulerToQuaternion(const Eigen::Vector3d &euler);
+
+/**
+ * @brief Correct quaternion hemisphere to ensure shortest rotation path.
+ * Equivalent to OpenSHC's correctRotation() — ensures the quaternion
+ * lies in the same hemisphere as the reference to prevent unwanted
+ * 360° flips during interpolation.
+ * @param rotation The quaternion to correct
+ * @param reference The reference quaternion for hemisphere comparison
+ * @return Corrected quaternion in the same hemisphere as reference
+ */
+inline Eigen::Quaterniond correctRotation(const Eigen::Quaterniond &rotation,
+                                          const Eigen::Quaterniond &reference) {
+    if (rotation.dot(reference) < 0.0) {
+        return Eigen::Quaterniond(-rotation.w(), -rotation.x(), -rotation.y(), -rotation.z());
+    }
+    return rotation;
+}
+
+/**
+ * @brief Convert Eigen::Quaterniond to Euler angles using intrinsic ZYX convention.
+ * Equivalent to OpenSHC's quaternionToEulerAngles for Quaterniond types.
+ * @param q Input quaternion
+ * @param extrinsic If true, use extrinsic convention (OpenSHC default)
+ * @return Euler angles as Vector3d (roll, pitch, yaw) in radians
+ */
+inline Eigen::Vector3d quaterniondToEulerAngles(const Eigen::Quaterniond &q, bool extrinsic = false) {
+    Eigen::Quaterniond qn = q.normalized();
+    if (extrinsic) {
+        // Extrinsic XYZ = Intrinsic ZYX
+        Eigen::Vector3d euler = qn.toRotationMatrix().eulerAngles(2, 1, 0);
+        return Eigen::Vector3d(euler[2], euler[1], euler[0]); // roll, pitch, yaw
+    }
+    Eigen::Vector3d euler = qn.toRotationMatrix().eulerAngles(2, 1, 0);
+    return Eigen::Vector3d(euler[2], euler[1], euler[0]);
+}
+
+/**
+ * @brief Convert Euler angles to Eigen::Quaterniond using intrinsic ZYX convention.
+ * Equivalent to OpenSHC's eulerAnglesToQuaternion for Quaterniond types.
+ * @param euler Euler angles as Vector3d (roll, pitch, yaw) in radians
+ * @param extrinsic If true, use extrinsic convention (OpenSHC default)
+ * @return Quaternion
+ */
+inline Eigen::Quaterniond eulerAnglesToQuaterniond(const Eigen::Vector3d &euler, bool extrinsic = false) {
+    if (extrinsic) {
+        return Eigen::Quaterniond(
+            Eigen::AngleAxisd(euler[2], Eigen::Vector3d::UnitZ()) *
+            Eigen::AngleAxisd(euler[1], Eigen::Vector3d::UnitY()) *
+            Eigen::AngleAxisd(euler[0], Eigen::Vector3d::UnitX()));
+    }
+    return Eigen::Quaterniond(
+        Eigen::AngleAxisd(euler[2], Eigen::Vector3d::UnitZ()) *
+        Eigen::AngleAxisd(euler[1], Eigen::Vector3d::UnitY()) *
+        Eigen::AngleAxisd(euler[0], Eigen::Vector3d::UnitX()));
+}
+
+/**
+ * @brief Clamp a vector's magnitude without changing direction.
+ * Equivalent to OpenSHC's clamped() for Vector3d.
+ * @param v Vector to clamp
+ * @param max_magnitude Maximum allowed magnitude
+ * @return Clamped vector
+ */
+inline Eigen::Vector3d clampedVector(const Eigen::Vector3d &v, double max_magnitude) {
+    double mag = v.norm();
+    if (mag > max_magnitude && mag > 0.0) {
+        return v * (max_magnitude / mag);
+    }
+    return v;
+}
+
+/**
+ * @brief Clamp a 2D vector's magnitude.
+ * @param v Vector to clamp
+ * @param max_magnitude Maximum allowed magnitude
+ * @return Clamped vector
+ */
+inline Eigen::Vector2d clampedVector2d(const Eigen::Vector2d &v, double max_magnitude) {
+    double mag = v.norm();
+    if (mag > max_magnitude && mag > 0.0) {
+        return v * (max_magnitude / mag);
+    }
+    return v;
+}
+
+/**
+ * @brief Modulo function that handles negative values correctly.
+ * Equivalent to OpenSHC's mod() utility.
+ * @param a Value
+ * @param b Divisor
+ * @return Positive modulo result
+ */
+inline int mod(int a, int b) {
+    int r = a % b;
+    return (r < 0) ? r + b : r;
+}
+
+/**
+ * @brief Round to nearest integer
+ * @param x The value to round
+ * @return Rounded integer
+ */
+inline int roundToInt(double x) {
+    return (x >= 0) ? static_cast<int>(x + 0.5) : -static_cast<int>(0.5 - x);
+}
+
+/**
+ * @brief Round to nearest even integer.
+ * Equivalent to OpenSHC's roundToEvenInt().
+ * @param x Value to round
+ * @return Nearest even integer
+ */
+inline int roundToEvenInt(double x) {
+    int rounded = roundToInt(x);
+    return (rounded % 2 == 0) ? rounded : (rounded + 1);
+}
+
+/**
+ * @brief Sign function returning -1, 0, or 1.
+ * @param x Value
+ * @return -1 if x<0, 0 if x==0, 1 if x>0
+ */
+inline double sign(double x) {
+    if (x > 0.0)
+        return 1.0;
+    if (x < 0.0)
+        return -1.0;
+    return 0.0;
+}
+
+/**
+ * @brief Round a floating point value to a fixed number of decimal places.
+ *
+ * Direct extraction of the helper previously local to LegStepper (_ls_setPrecision),
+ * kept inline for zero‑overhead usage in tight kinematic loops.
+ *
+ * @param value     Input floating point value.
+ * @param precision Number of decimal digits to keep (>=0).
+ * @return Rounded value with the requested precision.
+ */
+inline double setPrecision(double value, int precision) {
+    if (precision <= 0) {
+        return std::round(value); // fast path for integer rounding
+    }
+    double scale = std::pow(10.0, precision);
+    return std::round(value * scale) / scale;
+}
+
+/**
+ * @brief Set precision of a 3D Eigen vector.
+ * @param v Input vector
+ * @param precision Number of decimal places
+ * @return Vector with truncated precision
+ */
+inline Eigen::Vector3d setPrecisionVec(const Eigen::Vector3d &v, int precision) {
+    return Eigen::Vector3d(setPrecision(v[0], precision),
+                           setPrecision(v[1], precision),
+                           setPrecision(v[2], precision));
+}
 /** Multiply two quaternions. */
 Eigen::Vector4d quaternionMultiply(const Eigen::Vector4d &q1, const Eigen::Vector4d &q2);
 /** Invert a quaternion. */
@@ -199,33 +358,6 @@ inline T interpolate(const T &origin, const T &target, double control_input) {
 template <class T>
 inline T clamped(T value, T min_value, T max_value) {
     return std::max(min_value, std::min(max_value, value));
-}
-
-/**
- * @brief Round to nearest integer
- * @param x The value to round
- * @return Rounded integer
- */
-inline int roundToInt(double x) {
-    return (x >= 0) ? static_cast<int>(x + 0.5) : -static_cast<int>(0.5 - x);
-}
-
-/**
- * @brief Round a floating point value to a fixed number of decimal places.
- *
- * Direct extraction of the helper previously local to LegStepper (_ls_setPrecision),
- * kept inline for zero‑overhead usage in tight kinematic loops.
- *
- * @param value     Input floating point value.
- * @param precision Number of decimal digits to keep (>=0).
- * @return Rounded value with the requested precision.
- */
-inline double setPrecision(double value, int precision) {
-    if (precision <= 0) {
-        return std::round(value); // fast path for integer rounding
-    }
-    double scale = std::pow(10.0, precision);
-    return std::round(value * scale) / scale;
 }
 
 /**

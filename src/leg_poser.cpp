@@ -235,3 +235,84 @@ void LegPoser::updateAutoPose(int phase_index, const AutoPoseConfiguration &auto
         auto_pose_ = base_auto_pose_.removePose(portion);
     }
 }
+
+// ================================================================================================
+// OpenSHC LegPoser::transitionConfiguration equivalent
+// Cubic Bezier interpolation of joint positions from current to target configuration
+// ================================================================================================
+int LegPoser::transitionConfiguration(double transition_time) {
+    // Return early if no desired configuration set
+    if (!desired_config_set_) {
+        return PROGRESS_COMPLETE;
+    }
+
+    // Setup origin and target on first iteration
+    if (config_first_iteration_) {
+        JointAngles current_angles = leg_.getJointAngles();
+        origin_config_coxa_ = math_utils::degreesToRadians(current_angles.coxa);
+        origin_config_femur_ = math_utils::degreesToRadians(current_angles.femur);
+        origin_config_tibia_ = math_utils::degreesToRadians(current_angles.tibia);
+
+        // Check if already at target (joint tolerance check)
+        constexpr double JOINT_TOLERANCE_RAD = 0.01;
+        bool at_target = std::abs(desired_config_coxa_ - origin_config_coxa_) < JOINT_TOLERANCE_RAD &&
+                         std::abs(desired_config_femur_ - origin_config_femur_) < JOINT_TOLERANCE_RAD &&
+                         std::abs(desired_config_tibia_ - origin_config_tibia_) < JOINT_TOLERANCE_RAD;
+        if (at_target) {
+            desired_config_set_ = false;
+            return PROGRESS_COMPLETE;
+        }
+
+        config_first_iteration_ = false;
+        config_iteration_count_ = 0;
+    }
+
+    double time_delta = robot_model_.getTimeDelta();
+    int num_iterations = std::max(1, static_cast<int>(std::round(transition_time / time_delta)));
+    double delta_t = 1.0 / num_iterations;
+
+    config_iteration_count_++;
+    double t = config_iteration_count_ * delta_t;
+    if (t > 1.0)
+        t = 1.0;
+
+    // Cubic Bezier interpolation for each joint (C1 continuity at endpoints)
+    // control_nodes: [origin, origin, target, target]
+    auto cubicBezier = [](double p0, double p1, double p2, double p3, double t) {
+        double u = 1.0 - t;
+        return u * u * u * p0 + 3.0 * u * u * t * p1 + 3.0 * u * t * t * p2 + t * t * t * p3;
+    };
+
+    double new_coxa = cubicBezier(origin_config_coxa_, origin_config_coxa_,
+                                  desired_config_coxa_, desired_config_coxa_, t);
+    double new_femur = cubicBezier(origin_config_femur_, origin_config_femur_,
+                                   desired_config_femur_, desired_config_femur_, t);
+    double new_tibia = cubicBezier(origin_config_tibia_, origin_config_tibia_,
+                                   desired_config_tibia_, desired_config_tibia_, t);
+
+    // Apply joint angles (convert back to degrees for HexaMotion convention)
+    JointAngles new_angles;
+    new_angles.coxa = math_utils::radiansToDegrees(new_coxa);
+    new_angles.femur = math_utils::radiansToDegrees(new_femur);
+    new_angles.tibia = math_utils::radiansToDegrees(new_tibia);
+    leg_.setJointAngles(new_angles);
+
+    // Update tip position via FK
+    Point3D new_tip = robot_model_.forwardKinematicsGlobalCoordinates(leg_index_, new_angles);
+    leg_.setCurrentTipPositionGlobal(new_tip);
+    current_tip_pose_.position = new_tip;
+
+    // Progress calculation
+    int progress = static_cast<int>(std::round((static_cast<double>(config_iteration_count_ - 1) /
+                                                static_cast<double>(num_iterations)) *
+                                               PROGRESS_COMPLETE));
+    progress = math_utils::clamp(progress, 1, PROGRESS_COMPLETE);
+
+    if (config_iteration_count_ >= num_iterations) {
+        config_first_iteration_ = true;
+        desired_config_set_ = false;
+        return PROGRESS_COMPLETE;
+    }
+
+    return progress;
+}

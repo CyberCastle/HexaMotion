@@ -264,6 +264,37 @@ class BodyPoseController {
     bool isAutoPoseEnabled() const { return auto_pose_enabled; }
     void setAutoPoseEnabled(bool enabled) { auto_pose_enabled = enabled; }
 
+    /**
+     * @brief Enable manual body pose input composition.
+     * @param enabled True to include manual pose in composition
+     */
+    void setManualPoseEnabled(bool enabled) { manual_pose_enabled_ = enabled; }
+
+    /**
+     * @brief Set manual body pose input (translation + rotation).
+     * @param translation Translation in mm
+     * @param rotation Rotation in radians (roll,pitch,yaw)
+     */
+    void setManualPoseInput(const Point3D &translation, const Point3D &rotation);
+
+    /**
+     * @brief Enable IMU-based body pose correction.
+     * @param enabled True to include IMU correction in composition
+     */
+    void setIMUPoseEnabled(bool enabled) { imu_pose_enabled_ = enabled; }
+
+    /**
+     * @brief Enable inclination-based translation correction.
+     * @param enabled True to include inclination correction in composition
+     */
+    void setInclinationPoseEnabled(bool enabled) { inclination_pose_enabled_ = enabled; }
+
+    /**
+     * @brief Provide latest IMU data for pose corrections.
+     * @param imu_data Latest IMU data snapshot
+     */
+    void setIMUData(const IMUData &imu_data);
+
     // Smooth trajectory methods
     // orientation in radians
     bool setBodyPoseSmooth(const Eigen::Vector3d &position, const Eigen::Vector3d &orientation,
@@ -326,6 +357,78 @@ class BodyPoseController {
      * @param legs Array of Leg objects (needed for walk plane estimation and per-leg auto pose updates).
      */
     void updateCurrentPose(double gait_phase, Leg legs[NUM_LEGS]);
+
+    /**
+     * @brief Update IMU-based body pose using PID controller (OpenSHC equivalent).
+     * Uses low-pass filtered angular velocity (derivative), position error (proportional),
+     * and absement (integral of position error) for stable correction.
+     */
+    void updateIMUPosePID();
+
+    /**
+     * @brief Calculate default body pose for zero-moment balance (OpenSHC equivalent).
+     * Shifts the body towards the centroid of load-bearing legs' default tip positions
+     * to maintain balance when legs are in manual manipulation mode.
+     * @param legs Array of Leg objects
+     */
+    void calculateDefaultPose(Leg legs[NUM_LEGS]);
+
+    /**
+     * @brief Update tip alignment pose (OpenSHC equivalent, experimental).
+     * Generates a body translation that orients the final joint of swinging legs
+     * inline with the tip along the walk plane normal. Only effective for 3DOF legs.
+     * @param legs Array of Leg objects
+     */
+    void updateTipAlignPose(Leg legs[NUM_LEGS]);
+
+    /**
+     * @brief Update IK error compensation pose (OpenSHC equivalent).
+     * Accumulates IK position errors across legs and applies a body translation
+     * to compensate, decaying by 0.95 each cycle.
+     * @param legs Array of Leg objects
+     */
+    void updateIKErrorPose(Leg legs[NUM_LEGS]);
+
+    /**
+     * @brief Enable/disable tip alignment pose.
+     * @param enabled True to enable tip alignment
+     */
+    void setTipAlignPoseEnabled(bool enabled) { tip_align_pose_enabled_ = enabled; }
+
+    /**
+     * @brief Enable/disable IK error compensation pose.
+     * @param enabled True to enable IK error compensation
+     */
+    void setIKErrorPoseEnabled(bool enabled) { ik_error_pose_enabled_ = enabled; }
+
+    /**
+     * @brief Enable/disable default (zero-moment) pose.
+     * @param enabled True to enable default pose
+     */
+    void setDefaultPoseEnabled(bool enabled) { default_pose_enabled_ = enabled; }
+
+    /**
+     * @brief Access PID rotation errors for diagnostics.
+     */
+    Eigen::Vector3d getRotationAbsementError() const { return rotation_absement_error_; }
+    Eigen::Vector3d getRotationPositionError() const { return rotation_position_error_; }
+    Eigen::Vector3d getRotationVelocityError() const { return rotation_velocity_error_; }
+
+    /**
+     * @brief Reset all pose contributors to identity (OpenSHC equivalent).
+     */
+    void resetAllPosing() {
+        manual_pose_ = Pose::Identity();
+        imu_pose_ = Pose::Identity();
+        inclination_pose_ = Pose::Identity();
+        default_pose_ = Pose::Identity();
+        ik_error_pose_ = Pose::Identity();
+        tip_align_pose_ = Pose::Identity();
+        origin_tip_align_pose_ = Pose::Identity();
+        rotation_absement_error_ = Eigen::Vector3d::Zero();
+        rotation_position_error_ = Eigen::Vector3d::Zero();
+        rotation_velocity_error_ = Eigen::Vector3d::Zero();
+    }
 
     /**
      * @brief Apply global + per-leg auto pose modulation to desired tip positions (OpenSHC-style).
@@ -409,6 +512,29 @@ class BodyPoseController {
 
     // Composed body pose (currently equals walk_plane_pose_ but reserved for future manual/IMU components)
     Pose body_pose_current_ = Pose::Identity();
+
+    // Additional pose contributors (OpenSHC parity)
+    Pose manual_pose_ = Pose::Identity();
+    Pose imu_pose_ = Pose::Identity();
+    Pose inclination_pose_ = Pose::Identity();
+    Pose tip_align_pose_ = Pose::Identity();
+    Pose origin_tip_align_pose_ = Pose::Identity(); //< Origin tip align pose for interpolation (OpenSHC parity)
+    Pose default_pose_ = Pose::Identity();
+    Pose ik_error_pose_ = Pose::Identity(); //< IK error compensation pose (OpenSHC parity)
+    IMUData imu_data_{};
+    bool imu_data_valid_ = false;
+    bool manual_pose_enabled_ = false;
+    bool imu_pose_enabled_ = false;
+    bool inclination_pose_enabled_ = false;
+    bool tip_align_pose_enabled_ = false;
+    bool ik_error_pose_enabled_ = false;   //< Enable IK error compensation
+    bool default_pose_enabled_ = false;    //< Enable zero-moment default pose
+    bool recalculate_default_pose_ = true; //< Flag to recalculate default pose on leg state change
+
+    // PID state variables for IMU posing (OpenSHC parity)
+    Eigen::Vector3d rotation_absement_error_ = Eigen::Vector3d::Zero(); //< Integral of rotation error (absement)
+    Eigen::Vector3d rotation_position_error_ = Eigen::Vector3d::Zero(); //< Current rotation error
+    Eigen::Vector3d rotation_velocity_error_ = Eigen::Vector3d::Zero(); //< Low-pass filtered angular velocity error
 
     // Bézier curve control system for smooth transitions
     bool walk_plane_bezier_in_progress;              //< Whether a Bézier transition is in progress

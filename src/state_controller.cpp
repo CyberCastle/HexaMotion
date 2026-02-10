@@ -136,7 +136,7 @@ String toArduinoString(const std::string &str) {
 } // namespace
 
 StateController::StateController(LocomotionSystem &locomotion, const StateMachineConfig &config)
-    : locomotion_system_(locomotion), config_(config), current_system_state_(SystemState::SYSTEM_PACKED), current_robot_state_(RobotState::ROBOT_UNKNOWN), current_walk_state_(WalkState::WALK_STOPPED), current_posing_mode_(PosingMode::POSING_NONE), current_cruise_control_mode_(CruiseControlMode::CRUISE_CONTROL_OFF), current_pose_reset_mode_(PoseResetMode::POSE_RESET_NONE), desired_system_state_(SystemState::SYSTEM_PACKED), desired_robot_state_(RobotState::ROBOT_UNKNOWN), leg_states_{}, manual_leg_count_(0), is_transitioning_(false), transition_start_time_(0), desired_linear_velocity_(Eigen::Vector2d::Zero()), desired_angular_velocity_(0.0f), desired_body_position_(Eigen::Vector3d::Zero()), desired_body_orientation_(Eigen::Vector3d::Zero()), cruise_velocity_(Eigen::Vector3d::Zero()), cruise_start_time_(0), cruise_end_time_(0), last_update_time_(0), time_delta_(0.02f), has_error_(false), startup_step_(0), startup_transition_initialized_(false), startup_transition_step_count_(4), shutdown_step_(0), shutdown_transition_initialized_(false), shutdown_transition_step_count_(3), pack_step_(0), unpack_step_(0), is_initialized_(false) {
+    : locomotion_system_(locomotion), config_(config), current_system_state_(SystemState::SYSTEM_PACKED), current_robot_state_(RobotState::ROBOT_UNKNOWN), current_walk_state_(WalkState::WALK_STOPPED), current_posing_mode_(PosingMode::POSING_NONE), current_cruise_control_mode_(CruiseControlMode::CRUISE_CONTROL_OFF), current_pose_reset_mode_(PoseResetMode::POSE_RESET_NONE), desired_system_state_(SystemState::SYSTEM_PACKED), desired_robot_state_(RobotState::ROBOT_UNKNOWN), leg_states_{}, manual_leg_count_(0), toggle_leg_index_(-1), toggle_leg_state_pending_(false), is_transitioning_(false), transition_start_time_(0), desired_linear_velocity_(Eigen::Vector2d::Zero()), desired_angular_velocity_(0.0f), desired_body_position_(Eigen::Vector3d::Zero()), desired_body_orientation_(Eigen::Vector3d::Zero()), cruise_velocity_(Eigen::Vector3d::Zero()), cruise_start_time_(0), cruise_end_time_(0), last_update_time_(0), time_delta_(0.02f), has_error_(false), startup_step_(0), startup_transition_initialized_(false), startup_transition_step_count_(4), shutdown_step_(0), shutdown_transition_initialized_(false), shutdown_transition_step_count_(3), pack_step_(0), unpack_step_(0), is_initialized_(false) {
 
     // Initialize leg states
     for (int i = 0; i < NUM_LEGS; i++) {
@@ -383,6 +383,45 @@ bool StateController::setLegState(int leg_index, LegState state) {
 
     leg_states_[leg_index] = state;
     logDebug("Leg " + toArduinoString(toString(leg_index)) + " state changed to: " + toArduinoString(toString(state)));
+    return true;
+}
+
+bool StateController::requestLegToggle(int leg_index) {
+    if (leg_index < 0 || leg_index >= NUM_LEGS) {
+        setError("Invalid leg index for toggle: " + toArduinoString(toString(leg_index)));
+        return false;
+    }
+    if (current_robot_state_ != RobotState::ROBOT_RUNNING) {
+        setError("Cannot toggle leg state when robot is not in RUNNING state");
+        return false;
+    }
+    if (toggle_leg_state_pending_) {
+        setError("A leg toggle is already in progress");
+        return false;
+    }
+
+    LegState current = leg_states_[leg_index];
+    if (current == LegState::LEG_WALKING) {
+        if (manual_leg_count_ >= config_.max_manual_legs) {
+            setError("Maximum number of manual legs (" +
+                     toArduinoString(toString(config_.max_manual_legs)) + ") already reached");
+            return false;
+        }
+        // Begin WALKING -> WALKING_TO_MANUAL transition
+        leg_states_[leg_index] = LegState::LEG_WALKING_TO_MANUAL;
+        toggle_leg_index_ = leg_index;
+        toggle_leg_state_pending_ = true;
+        logDebug("Leg " + toArduinoString(toString(leg_index)) + " toggle requested: WALKING -> MANUAL");
+    } else if (current == LegState::LEG_MANUAL) {
+        // Begin MANUAL -> MANUAL_TO_WALKING transition
+        leg_states_[leg_index] = LegState::LEG_MANUAL_TO_WALKING;
+        toggle_leg_index_ = leg_index;
+        toggle_leg_state_pending_ = true;
+        logDebug("Leg " + toArduinoString(toString(leg_index)) + " toggle requested: MANUAL -> WALKING");
+    } else {
+        setError("Leg " + toArduinoString(toString(leg_index)) + " is already transitioning");
+        return false;
+    }
     return true;
 }
 
@@ -730,27 +769,62 @@ void StateController::updateWalkState() {
 }
 
 void StateController::handleLegStateTransitions() {
-    for (int i = 0; i < NUM_LEGS; i++) {
-        switch (leg_states_[i]) {
-        case LegState::LEG_WALKING_TO_MANUAL:
-            // Transition logic for walking to manual
-            if (current_walk_state_ == WalkState::WALK_STOPPED) {
-                leg_states_[i] = LegState::LEG_MANUAL;
-                logDebug("Leg " + toArduinoString(toString(i)) + " transitioned to MANUAL");
-            }
-            break;
+    // OpenSHC legStateToggle equivalent: handles gradual leg state transitions
+    // via poseForLegManipulation when a toggle request is pending.
 
-        case LegState::LEG_MANUAL_TO_WALKING:
-            // Transition logic for manual to walking
-            leg_states_[i] = LegState::LEG_WALKING;
-            manual_leg_count_--;
-            logDebug("Leg " + toArduinoString(toString(i)) + " transitioned to WALKING");
-            break;
+    if (!toggle_leg_state_pending_ || toggle_leg_index_ < 0 || toggle_leg_index_ >= NUM_LEGS) {
+        return;
+    }
 
-        default:
-            // No transition needed
-            break;
+    LegState &state = leg_states_[toggle_leg_index_];
+
+    // Must be WALK_STOPPED before transitions can proceed (OpenSHC forces stop first)
+    if (current_walk_state_ != WalkState::WALK_STOPPED) {
+        // Force velocity to zero so the walker reaches STOPPED
+        desired_linear_velocity_ = Eigen::Vector2d::Zero();
+        desired_angular_velocity_ = 0.0;
+        return;
+    }
+
+    // Retrieve body pose controller for poseForLegManipulation
+    BodyPoseController *bpc = locomotion_system_.getBodyPoseController();
+
+    switch (state) {
+    case LegState::LEG_WALKING_TO_MANUAL: {
+        // Drive all legs to manipulation-ready poses via poseForLegManipulation
+        int progress = 100;
+        if (bpc) {
+            progress = bpc->poseForLegManipulation(locomotion_system_.getLegsArray());
         }
+        if (progress >= 100) {
+            state = LegState::LEG_MANUAL;
+            manual_leg_count_++;
+            toggle_leg_state_pending_ = false;
+            toggle_leg_index_ = -1;
+            logDebug("Leg " + toArduinoString(toString(toggle_leg_index_)) + " set to state: MANUAL");
+        }
+        break;
+    }
+    case LegState::LEG_MANUAL_TO_WALKING: {
+        // Drive all legs back to walking-ready poses via poseForLegManipulation
+        int progress = 100;
+        if (bpc) {
+            progress = bpc->poseForLegManipulation(locomotion_system_.getLegsArray());
+        }
+        if (progress >= 100) {
+            state = LegState::LEG_WALKING;
+            manual_leg_count_--;
+            toggle_leg_state_pending_ = false;
+            toggle_leg_index_ = -1;
+            logDebug("Leg " + toArduinoString(toString(toggle_leg_index_)) + " set to state: WALKING");
+        }
+        break;
+    }
+    default:
+        // No valid transition state; clear pending flag
+        toggle_leg_state_pending_ = false;
+        toggle_leg_index_ = -1;
+        break;
     }
 }
 
@@ -881,7 +955,7 @@ void StateController::applyBodyPositionControl(bool enable_x, bool enable_y, boo
     }
 
     // Apply the position control via locomotion system
-    bool success = locomotion_system_.setBodyPose(controlled_position, desired_body_orientation_);
+    bool success = locomotion_system_.setManualBodyPoseInput(controlled_position, desired_body_orientation_);
 
     if (!success) {
         logError("Failed to apply body position control");
@@ -915,7 +989,7 @@ void StateController::applyBodyOrientationControl(bool enable_roll, bool enable_
     }
 
     // Apply the orientation control via locomotion system
-    bool success = locomotion_system_.setBodyPose(desired_body_position_, controlled_orientation);
+    bool success = locomotion_system_.setManualBodyPoseInput(desired_body_position_, controlled_orientation);
 
     if (!success) {
         logError("Failed to apply body orientation control");
@@ -983,7 +1057,7 @@ void StateController::applyPoseReset() {
     }
 
     // Apply the reset pose
-    bool success = locomotion_system_.setBodyPose(reset_position, reset_orientation);
+    bool success = locomotion_system_.setManualBodyPoseInput(reset_position, reset_orientation);
 
     if (success) {
         // Update internal desired pose state

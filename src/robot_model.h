@@ -121,7 +121,20 @@ struct Parameters {
         double kp = 0.6f;
         double lp_alpha = 0.10f;
         double max_tilt_deg = 12.0f;
+        // PID gains for IMU posing (OpenSHC rotation_pid_gains equivalent)
+        double imu_pid_kp = 1.0; //< Proportional gain for rotation correction
+        double imu_pid_ki = 0.0; //< Integral gain (absement) for rotation correction
+        double imu_pid_kd = 0.0; //< Derivative gain (angular velocity) for rotation correction
     } body_comp;
+
+    /**
+     * @brief Manual leg manipulation parameters (OpenSHC equivalent).
+     */
+    struct ManualLegConfig {
+        double max_translation_velocity = 200.0; //< Max tip translation speed in mm/s (OpenSHC: max_translation_velocity)
+        double max_rotation_velocity = 1.0;      //< Max joint rotation speed in rad/s (OpenSHC: max_rotation_velocity)
+        bool joint_control = true;               //< true = joint_control mode, false = tip_control mode (OpenSHC: leg_manipulation_mode)
+    } manual_leg;
 
     // Tipo de gait seleccionado (OpenSHC compatible)
     std::string gait_type;

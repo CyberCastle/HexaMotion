@@ -309,6 +309,19 @@ class StateController {
      */
     bool setLegState(int leg_index, LegState state);
 
+    /**
+     * @brief Request a leg state toggle between WALKING and MANUAL (OpenSHC equivalent).
+     *
+     * This initiates a gradual transition: the walk controller is stopped first,
+     * then poseForLegManipulation drives the legs to appropriate poses before
+     * the final state change. Called once per user request; the transition is
+     * completed over subsequent update() ticks.
+     *
+     * @param leg_index Index of the leg to toggle (0-5)
+     * @return True if toggle request was accepted
+     */
+    bool requestLegToggle(int leg_index);
+
     // ==============================
     // VELOCITY AND POSE CONTROL
     // ==============================
@@ -443,6 +456,10 @@ class StateController {
     // Leg states
     LegState leg_states_[NUM_LEGS];
     int manual_leg_count_;
+
+    // Leg state toggle tracking (OpenSHC equivalent)
+    int toggle_leg_index_;          //< Index of leg currently toggling (-1 if none)
+    bool toggle_leg_state_pending_; //< Flag indicating a leg state toggle is in progress
 
     // Transition management
     bool is_transitioning_;

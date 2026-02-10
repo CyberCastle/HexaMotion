@@ -111,6 +111,13 @@ const TerrainAdaptation::ExternalTarget &TerrainAdaptation::getExternalTarget(in
     return EMPTY_EXTERNAL_TARGET;
 }
 
+const TerrainAdaptation::ExternalTarget &TerrainAdaptation::getExternalDefault(int leg_index) const {
+    if (leg_index >= 0 && leg_index < NUM_LEGS) {
+        return external_defaults_[leg_index];
+    }
+    return EMPTY_EXTERNAL_TARGET;
+}
+
 const TerrainAdaptation::StepPlane &TerrainAdaptation::getStepPlane(int leg_index) const {
     if (leg_index >= 0 && leg_index < NUM_LEGS) {
         return step_planes_[leg_index];

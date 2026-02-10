@@ -19,10 +19,11 @@ enum StepState {
  * @brief External target for leg positioning (OpenSHC equivalent)
  */
 struct LegStepperExternalTarget {
-    Point3D position;       //< Target position
-    double swing_clearance; //< Swing clearance height
-    std::string frame_id;   //< Reference frame ID
-    bool defined = false;   //< Whether target is defined
+    Point3D position;            //< Target position
+    double swing_clearance;      //< Swing clearance height
+    std::string frame_id;        //< Reference frame ID
+    unsigned long timestamp = 0; //< Request timestamp (ms)
+    bool defined = false;        //< Whether target is defined
 };
 
 /**
@@ -109,6 +110,8 @@ class LegStepper {
     Point3D getSwing2ControlNode(int i) const { return swing_2_nodes_[i]; }
     Point3D getStanceControlNode(int i) const { return stance_nodes_[i]; }
     Point3D getSwingClearance() const { return swing_clearance_; }
+    LegStepperExternalTarget getExternalTarget() const { return external_target_; }
+    LegStepperExternalTarget getExternalDefault() const { return external_default_; }
 
     // OpenSHC-specific accessors
     int getSwingIterations() const { return swing_iterations_; }
@@ -127,6 +130,14 @@ class LegStepper {
     void setTargetTipPose(const Point3D &pose) { target_tip_pose_ = pose; }
     void setStepState(StepState state) { step_state_ = state; }
     void setPhase(int phase) { phase_ = phase; }
+    void setExternalTarget(const LegStepperExternalTarget &target) { external_target_ = target; }
+    void setExternalDefault(const LegStepperExternalTarget &target) { external_default_ = target; }
+    void setTouchdownDetection(bool enabled) { touchdown_detection_ = enabled; }
+    void setStepPlane(const Point3D &position, const Point3D &normal, bool valid) {
+        step_plane_position_ = position;
+        step_plane_normal_ = normal;
+        step_plane_valid_ = valid;
+    }
     void setStepProgress(double progress) { step_progress_ = progress; }
     void setPhaseOffset(double offset) { leg_.setPhaseOffset(offset); }
     void setSwingOriginTipVelocity(const Point3D &velocity) { swing_origin_tip_velocity_ = velocity; }
@@ -271,6 +282,14 @@ class LegStepper {
     bool nodes_generated_;
     int last_swing_iteration_;
     int last_swing_start_iteration_;
+
+    // External target/default support (rough terrain)
+    LegStepperExternalTarget external_target_;
+    LegStepperExternalTarget external_default_;
+    bool touchdown_detection_ = false;
+    bool step_plane_valid_ = false;
+    Point3D step_plane_position_;
+    Point3D step_plane_normal_ = Point3D(0, 0, 1);
 
     // Additional swing trajectory variable (was missing)
     Point3D swing_clearance_; // Swing clearance vector (OpenSHC)
