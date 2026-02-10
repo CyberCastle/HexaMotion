@@ -204,24 +204,108 @@ void RobotModel::clampJointAngles(JointAngles &angles) const {
     }
 }
 
-// OpenSHC-style Damped Least Squares (DLS) iterative inverse kinematics
+/**
+ * @brief Solve inverse kinematics from scratch for a global-frame target.
+ *
+ * Unlike inverseKinematicsCurrentGlobalCoordinates (which refines from the
+ * current joint state, mirroring OpenSHC's incremental per-cycle approach),
+ * this method computes a full IK solution without requiring a prior joint
+ * configuration.  It is intended for situations where no reasonable seed
+ * angles are available — e.g. initial stance setup, teleporting a foot to
+ * an arbitrary position, or validating workspace reachability — so the
+ * solver cannot rely on small incremental deltas.
+ *
+ * An analytical initial guess is derived from the DH chain geometry
+ * (law of cosines for tibia, linear system for femur, atan2 for coxa)
+ * and then refined with a DLS iterative solver.  Two coxa candidates
+ * (direct and π-flipped) and two tibia solutions (elbow-up / elbow-down)
+ * are evaluated to handle backward-folding configurations and joint-limit
+ * boundary cases.
+ *
+ * @param leg   Internal leg index (0–5).
+ * @param p     Desired tip position in the global (robot body) frame.
+ * @return      Joint angles that place the tip at @p p (clamped to limits
+ *              if clamping is enabled).
+ */
 JointAngles RobotModel::inverseKinematicsGlobalCoordinates(int leg, const Point3D &p) const {
     // Transform target to leg coordinate system for initial guess only
     Point3D local_target = transformGlobalToLocalLegCoordinates(leg, p);
 
-    // Initial guess based on target direction and realistic kinematics
-    double coxa_start = atan2(local_target.y, local_target.x);
-    coxa_start = constrainAngle(coxa_start, coxa_angle_limits_rad[0], coxa_angle_limits_rad[1]);
+    const double f = params.femur_length;
+    const double t = params.tibia_length;
+    const double base_angle = BASE_THETA_OFFSETS[leg];
+    // Small tolerance for floating-point boundary comparisons
+    const double eps = 1e-9;
 
-    // Initial estimates for femur and tibia based only on DH model
-    double femur_estimate = 0.0f;
-    double tibia_estimate = 0.0f;
+    // Coxa from atan2 may point "forward" when the leg is actually folded
+    // backward (high femur angles). Build candidate coxa angles: the direct
+    // atan2 result AND the π-flipped version, then pick the best analytical fit.
+    double coxa_raw = atan2(local_target.y, local_target.x);
+    double coxa_candidates[2] = {coxa_raw, normalizeAngle(coxa_raw + M_PI)};
 
-    JointAngles current_angles(coxa_start, femur_estimate, tibia_estimate);
-    clampJointAngles(current_angles);
+    double best_error = std::numeric_limits<double>::max();
+    JointAngles best_guess(0.0, 0.0, 0.0);
+
+    for (int c = 0; c < 2; ++c) {
+        double coxa_c = constrainAngle(coxa_candidates[c],
+                                       coxa_angle_limits_rad[0], coxa_angle_limits_rad[1]);
+        double total_angle = base_angle + coxa_c;
+
+        // Femur pivot in global coordinates
+        double fp_x = params.hexagon_radius * cos(base_angle) + params.coxa_length * cos(total_angle);
+        double fp_y = params.hexagon_radius * sin(base_angle) + params.coxa_length * sin(total_angle);
+
+        // Displacement from femur pivot to target, projected onto coxa radial direction
+        double gdx = p.x - fp_x;
+        double gdy = p.y - fp_y;
+        double dx = cos(total_angle) * gdx + sin(total_angle) * gdy; // radial
+        double dz = p.z;                                             // vertical (femur pivot z = 0)
+
+        double R2 = dx * dx + dz * dz;
+        double sin_tibia = (f * f + t * t - R2) / (2.0 * f * t);
+        if (sin_tibia < -1.0 - eps || sin_tibia > 1.0 + eps)
+            continue;
+        sin_tibia = std::max(-1.0, std::min(1.0, sin_tibia));
+
+        // Try both tibia solutions (elbow up / elbow down)
+        double tibia_sols[2] = {asin(sin_tibia), M_PI - asin(sin_tibia)};
+        for (int s = 0; s < 2; ++s) {
+            double tibia_e = tibia_sols[s];
+            double P = f - t * sin(tibia_e);
+            double Q = t * cos(tibia_e);
+            double femur_e = atan2(-(Q * dx + P * dz), P * dx - Q * dz);
+
+            // Skip if clearly outside joint limits (with floating-point tolerance)
+            if (femur_e < femur_angle_limits_rad[0] - eps || femur_e > femur_angle_limits_rad[1] + eps ||
+                tibia_e < tibia_angle_limits_rad[0] - eps || tibia_e > tibia_angle_limits_rad[1] + eps)
+                continue;
+
+            // Clamp to exact limits before FK evaluation
+            femur_e = std::max(femur_angle_limits_rad[0], std::min(femur_angle_limits_rad[1], femur_e));
+            tibia_e = std::max(tibia_angle_limits_rad[0], std::min(tibia_angle_limits_rad[1], tibia_e));
+
+            // Evaluate FK error for this candidate
+            JointAngles candidate(coxa_c, femur_e, tibia_e);
+            Point3D fk = forwardKinematicsGlobalCoordinates(leg, candidate);
+            double err = (fk.x - p.x) * (fk.x - p.x) +
+                         (fk.y - p.y) * (fk.y - p.y) +
+                         (fk.z - p.z) * (fk.z - p.z);
+            if (err < best_error) {
+                best_error = err;
+                best_guess = candidate;
+            }
+        }
+    }
+
+    // If no analytical candidate was found, fall back to clamped atan2
+    if (best_error == std::numeric_limits<double>::max()) {
+        double coxa_start = constrainAngle(coxa_raw, coxa_angle_limits_rad[0], coxa_angle_limits_rad[1]);
+        best_guess = JointAngles(coxa_start, 0.0, 0.0);
+        clampJointAngles(best_guess);
+    }
 
     // Pass global target directly — solveIK works in global frame (matching Jacobian)
-    return solveIK(leg, p, current_angles);
+    return solveIK(leg, p, best_guess);
 }
 
 JointAngles RobotModel::inverseKinematicsCurrentGlobalCoordinates(int leg, const JointAngles &current,

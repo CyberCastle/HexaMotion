@@ -78,5 +78,13 @@ int main() {
     }
 
     std::cout << "Max IK/FK error encountered: " << max_error << " mm" << std::endl;
+
+    const double max_acceptable_error = 0.01; // 0.01 mm tolerance
+    if (max_error > max_acceptable_error) {
+        std::cerr << "FAIL: IK/FK round-trip error " << max_error
+                  << " mm exceeds tolerance " << max_acceptable_error << " mm" << std::endl;
+        return 1;
+    }
+    std::cout << "PASS: All IK/FK round-trip errors within tolerance" << std::endl;
     return 0;
 }
