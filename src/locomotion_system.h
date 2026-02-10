@@ -14,6 +14,7 @@
 #include <vector>
 // Forward declarations
 class WalkController;
+class StateController;
 
 // Main locomotion system class
 class LocomotionSystem {
@@ -65,6 +66,9 @@ class LocomotionSystem {
     BodyPoseController *body_pose_ctrl;
     WalkController *walk_ctrl;
     AdmittanceController *admittance_ctrl;
+
+    // Optional state controller integration (non-owning).
+    StateController *state_controller_ = nullptr;
 
     // --- Debug / instrumentation helpers ---
     // Track last phase we logged for each leg to debounce repetitive FSR transition spam when other
@@ -193,6 +197,21 @@ class LocomotionSystem {
     bool isStartupInProgress() const { return startup_in_progress; }
     /** Check if shutdown sequence is in progress */
     bool isShutdownInProgress() const { return shutdown_in_progress; }
+    /**
+     * @brief Attach a StateController to be updated from LocomotionSystem (non-owning).
+     * @param controller Pointer to the state controller instance.
+     */
+    void setStateController(StateController *controller) { state_controller_ = controller; }
+    /**
+     * @brief Get attached StateController (may be nullptr).
+     * @return Pointer to attached StateController or nullptr.
+     */
+    StateController *getStateController() const { return state_controller_; }
+    /**
+     * @brief Check if a StateController is attached.
+     * @return True if state controller pointer is set.
+     */
+    bool hasStateController() const { return state_controller_ != nullptr; }
     /** Get current system state */
     SystemState getSystemState() const { return system_state; }
     /** Get startup progress percent (0-100). Returns 100 if startup already completed or controller missing. */

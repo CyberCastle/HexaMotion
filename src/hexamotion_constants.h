@@ -108,6 +108,15 @@
 // This is gait-independent, unlike gait-specific step heights
 #define BODY_POSE_DEFAULT_SWING_HEIGHT_FACTOR 0.10 // 10% of standing height (OpenSHC: 0.020m for typical robot)
 
+// OpenSHC startup/shutdown transition tuning (seconds @ step frequency == 1.0)
+#define SAFETY_FACTOR 0.15             // Joint limit safety factor during sequence generation
+#define HORIZONTAL_TRANSITION_TIME 1.0 // Horizontal transition time (s)
+#define VERTICAL_TRANSITION_TIME 3.0   // Vertical transition time (s)
+#define TRANSITION_STEP_THRESHOLD 20   // Max allowed transition steps before failure
+
+// OpenSHC load-bearing estimate threshold (mm)
+#define HALF_BODY_DEPTH_MM 50.0
+
 // Velocity scaling and coupling factors
 #define DEFAULT_ANGULAR_SCALING 1.0        // Default angular velocity scaling
 #define ANGULAR_ACCELERATION_FACTOR 2000.0 // Angular acceleration threshold (mm/s²)

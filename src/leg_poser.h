@@ -49,6 +49,11 @@ class LegPoser {
 
     // Accessors
     inline int getLegIndex() const { return leg_index_; }
+    /**
+     * @brief Get the current tip pose from the Leg's global tip position.
+     * Note: In executeSequenceInternal, the authoritative position is restored
+     * after setJointAngles to prevent FK drift from corrupting this value.
+     */
     inline Pose getCurrentTipPose() const {
         Point3D tip_pos = leg_.getCurrentTipPositionGlobal();
         return Pose(tip_pos, Eigen::Vector3d(0, 0, 0));
@@ -57,6 +62,23 @@ class LegPoser {
     inline ExternalTarget getExternalTarget() const { return external_target_; }
     inline Pose getAutoPose() const { return auto_pose_; }
     inline bool getLegCompletedStep() const { return leg_completed_step_; }
+
+    // Transition sequence helpers (OpenSHC parity)
+    /** Reset stored transition poses for sequence generation. */
+    void resetTransitionSequence() { transition_poses_.clear(); }
+    /** Append a transition pose in sequence order. */
+    void addTransitionPose(const Pose &pose) { transition_poses_.push_back(pose); }
+    /** Check if a transition pose exists for the given index. */
+    bool hasTransitionPose(int index) const {
+        return index >= 0 && static_cast<size_t>(index) < transition_poses_.size();
+    }
+    /** Get transition pose by index (identity if missing). */
+    Pose getTransitionPose(int index) const {
+        if (!hasTransitionPose(index)) {
+            return Pose::Identity();
+        }
+        return transition_poses_[index];
+    }
 
     // Progress (0.0 - 1.0) of current stepping maneuver
     double getCurrentStepProgress() const {
@@ -184,6 +206,9 @@ class LegPoser {
     ExternalTarget external_target_; //< Externally set target tip pose object
 
     bool leg_completed_step_ = false; //< Flag denoting if leg has completed its required step in a sequence
+
+    // OpenSHC-style transition sequence poses
+    std::vector<Pose> transition_poses_;
 
     double physical_reference_height_;  //< Physical reference height (z = getDefaultHeightOffset() when all angles are 0°)
     Point3D admittance_delta_{0, 0, 0}; //< Latest admittance (compliance) delta applied when apply_delta=true

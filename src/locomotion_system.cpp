@@ -2,6 +2,7 @@
 #include "body_pose_config_factory.h"
 #include "hexamotion_constants.h"
 #include "math_utils.h"
+#include "state_controller.h"
 #include "walk_controller.h"
 #include "workspace_analyzer.h" // Add unified analyzer
 #include <algorithm>
@@ -263,9 +264,14 @@ bool LocomotionSystem::walkSideways(double velocity, bool right_direction) {
 }
 
 bool LocomotionSystem::executeStartupSequence() {
+    if (!body_pose_ctrl || !walk_ctrl) {
+        last_error = STATE_ERROR;
+        return false;
+    }
 
     // Execute the body pose controller startup sequence
     bool startup_complete = body_pose_ctrl->executeStartupSequence(legs);
+    startup_in_progress = !startup_complete;
 
     if (startup_complete) {
         // Initialize walk controller for RUNNING state (OpenSHC pattern)
@@ -299,6 +305,13 @@ bool LocomotionSystem::executeStartupSequence() {
 }
 
 bool LocomotionSystem::executeShutdownSequence() {
+
+    if (!body_pose_ctrl || !walk_ctrl) {
+        last_error = STATE_ERROR;
+        return false;
+    }
+
+    shutdown_in_progress = true;
 
     // Update walk controller one final time with zero velocity
     walk_ctrl->updateWalk(Point3D(0.0, 0.0, 0.0), 0.0,
@@ -527,6 +540,11 @@ void LocomotionSystem::resetSmoothMovement() {
  * }
  */
 bool LocomotionSystem::update() {
+
+    // Update state machine first when attached (OpenSHC-style orchestration)
+    if (state_controller_ && state_controller_->isInitialized()) {
+        state_controller_->update(params.time_delta);
+    }
 
     // Update sensors in parallel for optimal performance
     if (!updateSensorsParallel()) {
@@ -1113,8 +1131,11 @@ void LocomotionSystem::applyInverseKinematicsToAllLegs() {
         // Update joint angles in Leg object
         legs[i].setJointAngles(new_angles);
 
-        // Update tip position using FK to maintain consistency
-        legs[i].updateTipPosition();
+        // Restore authoritative tip position after setJointAngles.
+        // setJointAngles triggers FK which can drift from the Bézier output
+        // (IK is approximate, so FK(IK(pos)) ≠ pos). Keep the planned position
+        // as the authoritative "current" to prevent drift accumulation across cycles.
+        legs[i].setCurrentTipPositionGlobal(desired_tip_position);
     }
 }
 

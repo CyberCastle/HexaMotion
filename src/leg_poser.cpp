@@ -30,7 +30,7 @@ LegPoser::LegPoser(int leg_index, Leg &leg, RobotModel &robot_model)
 }
 
 LegPoser::LegPoser(const LegPoser *leg_poser)
-    : leg_index_(leg_poser->leg_index_), leg_(leg_poser->leg_), robot_model_(leg_poser->robot_model_), auto_pose_(leg_poser->auto_pose_), first_iteration_(leg_poser->first_iteration_), master_iteration_count_(leg_poser->master_iteration_count_), origin_tip_pose_(leg_poser->origin_tip_pose_), current_tip_pose_(leg_poser->current_tip_pose_), target_tip_pose_(leg_poser->target_tip_pose_), external_target_(leg_poser->external_target_), leg_completed_step_(leg_poser->leg_completed_step_), physical_reference_height_(leg_poser->physical_reference_height_) {
+    : leg_index_(leg_poser->leg_index_), leg_(leg_poser->leg_), robot_model_(leg_poser->robot_model_), auto_pose_(leg_poser->auto_pose_), first_iteration_(leg_poser->first_iteration_), master_iteration_count_(leg_poser->master_iteration_count_), origin_tip_pose_(leg_poser->origin_tip_pose_), current_tip_pose_(leg_poser->current_tip_pose_), target_tip_pose_(leg_poser->target_tip_pose_), external_target_(leg_poser->external_target_), leg_completed_step_(leg_poser->leg_completed_step_), transition_poses_(leg_poser->transition_poses_), physical_reference_height_(leg_poser->physical_reference_height_) {
 }
 
 int LegPoser::stepToPosition(const Pose &target_tip_pose, const Pose &target_pose,

@@ -44,7 +44,7 @@ brute_force_workspace_test: brute_force_workspace_test.cpp ../src/robot_model.cp
 jacobian_validation_test: jacobian_validation_test.cpp ../src/robot_model.cpp ../src/math_utils.cpp ../src/workspace_analyzer.cpp
 	$(CXX) $(CXXFLAGS) $^ -o $@
 
-pose_gait_integration_test: pose_gait_integration_test.cpp ../src/locomotion_system.cpp ../src/robot_model.cpp ../src/body_pose_controller.cpp ../src/walk_controller.cpp ../src/leg_stepper.cpp ../src/terrain_adaptation.cpp ../src/admittance_controller.cpp ../src/velocity_limits.cpp ../src/cartesian_velocity_controller.cpp ../src/math_utils.cpp ../src/workspace_analyzer.cpp ../src/body_pose_config_factory.cpp ../src/leg.cpp ../src/leg_poser.cpp ../src/gait_config_factory.cpp
+pose_gait_integration_test: pose_gait_integration_test.cpp ../src/locomotion_system.cpp ../src/robot_model.cpp ../src/body_pose_controller.cpp ../src/walk_controller.cpp ../src/leg_stepper.cpp ../src/terrain_adaptation.cpp ../src/admittance_controller.cpp ../src/velocity_limits.cpp ../src/cartesian_velocity_controller.cpp ../src/math_utils.cpp ../src/workspace_analyzer.cpp ../src/body_pose_config_factory.cpp ../src/leg.cpp ../src/leg_poser.cpp ../src/gait_config_factory.cpp ../src/state_controller.cpp
 	$(CXX) $(CXXFLAGS) $^ -o $@
 
 finetune_angles_test: finetune_angles_test.cpp ../src/robot_model.cpp ../src/math_utils.cpp ../src/analytic_robot_model.cpp ../src/body_pose_config_factory.cpp ../src/workspace_analyzer.cpp

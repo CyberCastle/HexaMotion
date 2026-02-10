@@ -38,9 +38,9 @@ BodyPoseController::BodyPoseController(RobotModel &m, const BodyPoseConfiguratio
       shutdown_sequence_initialized(false),
       // OpenSHC state variables initialization
       executing_transition_(false), transition_step_(0), transition_step_count_(0),
-      set_target_(false), proximity_alert_(false), horizontal_transition_complete_(false),
+      set_target_(true), proximity_alert_(false), horizontal_transition_complete_(false),
       vertical_transition_complete_(false), first_sequence_execution_(true),
-      reset_transition_sequence_(false), legs_completed_step_(0), current_group_(0),
+      reset_transition_sequence_(true), legs_completed_step_(0), current_group_(0),
       pack_step_(0) {
 
     // Initialize leg posers
@@ -300,6 +300,7 @@ bool BodyPoseController::calculateBodyPoseFromConfig(double height_offset, Leg l
 
             legs[i].setCurrentTipPositionGlobal(target_pos);
             legs[i].setJointAngles(angles);
+            legs[i].setCurrentTipPositionGlobal(target_pos);
         }
     }
 
@@ -519,6 +520,7 @@ bool BodyPoseController::updateTrajectoryStep(Leg legs[NUM_LEGS]) {
         for (int i = 0; i < NUM_LEGS; i++) {
             legs[i].setCurrentTipPositionGlobal(trajectory_target_positions[i]);
             legs[i].setJointAngles(trajectory_target_angles[i]);
+            legs[i].setCurrentTipPositionGlobal(trajectory_target_positions[i]);
         }
 
         resetTrajectory();
@@ -548,6 +550,7 @@ bool BodyPoseController::updateTrajectoryStep(Leg legs[NUM_LEGS]) {
         // Update leg
         legs[i].setCurrentTipPositionGlobal(interp_pos);
         legs[i].setJointAngles(interp_angles);
+        legs[i].setCurrentTipPositionGlobal(interp_pos);
     }
 
     return true;
@@ -567,9 +570,9 @@ bool BodyPoseController::beginInitialStandingPoseTransition(Leg legs[NUM_LEGS]) 
         initializeLegPosers(legs);
     }
 
-    // Use OpenSHC-style Bezier tip trajectories for standing up.
-    initial_standing_use_bezier_ = true;
-    resetSequenceStates();
+    // Use OpenSHC direct startup-style transition for standing up.
+    initial_standing_use_bezier_ = false;
+    initial_standing_progress_ = 0.0;
     initial_standing_active_ = true;
     return true;
 }
@@ -583,43 +586,80 @@ bool BodyPoseController::stepInitialStandingPoseTransition(Leg legs[NUM_LEGS], d
     }
 
     if (initial_standing_use_bezier_) {
-        bool complete = executeStartupSequence(legs);
+        return false;
+    }
 
+    int min_progress = PROGRESS_COMPLETE;
+    int completed_legs = 0;
+    double time_to_start = body_pose_config.time_to_start;
+
+    for (int l = 0; l < NUM_LEGS; ++l) {
+        if (!leg_posers_[l])
+            continue;
+        LegPoser *lp = leg_posers_[l]->get();
+        const StandingPoseJoints &standing = body_pose_config.standing_pose_joints[l];
+        JointAngles target_angles;
+        target_angles.coxa = standing.coxa;
+        target_angles.femur = standing.femur;
+        target_angles.tibia = standing.tibia;
+        Point3D target_tip = model.forwardKinematicsGlobalCoordinates(l, target_angles);
+        Pose target_pose(target_tip, Eigen::Quaterniond::Identity());
+
+        int progress = lp->stepToPosition(target_pose, Pose::Identity(), 0.0, time_to_start, false);
+        min_progress = std::min(min_progress, progress);
+
+        Point3D desired_tip = lp->getCurrentPosition();
+        legs[l].setCurrentTipPositionGlobal(desired_tip);
+        JointAngles current_angles = legs[l].getJointAngles();
+        JointAngles next_angles = model.inverseKinematicsCurrentGlobalCoordinates(l, current_angles, desired_tip);
+        legs[l].setJointAngles(next_angles);
+        legs[l].setCurrentTipPositionGlobal(desired_tip);
+
+        if (progress == PROGRESS_COMPLETE) {
+            completed_legs++;
+        }
+    }
+
+    initial_standing_progress_ = math_utils::clamp(static_cast<double>(min_progress) / 100.0, 0.0, 1.0);
+
+    if (completed_legs == NUM_LEGS) {
         for (int l = 0; l < NUM_LEGS; ++l) {
-            JointAngles ja = legs[l].getJointAngles();
-            if (out_pos) {
-                out_pos[l][0] = ja.coxa;
-                out_pos[l][1] = ja.femur;
-                out_pos[l][2] = ja.tibia;
-            }
-            if (out_vel) {
-                out_vel[l][0] = 0.0;
-                out_vel[l][1] = 0.0;
-                out_vel[l][2] = 0.0;
-            }
-            if (out_acc) {
-                out_acc[l][0] = 0.0;
-                out_acc[l][1] = 0.0;
-                out_acc[l][2] = 0.0;
+            const StandingPoseJoints &standing = body_pose_config.standing_pose_joints[l];
+            JointAngles ja;
+            ja.coxa = standing.coxa;
+            ja.femur = standing.femur;
+            ja.tibia = standing.tibia;
+            legs[l].setJointAngles(ja);
+            Point3D pos = model.forwardKinematicsGlobalCoordinates(l, ja);
+            legs[l].setCurrentTipPositionGlobal(pos);
+            legs[l].setStepPhase(STANCE_PHASE);
+            if (leg_posers_[l]) {
+                leg_posers_[l]->get()->setTargetPosition(pos);
+                leg_posers_[l]->get()->resetStepToPosition();
             }
         }
+        initial_standing_active_ = false;
+        initial_standing_progress_ = 1.0;
+        return true;
+    }
 
-        if (complete) {
-            for (int l = 0; l < NUM_LEGS; ++l) {
-                JointAngles ja = legs[l].getJointAngles();
-                Point3D pos = model.forwardKinematicsGlobalCoordinates(l, ja);
-                legs[l].setCurrentTipPositionGlobal(pos);
-                legs[l].setStepPhase(STANCE_PHASE);
-                if (leg_posers_[l]) {
-                    leg_posers_[l]->get()->setTargetPosition(pos);
-                    leg_posers_[l]->get()->resetStepToPosition();
-                }
-            }
-            initial_standing_active_ = false;
-            initial_standing_use_bezier_ = false;
+    for (int l = 0; l < NUM_LEGS; ++l) {
+        JointAngles ja = legs[l].getJointAngles();
+        if (out_pos) {
+            out_pos[l][0] = ja.coxa;
+            out_pos[l][1] = ja.femur;
+            out_pos[l][2] = ja.tibia;
         }
-
-        return complete;
+        if (out_vel) {
+            out_vel[l][0] = 0.0;
+            out_vel[l][1] = 0.0;
+            out_vel[l][2] = 0.0;
+        }
+        if (out_acc) {
+            out_acc[l][0] = 0.0;
+            out_acc[l][1] = 0.0;
+            out_acc[l][2] = 0.0;
+        }
     }
 
     return false;
@@ -669,9 +709,11 @@ bool BodyPoseController::stepToNewStance(Leg legs[NUM_LEGS], double step_height,
             bool leg_complete = leg_poser->stepToPosition(leg_poser->getTargetPosition(), step_height, step_time);
 
             // Update leg state from poser (OpenSHC pattern)
-            legs[leg_index].setCurrentTipPositionGlobal(leg_poser->getCurrentPosition());
+            Point3D desired_tip = leg_poser->getCurrentPosition();
+            legs[leg_index].setCurrentTipPositionGlobal(desired_tip);
             JointAngles current_angles = legs[leg_index].getJointAngles();
-            legs[leg_index].setJointAngles(model.inverseKinematicsCurrentGlobalCoordinates(leg_index, current_angles, legs[leg_index].getCurrentTipPositionGlobal()));
+            legs[leg_index].setJointAngles(model.inverseKinematicsCurrentGlobalCoordinates(leg_index, current_angles, desired_tip));
+            legs[leg_index].setCurrentTipPositionGlobal(desired_tip);
 
             if (leg_complete) {
                 // When leg completes movement, set back to STANCE phase
@@ -722,206 +764,33 @@ bool BodyPoseController::stepToNewStance(Leg legs[NUM_LEGS], double step_height,
 
 // Execute startup sequence (READY -> RUNNING transition)
 bool BodyPoseController::executeStartupSequence(Leg legs[NUM_LEGS]) {
-    // OpenSHC logic replication: transition sequence with alternating horizontal and vertical
-    // steps to reach standing pose. Intermediate targets are generated on first run and reused.
-
-    if (!getLegPoser(0)) {
-        initializeLegPosers(legs);
+    int progress = executeSequenceInternal("startup", legs);
+    if (progress < 0) {
+        last_startup_progress_ = 0;
+        return false;
     }
-
-    // First execution initialization
-    if (first_sequence_execution_) {
-        // Phase 0: store initial positions (implicit first target)
-        // Phase 1 (horizontal): move XY towards standing target preserving current Z
-        // Phase 2 (vertical): adjust Z down/up to standing
-
-        // Build final standing targets
-        for (int i = 0; i < NUM_LEGS; ++i) {
-            const auto &standing_joints = body_pose_config.standing_pose_joints[i];
-            JointAngles sj;
-            sj.coxa = standing_joints.coxa;
-            sj.femur = standing_joints.femur;
-            sj.tibia = standing_joints.tibia;
-            Point3D standing_pos = model.forwardKinematicsGlobalCoordinates(i, sj);
-            startup_final_targets_[i] = standing_pos;
-
-            // Horizontal: keep initial Z, take standing XY
-            Point3D init_pos = legs[i].getCurrentTipPositionGlobal();
-            Point3D horiz = standing_pos;
-            horiz.z = init_pos.z; // mantener z
-            startup_horizontal_targets_[i] = horiz;
-        }
-        transition_step_ = 0;       // 0 = horizontal, 1 = vertical
-        transition_step_count_ = 2; // Two total phases
-        set_target_ = true;
-        proximity_alert_ = false;
-        horizontal_transition_complete_ = false;
-        vertical_transition_complete_ = false;
-        executing_transition_ = true;
-        first_sequence_execution_ = false; // After setup
-    }
-
-    // Timings now use configurable global step_frequency (OpenSHC semantics)
-    double step_frequency = model.getParams().step_frequency;
-    double horiz_time = 1.0 / step_frequency; // Normalized horizontal transition time
-    double vert_time = 3.0 / step_frequency;  // Normalized vertical transition time
-    double lift_height = initial_standing_use_bezier_ ? 0.0 : body_pose_config.swing_height;
-
-    bool sequence_complete = false;
-
-    // Horizontal phase (XY toward target)
-    if (transition_step_ == 0) {
-        bool all_complete = true;
-        for (int i = 0; i < NUM_LEGS; ++i) {
-            if (!leg_posers_[i])
-                continue;
-            LegPoser *lp = leg_posers_[i]->get();
-            if (set_target_) {
-                lp->setTargetPosition(startup_horizontal_targets_[i]);
-                lp->resetStepToPosition();
-            }
-            bool done = lp->stepToPosition(lp->getTargetPosition(), lift_height, horiz_time);
-            legs[i].setCurrentTipPositionGlobal(lp->getCurrentPosition());
-            JointAngles ca = legs[i].getJointAngles();
-            legs[i].setJointAngles(model.inverseKinematicsCurrentGlobalCoordinates(i, ca, legs[i].getCurrentTipPositionGlobal()));
-            all_complete = all_complete && done;
-        }
-        set_target_ = false;
-        if (all_complete) {
-            horizontal_transition_complete_ = true;
-            set_target_ = true; // prepare vertical phase
-            transition_step_ = 1;
-        }
-    }
-    // Vertical phase (Z adjustment)
-    else if (transition_step_ == 1) {
-        bool all_complete = true;
-        for (int i = 0; i < NUM_LEGS; ++i) {
-            if (!leg_posers_[i])
-                continue;
-            LegPoser *lp = leg_posers_[i]->get();
-            if (set_target_) {
-                lp->setTargetPosition(startup_final_targets_[i]);
-                lp->resetStepToPosition();
-            }
-            // Vertical: adjust Z without additional lift
-            bool done = lp->stepToPosition(lp->getTargetPosition(), 0.0, vert_time);
-            legs[i].setCurrentTipPositionGlobal(lp->getCurrentPosition());
-            JointAngles ca = legs[i].getJointAngles();
-            legs[i].setJointAngles(model.inverseKinematicsCurrentGlobalCoordinates(i, ca, legs[i].getCurrentTipPositionGlobal()));
-            all_complete = all_complete && done;
-        }
-        set_target_ = false;
-        if (all_complete) {
-            vertical_transition_complete_ = true;
-            sequence_complete = true;
-        }
-    }
-
-    if (sequence_complete) {
-        executing_transition_ = false;
-        transition_step_ = transition_step_count_;
-        // Ensure exact final standing pose
-        for (int i = 0; i < NUM_LEGS; ++i) {
-            const auto &standing_joints = body_pose_config.standing_pose_joints[i];
-            JointAngles sj;
-            sj.coxa = standing_joints.coxa;
-            sj.femur = standing_joints.femur;
-            sj.tibia = standing_joints.tibia;
-            legs[i].setJointAngles(sj);
-            Point3D pos = model.forwardKinematicsGlobalCoordinates(i, sj);
-            legs[i].setCurrentTipPositionGlobal(pos);
-        }
-        return true;
-    }
-
-    return false; // still in progress
+    last_startup_progress_ = progress;
+    return progress == PROGRESS_COMPLETE;
 }
 
 int BodyPoseController::getStartupProgressPercent() const {
-    if (transition_step_count_ == 0)
-        return 0;
-    if (transition_step_ >= transition_step_count_)
-        return 100;
-    double phase_fraction = (transition_step_ == 0 ? 0.0 : 0.5);
-    double leg_avg = 0.0;
-    int counted = 0;
-    for (int i = 0; i < NUM_LEGS; ++i) {
-        if (leg_posers_[i]) {
-            // LegPoserImpl expected to expose underlying LegPoser via get()
-            leg_avg += leg_posers_[i]->get()->getCurrentStepProgress();
-            counted++;
-        }
-    }
-    if (counted > 0)
-        leg_avg /= counted;
-    double phase_progress = leg_avg * 0.5; // each phase worth 50%
-    int percent = static_cast<int>((phase_fraction + phase_progress) * 100.0 + 0.5);
-    if (percent > 99 && transition_step_ < transition_step_count_)
-        percent = 99;
+    int percent = last_startup_progress_;
     if (percent < 0)
         percent = 0;
+    if (percent > PROGRESS_COMPLETE)
+        percent = PROGRESS_COMPLETE;
     return percent;
 }
 
 // Execute shutdown sequence (RUNNING -> READY transition - OpenSHC equivalent)
 bool BodyPoseController::executeShutdownSequence(Leg legs[NUM_LEGS]) {
-    // OpenSHC shutdown is essentially the reverse of startup
-    // It moves legs from their current walking positions back to ready/standing positions
-    // Unlike startup, shutdown doesn't need different methods for different gaits
-    // All legs move simultaneously back to standing configuration
-
-    // Initialize sequence if not done
-    if (!shutdown_sequence_initialized) {
-        shutdown_sequence_initialized = true;
-
-        // Initialize all leg posers for shutdown
-        for (int i = 0; i < NUM_LEGS; i++) {
-            if (leg_posers_[i]) {
-                // Set target to standing pose position
-                const auto &standing_joints = body_pose_config.standing_pose_joints[i];
-                JointAngles target_angles;
-                target_angles.coxa = standing_joints.coxa;
-                target_angles.femur = standing_joints.femur;
-                target_angles.tibia = standing_joints.tibia;
-
-                Point3D target_position = model.forwardKinematicsGlobalCoordinates(i, target_angles);
-                leg_posers_[i]->get()->setTargetPosition(target_position);
-                leg_posers_[i]->get()->resetStepToPosition();
-            }
-        }
+    int progress = executeSequenceInternal("shutdown", legs);
+    if (progress < 0) {
+        last_shutdown_progress_ = 0;
+        return false;
     }
-
-    // Execute shutdown transition for all legs simultaneously
-    double step_height = body_pose_config.swing_height;
-    double step_time = 1.0 / model.getParams().step_frequency;
-    bool all_legs_complete = true;
-
-    for (int i = 0; i < NUM_LEGS; i++) {
-        if (leg_posers_[i]) {
-            LegPoser *leg_poser = leg_posers_[i]->get();
-
-            // Step to standing position (OpenSHC approach)
-            bool leg_complete = leg_poser->stepToPosition(leg_poser->getTargetPosition(), step_height, step_time);
-
-            // Update leg with current position from poser
-            legs[i].setCurrentTipPositionGlobal(leg_poser->getCurrentPosition());
-            JointAngles current_angles = legs[i].getJointAngles();
-            legs[i].setJointAngles(model.inverseKinematicsCurrentGlobalCoordinates(i, current_angles, legs[i].getCurrentTipPositionGlobal()));
-
-            if (!leg_complete) {
-                all_legs_complete = false;
-            }
-        }
-    }
-
-    // Reset state when sequence completes
-    if (all_legs_complete) {
-        shutdown_sequence_initialized = false;
-        return true;
-    }
-
-    return false;
+    last_shutdown_progress_ = progress;
+    return progress == PROGRESS_COMPLETE;
 }
 
 // Update auto-pose during gait execution (OpenSHC equivalent)
@@ -1202,6 +1071,7 @@ int BodyPoseController::packLegs(Leg legs[NUM_LEGS], double time_to_pack) {
                 legs[leg_index].setCurrentTipPositionGlobal(pack_position);
                 JointAngles current_angles = legs[leg_index].getJointAngles();
                 legs[leg_index].setJointAngles(model.inverseKinematicsCurrentGlobalCoordinates(leg_index, current_angles, pack_position));
+                legs[leg_index].setCurrentTipPositionGlobal(pack_position);
                 completed_legs++;
             }
         }
@@ -1244,6 +1114,7 @@ int BodyPoseController::unpackLegs(Leg legs[NUM_LEGS], double time_to_unpack) {
                 legs[leg_index].setCurrentTipPositionGlobal(default_position);
                 JointAngles current_angles = legs[leg_index].getJointAngles();
                 legs[leg_index].setJointAngles(model.inverseKinematicsCurrentGlobalCoordinates(leg_index, current_angles, default_position));
+                legs[leg_index].setCurrentTipPositionGlobal(default_position);
                 completed_legs++;
             }
         }
@@ -1280,34 +1151,283 @@ int BodyPoseController::poseForLegManipulation(Leg legs[NUM_LEGS]) {
     return success ? 100 : 0;
 }
 
-int BodyPoseController::executeSequence(const std::string &sequence_type, Leg legs[NUM_LEGS]) {
-    // OpenSHC executeSequence implementation adapted for HexaMotion
-    // This is the main sequence execution method that handles complex startup/shutdown
-
-    // Initialize sequence execution state
-    executing_transition_ = true;
-    transition_step_ = 0;
-
-    int progress = 0;
-
-    // Execute sequence based on type
-    if (sequence_type == "startup") {
-        bool complete = executeStartupSequence(legs);
-        progress = complete ? 100 : 50; // Simple progress tracking
-    } else if (sequence_type == "shutdown") {
-        bool complete = executeShutdownSequence(legs);
-        progress = complete ? 100 : 50; // Simple progress tracking
-    } else {
-        // Unknown sequence type
-        executing_transition_ = false;
+int BodyPoseController::executeSequenceInternal(const std::string &sequence_type, Leg legs[NUM_LEGS]) {
+    const bool is_startup = sequence_type == "startup";
+    const bool is_shutdown = sequence_type == "shutdown";
+    if (!is_startup && !is_shutdown) {
         return 0;
     }
 
-    // Update sequence state
-    if (progress == 100) {
-        executing_transition_ = false;
-        transition_step_ = transition_step_count_;
+    if (!getLegPoser(0)) {
+        initializeLegPosers(legs);
     }
 
+    // Initialise/reset saved transition sequence
+    if (reset_transition_sequence_ && is_startup) {
+        reset_transition_sequence_ = false;
+        first_sequence_execution_ = true;
+        transition_step_ = 0;
+        set_target_ = true;
+        for (int i = 0; i < NUM_LEGS; ++i) {
+            if (leg_posers_[i]) {
+                LegPoser *lp = leg_posers_[i]->get();
+                lp->resetTransitionSequence();
+                lp->addTransitionPose(lp->getCurrentTipPose());
+            }
+        }
+    }
+
+    int progress = 0;
+    int normalised_progress = 0;
+    int total_progress = 0;
+
+    int next_transition_step = transition_step_ + 1;
+    int transition_step_target = transition_step_count_;
+    bool execute_horizontal_transition = !(transition_step_ % 2);
+    bool execute_vertical_transition = transition_step_ % 2;
+    if (is_shutdown) {
+        execute_horizontal_transition = transition_step_ % 2;
+        execute_vertical_transition = !(transition_step_ % 2);
+        next_transition_step = transition_step_ - 1;
+        transition_step_target = 0;
+        total_progress = 100 - transition_step_ * 100 / std::max(transition_step_count_, 1);
+    } else {
+        total_progress = transition_step_ * 100 / std::max(transition_step_count_, 1);
+    }
+
+    bool final_transition = false;
+    bool sequence_complete = false;
+    if (first_sequence_execution_) {
+        final_transition = (horizontal_transition_complete_ || vertical_transition_complete_);
+    } else {
+        final_transition = (next_transition_step == transition_step_target);
+    }
+
+    double safety_factor = (first_sequence_execution_ ? SAFETY_FACTOR / (transition_step_ + 1) : 0.0);
+
+    auto compute_limit_proximity = [&](const JointAngles &angles) {
+        double min_proximity = 1.0;
+        double joints[3] = {angles.coxa, angles.femur, angles.tibia};
+        double limits[3][2] = {
+            {model.getParams().coxa_angle_limits[0], model.getParams().coxa_angle_limits[1]},
+            {model.getParams().femur_angle_limits[0], model.getParams().femur_angle_limits[1]},
+            {model.getParams().tibia_angle_limits[0], model.getParams().tibia_angle_limits[1]}};
+        for (int j = 0; j < 3; ++j) {
+            double range = limits[j][1] - limits[j][0];
+            if (range > 0.0) {
+                double half_range = range * 0.5;
+                double center = (limits[j][1] + limits[j][0]) * 0.5;
+                double distance_from_center = std::abs(joints[j] - center);
+                double proximity = math_utils::clamp<double>((half_range - distance_from_center) / half_range, 0.0, 1.0);
+                min_proximity = std::min(min_proximity, proximity);
+            }
+        }
+        return min_proximity;
+    };
+
+    auto legs_bearing_load = [&]() {
+        double body_height_estimate = 0.0;
+        for (int i = 0; i < NUM_LEGS; ++i) {
+            body_height_estimate += legs[i].getCurrentTipPositionGlobal().z;
+        }
+        return -(body_height_estimate / NUM_LEGS) > HALF_BODY_DEPTH_MM;
+    };
+
+    if (execute_horizontal_transition) {
+        if (set_target_) {
+            set_target_ = false;
+            for (int i = 0; i < NUM_LEGS; ++i) {
+                if (!leg_posers_[i])
+                    continue;
+                LegPoser *lp = leg_posers_[i]->get();
+                lp->setLegCompletedStep(false);
+
+                Point3D target_tip_position;
+                if (lp->hasTransitionPose(next_transition_step)) {
+                    target_tip_position = lp->getTransitionPose(next_transition_step).position;
+                } else {
+                    const auto &stance = body_pose_config.leg_stance_positions[i];
+                    target_tip_position = Point3D(stance.x, stance.y, stance.z);
+                }
+
+                target_tip_position.z = legs[i].getCurrentTipPositionGlobal().z;
+                lp->setTargetTipPose(Pose(target_tip_position, Eigen::Quaterniond::Identity()));
+            }
+        }
+
+        bool direct_step = !legs_bearing_load();
+        for (int i = 0; i < NUM_LEGS; ++i) {
+            if (!leg_posers_[i])
+                continue;
+            LegPoser *lp = leg_posers_[i]->get();
+            if (!lp->getLegCompletedStep()) {
+                if (i == tripod_leg_groups[current_group_][0] ||
+                    i == tripod_leg_groups[current_group_][1] ||
+                    i == tripod_leg_groups[current_group_][2] || direct_step) {
+                    Pose target_tip_pose = lp->getTargetTipPose();
+                    bool apply_delta = (is_startup && final_transition);
+                    double step_height = direct_step ? 0.0 : body_pose_config.swing_height;
+                    double time_to_step = HORIZONTAL_TRANSITION_TIME / model.getParams().step_frequency;
+                    if (first_sequence_execution_) {
+                        time_to_step *= 2.0;
+                    }
+                    progress = lp->stepToPosition(target_tip_pose, Pose::Identity(), step_height, time_to_step, apply_delta);
+                    Point3D desired_tip = lp->getCurrentPosition();
+                    legs[i].setCurrentTipPositionGlobal(desired_tip);
+                    JointAngles current_angles = legs[i].getJointAngles();
+                    JointAngles next_angles = model.inverseKinematicsCurrentGlobalCoordinates(i, current_angles, desired_tip);
+                    legs[i].setJointAngles(next_angles);
+                    // Restore authoritative LegPoser position after setJointAngles
+                    // (setJointAngles triggers FK which can drift from the bezier output)
+                    legs[i].setCurrentTipPositionGlobal(desired_tip);
+
+                    double limit_proximity = compute_limit_proximity(next_angles);
+                    bool exceeded_workspace = limit_proximity < safety_factor;
+                    if (first_sequence_execution_ && exceeded_workspace) {
+                        lp->setTargetTipPose(lp->getCurrentTipPose());
+                        lp->resetStepToPosition();
+                        progress = PROGRESS_COMPLETE;
+                        proximity_alert_ = true;
+                    }
+
+                    if (progress == PROGRESS_COMPLETE) {
+                        lp->setLegCompletedStep(true);
+                        legs_completed_step_++;
+                        if (first_sequence_execution_) {
+                            bool reached_target = !exceeded_workspace;
+                            Pose transition_pose = reached_target ? target_tip_pose : lp->getCurrentTipPose();
+                            lp->addTransitionPose(transition_pose);
+                        }
+                    }
+                } else {
+                    legs_completed_step_++;
+                    lp->setLegCompletedStep(true);
+                }
+            }
+        }
+
+        if (direct_step) {
+            normalised_progress = progress / std::max(transition_step_count_, 1);
+        } else {
+            normalised_progress = (progress / 2 + (current_group_ == 0 ? 0 : 50)) / std::max(transition_step_count_, 1);
+        }
+
+        if (legs_completed_step_ == NUM_LEGS) {
+            set_target_ = true;
+            legs_completed_step_ = 0;
+            if (current_group_ == 1 || direct_step) {
+                current_group_ = 0;
+                transition_step_ = next_transition_step;
+                horizontal_transition_complete_ = !proximity_alert_;
+                sequence_complete = final_transition;
+                proximity_alert_ = false;
+            } else {
+                current_group_ = 1;
+            }
+        }
+    }
+
+    if (execute_vertical_transition) {
+        if (set_target_) {
+            set_target_ = false;
+            for (int i = 0; i < NUM_LEGS; ++i) {
+                if (!leg_posers_[i])
+                    continue;
+                LegPoser *lp = leg_posers_[i]->get();
+                Point3D target_tip_position;
+                if (lp->hasTransitionPose(next_transition_step)) {
+                    target_tip_position = lp->getTransitionPose(next_transition_step).position;
+                } else {
+                    const auto &stance = body_pose_config.leg_stance_positions[i];
+                    target_tip_position = Point3D(stance.x, stance.y, stance.z);
+                }
+
+                Point3D current = legs[i].getCurrentTipPositionGlobal();
+                target_tip_position.x = current.x;
+                target_tip_position.y = current.y;
+                lp->setTargetTipPose(Pose(target_tip_position, Eigen::Quaterniond::Identity()));
+            }
+        }
+
+        bool all_legs_within_workspace = true;
+        for (int i = 0; i < NUM_LEGS; ++i) {
+            if (!leg_posers_[i])
+                continue;
+            LegPoser *lp = leg_posers_[i]->get();
+            Pose target_tip_pose = lp->getTargetTipPose();
+            bool apply_delta = (is_startup && final_transition);
+            double time_to_step = VERTICAL_TRANSITION_TIME / model.getParams().step_frequency;
+            if (first_sequence_execution_) {
+                time_to_step *= 2.0;
+            }
+            progress = lp->stepToPosition(target_tip_pose, Pose::Identity(), 0.0, time_to_step, apply_delta);
+            Point3D desired_tip = lp->getCurrentPosition();
+            legs[i].setCurrentTipPositionGlobal(desired_tip);
+            JointAngles current_angles = legs[i].getJointAngles();
+            JointAngles next_angles = model.inverseKinematicsCurrentGlobalCoordinates(i, current_angles, desired_tip);
+            legs[i].setJointAngles(next_angles);
+            // Restore authoritative LegPoser position after setJointAngles
+            // (setJointAngles triggers FK which can drift from the bezier output)
+            legs[i].setCurrentTipPositionGlobal(desired_tip);
+            double limit_proximity = compute_limit_proximity(next_angles);
+            all_legs_within_workspace = all_legs_within_workspace && !(limit_proximity < safety_factor);
+        }
+
+        if ((!all_legs_within_workspace && first_sequence_execution_) || progress == PROGRESS_COMPLETE) {
+            for (int i = 0; i < NUM_LEGS; ++i) {
+                if (!leg_posers_[i])
+                    continue;
+                LegPoser *lp = leg_posers_[i]->get();
+                lp->resetStepToPosition();
+                progress = PROGRESS_COMPLETE;
+                if (first_sequence_execution_) {
+                    bool reached_target = all_legs_within_workspace;
+                    Pose transition_pose = reached_target ? lp->getTargetTipPose() : lp->getCurrentTipPose();
+                    lp->addTransitionPose(transition_pose);
+                }
+            }
+
+            vertical_transition_complete_ = all_legs_within_workspace;
+            transition_step_ = next_transition_step;
+            sequence_complete = final_transition;
+            set_target_ = true;
+        }
+
+        normalised_progress = progress / std::max(transition_step_count_, 1);
+    }
+
+    if (first_sequence_execution_) {
+        transition_step_count_ = transition_step_;
+        transition_step_target = transition_step_;
+    }
+
+    if (transition_step_ > TRANSITION_STEP_THRESHOLD) {
+        resetSequenceStates();
+        return 0;
+    }
+
+    if (sequence_complete) {
+        set_target_ = true;
+        vertical_transition_complete_ = false;
+        horizontal_transition_complete_ = false;
+        first_sequence_execution_ = false;
+        return PROGRESS_COMPLETE;
+    }
+
+    total_progress = std::min(total_progress + normalised_progress, PROGRESS_COMPLETE - 1);
+    return (first_sequence_execution_ ? -1 : total_progress);
+}
+
+int BodyPoseController::executeSequence(const std::string &sequence_type, Leg legs[NUM_LEGS]) {
+    executing_transition_ = true;
+    int progress = executeSequenceInternal(sequence_type, legs);
+    if (sequence_type == "startup") {
+        last_startup_progress_ = (progress < 0 ? 0 : progress);
+    } else if (sequence_type == "shutdown") {
+        last_shutdown_progress_ = (progress < 0 ? 0 : progress);
+    }
+    if (progress == PROGRESS_COMPLETE) {
+        executing_transition_ = false;
+    }
     return progress;
 }

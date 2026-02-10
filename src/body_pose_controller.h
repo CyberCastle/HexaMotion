@@ -234,11 +234,12 @@ class BodyPoseController {
         transition_step_count_ = 0;
         horizontal_transition_complete_ = false;
         vertical_transition_complete_ = false;
-        set_target_ = false;
+        set_target_ = true;
         proximity_alert_ = false;
         legs_completed_step_ = 0;
         current_group_ = 0;
         pack_step_ = 0;
+        reset_transition_sequence_ = true;
     }
 
     // Explicit public reset for startup learning cycle
@@ -305,7 +306,7 @@ class BodyPoseController {
     double getInitialStandingPoseProgress() const {
         if (!initial_standing_active_)
             return 0.0;
-        return math_utils::clamp(static_cast<double>(getStartupProgressPercent()) / 100.0, 0.0, 1.0);
+        return math_utils::clamp(initial_standing_progress_, 0.0, 1.0);
     }
 
     // Walk plane pose system (OpenSHC equivalent)
@@ -390,6 +391,13 @@ class BodyPoseController {
     int current_group_;                   //< Current leg group executing stepping maneuver
     int pack_step_;                       //< Current step in pack/unpack sequence
 
+    // Last reported progress for startup/shutdown sequences (OpenSHC parity)
+    int last_startup_progress_ = 0;
+    int last_shutdown_progress_ = 0;
+
+    // Execute OpenSHC-style startup/shutdown sequence and return progress
+    int executeSequenceInternal(const std::string &sequence_type, Leg legs[NUM_LEGS]);
+
     // Startup sequence (OpenSHC-style) targets
     Point3D startup_horizontal_targets_[NUM_LEGS]; //< Intermediate horizontal (XY only) targets preserving initial Z
     Point3D startup_final_targets_[NUM_LEGS];      //< Final standing pose targets (full XYZ)
@@ -412,6 +420,7 @@ class BodyPoseController {
     // Initial standing pose transition state
     bool initial_standing_active_ = false;
     bool initial_standing_use_bezier_ = false;
+    double initial_standing_progress_ = 0.0;
 
     // Walk plane pose helper methods
     Point3D calculateWalkPlaneNormal(Leg legs[NUM_LEGS]) const;

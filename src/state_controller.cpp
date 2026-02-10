@@ -1039,54 +1039,21 @@ void StateController::applyPoseReset() {
  * @return int Progress percentage (0-100), 100 indicates completion
  */
 int StateController::executeStartupSequence() {
-    // Enhanced startup sequence following OpenSHC patterns using instance members
-    if (!startup_transition_initialized_) {
-        // Remove transition_progress_ updates in transition and reset methods
-        // transition_progress_.total_steps = startup_transition_step_count_;
-        startup_transition_initialized_ = true;
+    // Delegate to LocomotionSystem startup sequence (OpenSHC parity)
+    bool complete = locomotion_system_.executeStartupSequence();
+    if (complete) {
         startup_step_ = 0;
+        startup_transition_initialized_ = false;
+        return PROGRESS_COMPLETE;
     }
 
-    // Execute sequence based on startup_step_
-    switch (startup_step_) {
-    case 0:
-        // Step 1: Initialize ready stance
-        startup_step_ = 1;
-        // Remove transition_progress_ updates in transition and reset methods
-        // transition_progress_.current_step = 1;
-        return 25;
-
-    case 1:
-        // Step 2: Move to intermediate position (safer transition)
-        // Use locomotion system to transition to higher stance
-        startup_step_ = 2;
-        // Remove transition_progress_ updates in transition and reset methods
-        // transition_progress_.current_step = 2;
-        return 50;
-
-    case 2:
-        // Step 3: Move to walking height
-        startup_step_ = 3;
-        // Remove transition_progress_ updates in transition and reset methods
-        // transition_progress_.current_step = 3;
-        return 75;
-
-    case 3:
-        // Step 4: Finalize walking stance and enable locomotion
-        if (locomotion_system_.setStandingPose()) {
-            // Update default configuration for walking
-            startup_step_ = 0; // Reset for next time
-            startup_transition_initialized_ = false;
-            // Remove transition_progress_ updates in transition and reset methods
-            // transition_progress_.current_step = startup_transition_step_count_;
-            // transition_progress_.is_complete = true;
-            return 100;
-        }
-        return 75;
-
-    default:
-        return 0;
-    }
+    // Provide incremental progress from the locomotion system
+    int progress = locomotion_system_.getStartupProgressPercent();
+    if (progress < 0)
+        progress = 0;
+    if (progress >= PROGRESS_COMPLETE)
+        progress = PROGRESS_COMPLETE - 1;
+    return progress;
 }
 
 /**
@@ -1099,53 +1066,21 @@ int StateController::executeStartupSequence() {
  * @return int Progress percentage (0-100), 100 indicates completion
  */
 int StateController::executeShutdownSequence() {
-    // Enhanced shutdown sequence following OpenSHC patterns using instance members
-    if (!shutdown_transition_initialized_) {
-        // Ensure walking has stopped before shutdown
-        if (current_walk_state_ != WALK_STOPPED) {
-            desired_linear_velocity_.setZero();
-            desired_angular_velocity_ = 0.0f;
-            return 10; // Stay in shutdown but indicate progress
-        }
-        // Remove transition_progress_ updates in transition and reset methods
-        // transition_progress_.total_steps = shutdown_transition_step_count_;
-        shutdown_transition_initialized_ = true;
+    // Ensure walking has stopped before shutdown
+    if (current_walk_state_ != WALK_STOPPED) {
+        desired_linear_velocity_.setZero();
+        desired_angular_velocity_ = 0.0f;
+        return 10; // Stay in shutdown but indicate progress
+    }
+
+    bool complete = locomotion_system_.executeShutdownSequence();
+    if (complete) {
         shutdown_step_ = 0;
+        shutdown_transition_initialized_ = false;
+        return PROGRESS_COMPLETE;
     }
 
-    switch (shutdown_step_) {
-    case 0:
-        // Step 1: Return any manually controlled legs to automatic control
-        if (manual_leg_count_ > 0) {
-            manual_leg_count_ = 0;
-        }
-        shutdown_step_ = 1;
-        // Remove transition_progress_ updates in transition and reset methods
-        // transition_progress_.current_step = 1;
-        return 33;
-
-    case 1:
-        // Step 2: Transition to ready height (higher than walking height)
-        shutdown_step_ = 2;
-        // Remove transition_progress_ updates in transition and reset methods
-        // transition_progress_.current_step = 2;
-        return 66;
-
-    case 2:
-        // Step 3: Finalize ready position
-        if (locomotion_system_.setStandingPose()) {
-            shutdown_step_ = 0; // Reset for next time
-            shutdown_transition_initialized_ = false;
-            // Remove transition_progress_ updates in transition and reset methods
-            // transition_progress_.current_step = shutdown_transition_step_count_;
-            // transition_progress_.is_complete = true;
-            return 100;
-        }
-        return 66;
-
-    default:
-        return 0;
-    }
+    return 0;
 }
 
 int StateController::executePackSequence() {
@@ -1175,29 +1110,27 @@ int StateController::executePackSequence() {
 }
 
 int StateController::executeUnpackSequence() {
-    // Simplified unpack sequence using instance member
-    if (unpack_step_ == 0) {
-        // Remove transition_progress_ updates in transition and reset methods
-        // transition_progress_.total_steps = 2;
-        unpack_step_ = 1;
-        // Remove transition_progress_ updates in transition and reset methods
-        // transition_progress_.current_step = 1;
-        return 50;
-    } else if (unpack_step_ == 1) {
-        // Move to ready position
-        if (locomotion_system_.setStandingPose()) {
-            unpack_step_ = 0; // Reset for next time
-            // Remove transition_progress_ updates in transition and reset methods
-            // transition_progress_.current_step = 2;
-            // transition_progress_.is_complete = true;
-            // Capture ready target joint angles
-            for (int i = 0; i < NUM_LEGS; ++i) {
-                ready_target_angles_[i] = locomotion_system_.getJointAngles(i);
-            }
-            return 100;
-        }
+    // Direct startup equivalent (OpenSHC: directStartup)
+    bool ok = locomotion_system_.establishInitialStandingPose();
+    if (!ok) {
+        return 0;
     }
-    return 50;
+
+    if (!locomotion_system_.isInitialStandingPoseActive()) {
+        // Capture ready target joint angles when transition completes
+        for (int i = 0; i < NUM_LEGS; ++i) {
+            ready_target_angles_[i] = locomotion_system_.getJointAngles(i);
+        }
+        unpack_step_ = 0;
+        return PROGRESS_COMPLETE;
+    }
+
+    int progress = locomotion_system_.getStartupProgressPercent();
+    if (progress < 0)
+        progress = 0;
+    if (progress >= PROGRESS_COMPLETE)
+        progress = PROGRESS_COMPLETE - 1;
+    return progress;
 }
 
 bool StateController::isRobotPacked() const {

@@ -138,24 +138,22 @@ void Leg::initialize(const Pose &default_stance) {
 
     // Set current configuration to default
     joint_angles_ = stance_angles;
+    // Keep the commanded stance_tip as authoritative position.
+    // FK(IK(stance_tip)) may drift due to IK solver tolerances;
+    // the desired position is the ground truth during planning.
     tip_position_ = stance_tip;
-
-    // Update FK to ensure consistency
-    updateTipPosition();
 }
 
 void Leg::reset() {
     // Reset to default configuration
     joint_angles_ = default_angles_;
+    // Keep the authoritative default_tip_position_ (same rationale as initialize).
     tip_position_ = default_tip_position_;
     step_phase_ = STANCE_PHASE;
     gait_phase_ = 0.0;
 
     // Reset FSR contact history
     resetFSRHistory();
-
-    // Update FK
-    updateTipPosition();
 }
 
 double Leg::getDistanceToTarget(const Point3D &target) const {
