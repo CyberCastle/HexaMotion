@@ -18,7 +18,7 @@
 
 WalkController::WalkController(RobotModel &m, Leg legs[NUM_LEGS], const BodyPoseConfiguration &pose_config)
     : model(m), time_delta_(0.0), step_clearance_(0.0), step_depth_(0.0), desired_linear_velocity_(0, 0, 0), desired_angular_velocity_(0.0),
-      walk_state_(WALK_STOPPED), walkspace_(), odometry_ideal_(), pose_state_(0),
+      walk_state_(WALK_STOPPED), walkspace_(), odometry_ideal_(Point3D(0, 0, 0), Eigen::Quaterniond::Identity()), pose_state_(0),
       current_body_position_(Eigen::Vector3d::Zero()), current_body_orientation_(Eigen::Vector3d::Zero()),
       regenerate_walkspace_(false), legs_at_correct_phase_(0), legs_completed_first_step_(0), return_to_default_attempted_(false),
       leg_steppers_(), current_gait_config_(), gait_selection_config_(), terrain_adaptation_(m), body_pose_controller_(nullptr),
@@ -298,7 +298,7 @@ VelocityLimits::WorkspaceConfig WalkController::getWorkspaceConfig() const {
 void WalkController::init(const Eigen::Vector3d &current_body_position, const Eigen::Vector3d &current_body_orientation) {
 
     walk_state_ = WALK_STOPPED;
-    odometry_ideal_ = Point3D(0, 0, 0);
+    odometry_ideal_ = Pose(Point3D(0, 0, 0), Eigen::Quaterniond::Identity());
 
     // Store current robot pose
     current_body_position_ = current_body_position;
@@ -460,8 +460,10 @@ void WalkController::updateWalk(const Point3D &linear_velocity_input, double ang
 
                 // Initialize per-leg phase using offset like OpenSHC (convert phase_offset fraction to iterations)
                 StepCycle tmp_cycle = current_gait_config_.generateStepCycle();
-                int offset_iters = static_cast<int>(leg_stepper->getPhaseOffset() * tmp_cycle.period_);
+                int offset_iters = static_cast<int>(std::round(leg_stepper->getPhaseOffset() * tmp_cycle.period_));
                 leg_stepper->setPhase(offset_iters % tmp_cycle.period_);
+                // OpenSHC: initialize step state from initial phase
+                leg_stepper->updateStepStateFromPhase();
             }
             return;
         }
@@ -476,8 +478,10 @@ void WalkController::updateWalk(const Point3D &linear_velocity_input, double ang
     case WALK_MOVING:
         if (!has_velocity_command) {
             walk_state_ = WALK_STOPPING;
+            // OpenSHC: reset at_correct_phase flags for STOPPING tracking
+            // Do NOT force STEP_STANCE — legs continue cycling until individually stopped
             for (auto &leg_stepper : leg_steppers_) {
-                leg_stepper->setStepState(STEP_STANCE);
+                leg_stepper->setAtCorrectPhase(false);
             }
         }
         break;
@@ -496,7 +500,7 @@ void WalkController::updateWalk(const Point3D &linear_velocity_input, double ang
     }
 
     // OpenSHC: Pre-calculate shared values for leg processing
-    const bool is_active_walking = (walk_state_ == WALK_MOVING || walk_state_ == WALK_STARTING);
+    const bool is_active_walking = (walk_state_ == WALK_MOVING || walk_state_ == WALK_STARTING || walk_state_ == WALK_STOPPING);
     StepCycle step_cycle;
     bool step_cycle_calculated = false;
 
@@ -526,6 +530,57 @@ void WalkController::updateWalk(const Point3D &linear_velocity_input, double ang
             leg_stepper->setPhase(current_phase);
             // Let leg stepper derive state from its own phase
             leg_stepper->updateStepStateFromPhase();
+
+            // OpenSHC STARTING state: per-leg phase synchronization
+            if (walk_state_ == WALK_STARTING) {
+                int swing_end_wrapped = step_cycle.swing_end_ % step_cycle.period_;
+
+                // Once ALL legs are at correct phase, track completed first step
+                if (legs_at_correct_phase_ == leg_count) {
+                    if (leg_stepper->getPhase() == swing_end_wrapped && !leg_stepper->hasCompletedFirstStep()) {
+                        leg_stepper->setCompletedFirstStep(true);
+                        legs_completed_first_step_++;
+                    }
+                }
+
+                // Check if this leg is at correct phase
+                if (!leg_stepper->isAtCorrectPhase()) {
+                    // Convert fractional offset to iteration count for comparison
+                    int offset_iters = static_cast<int>(std::round(leg_stepper->getPhaseOffset() * step_cycle.period_));
+                    bool offset_in_swing = (offset_iters > step_cycle.swing_start_ && offset_iters < step_cycle.swing_end_);
+
+                    if (offset_in_swing && leg_stepper->getPhase() != swing_end_wrapped) {
+                        // Leg's offset is in swing range and hasn't reached swing end yet
+                        leg_stepper->setStepState(STEP_FORCE_STANCE);
+                    } else {
+                        // Leg is at correct phase — mark it
+                        legs_at_correct_phase_++;
+                        leg_stepper->setAtCorrectPhase(true);
+                    }
+                }
+            }
+            // OpenSHC STOPPING state: per-leg graceful shutdown
+            else if (walk_state_ == WALK_STOPPING) {
+                int swing_end_wrapped = step_cycle.swing_end_ % step_cycle.period_;
+                bool zero_body_velocity = (leg_stepper->getStrideVector().norm() < 1e-9);
+
+                Point3D error = leg_stepper->getCurrentTipPose() - leg_stepper->getTargetTipPose();
+                Point3D walk_normal = getWalkPlaneNormal();
+                error = math_utils::rejectVector(error, walk_normal);
+                bool at_target_tip_position = (error.norm() < IK_TOLERANCE);
+
+                if (zero_body_velocity && !leg_stepper->isAtCorrectPhase() && leg_stepper->getPhase() == swing_end_wrapped) {
+                    if (at_target_tip_position || return_to_default_attempted_) {
+                        return_to_default_attempted_ = false;
+                        leg_stepper->setStepState(STEP_FORCE_STOP);
+                        leg_stepper->setAtCorrectPhase(true);
+                        legs_at_correct_phase_++;
+                    } else {
+                        return_to_default_attempted_ = true;
+                    }
+                }
+            }
+
             bool in_swing = (leg_stepper->getStepState() == STEP_SWING);
             legs_array_[i].setStepPhase(in_swing ? SWING_PHASE : STANCE_PHASE);
             // Local phase-based tip update
@@ -537,7 +592,8 @@ void WalkController::updateWalk(const Point3D &linear_velocity_input, double ang
     }
 
     // OpenSHC: Optimized analysis and odometry updates
-    odometry_ideal_ = odometry_ideal_ + calculateOdometry(time_delta_);
+    // OpenSHC: proper SE(3) pose composition (accumulates heading)
+    odometry_ideal_ = odometry_ideal_.addPose(calculateOdometry(time_delta_));
 
     // OpenSHC: Conditional walkspace regeneration
     if (regenerate_walkspace_) {
@@ -545,24 +601,14 @@ void WalkController::updateWalk(const Point3D &linear_velocity_input, double ang
     }
 }
 
-Point3D WalkController::calculateOdometry(double time_period) {
-    Point3D desired_linear_velocity(desired_linear_velocity_.x, desired_linear_velocity_.y, 0);
-    Point3D position_delta = desired_linear_velocity * time_period;
-
-    // Implement proper rotation delta calculation
-    double angular_velocity = desired_angular_velocity_;
-    double rotation_delta = angular_velocity * time_period;
-
-    // Apply rotation to position delta
-    double cos_rot = cos(rotation_delta);
-    double sin_rot = sin(rotation_delta);
-
-    Point3D rotated_delta;
-    rotated_delta.x = position_delta.x * cos_rot - position_delta.y * sin_rot;
-    rotated_delta.y = position_delta.x * sin_rot + position_delta.y * cos_rot;
-    rotated_delta.z = position_delta.z;
-
-    return rotated_delta;
+Pose WalkController::calculateOdometry(double time_period) {
+    // OpenSHC exact: return Pose with position delta + rotation delta
+    Point3D position_delta(desired_linear_velocity_.x * time_period,
+                           desired_linear_velocity_.y * time_period,
+                           0.0);
+    Eigen::Quaterniond rotation_delta(
+        Eigen::AngleAxisd(desired_angular_velocity_ * time_period, Eigen::Vector3d::UnitZ()));
+    return Pose(position_delta, rotation_delta);
 }
 
 void WalkController::generateWalkspace() {

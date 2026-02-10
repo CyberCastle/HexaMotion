@@ -80,7 +80,7 @@ class WalkController {
     /**
      * @brief Calculate odometry for the given time period
      */
-    Point3D calculateOdometry(double time_period);
+    Pose calculateOdometry(double time_period);
 
     /**
      * @brief Set body pose controller reference for walk plane functionality
@@ -106,7 +106,7 @@ class WalkController {
     // Walk plane functionality moved to BodyPoseController
     Point3D getWalkPlane() const;       // moved implementation to cpp
     Point3D getWalkPlaneNormal() const; // moved implementation to cpp
-    Point3D getOdometryIdeal() const { return odometry_ideal_; }
+    Pose getOdometryIdeal() const { return odometry_ideal_; }
     std::shared_ptr<LegStepper> getLegStepper(int leg_index) const;
 
     // Modifiers
@@ -236,7 +236,7 @@ class WalkController {
     double desired_angular_velocity_;
     WalkState walk_state_;
     std::map<int, double> walkspace_;
-    Point3D odometry_ideal_;
+    Pose odometry_ideal_;
     int pose_state_;
 
     // Current robot pose (provided by BodyPoseController)

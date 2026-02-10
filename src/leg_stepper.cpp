@@ -372,6 +372,26 @@ void LegStepper::generateSecondarySwingControlNodes(bool ground_contact) {
     }
 }
 
+void LegStepper::forceNormalTouchdown() {
+    // OpenSHC exact: rewrite swing junction nodes so the second-half trajectory
+    // approaches the touchdown target with the same velocity vector as stance motion
+    // (i.e. -stride_vector), making the foot land normal to the walk plane.
+    double time_delta = params_.time_delta;
+    Point3D final_tip_velocity = stride_vector_ * (-1.0) * (stance_delta_t_ / time_delta);
+    Point3D stance_node_separation = final_tip_velocity * 0.25 * (time_delta / swing_delta_t_);
+
+    Point3D bezier_target = target_tip_pose_;
+    Point3D bezier_origin = target_tip_pose_ - stance_node_separation * 4.0;
+    bezier_origin.z = std::max(swing_origin_tip_position_.z, target_tip_pose_.z);
+    bezier_origin = bezier_origin + swing_clearance_;
+
+    swing_1_nodes_[4] = bezier_origin;
+    swing_2_nodes_[0] = bezier_origin;
+    swing_2_nodes_[2] = bezier_target - stance_node_separation * 2.0;
+    swing_1_nodes_[3] = swing_2_nodes_[0] - (swing_2_nodes_[2] - bezier_origin) / 2.0;
+    swing_2_nodes_[1] = swing_2_nodes_[0] + (swing_2_nodes_[2] - bezier_origin) / 2.0;
+}
+
 void LegStepper::generateStanceControlNodes(double stride_scaler) {
     // OpenSHC-based stance control node generation - direct implementation
 
@@ -516,19 +536,19 @@ void LegStepper::updateTipPositionIterative(int iteration, double time_delta, bo
         // Initialize swing period on first iteration
         initializeSwingPeriod(iteration);
 
-        // Generate control nodes ONLY once at the beginning of swing
-
-        // Detect if this is a new swing cycle (reset on iteration 1 or when we restart swing)
-        if (iteration == 1 || (iteration <= swing_iterations_ && last_swing_start_iteration_ > iteration)) {
-            nodes_generated_ = false;
-            last_swing_start_iteration_ = iteration;
+        // Detect ground contact via FSR (if enabled) for adaptive touchdown (OpenSHC style)
+        bool ground_contact = false;
+        if (params_.use_fsr_contact) {
+            ground_contact = leg_.isInContact();
         }
 
-        if (!nodes_generated_) {
-            // Generate initial swing control nodes (primary + secondary without contact)
-            generatePrimarySwingControlNodes();
-            generateSecondarySwingControlNodes(false);
-            nodes_generated_ = true;
+        // OpenSHC: regenerate ALL swing control nodes EVERY iteration
+        generatePrimarySwingControlNodes();
+        generateSecondarySwingControlNodes(ground_contact);
+
+        // OpenSHC: adjust nodes so touchdown approach aligns with stance velocity
+        if (force_normal_touchdown && !ground_contact) {
+            forceNormalTouchdown();
         }
 
         // Determine which half of swing we're in based on actual swing progress
@@ -543,12 +563,6 @@ void LegStepper::updateTipPositionIterative(int iteration, double time_delta, bo
         Point3D delta_pos;
         double time_input = 0.0;
 
-        // Detect ground contact via FSR (if enabled) for adaptive touchdown (OpenSHC style)
-        bool ground_contact = false;
-        if (params_.use_fsr_contact) {
-            ground_contact = leg_.isInContact();
-        }
-
         if (first_half) {
             // OpenSHC exact calculation: swing_delta_t_ * iteration (1-based)
             time_input = swing_delta_t_ * swing_iteration;
@@ -558,9 +572,6 @@ void LegStepper::updateTipPositionIterative(int iteration, double time_delta, bo
         } else {
             // OpenSHC exact calculation: swing_delta_t_ * (iteration - swing_iterations / 2)
             time_input = swing_delta_t_ * (swing_iteration - swing_iterations_ / 2);
-
-            // Regenerate secondary swing nodes continuously in second half to allow early flattening when contact detected
-            generateSecondarySwingControlNodes(ground_contact);
 
             // OpenSHC pattern: Use quarticBezierDot for velocity-based calculation
             delta_pos = math_utils::quarticBezierDot(swing_2_nodes_, time_input) * swing_delta_t_;
@@ -829,18 +840,22 @@ void LegStepper::updateStepStateFromPhase() {
     bool in_swing = (local >= swing_start_iter);
     if (step_state_ == STEP_FORCE_STOP)
         return;
-    if (in_swing) {
+    // OpenSHC parity: FORCE_STANCE prevents transition to SWING in swing range,
+    // but when phase enters stance range FORCE_STANCE is lifted to STANCE.
+    if (in_swing && step_state_ != STEP_FORCE_STANCE) {
         if (step_state_ != STEP_SWING) {
             setStepState(STEP_SWING);
             initializeSwingPeriod(1);
             beginSwingPhase();
         }
-    } else {
-        if (step_state_ != STEP_STANCE && step_state_ != STEP_FORCE_STANCE) {
+    } else if (!in_swing) {
+        // Unconditionally transition to STANCE (including from FORCE_STANCE)
+        if (step_state_ != STEP_STANCE) {
             setStepState(STEP_STANCE);
             beginStancePhase();
         }
     }
+    // When in_swing && STEP_FORCE_STANCE: neither branch fires → state preserved
 }
 
 // ========================================================================

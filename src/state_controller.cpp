@@ -235,7 +235,7 @@ void StateController::update(double time_delta) {
     // Main state machine update
     updateStateMachine();
 
-    // Update walk state
+    // Update walk state (mirrors WalkController's authoritative state)
     updateWalkState();
 
     // Handle state transitions
@@ -720,42 +720,12 @@ void StateController::updateWalkState() {
         return;
     }
 
-    // Determine walk state based on velocity inputs
-    double linear_magnitude = desired_linear_velocity_.norm();
-    double angular_magnitude = abs(desired_angular_velocity_);
-
-    bool has_velocity_input = (linear_magnitude > 0.01f) || (angular_magnitude > 0.01f);
-
-    switch (current_walk_state_) {
-    case WalkState::WALK_STOPPED:
-        if (has_velocity_input) {
-            current_walk_state_ = WalkState::WALK_STARTING;
-            logDebug("Walk state: STARTING");
-        }
-        break;
-
-    case WalkState::WALK_STARTING:
-        // Check if all legs are at correct phase
-        current_walk_state_ = WalkState::WALK_MOVING;
-        logDebug("Walk state: MOVING");
-        break;
-
-    case WalkState::WALK_MOVING:
-        if (!has_velocity_input) {
-            current_walk_state_ = WalkState::WALK_STOPPING;
-            logDebug("Walk state: STOPPING");
-        }
-        break;
-
-    case WalkState::WALK_STOPPING:
-        // Check if all legs have reached default positions
-        current_walk_state_ = WalkState::WALK_STOPPED;
-        logDebug("Walk state: STOPPED");
-        break;
-
-    default:
-        current_walk_state_ = WalkState::WALK_STOPPED;
-        break;
+    // OpenSHC parity: walk state transitions are handled inside WalkController::updateWalk().
+    // StateController only mirrors the walk state for external queries.
+    // Do NOT independently change walk_state_ here — it is authoritative in WalkController.
+    WalkController *walker = locomotion_system_.getWalkController();
+    if (walker) {
+        current_walk_state_ = walker->getWalkState();
     }
 }
 

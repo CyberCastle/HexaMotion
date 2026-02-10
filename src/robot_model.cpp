@@ -118,29 +118,30 @@ void RobotModel::initializeDH() {
 }
 
 // OpenSHC-style Damped Least Squares (DLS) iterative inverse kinematics
-JointAngles RobotModel::solveIK(int leg, const Point3D &local_target, JointAngles current) const {
+JointAngles RobotModel::solveIK(int leg, const Point3D &global_target, JointAngles current) const {
     const double tolerance = IK_TOLERANCE;
     const double dls_coefficient = IK_DLS_COEFFICIENT;
     const double max_angle_change = math_utils::degreesToRadians(IK_MAX_ANGLE_STEP); // Max angle change per iteration
 
     for (int iter = 0; iter < params.ik.max_iterations; ++iter) {
-        // Calculate current position in local leg frame using FK
-        Point3D current_pos_global = forwardKinematicsGlobalCoordinates(leg, current);
-        Point3D current_pos = transformGlobalToLocalCoordinates(leg, current_pos_global, current);
+        // OpenSHC parity: compute error in global frame (matches Jacobian frame).
+        // Previous code transformed FK output through legTransform.inverse(), which
+        // cancelled out (FK IS legTransform * origin), yielding current_pos ≈ (0,0,0).
+        Point3D current_pos = forwardKinematicsGlobalCoordinates(leg, current);
 
-        // Calculate position error
+        // Calculate position error in global frame
         Eigen::Vector3d position_error3;
-        position_error3 << (local_target.x - current_pos.x),
-            (local_target.y - current_pos.y),
-            (local_target.z - current_pos.z);
+        position_error3 << (global_target.x - current_pos.x),
+            (global_target.y - current_pos.y),
+            (global_target.z - current_pos.z);
 
         // Check convergence
         if (position_error3.norm() < tolerance) {
             break;
         }
 
-        // Calculate Jacobian using existing method
-        Eigen::Matrix3d jacobian_pos = calculateJacobian(leg, current, local_target);
+        // Calculate Jacobian (already in global frame via numerical FK perturbation)
+        Eigen::Matrix3d jacobian_pos = calculateJacobian(leg, current, global_target);
 
         // Damped Least Squares (DLS) solution
         Eigen::Matrix3d JJT3 = jacobian_pos * jacobian_pos.transpose();
@@ -205,7 +206,7 @@ void RobotModel::clampJointAngles(JointAngles &angles) const {
 
 // OpenSHC-style Damped Least Squares (DLS) iterative inverse kinematics
 JointAngles RobotModel::inverseKinematicsGlobalCoordinates(int leg, const Point3D &p) const {
-    // Transform target to leg coordinate system
+    // Transform target to leg coordinate system for initial guess only
     Point3D local_target = transformGlobalToLocalLegCoordinates(leg, p);
 
     // Initial guess based on target direction and realistic kinematics
@@ -219,18 +220,17 @@ JointAngles RobotModel::inverseKinematicsGlobalCoordinates(int leg, const Point3
     JointAngles current_angles(coxa_start, femur_estimate, tibia_estimate);
     clampJointAngles(current_angles);
 
-    return solveIK(leg, local_target, current_angles);
+    // Pass global target directly — solveIK works in global frame (matching Jacobian)
+    return solveIK(leg, p, current_angles);
 }
 
 JointAngles RobotModel::inverseKinematicsCurrentGlobalCoordinates(int leg, const JointAngles &current,
                                                                   const Point3D &target) const {
-    // Transform target to local leg coordinates using full OpenSHC Pose-based conversion
-    Point3D local_target = transformGlobalToLocalCoordinates(leg, target, current);
-
+    // Pass global target directly — solveIK works in global frame (matching Jacobian)
     JointAngles start = current;
     clampJointAngles(start);
 
-    return solveIK(leg, local_target, start);
+    return solveIK(leg, target, start);
 }
 
 Point3D RobotModel::forwardKinematicsGlobalCoordinates(int leg, const JointAngles &q) const {
@@ -551,11 +551,8 @@ JointAngles RobotModel::calculateTargetFromDefaultStance(int leg, const JointAng
 
 JointAngles RobotModel::solveIKLocalCoordinates(int leg, const Point3D &global_target,
                                                 const JointAngles &current_angles) const {
-    // Transform global target to local leg coordinates (OpenSHC-style)
-    Point3D local_target = transformGlobalToLocalCoordinates(leg, global_target, current_angles);
-
-    // Solve IK in local coordinates using existing solveIK method
-    return solveIK(leg, local_target, current_angles);
+    // solveIK now works in global frame — pass global target directly
+    return solveIK(leg, global_target, current_angles);
 }
 
 Point3D RobotModel::transformGlobalToLocalCoordinates(int leg, const Point3D &global_position,

@@ -193,6 +193,9 @@ class LegStepper {
     void generateSecondarySwingControlNodes(bool ground_contact = false);
     void generateStanceControlNodes(double stride_scaler = 1.0);
 
+    /** @brief OpenSHC: Rewrites swing junction nodes so touchdown approach aligns with stance velocity. */
+    void forceNormalTouchdown();
+
     // Control node validation methods (Step 4 implementation)
     void validateAndFixControlNodes(Point3D nodes[5]) const;
 
