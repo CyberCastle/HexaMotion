@@ -95,7 +95,8 @@ void BodyPoseController::setManualPoseInput(const Point3D &translation, const Po
     clamped_rotation.z = math_utils::clamp(clamped_rotation.z, -body_pose_config.max_rotation.yaw, body_pose_config.max_rotation.yaw);
 
     manual_pose_.position = clamped_translation;
-    manual_pose_.rotation = Eigen::Quaterniond(math_utils::eulerPoint3DToQuaternion(clamped_rotation));
+    Eigen::Vector3d clamped_euler(clamped_rotation.x, clamped_rotation.y, clamped_rotation.z);
+    manual_pose_.rotation = math_utils::eulerAnglesToQuaterniond(clamped_euler);
 }
 
 void BodyPoseController::setIMUData(const IMUData &imu_data) {
@@ -248,12 +249,12 @@ void BodyPoseController::updateIMUPosePID() {
         Eigen::Vector3d euler_rad(math_utils::degreesToRadians(imu_data_.absolute_data.absolute_roll),
                                   math_utils::degreesToRadians(imu_data_.absolute_data.absolute_pitch),
                                   math_utils::degreesToRadians(imu_data_.absolute_data.absolute_yaw));
-        current_rotation = math_utils::eulerToQuaternion(euler_rad);
+        current_rotation = math_utils::eulerAnglesToQuaterniond(euler_rad);
     } else {
         Eigen::Vector3d euler_rad(math_utils::degreesToRadians(imu_data_.roll),
                                   math_utils::degreesToRadians(imu_data_.pitch),
                                   math_utils::degreesToRadians(imu_data_.yaw));
-        current_rotation = math_utils::eulerToQuaternion(euler_rad);
+        current_rotation = math_utils::eulerAnglesToQuaterniond(euler_rad);
     }
     current_rotation = math_utils::correctRotation(current_rotation, Eigen::Quaterniond::Identity());
 

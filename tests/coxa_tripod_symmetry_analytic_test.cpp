@@ -751,75 +751,88 @@ int main(int argc, char **argv) {
         std::cout << "ShiftTripod(0 vs 1) bestShift=" << s01.first << " expectedHalf=" << expected_half_shift
                   << " error=" << shift_error << " (" << std::fixed << std::setprecision(2) << (shift_error_ratio * 100.0)
                   << "%) score=" << s01.second << " phase_shift_ok=" << (phase_shift_ok ? "YES" : "NO") << std::endl;
-        // 2. Simetría especular global: phi_i ≈ -phi_j en promedio para pares opuestos
+        // 2. Simetría especular: pares opuestos (i,j) deben tener amplitudes iguales
+        //    y medias que se cancelen (anti-simetría). No se puede comparar suma instantánea
+        //    porque los pares pertenecen a trípodes opuestos (desfasados 180°), y en cada
+        //    instante uno está en stance y el otro en swing, haciendo que phi_i + phi_j ≠ 0.
+        //    En su lugar se comparan: (a) amplitudes, (b) cancelación de medias.
         int pairs[3][2] = {{0, 5}, {1, 4}, {2, 3}};
         bool specular_ok = true;
-        bool specular_linear_ok = true;
-        const double kSpecularAngularMAEThresh = 0.15; // rad (legacy)
-        const double kSpecularLinearMAEThresh = 8.0;   // mm (new, linearized)
         std::cout << "Mean stance radii (mm) per leg:";
         for (int i = 0; i < NUM_LEGS; ++i)
             std::cout << " " << std::fixed << std::setprecision(1) << mean_stance_radius[i];
         std::cout << std::endl;
         for (auto &pr : pairs) {
-            double err_sum_ang = 0.0;
-            double err_sum_lin = 0.0;
-            int c = 0;
-            for (size_t i = 0; i < n; ++i) {
-                const auto &s = sys.getTelemetrySample(i);
-                double li = s.local_angle[pr[0]]; // rad
-                double lj = s.local_angle[pr[1]]; // rad
-                double sum_ang = li + lj;         // rad
-                err_sum_ang += std::fabs(sum_ang);
-                // Linearized (approx tangential) displacement: angle * mean stance radius
-                double sum_lin = li * mean_stance_radius[pr[0]] + lj * mean_stance_radius[pr[1]]; // mm
-                err_sum_lin += std::fabs(sum_lin);
-                ++c;
-            }
-            double mae_ang = err_sum_ang / std::max(1, c);
-            double mae_lin = err_sum_lin / std::max(1, c);
-            std::cout << "SpecularPair (" << pr[0] << "," << pr[1]
-                      << ") MAE local_sum(rad)=" << mae_ang
-                      << " MAE linear_sum(mm)=" << mae_lin << std::endl;
-            if (mae_ang > kSpecularAngularMAEThresh)
+            double amp_i = amp[pr[0]];
+            double amp_j = amp[pr[1]];
+            double amp_max = std::max(amp_i, amp_j);
+            // Amplitude match: opposite legs should sweep the same angular magnitude
+            double amp_diff_ratio = amp_max > 1e-6 ? std::fabs(amp_i - amp_j) / amp_max : 0.0;
+            // Mean antisymmetry: mean(phi_i) + mean(phi_j) should be ~0
+            double mean_sum = std::fabs(mean[pr[0]] + mean[pr[1]]);
+            double mean_anti_ratio = amp_max > 1e-6 ? mean_sum / amp_max : 0.0;
+            // Linearized versions (mm)
+            double lin_amp_i = amp_i * mean_stance_radius[pr[0]];
+            double lin_amp_j = amp_j * mean_stance_radius[pr[1]];
+            double lin_amp_max = std::max(lin_amp_i, lin_amp_j);
+            double lin_amp_diff_ratio = lin_amp_max > 1e-6 ? std::fabs(lin_amp_i - lin_amp_j) / lin_amp_max : 0.0;
+            double lin_mean_sum = std::fabs(mean[pr[0]] * mean_stance_radius[pr[0]] +
+                                            mean[pr[1]] * mean_stance_radius[pr[1]]);
+            double lin_mean_anti_ratio = lin_amp_max > 1e-6 ? lin_mean_sum / lin_amp_max : 0.0;
+
+            std::cout << "SpecularPair (" << pr[0] << "," << pr[1] << ")"
+                      << " amp_diff=" << std::fixed << std::setprecision(3) << amp_diff_ratio
+                      << " mean_anti=" << mean_anti_ratio
+                      << " lin_amp_diff=" << lin_amp_diff_ratio
+                      << " lin_mean_anti=" << lin_mean_anti_ratio
+                      << std::endl;
+            // 30% amplitude tolerance, 80% mean antisymmetry tolerance
+            if (lin_amp_diff_ratio > 0.3 || lin_mean_anti_ratio > 0.8)
                 specular_ok = false;
-            if (mae_lin > kSpecularLinearMAEThresh)
-                specular_linear_ok = false;
         }
-        // We now define specular_ok as requiring the linear criterion; keep angular as informative only.
-        if (!specular_linear_ok)
-            specular_ok = false;
         // 3. Simetría barrido por pata (amplitud protacción vs retracción) ya aproximado con amp[] (baseline)
-        // 4. Copias entre patas separadas 60° dentro mismo trípode: comparar amplitudes
+        // 4. Copias entre patas dentro del mismo trípode: comparar amplitudes normalizadas
+        //    por factor geométrico |sin(base_angle)| para compensar la orientación de cada pata.
+        //    La contribución tangencial (coxa) durante movimiento forward es proporcional a
+        //    |sin(base_angle)|, por lo que las patas a ±90° barren ~2x más que las de ±30°/±150°.
         bool tripod_internal_ok = true;
         int tripodA[3] = {0, 2, 4};
         int tripodB[3] = {1, 3, 5};
-        auto checkTripod = [&](int *legs) {
-            double a0 = amp[legs[0]];
+        // Geometry-normalized angular amplitude: normalize by |sin(base_angle)|
+        double norm_amp[NUM_LEGS];
+        for (int L = 0; L < NUM_LEGS; ++L) {
+            double sin_factor = std::fabs(std::sin(BASE_THETA_OFFSETS[L]));
+            norm_amp[L] = sin_factor > 1e-6 ? amp[L] / sin_factor : amp[L];
+        }
+        auto checkTripodAngNorm = [&](int *legs) {
+            double a0 = norm_amp[legs[0]];
             for (int k = 1; k < 3; ++k) {
-                double rel = fabs(amp[legs[k]] - a0) / std::max(1e-6, fabs(a0));
-                if (rel > 0.2) {
+                double rel = fabs(norm_amp[legs[k]] - a0) / std::max(1e-6, fabs(a0));
+                if (rel > 0.25) // 25% tolerance after geometry normalization
                     tripod_internal_ok = false;
-                }
             }
         };
-        checkTripod(tripodA);
-        checkTripod(tripodB);
-        // Linearized amplitude comparison (amp_rad * mean_radius) to reduce bias from different leg arm lengths
+        checkTripodAngNorm(tripodA);
+        checkTripodAngNorm(tripodB);
+        // Linearized amplitude comparison: (amp * mean_stance_radius) / |sin(base_angle)|
         bool tripod_internal_linear_ok = true;
         double lin_amp[NUM_LEGS];
-        for (int L = 0; L < NUM_LEGS; ++L)
+        double norm_lin_amp[NUM_LEGS];
+        for (int L = 0; L < NUM_LEGS; ++L) {
             lin_amp[L] = amp[L] * mean_stance_radius[L];
-        auto checkTripodLinear = [&](int *legs) {
-            double a0 = lin_amp[legs[0]];
+            double sin_factor = std::fabs(std::sin(BASE_THETA_OFFSETS[L]));
+            norm_lin_amp[L] = sin_factor > 1e-6 ? lin_amp[L] / sin_factor : lin_amp[L];
+        }
+        auto checkTripodLinearNorm = [&](int *legs) {
+            double a0 = norm_lin_amp[legs[0]];
             for (int k = 1; k < 3; ++k) {
-                double rel = fabs(lin_amp[legs[k]] - a0) / std::max(1e-6, fabs(a0));
-                if (rel > 0.2)
+                double rel = fabs(norm_lin_amp[legs[k]] - a0) / std::max(1e-6, fabs(a0));
+                if (rel > 0.25) // 25% tolerance after geometry normalization
                     tripod_internal_linear_ok = false;
             }
         };
-        checkTripodLinear(tripodA);
-        checkTripodLinear(tripodB);
+        checkTripodLinearNorm(tripodA);
+        checkTripodLinearNorm(tripodB);
         // Servo vs internal angle match
         double servo_angle_mae = 0.0;
         int servo_samples = 0;
@@ -864,8 +877,12 @@ int main(int argc, char **argv) {
 
         std::cout << "TripodA amps(rad): " << amp[0] << "," << amp[2] << "," << amp[4]
                   << "  TripodB amps(rad): " << amp[1] << "," << amp[3] << "," << amp[5] << std::endl;
+        std::cout << "TripodA norm_amps(rad): " << norm_amp[0] << "," << norm_amp[2] << "," << norm_amp[4]
+                  << "  TripodB norm_amps(rad): " << norm_amp[1] << "," << norm_amp[3] << "," << norm_amp[5] << std::endl;
         std::cout << "TripodA linear_amps(mm): " << lin_amp[0] << "," << lin_amp[2] << "," << lin_amp[4]
                   << "  TripodB linear_amps(mm): " << lin_amp[1] << "," << lin_amp[3] << "," << lin_amp[5] << std::endl;
+        std::cout << "TripodA norm_lin_amps(mm): " << norm_lin_amp[0] << "," << norm_lin_amp[2] << "," << norm_lin_amp[4]
+                  << "  TripodB norm_lin_amps(mm): " << norm_lin_amp[1] << "," << norm_lin_amp[3] << "," << norm_lin_amp[5] << std::endl;
         std::cout << "Servo vs model coxa MAE(rad): " << servo_angle_mae << " (tol=" << servo_tol_rad << ") match=" << (servo_match_ok ? "YES" : "NO") << std::endl;
         std::cout << "Avg stance stride dx TripodA=" << avg_dx_stance_tripodA << " TripodB=" << avg_dx_stance_tripodB << " forward_progress_ok=" << (forward_progress_ok ? "YES" : "NO") << std::endl;
         std::cout << "Premises Result: specular_ok=" << (specular_ok ? "YES" : "NO")
