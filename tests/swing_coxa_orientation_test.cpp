@@ -34,7 +34,7 @@ static double planarAngle(const Point3D &v) { return std::atan2(v.y, v.x); }
 static double planarNorm(const Point3D &v) { return std::sqrt(v.x * v.x + v.y * v.y); }
 
 int main() {
-    std::cout << std::fixed << std::setprecision(6);
+    std::cout << std::fixed << std::setprecision(3);
     std::cout << "=== Swing Coxa Orientation Influence Test ===\n";
 
     // Parámetros mínimos coherentes con AGENTS.md
@@ -126,22 +126,22 @@ int main() {
         }
 
         // Reporte por pata
-        std::cout << "\n[Pata " << leg_index << "] base_theta(deg)=" << math_utils::radiansToDegrees(base_theta) << " raw_target=(" << reference_raw_target.x << ", " << reference_raw_target.y << ")" << "\n";
+        std::cout << "\n[Leg " << leg_index << "] base_theta(deg)=" << math_utils::radiansToDegrees(base_theta)
+                  << " raw_target=(" << reference_raw_target.x << ", " << reference_raw_target.y << ")" << "\n";
         const double DEG = math_utils::radiansToDegrees(1.0);
         if (!results.empty()) {
             double base_dir = results[0].target_dir;
+            std::cout << "  Coxa(deg) | dTarget(deg) | dSwingEnd(deg) | target_norm | swing_norm\n";
             for (auto &r : results) {
                 double dtheta_target = (r.target_dir - base_dir) * DEG;
                 double dtheta_swing_end = (r.swing_end_dir - base_dir) * DEG;
-                std::cout << " Coxa=" << r.coxa_deg
-                          << "° target_dir(deg)=" << r.target_dir * DEG
-                          << " Δtarget_dir(deg)=" << dtheta_target
-                          << " swing_end_dir(deg)=" << r.swing_end_dir * DEG
-                          << " Δswing_end_dir(deg)=" << dtheta_swing_end
-                          << " target_norm=" << r.target_norm
-                          << " swing_end_norm=" << r.swing_end_norm
-                          << " tip_before=(" << r.tip_before.x << ", " << r.tip_before.y << ")"
-                          << " target=(" << r.target.x << ", " << r.target.y << ")"
+                std::cout << "  " << std::setw(8) << r.coxa_deg
+                          << " | " << std::setw(11) << dtheta_target
+                          << " | " << std::setw(13) << dtheta_swing_end
+                          << " | " << std::setw(11) << r.target_norm
+                          << " | " << std::setw(10) << r.swing_end_norm
+                          << "\n"
+                          << "    target=(" << r.target.x << ", " << r.target.y << ")"
                           << " swing_end=(" << r.swing_end.x << ", " << r.swing_end.y << ")"
                           << "\n";
             }
@@ -161,13 +161,14 @@ int main() {
 
     // Resumen global
     const double THRESH = 1e-3; // 0.001 deg
-    std::cout << "\n=== Resumen Global ===\n";
+    std::cout << "\n=== Global Summary ===\n";
     for (auto &ls : leg_summaries) {
         std::cout << "Leg " << ls.leg
-                  << " maxΔ target_dir(deg)=" << ls.max_delta_target_deg
-                  << " maxΔ swing_end_dir(deg)=" << ls.max_delta_swing_end_deg
-                  << (ls.max_delta_target_deg <= THRESH ? " [INV]" : " [VAR]")
-                  << (ls.max_delta_swing_end_deg <= THRESH ? " [INV]" : " [VAR]")
+                  << ": dTargetMax=" << ls.max_delta_target_deg
+                  << " deg, dSwingEndMax=" << ls.max_delta_swing_end_deg
+                  << " deg ->"
+                  << (ls.max_delta_target_deg <= THRESH ? " target INV" : " target VAR")
+                  << (ls.max_delta_swing_end_deg <= THRESH ? ", swing INV" : ", swing VAR")
                   << "\n";
     }
     bool all_invariant = true;
@@ -178,10 +179,10 @@ int main() {
         }
     }
     if (all_invariant)
-        std::cout << "Conclusión: target_tip_pose y swing_end invariables al ángulo de coxa en TODAS las patas (escenario probado).\n";
+        std::cout << "Conclusion: target_tip_pose and swing_end are invariant to coxa angle in all legs.\n";
     else
-        std::cout << "Conclusión: Se detectó variación en alguna pata.\n";
-    std::cout << "Umbral usado (deg): " << THRESH << "\n";
+        std::cout << "Conclusion: Variation detected in at least one leg.\n";
+    std::cout << "Threshold (deg): " << THRESH << "\n";
 
     return 0;
 }
