@@ -169,8 +169,9 @@ static bool validateAllLegs(const StrideTestCase &tc, RobotModel &model, const P
 
     // ================= Symmetry Validation (Oposición 180° y Reflexión 60°) =================
     // NUEVO: Se separan las dos nociones.
-    //  A) Oposición (pares realmente separados 180° en el hexágono): (0,5), (1,4), (2,3)
-    //  B) Reflexión (pares que sólo invierten el signo de X ó Y respecto a un eje local): (0,3), (2,5) y (1,4) (este último coincide con oposición)
+    //  A) Oposición (pares realmente separados 180° en el hexágono): (0,3), (1,4), (2,5)
+    //     AR(+30°)↔CL(-150°), BR(+90°)↔BL(-90°), CR(+150°)↔AL(-30°)
+    //  B) Reflexión (pares espejo por índice, separados ~60°): (0,5), (1,4), (2,3)
 
     struct Pair {
         int a;
@@ -179,7 +180,7 @@ static bool validateAllLegs(const StrideTestCase &tc, RobotModel &model, const P
     };
 
     // ---- Bloque A: Oposición verdadera (esperamos vectores angulares opuestos -> dot ≈ -1) ----
-    Pair opposite_pairs[3] = {{0, 5, "(0,5)"}, {1, 4, "(1,4)"}, {2, 3, "(2,3)"}};
+    Pair opposite_pairs[3] = {{0, 3, "(0,3)"}, {1, 4, "(1,4)"}, {2, 5, "(2,5)"}};
     std::cout << "    BaseAngles(deg):";
     for (int i = 0; i < NUM_LEGS; ++i) {
         double deg = math_utils::radiansToDegrees(BASE_THETA_OFFSETS[i]);
@@ -221,9 +222,9 @@ static bool validateAllLegs(const StrideTestCase &tc, RobotModel &model, const P
     }
 
     // ---- Bloque B: Reflexión (informativo, NO afecta all_ok) ----
-    // Para reflexión esperamos magnitudes iguales y direcciones similares (dot≈+1) porque el radio se refleja
-    // pero el signo de la componente tangencial puede conservarse según convención (depende de ω y orientación).
-    Pair reflection_pairs[3] = {{0, 3, "(0,3)"}, {1, 4, "(1,4)"}, {2, 5, "(2,5)"}};
+    // Pares espejo por índice (0↔5, 1↔4, 2↔3): separados ~60°, no 180°.
+    // Magnitudes iguales pero direcciones NO necesariamente opuestas — sólo informativo.
+    Pair reflection_pairs[3] = {{0, 5, "(0,5)"}, {1, 4, "(1,4)"}, {2, 3, "(2,3)"}};
     std::cout << "    Symmetry Reflection Pairs (Δθ≈60° o 180° -> dot≈+1 esperado):" << std::endl;
     for (const auto &p : reflection_pairs) {
         Point3D va = angular_components[p.a];
