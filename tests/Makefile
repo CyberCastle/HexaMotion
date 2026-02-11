@@ -95,5 +95,8 @@ coxa_tripod_symmetry_analytic_test: coxa_tripod_symmetry_analytic_test.cpp ../sr
 step_frequency_regeneration_test: step_frequency_regeneration_test.cpp ../src/gait_config_factory.cpp ../src/robot_model.cpp ../src/math_utils.cpp ../src/workspace_analyzer.cpp
 	$(CXX) $(CXXFLAGS) $^ -o $@
 
+runge_kutta_validation_test: runge_kutta_validation_test.cpp ../src/admittance_controller.cpp ../src/robot_model.cpp ../src/math_utils.cpp ../src/workspace_analyzer.cpp ../src/body_pose_config_factory.cpp
+	$(CXX) $(CXXFLAGS) $^ -o $@
+
 clean:
 	rm -f math_utils_test pose_controller_test walk_controller_test quaternion_functions_test kinematics_validation_test simple_dh_test simple_ik_test simple_advanced_ik_test brute_force_workspace_test jacobian_validation_test dh_vs_analytic_test pose_gait_integration_test trajectory_tip_position_test trajectory_all_legs_test finetune_angles_test tripod_walk_visualization_test tripod_linearity_test virtual_hardware_sim_test hexapod_trajectory_analysis_test workspace_analyzer_fusion_test bezier_validation_test test_complete_physical_offset coxa_phase_transition_test coxa_stride_decomposition_test stride_vector_validation_test swing_coxa_orientation_test step_frequency_regeneration_test coxa_tripod_symmetry_analytic_test
