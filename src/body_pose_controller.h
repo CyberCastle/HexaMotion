@@ -195,6 +195,13 @@ class BodyPoseController {
     bool updateAutoPose(double gait_phase, Leg legs[NUM_LEGS]);
 
     /**
+     * @brief Check if legs are bearing load based on average tip height.
+     * @param legs Array of Leg objects
+     * @return True if estimated body height indicates load-bearing stance
+     */
+    bool legsBearingLoad(const Leg legs[NUM_LEGS]) const;
+
+    /**
      * @brief Tripod leg coordination for stance transition (tripod gait only)
      * @param legs Array of Leg objects to update
      * @param step_height Height for leg lifting during transition
@@ -255,6 +262,12 @@ class BodyPoseController {
     const BodyPoseConfiguration &getBodyPoseConfig() const { return body_pose_config; }
     void setBodyPoseConfig(const BodyPoseConfiguration &config) { body_pose_config = config; }
     void configureSmoothTrajectory(bool use_current_positions, double interpolation_speed = 0.1, uint8_t max_steps = 20);
+
+    /**
+     * @brief Get current composed body pose (OpenSHC Model::getCurrentPose equivalent).
+     * @return Current body pose
+     */
+    const Pose &getCurrentBodyPose() const { return body_pose_current_; }
 
     // Auto-pose configuration accessors
     const AutoPoseConfiguration &getAutoPoseConfig() const { return auto_pose_config; }

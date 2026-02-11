@@ -11,6 +11,7 @@
 #include <ArduinoEigen.h>
 #include <math.h>
 
+#include <string>
 #include <vector>
 // Forward declarations
 class WalkController;
@@ -96,6 +97,9 @@ class LocomotionSystem {
     // OpenSHC-style IK batch processing functions
     void applyInverseKinematicsToAllLegs();
     void publishJointAnglesToServos();
+
+    // Update per-joint telemetry (velocity/effort) from servo interface if available
+    void updateLegJointTelemetry();
 
     // Runtime-only switch to gate coxa servo output during tests
     bool coxa_movement_enabled_ = true;
@@ -192,6 +196,14 @@ class LocomotionSystem {
     /** Plan the next gait step from desired velocities. */
     bool planGaitSequence(double velocity_x, double velocity_y, double angular_velocity);
 
+    /**
+     * @brief Update a runtime-adjustable parameter by name (lightweight parity with OpenSHC).
+     * @param name Parameter name (step_frequency, swing_height, stance_span_modifier)
+     * @param value New parameter value
+     * @return True if parameter was accepted and applied
+     */
+    bool setParameter(const std::string &name, double value);
+
     // State management (OpenSHC equivalent)
     /** Check if startup sequence is in progress */
     bool isStartupInProgress() const { return startup_in_progress; }
@@ -214,6 +226,10 @@ class LocomotionSystem {
     bool hasStateController() const { return state_controller_ != nullptr; }
     /** Get current system state */
     SystemState getSystemState() const { return system_state; }
+    /** Get current composed body pose (OpenSHC Model::getCurrentPose equivalent). */
+    Pose getCurrentBodyPose() const;
+    /** Check if legs are bearing load based on body pose controller estimate. */
+    bool legsBearingLoad() const;
     /** Get startup progress percent (0-100). Returns 100 if startup already completed or controller missing. */
     int getStartupProgressPercent() const {
         if (!body_pose_ctrl)
@@ -259,6 +275,12 @@ class LocomotionSystem {
     Eigen::Vector2d calculateCenterOfPressure();
     /** Compute a numeric stability index. */
     double calculateStabilityIndex();
+
+    /**
+     * @brief Check if the legs are bearing load (OpenSHC equivalent).
+     * @return True if average body height indicates load-bearing stance
+     */
+    bool legsBearingLoad() const;
     /** Enhanced stability calculation using absolute positioning data. */
     double calculateDynamicStabilityIndex();
     /** Check if the robot is statically stable. */

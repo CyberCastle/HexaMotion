@@ -54,6 +54,15 @@ enum CruiseControlMode {
 };
 
 //
+// Designation for potential planner modes (stub parity with OpenSHC).
+//
+enum PlannerMode {
+    PLANNER_MODE_OFF,  //< Planner disabled
+    PLANNER_MODE_ON,   //< Planner enabled (not supported on MCU)
+    PLANNER_MODE_COUNT //< Misc enum defining number of Planner Modes
+};
+
+//
 // Designation for potential posing states used in auto-posing.
 //
 enum PosingState {
@@ -192,6 +201,12 @@ class StateController {
     inline CruiseControlMode getCruiseControlMode() const { return current_cruise_control_mode_; }
 
     /**
+     * @brief Get the current planner mode.
+     * @return Current planner mode
+     */
+    inline PlannerMode getPlannerMode() const { return current_planner_mode_; }
+
+    /**
      * @brief Get the current cruise control velocity.
      * @return Current cruise velocity vector (x, y, angular_z)
      */
@@ -278,6 +293,13 @@ class StateController {
     bool setCruiseControlMode(CruiseControlMode mode, const Eigen::Vector3d &velocity = Eigen::Vector3d::Zero());
 
     /**
+     * @brief Set planner mode (stub parity with OpenSHC).
+     * @param mode Desired planner mode
+     * @return True if mode is accepted
+     */
+    bool setPlannerMode(PlannerMode mode);
+
+    /**
      * @brief Set the pose reset mode.
      * @param mode Desired pose reset mode
      * @return True if mode change successful
@@ -346,6 +368,35 @@ class StateController {
      * @param velocity Desired tip velocity [x, y, z] in mm/s
      */
     void setLegTipVelocity(int leg_index, const Eigen::Vector3d &velocity);
+
+    /**
+     * @brief Set desired tip pose for manual leg control.
+     * @param leg_index Index of the leg (0-5)
+     * @param position Desired tip position in mm
+     */
+    void setLegTipPose(int leg_index, const Point3D &position);
+
+    /**
+     * @brief Get desired tip pose for manual leg control.
+     * @param leg_index Index of the leg (0-5)
+     * @param out_position Output position if available
+     * @return True if a valid pose is set for this leg
+     */
+    bool getLegTipPose(int leg_index, Point3D &out_position) const;
+
+    /**
+     * @brief Get desired tip velocity for a leg.
+     * @param leg_index Index of the leg (0-5)
+     * @return Desired tip velocity
+     */
+    Eigen::Vector3d getLegTipVelocity(int leg_index) const;
+
+    /**
+     * @brief Get up to two manual leg indices for manual control inputs.
+     * @param primary_leg Output primary leg index (-1 if none)
+     * @param secondary_leg Output secondary leg index (-1 if none)
+     */
+    void getManualLegIndices(int &primary_leg, int &secondary_leg) const;
 
     /**
      * @brief Update velocity control based on current mode.
@@ -433,6 +484,12 @@ class StateController {
      */
     void clearError();
 
+    /**
+     * @brief Execute planner (stub parity with OpenSHC).
+     * @return False if planner is not supported
+     */
+    bool executePlan();
+
   private:
     // ==============================
     // PRIVATE MEMBERS
@@ -447,6 +504,7 @@ class StateController {
     WalkState current_walk_state_;
     PosingMode current_posing_mode_;
     CruiseControlMode current_cruise_control_mode_;
+    PlannerMode current_planner_mode_;
     PoseResetMode current_pose_reset_mode_;
 
     // Desired states (for transitions)
@@ -471,6 +529,8 @@ class StateController {
     Eigen::Vector3d desired_body_position_;
     Eigen::Vector3d desired_body_orientation_;
     Eigen::Vector3d leg_tip_velocities_[NUM_LEGS];
+    Point3D leg_tip_poses_[NUM_LEGS];
+    bool leg_tip_pose_valid_[NUM_LEGS];
 
     // Cruise control
     Eigen::Vector3d cruise_velocity_;

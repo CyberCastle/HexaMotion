@@ -7,6 +7,8 @@
 #include "precision_config.h"
 #include <Arduino.h>
 #include <ArduinoEigen.h>
+#include <cmath>
+#include <limits>
 #include <memory>
 #include <utility>
 
@@ -319,6 +321,28 @@ struct Pose {
         return Pose(Point3D(), Eigen::Quaterniond::Identity());
     }
 
+    /**
+     * @brief Create a sentinel undefined pose (NaN components).
+     * @return Undefined pose instance.
+     */
+    static Pose Undefined() {
+        double nan = std::numeric_limits<double>::quiet_NaN();
+        Eigen::Quaterniond q(nan, nan, nan, nan);
+        return Pose(Point3D(nan, nan, nan), q);
+    }
+
+    /**
+     * @brief Check if pose components are finite and usable.
+     * @return True if position and rotation are finite.
+     */
+    bool isValid() const {
+        if (!std::isfinite(position.x) || !std::isfinite(position.y) || !std::isfinite(position.z)) {
+            return false;
+        }
+        return std::isfinite(rotation.w()) && std::isfinite(rotation.x()) &&
+               std::isfinite(rotation.y()) && std::isfinite(rotation.z());
+    }
+
     bool operator==(const Pose &other) const {
         return (position == other.position && rotation.isApprox(other.rotation));
     }
@@ -565,6 +589,12 @@ class IServoInterface {
     /** Retrieve the current joint angle (radians). */
     virtual double getJointAngle(int leg_index, int joint_index) = 0;
 
+    /** Retrieve the current joint velocity (rad/s). Default returns 0.0 if unsupported. */
+    virtual double getJointVelocity(int leg_index, int joint_index) { return 0.0; }
+
+    /** Retrieve the current joint effort/torque (driver units). Default returns 0.0 if unsupported. */
+    virtual double getJointEffort(int leg_index, int joint_index) { return 0.0; }
+
     /** Check if a joint is currently moving. */
     virtual bool isJointMoving(int leg_index, int joint_index) = 0;
     /** Enable or disable torque on a joint. */
@@ -720,6 +750,12 @@ class RobotModel {
     std::pair<double, double> calculateHeightRange() const;
     const Parameters &getParams() const { return params; }
     double getTimeDelta() const { return params.time_delta; }
+
+    /**
+     * @brief Update the global step frequency (Hz) at runtime.
+     * @param step_frequency New step frequency in Hz
+     */
+    void setStepFrequency(double step_frequency) { params.step_frequency = step_frequency; }
 
     /**
      * @brief Get the default height offset when all joint angles are 0°

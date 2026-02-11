@@ -102,6 +102,17 @@ std::string toString(CruiseControlMode mode) {
     }
 }
 
+std::string toString(PlannerMode mode) {
+    switch (mode) {
+    case PlannerMode::PLANNER_MODE_OFF:
+        return "PLANNER_MODE_OFF";
+    case PlannerMode::PLANNER_MODE_ON:
+        return "PLANNER_MODE_ON";
+    default:
+        return "UNKNOWN";
+    }
+}
+
 std::string toString(LegState state) {
     switch (state) {
     case LegState::LEG_WALKING:
@@ -136,12 +147,14 @@ String toArduinoString(const std::string &str) {
 } // namespace
 
 StateController::StateController(LocomotionSystem &locomotion, const StateMachineConfig &config)
-    : locomotion_system_(locomotion), config_(config), current_system_state_(SystemState::SYSTEM_PACKED), current_robot_state_(RobotState::ROBOT_UNKNOWN), current_walk_state_(WalkState::WALK_STOPPED), current_posing_mode_(PosingMode::POSING_NONE), current_cruise_control_mode_(CruiseControlMode::CRUISE_CONTROL_OFF), current_pose_reset_mode_(PoseResetMode::POSE_RESET_NONE), desired_system_state_(SystemState::SYSTEM_PACKED), desired_robot_state_(RobotState::ROBOT_UNKNOWN), leg_states_{}, manual_leg_count_(0), toggle_leg_index_(-1), toggle_leg_state_pending_(false), is_transitioning_(false), transition_start_time_(0), desired_linear_velocity_(Eigen::Vector2d::Zero()), desired_angular_velocity_(0.0f), desired_body_position_(Eigen::Vector3d::Zero()), desired_body_orientation_(Eigen::Vector3d::Zero()), cruise_velocity_(Eigen::Vector3d::Zero()), cruise_start_time_(0), cruise_end_time_(0), last_update_time_(0), time_delta_(0.02f), has_error_(false), startup_step_(0), startup_transition_initialized_(false), startup_transition_step_count_(4), shutdown_step_(0), shutdown_transition_initialized_(false), shutdown_transition_step_count_(3), pack_step_(0), unpack_step_(0), is_initialized_(false) {
+    : locomotion_system_(locomotion), config_(config), current_system_state_(SystemState::SYSTEM_PACKED), current_robot_state_(RobotState::ROBOT_UNKNOWN), current_walk_state_(WalkState::WALK_STOPPED), current_posing_mode_(PosingMode::POSING_NONE), current_cruise_control_mode_(CruiseControlMode::CRUISE_CONTROL_OFF), current_planner_mode_(PlannerMode::PLANNER_MODE_OFF), current_pose_reset_mode_(PoseResetMode::POSE_RESET_NONE), desired_system_state_(SystemState::SYSTEM_PACKED), desired_robot_state_(RobotState::ROBOT_UNKNOWN), leg_states_{}, manual_leg_count_(0), toggle_leg_index_(-1), toggle_leg_state_pending_(false), is_transitioning_(false), transition_start_time_(0), desired_linear_velocity_(Eigen::Vector2d::Zero()), desired_angular_velocity_(0.0f), desired_body_position_(Eigen::Vector3d::Zero()), desired_body_orientation_(Eigen::Vector3d::Zero()), cruise_velocity_(Eigen::Vector3d::Zero()), cruise_start_time_(0), cruise_end_time_(0), last_update_time_(0), time_delta_(0.02f), has_error_(false), startup_step_(0), startup_transition_initialized_(false), startup_transition_step_count_(4), shutdown_step_(0), shutdown_transition_initialized_(false), shutdown_transition_step_count_(3), pack_step_(0), unpack_step_(0), is_initialized_(false) {
 
     // Initialize leg states
     for (int i = 0; i < NUM_LEGS; i++) {
         leg_states_[i] = LegState::LEG_WALKING;
         leg_tip_velocities_[i] = Eigen::Vector3d::Zero();
+        leg_tip_poses_[i] = Point3D();
+        leg_tip_pose_valid_[i] = false;
     }
 
     // Initialize transition progress
@@ -349,6 +362,18 @@ bool StateController::setCruiseControlMode(CruiseControlMode mode, const Eigen::
     return true;
 }
 
+bool StateController::setPlannerMode(PlannerMode mode) {
+    if (mode == PlannerMode::PLANNER_MODE_ON) {
+        setError("Planner mode is not supported on this target");
+        current_planner_mode_ = PlannerMode::PLANNER_MODE_OFF;
+        return false;
+    }
+
+    current_planner_mode_ = PlannerMode::PLANNER_MODE_OFF;
+    logDebug("Planner mode changed to: " + toArduinoString(toString(current_planner_mode_)));
+    return true;
+}
+
 bool StateController::setPoseResetMode(PoseResetMode mode) {
     current_pose_reset_mode_ = mode;
     logDebug("Pose reset mode changed to: " + toArduinoString(toString(mode)));
@@ -452,6 +477,47 @@ void StateController::setLegTipVelocity(int leg_index, const Eigen::Vector3d &ve
     }
 }
 
+void StateController::setLegTipPose(int leg_index, const Point3D &position) {
+    if (leg_index >= 0 && leg_index < NUM_LEGS) {
+        leg_tip_poses_[leg_index] = position;
+        leg_tip_pose_valid_[leg_index] = true;
+    }
+}
+
+bool StateController::getLegTipPose(int leg_index, Point3D &out_position) const {
+    if (leg_index < 0 || leg_index >= NUM_LEGS) {
+        return false;
+    }
+    if (!leg_tip_pose_valid_[leg_index]) {
+        return false;
+    }
+    out_position = leg_tip_poses_[leg_index];
+    return true;
+}
+
+Eigen::Vector3d StateController::getLegTipVelocity(int leg_index) const {
+    if (leg_index < 0 || leg_index >= NUM_LEGS) {
+        return Eigen::Vector3d::Zero();
+    }
+    return leg_tip_velocities_[leg_index];
+}
+
+void StateController::getManualLegIndices(int &primary_leg, int &secondary_leg) const {
+    primary_leg = -1;
+    secondary_leg = -1;
+    for (int i = 0; i < NUM_LEGS; ++i) {
+        if (leg_states_[i] != LegState::LEG_MANUAL) {
+            continue;
+        }
+        if (primary_leg < 0) {
+            primary_leg = i;
+        } else if (secondary_leg < 0) {
+            secondary_leg = i;
+            break;
+        }
+    }
+}
+
 bool StateController::setDesiredBodyPosition(const Eigen::Vector3d &position) {
     // Validate position limits (basic safety check)
     const double MAX_POSITION_OFFSET = 200.0f; // mm
@@ -527,6 +593,7 @@ String StateController::getDiagnosticInfo() const {
     info += "  Walk State: " + toArduinoString(toString(current_walk_state_)) + "\n";
     info += "  Posing Mode: " + toArduinoString(toString(current_posing_mode_)) + "\n";
     info += "  Cruise Control: " + toArduinoString(toString(current_cruise_control_mode_)) + "\n";
+    info += "  Planner Mode: " + toArduinoString(toString(current_planner_mode_)) + "\n";
     info += "  Manual Legs: " + toArduinoString(toString(manual_leg_count_)) + "/" + toArduinoString(toString(config_.max_manual_legs)) + "\n";
     info += "  Transitioning: " + String(is_transitioning_ ? "Yes" : "No") + "\n";
 
@@ -559,6 +626,8 @@ void StateController::emergencyStop() {
     // Reset all leg tip velocities
     for (int i = 0; i < NUM_LEGS; i++) {
         leg_tip_velocities_[i] = Eigen::Vector3d::Zero();
+        leg_tip_poses_[i] = Point3D();
+        leg_tip_pose_valid_[i] = false;
     }
 
     // Cancel any ongoing transitions
@@ -581,6 +650,7 @@ void StateController::reset() {
     current_walk_state_ = WalkState::WALK_STOPPED;
     current_posing_mode_ = PosingMode::POSING_NONE;
     current_cruise_control_mode_ = CruiseControlMode::CRUISE_CONTROL_OFF;
+    current_planner_mode_ = PlannerMode::PLANNER_MODE_OFF;
     current_pose_reset_mode_ = PoseResetMode::POSE_RESET_NONE;
 
     desired_system_state_ = SystemState::SYSTEM_PACKED;
@@ -590,6 +660,8 @@ void StateController::reset() {
     for (int i = 0; i < NUM_LEGS; i++) {
         leg_states_[i] = LegState::LEG_WALKING;
         leg_tip_velocities_[i] = Eigen::Vector3d::Zero();
+        leg_tip_poses_[i] = Point3D();
+        leg_tip_pose_valid_[i] = false;
     }
     manual_leg_count_ = 0;
 
@@ -611,6 +683,11 @@ void StateController::reset() {
 
     // Initialize pose controller
     body_pose_controller_ = nullptr;
+}
+
+bool StateController::executePlan() {
+    setError("Planner execution is not supported on this target");
+    return false;
 }
 
 void StateController::updateStateMachine() {

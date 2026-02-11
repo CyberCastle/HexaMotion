@@ -2,7 +2,14 @@
 #include "hexamotion_constants.h"
 
 Leg::Leg(int leg_id, const RobotModel &model)
-    : model_(model), leg_id_(leg_id), leg_name_(("Leg_" + std::to_string(leg_id)).c_str()), joint_angles_(0.0, 0.0, 0.0), tip_position_(0.0, 0.0, 0.0), base_position_(0.0, 0.0, 0.0), leg_state_(LEG_WALKING), swing_progress_(-1.0), step_phase_(STANCE_PHASE), gait_phase_(0.0), in_contact_(false), contact_force_(0.0), fsr_history_index_(0), leg_phase_offset_(0.0), desired_tip_position_(0.0, 0.0, 0.0), default_angles_(0.0, 0.0, 0.0), default_tip_position_(0.0, 0.0, 0.0) {
+    : model_(model), leg_id_(leg_id), leg_name_(("Leg_" + std::to_string(leg_id)).c_str()),
+      joint_angles_(0.0, 0.0, 0.0), desired_joint_velocity_(0.0, 0.0, 0.0),
+      current_joint_velocity_(0.0, 0.0, 0.0), current_joint_effort_(0.0, 0.0, 0.0),
+      tip_position_(0.0, 0.0, 0.0), base_position_(0.0, 0.0, 0.0), leg_state_(LEG_WALKING),
+      swing_progress_(-1.0), step_phase_(STANCE_PHASE), gait_phase_(0.0), in_contact_(false),
+      contact_force_(0.0), tip_force_calculated_(Eigen::Vector3d::Zero()), fsr_history_index_(0),
+      leg_phase_offset_(0.0), desired_tip_position_(0.0, 0.0, 0.0), default_angles_(0.0, 0.0, 0.0),
+      default_tip_position_(0.0, 0.0, 0.0) {
 
     // Initialize FSR contact history
     for (int i = 0; i < 3; ++i) {
@@ -53,6 +60,15 @@ void Leg::setJointAngle(int joint_index, double angle) {
     }
     // Synchronize tip position using forward kinematics
     updateTipPosition();
+}
+
+void Leg::setCurrentJointVelocity(const JointAngles &velocities) {
+    current_joint_velocity_ = velocities;
+}
+
+void Leg::setCurrentJointEffort(const JointAngles &efforts) {
+    current_joint_effort_ = efforts;
+    has_effort_data_ = true;
 }
 
 void Leg::setCurrentTipPositionGlobal(const Point3D &position) {
@@ -122,6 +138,22 @@ Eigen::Matrix4d Leg::getTransform() const {
 
 Eigen::Matrix3d Leg::getJacobian() const {
     return model_.calculateJacobian(leg_id_, joint_angles_, tip_position_);
+}
+
+void Leg::calculateTipForce() {
+    if (!has_effort_data_) {
+        return;
+    }
+
+    Eigen::Matrix3d jacobian = model_.calculateJacobian(leg_id_, joint_angles_, tip_position_);
+    Eigen::Matrix3d identity = Eigen::Matrix3d::Identity();
+    Eigen::Matrix3d jt_j = jacobian.transpose() * jacobian;
+    Eigen::Matrix3d transformation =
+        jacobian * (jt_j + (IK_DLS_COEFFICIENT * IK_DLS_COEFFICIENT) * identity).inverse();
+    Eigen::Vector3d joint_torques(current_joint_effort_.coxa,
+                                  current_joint_effort_.femur,
+                                  current_joint_effort_.tibia);
+    tip_force_calculated_ = transformation * joint_torques;
 }
 
 void Leg::initialize(const Pose &default_stance) {

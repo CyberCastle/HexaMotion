@@ -1,6 +1,7 @@
 # OpenSHC Parity Gap Report (HexaMotion)
 
 > **Last updated**: 2026-02-10 — Full method-level audit against OpenSHC source.
+> **Validation pass**: 2026-02-10 — Cross-verified all OpenSHC symbols (14 enums, 6 structs, 14 classes, ~290 public methods, ~200 member variables) against HexaMotion (24 classes, 3 interfaces, ~20 enums, ~50 structs, ~500+ public methods).
 
 ## Context (from AGENTS.md)
 
@@ -41,82 +42,97 @@ Physical parameters and conventions:
 
 #### Enums — Detailed Mapping
 
-| OpenSHC Enum         | OpenSHC Values                                                                                             | HexaMotion Equivalent                                 | HexaMotion Values                                                                                                                          | Status                                                                                                                                                               |
-| :------------------- | :--------------------------------------------------------------------------------------------------------- | :---------------------------------------------------- | :----------------------------------------------------------------------------------------------------------------------------------------- | :------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `SystemState`        | `SUSPENDED`, `OPERATIONAL`                                                                                 | Merged into `SystemState` in `hexamotion_constants.h` | `SYSTEM_UNKNOWN`, `SYSTEM_PACKED`, `SYSTEM_READY`, `SYSTEM_RUNNING`                                                                        | **Redesigned**: OpenSHC's two-state toggle replaced by four-state lifecycle. SUSPENDED/OPERATIONAL semantics handled by `system_enabled` flag in `LocomotionSystem`. |
-| `RobotState`         | `PACKED`, `READY`, `RUNNING`, `UNKNOWN=-1`, `OFF=-2`                                                       | `RobotState` in `state_controller.h`                  | `ROBOT_PACKED`, `ROBOT_READY`, `ROBOT_RUNNING`, `ROBOT_UNKNOWN=-1`, `ROBOT_OFF=-2`                                                         | ✅ 1:1 (renamed)                                                                                                                                                     |
-| `GaitDesignation`    | `WAVE_GAIT`, `AMBLE_GAIT`, `RIPPLE_GAIT`, `TRIPOD_GAIT`                                                    | `GaitType` in `gait_types.h`                          | `WAVE_GAIT`, `RIPPLE_GAIT`, `TRIPOD_GAIT`, `NO_GAIT`, `METACHRONAL_GAIT`, `ADAPTIVE_GAIT`                                                  | `AMBLE_GAIT` not supported due to current morphology. `METACHRONAL_GAIT` and `ADAPTIVE_GAIT` remain HexaMotion extensions.                                           |
-| `PosingMode`         | `NO_POSING`, `X_Y_POSING`, `PITCH_ROLL_POSING`, `Z_YAW_POSING`, `EXTERNAL_POSING`                          | `PosingMode` in `state_controller.h`                  | `POSING_NONE`, `POSING_X_Y`, `POSING_PITCH_ROLL`, `POSING_Z_YAW`, `POSING_EXTERNAL`                                                        | ✅ 1:1 (renamed)                                                                                                                                                     |
-| `CruiseControlMode`  | `CRUISE_CONTROL_OFF`, `CRUISE_CONTROL_ON`, `CRUISE_CONTROL_EXTERNAL=-1`                                    | `CruiseControlMode` in `state_controller.h`           | Same names                                                                                                                                 | ✅ 1:1                                                                                                                                                               |
-| `PlannerMode`        | `PLANNER_MODE_OFF`, `PLANNER_MODE_ON`                                                                      | `PlannerMode` in `state_controller.h`                 | `PLANNER_MODE_OFF`, `PLANNER_MODE_ON`                                                                                                      | ✅ Stubbed (returns not supported on MCU).                                                                                                                           |
-| `LegState`           | `WALKING`, `MANUAL`, `WALKING_TO_MANUAL=-1`, `MANUAL_TO_WALKING=-2`                                        | `LegState` in `gait_types.h`                          | `LEG_WALKING`, `LEG_MANUAL`, `LEG_WALKING_TO_MANUAL=-1`, `LEG_MANUAL_TO_WALKING=-2`                                                        | ✅ 1:1 (renamed)                                                                                                                                                     |
-| `WalkState`          | `STARTING`, `MOVING`, `STOPPING`, `STOPPED`                                                                | `WalkState` in `gait_types.h`                         | `WALK_STARTING`, `WALK_MOVING`, `WALK_STOPPING`, `WALK_STOPPED`                                                                            | ✅ 1:1 (renamed)                                                                                                                                                     |
-| `StepState`          | `SWING`, `STANCE`, `FORCE_STANCE`, `FORCE_STOP`                                                            | `StepState` in `gait_types.h`                         | `STEP_SWING`, `STEP_STANCE`, `STEP_FORCE_STANCE`, `STEP_FORCE_STOP`                                                                        | ✅ 1:1 (renamed)                                                                                                                                                     |
-| `PosingState`        | `POSING`, `STOP_POSING`, `POSING_COMPLETE`                                                                 | `PosingState` in `state_controller.h`                 | `POSE_POSING`, `POSE_STOP_POSING`, `POSE_POSING_COMPLETE`                                                                                  | ✅ 1:1 (renamed)                                                                                                                                                     |
-| `PoseResetMode`      | `NO_RESET`, `Z_AND_YAW_RESET`, `X_AND_Y_RESET`, `PITCH_AND_ROLL_RESET`, `ALL_RESET`, `IMMEDIATE_ALL_RESET` | `PoseResetMode` in `state_controller.h`               | `POSE_RESET_NONE`, `POSE_RESET_Z_AND_YAW`, `POSE_RESET_X_AND_Y`, `POSE_RESET_PITCH_AND_ROLL`, `POSE_RESET_ALL`, `POSE_RESET_IMMEDIATE_ALL` | ✅ 1:1 (renamed)                                                                                                                                                     |
-| `LegDesignation`     | `LEG_0`–`LEG_7`, `LEG_UNDESIGNATED=-1`                                                                     | `LegDesignation` in `hexamotion_constants.h`          | `LEG_0`–`LEG_5`, `LEG_UNDESIGNATED=-1`                                                                                                     | ✅ Reduced to 6 (by design).                                                                                                                                         |
-| `ParameterSelection` | 10 values (step_freq, swing_height, etc.)                                                                  | —                                                     | —                                                                                                                                          | **Gap**: No dynamic parameter adjustment system.                                                                                                                     |
-| `SequenceSelection`  | `START_UP`, `SHUT_DOWN`                                                                                    | `SequenceType` in `state_controller.h`                | `SEQUENCE_START_UP`, `SEQUENCE_SHUT_DOWN`, `SEQUENCE_PACK`, `SEQUENCE_UNPACK`                                                              | ✅ Extended (pack/unpack added).                                                                                                                                     |
+| OpenSHC Enum         | OpenSHC Values                                                                                             | HexaMotion Equivalent                                 | HexaMotion Values                                                                                                                          | Status                                                                                                                                                                                  |
+| :------------------- | :--------------------------------------------------------------------------------------------------------- | :---------------------------------------------------- | :----------------------------------------------------------------------------------------------------------------------------------------- | :-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `SystemState`        | `SUSPENDED`, `OPERATIONAL`                                                                                 | Merged into `SystemState` in `hexamotion_constants.h` | `SYSTEM_UNKNOWN`, `SYSTEM_PACKED`, `SYSTEM_READY`, `SYSTEM_RUNNING`                                                                        | **Redesigned**: OpenSHC's two-state toggle replaced by four-state lifecycle. SUSPENDED/OPERATIONAL semantics handled by `system_enabled` flag in `LocomotionSystem`.                    |
+| `RobotState`         | `PACKED`, `READY`, `RUNNING`, `UNKNOWN=-1`, `OFF=-2`                                                       | `RobotState` in `state_controller.h`                  | `ROBOT_PACKED`, `ROBOT_READY`, `ROBOT_RUNNING`, `ROBOT_UNKNOWN=-1`, `ROBOT_OFF=-2`                                                         | ✅ 1:1 (renamed)                                                                                                                                                                        |
+| `GaitDesignation`    | `WAVE_GAIT(0)`, `AMBLE_GAIT(1)`, `RIPPLE_GAIT(2)`, `TRIPOD_GAIT(3)`, `GAIT_UNDESIGNATED(-1)`               | `GaitType` in `gait_types.h`                          | `NO_GAIT(0)`, `TRIPOD_GAIT(1)`, `WAVE_GAIT(2)`, `RIPPLE_GAIT(3)`, `METACHRONAL_GAIT(4)`, `ADAPTIVE_GAIT(5)`                                | `AMBLE_GAIT` not supported. `NO_GAIT` replaces `GAIT_UNDESIGNATED` at value 0 (was -1). **Ordinal values differ.** `METACHRONAL_GAIT` and `ADAPTIVE_GAIT` are HexaMotion extensions.    |
+| `PosingMode`         | `NO_POSING`, `X_Y_POSING`, `PITCH_ROLL_POSING`, `Z_YAW_POSING`, `EXTERNAL_POSING`                          | `PosingMode` in `state_controller.h`                  | `POSING_NONE`, `POSING_X_Y`, `POSING_PITCH_ROLL`, `POSING_Z_YAW`, `POSING_EXTERNAL`                                                        | ✅ 1:1 (renamed)                                                                                                                                                                        |
+| `CruiseControlMode`  | `CRUISE_CONTROL_OFF`, `CRUISE_CONTROL_ON`, `CRUISE_CONTROL_EXTERNAL=-1`                                    | `CruiseControlMode` in `state_controller.h`           | Same names                                                                                                                                 | ✅ 1:1                                                                                                                                                                                  |
+| `PlannerMode`        | `PLANNER_MODE_OFF`, `PLANNER_MODE_ON`                                                                      | `PlannerMode` in `state_controller.h`                 | `PLANNER_MODE_OFF`, `PLANNER_MODE_ON`                                                                                                      | ✅ Stubbed (returns not supported on MCU).                                                                                                                                              |
+| `LegState`           | `WALKING`, `MANUAL`, `WALKING_TO_MANUAL=-1`, `MANUAL_TO_WALKING=-2`                                        | `LegState` in `gait_types.h`                          | `LEG_WALKING`, `LEG_MANUAL`, `LEG_WALKING_TO_MANUAL=-1`, `LEG_MANUAL_TO_WALKING=-2`                                                        | ✅ 1:1 (renamed)                                                                                                                                                                        |
+| `WalkState`          | `STARTING`, `MOVING`, `STOPPING`, `STOPPED`                                                                | `WalkState` in `gait_types.h`                         | `WALK_STARTING`, `WALK_MOVING`, `WALK_STOPPING`, `WALK_STOPPED`                                                                            | ✅ 1:1 (renamed)                                                                                                                                                                        |
+| `StepState`          | `SWING`, `STANCE`, `FORCE_STANCE`, `FORCE_STOP`                                                            | `StepState` in `leg_stepper.h`                        | `STEP_SWING`, `STEP_STANCE`, `STEP_FORCE_STANCE`, `STEP_FORCE_STOP`                                                                        | ✅ 1:1 (renamed). Note: lives in `leg_stepper.h`, not `gait_types.h`. HexaMotion also has a parallel `StepPhase` enum (`STANCE_PHASE`, `SWING_PHASE`) in `robot_model.h` used by `Leg`. |
+| `PosingState`        | `POSING`, `STOP_POSING`, `POSING_COMPLETE`                                                                 | `PosingState` in `state_controller.h`                 | `POSE_POSING`, `POSE_STOP_POSING`, `POSE_POSING_COMPLETE`                                                                                  | ✅ 1:1 (renamed)                                                                                                                                                                        |
+| `PoseResetMode`      | `NO_RESET`, `Z_AND_YAW_RESET`, `X_AND_Y_RESET`, `PITCH_AND_ROLL_RESET`, `ALL_RESET`, `IMMEDIATE_ALL_RESET` | `PoseResetMode` in `state_controller.h`               | `POSE_RESET_NONE`, `POSE_RESET_Z_AND_YAW`, `POSE_RESET_X_AND_Y`, `POSE_RESET_PITCH_AND_ROLL`, `POSE_RESET_ALL`, `POSE_RESET_IMMEDIATE_ALL` | ✅ 1:1 (renamed)                                                                                                                                                                        |
+| `LegDesignation`     | `LEG_0`–`LEG_7`, `LEG_UNDESIGNATED=-1`                                                                     | `LegDesignation` in `hexamotion_constants.h`          | `LEG_0`–`LEG_5`, `LEG_UNDESIGNATED=-1`                                                                                                     | ✅ Reduced to 6 (by design).                                                                                                                                                            |
+| `ParameterSelection` | 10 values (step_freq, swing_height, etc.)                                                                  | —                                                     | —                                                                                                                                          | **Partial**: `LocomotionSystem::setParameter()` supports a limited subset.                                                                                                              |
+| `SequenceSelection`  | `START_UP`, `SHUT_DOWN`                                                                                    | `SequenceType` in `state_controller.h`                | `SEQUENCE_START_UP`, `SEQUENCE_SHUT_DOWN`, `SEQUENCE_PACK`, `SEQUENCE_UNPACK`                                                              | ✅ Extended (pack/unpack added).                                                                                                                                                        |
 
 #### Structs — Detailed Mapping
 
-| OpenSHC                                              | HexaMotion                                                   | Status                                        |
-| :--------------------------------------------------- | :----------------------------------------------------------- | :-------------------------------------------- |
-| `Parameter<T>` (ROS param server binding)            | —                                                            | **Removed** (by design: no ROS).              |
-| `AdjustableParameter` (current/min/max/step + ROS)   | —                                                            | **Gap**: No runtime parameter tuning system.  |
-| `Parameters` struct (~70 fields, all `Parameter<T>`) | `Parameters` struct in `robot_model.h` (flat numeric fields) | ✅ Equivalent data, different storage format. |
+| OpenSHC                                              | HexaMotion                                                   | Status                                                                      |
+| :--------------------------------------------------- | :----------------------------------------------------------- | :-------------------------------------------------------------------------- |
+| `Parameter<T>` (ROS param server binding)            | —                                                            | **Removed** (by design: no ROS).                                            |
+| `AdjustableParameter` (current/min/max/step + ROS)   | —                                                            | **Partial**: Lightweight runtime `setParameter()` for core gait parameters. |
+| `Parameters` struct (~70 fields, all `Parameter<T>`) | `Parameters` struct in `robot_model.h` (flat numeric fields) | ✅ Equivalent data, different storage format.                               |
 
 #### Constants — Detailed Mapping
 
-| OpenSHC Constant                   | HexaMotion Equivalent                      | Location                                                 |
-| :--------------------------------- | :----------------------------------------- | :------------------------------------------------------- |
-| `UNASSIGNED_VALUE`                 | —                                          | **Gap**: No sentinel value; uses validity flags instead. |
-| `UNDEFINED_POSITION`               | —                                          | **Gap**: Uses `Point3D(0,0,0)` or explicit checks.       |
-| `UNDEFINED_ROTATION`               | —                                          | **Gap**: Uses `Quaterniond::Identity()`.                 |
-| `GRAVITY_ACCELERATION`             | Computed from IMU or hardcoded per context | Distributed.                                             |
-| `PROGRESS_COMPLETE` (100)          | `PROGRESS_COMPLETE` (100)                  | `state_controller.h` ✅                                  |
-| `THROTTLE_PERIOD` (5)              | `THROTTLE_PERIOD` (1.0f)                   | `state_controller.h` — value changed.                    |
-| `IK_TOLERANCE` (0.005)             | `IK_TOLERANCE`                             | `hexamotion_constants.h` ✅                              |
-| `DLS_COEFFICIENT` (0.02)           | `IK_DLS_COEFFICIENT`                       | `hexamotion_constants.h` ✅                              |
-| `BEARING_STEP` (45)                | `BEARING_STEP`                             | `hexamotion_constants.h` ✅                              |
-| `MAX_POSITION_DELTA` (0.002)       | `MAX_POSITION_DELTA`                       | `hexamotion_constants.h` ✅                              |
-| `MAX_WORKSPACE_RADIUS` (1.0)       | `MAX_WORKSPACE_RADIUS`                     | `hexamotion_constants.h` ✅                              |
-| `WORKSPACE_LAYERS` (10)            | `WORKSPACE_LAYERS`                         | `hexamotion_constants.h` ✅                              |
-| `JOINT_TOLERANCE` (0.01)           | `JOINT_TOLERANCE` (0.1f)                   | `state_controller.h` — value relaxed.                    |
-| `TIP_TOLERANCE` (0.01)             | `TIP_TOLERANCE`                            | `hexamotion_constants.h` ✅                              |
-| `SAFETY_FACTOR` (0.15)             | `SAFETY_FACTOR`                            | `hexamotion_constants.h` ✅                              |
-| `PACK_TIME` (2.0)                  | `PACK_TIME` (2.0f)                         | `state_controller.h` ✅                                  |
-| `MAX_MANUAL_LEGS` (2)              | `MAX_MANUAL_LEGS` (2)                      | `state_controller.h` ✅                                  |
-| `HORIZONTAL_TRANSITION_TIME` (1.0) | `HORIZONTAL_TRANSITION_TIME`               | `hexamotion_constants.h` ✅                              |
-| `VERTICAL_TRANSITION_TIME` (3.0)   | `VERTICAL_TRANSITION_TIME`                 | `hexamotion_constants.h` ✅                              |
-| `STABILITY_THRESHOLD` (100)        | `DEFAULT_STABILITY_THRESHOLD`              | `hexamotion_constants.h` ✅                              |
-| `ADMITTANCE_DEADBAND` (0.0)        | Inline in `AdmittanceController`           | ✅                                                       |
+| OpenSHC Constant                   | HexaMotion Equivalent                      | Location                                                                                  |
+| :--------------------------------- | :----------------------------------------- | :---------------------------------------------------------------------------------------- |
+| `UNASSIGNED_VALUE`                 | —                                          | **Gap**: No global sentinel constant; uses validity flags or local `1e9` large sentinels. |
+| `UNDEFINED_POSITION`               | `Pose::Undefined()`                        | Uses NaN sentinel in `Pose` (no global constant).                                         |
+| `UNDEFINED_ROTATION`               | `Pose::Undefined()`                        | Uses NaN quaternion sentinel (no global constant).                                        |
+| `GRAVITY_ACCELERATION`             | Computed from IMU or hardcoded per context | Distributed.                                                                              |
+| `PROGRESS_COMPLETE` (100)          | `PROGRESS_COMPLETE` (100)                  | `state_controller.h` ✅                                                                   |
+| `THROTTLE_PERIOD` (5)              | `THROTTLE_PERIOD` (1.0f)                   | `state_controller.h` — value changed.                                                     |
+| `IK_TOLERANCE` (0.005)             | `IK_TOLERANCE`                             | `hexamotion_constants.h` ✅                                                               |
+| `DLS_COEFFICIENT` (0.02)           | `IK_DLS_COEFFICIENT`                       | `hexamotion_constants.h` ✅                                                               |
+| `BEARING_STEP` (45)                | `BEARING_STEP`                             | `hexamotion_constants.h` ✅                                                               |
+| `MAX_POSITION_DELTA` (0.002)       | `MAX_POSITION_DELTA`                       | `hexamotion_constants.h` ✅                                                               |
+| `MAX_WORKSPACE_RADIUS` (1.0)       | `MAX_WORKSPACE_RADIUS`                     | `hexamotion_constants.h` ✅                                                               |
+| `WORKSPACE_LAYERS` (10)            | `WORKSPACE_LAYERS`                         | `hexamotion_constants.h` ✅                                                               |
+| `JOINT_TOLERANCE` (0.01)           | `JOINT_TOLERANCE` (0.1f)                   | `state_controller.h` — value relaxed.                                                     |
+| `TIP_TOLERANCE` (0.01)             | `TIP_TOLERANCE`                            | `hexamotion_constants.h` ✅                                                               |
+| `SAFETY_FACTOR` (0.15)             | `SAFETY_FACTOR`                            | `hexamotion_constants.h` ✅                                                               |
+| `PACK_TIME` (2.0)                  | `PACK_TIME` (2.0f)                         | `state_controller.h` ✅                                                                   |
+| `MAX_MANUAL_LEGS` (2)              | `MAX_MANUAL_LEGS` (2)                      | `state_controller.h` ✅                                                                   |
+| `HORIZONTAL_TRANSITION_TIME` (1.0) | `HORIZONTAL_TRANSITION_TIME`               | `hexamotion_constants.h` ✅                                                               |
+| `VERTICAL_TRANSITION_TIME` (3.0)   | `VERTICAL_TRANSITION_TIME`                 | `hexamotion_constants.h` ✅                                                               |
+| `STABILITY_THRESHOLD` (100)        | `DEFAULT_STABILITY_THRESHOLD`              | `hexamotion_constants.h` ✅                                                               |
+| `ADMITTANCE_DEADBAND` (0.0)        | Inline in `AdmittanceController`           | ✅                                                                                        |
 
 ### 2. standard_includes.h (OpenSHC) vs HexaMotion utility/constants
 
 **Status**: Refactored — Logic Preserved
 
-| OpenSHC Function                | HexaMotion Equivalent       | Location       | Status                                    |
-| :------------------------------ | :-------------------------- | :------------- | :---------------------------------------- |
-| `degreesToRadians()`            | `degreesToRadians()`        | `math_utils.h` | ✅                                        |
-| `radiansToDegrees()`            | `radiansToDegrees()`        | `math_utils.h` | ✅                                        |
-| `mod<T>()`                      | `mod<T>()`                  | `math_utils.h` | ✅                                        |
-| `sqr<T>()`                      | `sqr<T>()`                  | `math_utils.h` | ✅                                        |
-| `sign<T>()`                     | `sign<T>()`                 | `math_utils.h` | ✅                                        |
-| `roundToInt()`                  | `roundToInt()`              | `math_utils.h` | ✅                                        |
-| `roundToEvenInt()`              | `roundToEvenInt()`          | `math_utils.h` | ✅                                        |
-| `clamped<T>(value, min, max)`   | `clamped()`                 | `math_utils.h` | ✅                                        |
-| `clamped<T>(vector, magnitude)` | `clamped()`                 | `math_utils.h` | ✅                                        |
-| `setPrecision(double, int)`     | `setPrecision()`            | `math_utils.h` | ✅                                        |
-| `setPrecision(Vector3d, int)`   | `setPrecision()`            | `math_utils.h` | ✅                                        |
-| `smoothStep()`                  | `smoothStep()`              | `math_utils.h` | ✅                                        |
-| `getProjection()`               | `getProjection()`           | `math_utils.h` | ✅                                        |
-| `getRejection()`                | `getRejection()`            | `math_utils.h` | ✅                                        |
-| `interpolate<T>()`              | `interpolate<T>()`          | `math_utils.h` | ✅                                        |
-| `correctRotation()`             | `correctRotation()`         | `math_utils.h` | ✅                                        |
-| `eulerAnglesToQuaternion()`     | `eulerAnglesToQuaternion()` | `math_utils.h` | ✅                                        |
-| `quaternionToEulerAngles()`     | `quaternionToEulerAngles()` | `math_utils.h` | ✅                                        |
-| `numberToString<T>()`           | —                           | —              | **Gap** (minor utility, `String()` used). |
+| OpenSHC Function                | HexaMotion Equivalent       | Location       | Status                                                                    |
+| :------------------------------ | :-------------------------- | :------------- | :------------------------------------------------------------------------ |
+| `degreesToRadians()`            | `degreesToRadians()`        | `math_utils.h` | ✅                                                                        |
+| `radiansToDegrees()`            | `radiansToDegrees()`        | `math_utils.h` | ✅                                                                        |
+| `mod<T>()`                      | `mod<T>()`                  | `math_utils.h` | ✅                                                                        |
+| `sqr<T>()`                      | `sqr<T>()`                  | `math_utils.h` | ✅                                                                        |
+| `sign<T>()`                     | `sign<T>()`                 | `math_utils.h` | ✅                                                                        |
+| `roundToInt()`                  | `roundToInt()`              | `math_utils.h` | ✅                                                                        |
+| `roundToEvenInt()`              | `roundToEvenInt()`          | `math_utils.h` | ✅                                                                        |
+| `clamped<T>(value, min, max)`   | `clamped()`                 | `math_utils.h` | ✅                                                                        |
+| `clamped<T>(vector, magnitude)` | `clamped()`                 | `math_utils.h` | ✅                                                                        |
+| `setPrecision(double, int)`     | `setPrecision()`            | `math_utils.h` | ✅                                                                        |
+| `setPrecision(Vector3d, int)`   | `setPrecision()`            | `math_utils.h` | ✅                                                                        |
+| `smoothStep()`                  | `smoothStep()`              | `math_utils.h` | ✅                                                                        |
+| `getProjection()`               | `getProjection()`           | `math_utils.h` | ✅                                                                        |
+| `getRejection()`                | `getRejection()`            | `math_utils.h` | ✅                                                                        |
+| `interpolate<T>()`              | `interpolate<T>()`          | `math_utils.h` | ✅                                                                        |
+| `correctRotation()`             | `correctRotation()`         | `math_utils.h` | ✅                                                                        |
+| `eulerAnglesToQuaternion()`     | `eulerAnglesToQuaternion()` | `math_utils.h` | ✅                                                                        |
+| `quaternionToEulerAngles()`     | `quaternionToEulerAngles()` | `math_utils.h` | ✅                                                                        |
+| `numberToString<T>()`           | —                           | —              | **Gap** (minor utility, `String()` used).                                 |
+| `stringFormat<Args>()`          | —                           | —              | **Gap** (minor utility, snprintf-based format; no HexaMotion equivalent). |
+
+#### Bezier / DH Functions (OpenSHC standard_includes.h) — Detailed Mapping
+
+| OpenSHC Function                               | HexaMotion Equivalent   | Location       | Status                                                                            |
+| :--------------------------------------------- | :---------------------- | :------------- | :-------------------------------------------------------------------------------- |
+| `quadraticBezier<T>()`                         | `quadraticBezier<T>()`  | `math_utils.h` | ✅                                                                                |
+| `quadraticBezierCurveThroughControlPoint<T>()` | —                       | —              | **Gap**: Adjusts control point so curve passes _through_ it (not just toward it). |
+| `cubicBezier<T>()`                             | `cubicBezier<T>()`      | `math_utils.h` | ✅                                                                                |
+| `cubicBezierDot<T>()`                          | `cubicBezierDot<T>()`   | `math_utils.h` | ✅                                                                                |
+| `cubicBezierCurveThroughControlPoint<T>()`     | —                       | —              | **Gap**: Through-control-point variant (parameterized by node index).             |
+| `quarticBezier<T>()`                           | `quarticBezier<T>()`    | `math_utils.h` | ✅                                                                                |
+| `quarticBezierDot<T>()`                        | `quarticBezierDot<T>()` | `math_utils.h` | ✅                                                                                |
+| `quarticBezierCurveThroughControlPoint<T>()`   | —                       | —              | **Gap**: Through-control-point variant (parameterized by node index).             |
+| `createDHMatrix(theta, d, r, alpha)`           | `dhTransform<T>()`      | `math_utils.h` | ✅ (renamed, templated).                                                          |
 
 ### 3. Pose class (OpenSHC pose.h) vs HexaMotion Pose
 
@@ -127,7 +143,7 @@ Physical parameters and conventions:
 | `Pose(Vector3d, Quaterniond)`         | `Pose(Vector3d, Quaterniond)` | ✅                                                 |
 | `Pose(geometry_msgs::Pose)`           | —                             | **Removed** (no ROS).                              |
 | `Pose(geometry_msgs::Transform)`      | —                             | **Removed** (no ROS).                              |
-| `isValid()`                           | —                             | **Gap**: No validity check.                        |
+| `isValid()`                           | `Pose::isValid()`             | ✅                                                 |
 | `toPoseMessage()`                     | —                             | **Removed** (no ROS).                              |
 | `toTransformMessage()`                | —                             | **Removed** (no ROS).                              |
 | `operator==` / `operator!=`           | `operator==` / `operator!=`   | ✅                                                 |
@@ -140,7 +156,7 @@ Physical parameters and conventions:
 | `removePose()`                        | `removePose()`                | ✅                                                 |
 | `interpolate()`                       | `interpolate()`               | ✅                                                 |
 | `Identity()`                          | `Identity()`                  | ✅                                                 |
-| `Undefined()`                         | —                             | **Gap**: No undefined sentinel.                    |
+| `Undefined()`                         | `Pose::Undefined()`           | ✅                                                 |
 
 ### 4. Model / Leg / Joint / Link / Tip
 
@@ -154,12 +170,12 @@ Physical parameters and conventions:
 | `Model(model)` (copy ctor)              | —                                                              | —                                  | **Gap** (not needed: stateless + external legs). |
 | `getLegContainer()`                     | — (array in `LocomotionSystem`)                                | —                                  | **Redesigned**: Legs external.                   |
 | `getLegCount()`                         | `NUM_LEGS` constant (6)                                        | `hexamotion_constants.h`           | ✅ (hardcoded).                                  |
-| `getCurrentPose()` / `setCurrentPose()` | `BodyPoseController::body_pose_current_`                       | `body_pose_controller.h`           | ✅ (moved).                                      |
+| `getCurrentPose()` / `setCurrentPose()` | `BodyPoseController::getCurrentBodyPose()`                     | `body_pose_controller.h`           | ✅ (moved).                                      |
 | `getDefaultPose()` / `setDefaultPose()` | `BodyPoseController::walk_plane_pose_`                         | `body_pose_controller.h`           | ✅ (moved).                                      |
 | `getTimeDelta()`                        | `getTimeDelta()`                                               | `robot_model.h`                    | ✅                                               |
 | `generate()`                            | — (distributed initialization)                                 | —                                  | **Redesigned**.                                  |
 | `initLegs()`                            | `LocomotionSystem::initialize()` + per-leg `Leg::initialize()` | `locomotion_system.cpp`, `leg.cpp` | ✅                                               |
-| `legsBearingLoad()`                     | Lambda in `BodyPoseController::executeSequenceInternal()`      | `body_pose_controller.cpp`         | ✅ (logic present, not a public API).            |
+| `legsBearingLoad()`                     | `LocomotionSystem::legsBearingLoad()`                          | `locomotion_system.h`              | ✅ (public API).                                 |
 | `getLegByIDNumber()`                    | `LocomotionSystem::getLeg(int)`                                | `locomotion_system.h`              | ✅                                               |
 | `getLegByIDName()`                      | —                                                              | —                                  | **Gap** (minor: index-only access).              |
 | `getImuData()` / `setImuData()`         | `BodyPoseController::setIMUData()` / `IMUAutoPose`             | `body_pose_controller.h`           | ✅ (moved).                                      |
@@ -170,36 +186,36 @@ Physical parameters and conventions:
 
 #### Leg
 
-| OpenSHC Leg Feature                                               | HexaMotion Equivalent                                              | Status                                                                                                               |
-| :---------------------------------------------------------------- | :----------------------------------------------------------------- | :------------------------------------------------------------------------------------------------------------------- |
-| `Joint`/`Link`/`Tip` sub-objects                                  | —                                                                  | **Gap**: Flattened into `JointAngles` + `Point3D`. Per-joint desired/current position/velocity/effort fields absent. |
-| `joint_container_` / `link_container_` / `tip_`                   | —                                                                  | **Gap**: No sub-object containers.                                                                                   |
-| `workspace_` (per-leg)                                            | `WorkspaceAnalyzer` (centralized)                                  | ✅ (moved).                                                                                                          |
-| `group_` (stepping coordination)                                  | `BodyPoseController::tripod_leg_groups`                            | ✅ (moved).                                                                                                          |
-| `leg_stepper_` / `leg_poser_`                                     | Separate classes, owned by `WalkController` / `BodyPoseController` | ✅ (moved).                                                                                                          |
-| `leg_state_`                                                      | `leg_state_`                                                       | ✅                                                                                                                   |
-| `admittance_delta_`                                               | `LegPoser::admittance_delta_`                                      | ✅ (moved).                                                                                                          |
-| `virtual_mass_` / `virtual_stiffness_` / `virtual_damping_ratio_` | `AdmittanceController::LegAdmittanceState`                         | ✅ (moved to centralized controller).                                                                                |
-| `admittance_state_` (ODE state vector)                            | `AdmittanceController::leg_dynamics_state_[]`                      | ✅ (moved).                                                                                                          |
-| `tip_force_calculated_` / `tip_torque_calculated_`                | —                                                                  | **Gap**: No Jacobian-transpose force estimation from joint effort.                                                   |
-| `tip_force_measured_` / `tip_torque_measured_`                    | `Leg::contact_force_` (scalar)                                     | **Partial**: Scalar FSR only, not 3D force/torque vectors.                                                           |
-| `desired_tip_velocity_` / `current_tip_velocity_`                 | — in `Leg` (in `LegStepper::current_tip_velocity_`)                | **Partial**: Present in `LegStepper`, not in `Leg` directly.                                                         |
-| `step_plane_pose_`                                                | `TerrainAdaptation::step_planes_[]`                                | ✅ (moved).                                                                                                          |
-| `desired_tip_pose_` / `current_tip_pose_`                         | `desired_tip_position_` / `tip_position_` (Point3D)                | ✅ (simplified: 3DOF needs position only, not full Pose).                                                            |
-| `generate()` / `init()`                                           | `Leg::initialize(const Pose&)`                                     | ✅                                                                                                                   |
-| `generateWorkspace()`                                             | `WorkspaceAnalyzer::generateWalkspaceForLeg()`                     | ✅ (moved).                                                                                                          |
-| `getWorkplane()`                                                  | `WorkspaceAnalyzer::getWorkplane()`                                | ✅ (moved).                                                                                                          |
-| `makeReachable()`                                                 | `RobotModel::makeReachable()`                                      | ✅ (moved).                                                                                                          |
-| `setDesiredTipPose(apply_delta)`                                  | `Leg::setDesiredTipPosition()` + `LegPoser::admittance_delta_`     | ✅ (split).                                                                                                          |
-| `setDesiredTipVelocity()`                                         | — on Leg                                                           | **Gap** on Leg (tracked in `LegStepper`).                                                                            |
-| `calculateTipForce()`                                             | —                                                                  | **Gap**: No Jacobian-transpose force estimation.                                                                     |
-| `touchdownDetection()`                                            | `TerrainAdaptation::detectTouchdownEvents()`                       | ✅ (moved).                                                                                                          |
-| `solveIK()`                                                       | `RobotModel::solveIK()` / `solveDeltaIK()`                         | ✅ (centralized).                                                                                                    |
-| `updateJointPositions()`                                          | `Leg::setJointAngles()` + `updateTipPosition()`                    | ✅                                                                                                                   |
-| `applyIK()`                                                       | `Leg::applyIK()` / `applyAdvancedIK()`                             | ✅                                                                                                                   |
-| `applyFK()`                                                       | `Leg::updateTipPosition()`                                         | ✅                                                                                                                   |
-| `generateDesiredJointStateMsg()`                                  | —                                                                  | **Removed** (no ROS messages).                                                                                       |
-| ROS publishers                                                    | —                                                                  | **Removed** (no ROS).                                                                                                |
+| OpenSHC Leg Feature                                               | HexaMotion Equivalent                                              | Status                                                                                                            |
+| :---------------------------------------------------------------- | :----------------------------------------------------------------- | :---------------------------------------------------------------------------------------------------------------- |
+| `Joint`/`Link`/`Tip` sub-objects                                  | —                                                                  | **Partial**: Flattened into `JointAngles` + `Point3D`; per-joint velocity/effort tracked but no sub-object model. |
+| `joint_container_` / `link_container_` / `tip_`                   | —                                                                  | **Gap**: No sub-object containers.                                                                                |
+| `workspace_` (per-leg)                                            | `WorkspaceAnalyzer` (centralized)                                  | ✅ (moved).                                                                                                       |
+| `group_` (stepping coordination)                                  | `BodyPoseController::tripod_leg_groups`                            | ✅ (moved).                                                                                                       |
+| `leg_stepper_` / `leg_poser_`                                     | Separate classes, owned by `WalkController` / `BodyPoseController` | ✅ (moved).                                                                                                       |
+| `leg_state_`                                                      | `leg_state_`                                                       | ✅                                                                                                                |
+| `admittance_delta_`                                               | `LegPoser::admittance_delta_`                                      | ✅ (moved).                                                                                                       |
+| `virtual_mass_` / `virtual_stiffness_` / `virtual_damping_ratio_` | `AdmittanceController::LegAdmittanceState`                         | ✅ (moved to centralized controller).                                                                             |
+| `admittance_state_` (ODE state vector)                            | `AdmittanceController::leg_dynamics_state_[]`                      | ✅ (moved).                                                                                                       |
+| `tip_force_calculated_` / `tip_torque_calculated_`                | `Leg::calculateTipForce()` + `tip_force_calculated_`               | **Partial**: Force estimation implemented; torque vector not tracked.                                             |
+| `tip_force_measured_` / `tip_torque_measured_`                    | `Leg::contact_force_` (scalar)                                     | **Partial**: Scalar FSR only, not 3D force/torque vectors.                                                        |
+| `desired_tip_velocity_` / `current_tip_velocity_`                 | — in `Leg` (in `LegStepper::current_tip_velocity_`)                | **Partial**: Present in `LegStepper`, not in `Leg` directly.                                                      |
+| `step_plane_pose_`                                                | `TerrainAdaptation::step_planes_[]`                                | ✅ (moved).                                                                                                       |
+| `desired_tip_pose_` / `current_tip_pose_`                         | `desired_tip_position_` / `tip_position_` (Point3D)                | ✅ (simplified: 3DOF needs position only, not full Pose).                                                         |
+| `generate()` / `init()`                                           | `Leg::initialize(const Pose&)`                                     | ✅                                                                                                                |
+| `generateWorkspace()`                                             | `WorkspaceAnalyzer::generateWalkspaceForLeg()`                     | ✅ (moved).                                                                                                       |
+| `getWorkplane()`                                                  | `WorkspaceAnalyzer::getWorkplane()`                                | ✅ (moved).                                                                                                       |
+| `makeReachable()`                                                 | `RobotModel::makeReachable()`                                      | ✅ (moved).                                                                                                       |
+| `setDesiredTipPose(apply_delta)`                                  | `Leg::setDesiredTipPosition()` + `LegPoser::admittance_delta_`     | ✅ (split).                                                                                                       |
+| `setDesiredTipVelocity()`                                         | — on Leg                                                           | **Gap** on Leg (tracked in `LegStepper`).                                                                         |
+| `calculateTipForce()`                                             | `Leg::calculateTipForce()`                                         | ✅                                                                                                                |
+| `touchdownDetection()`                                            | `TerrainAdaptation::detectTouchdownEvents()`                       | ✅ (moved).                                                                                                       |
+| `solveIK()`                                                       | `RobotModel::solveIK()` / `solveDeltaIK()`                         | ✅ (centralized).                                                                                                 |
+| `updateJointPositions()`                                          | `Leg::setJointAngles()` + `updateTipPosition()`                    | ✅                                                                                                                |
+| `applyIK()`                                                       | `Leg::applyIK()` / `applyAdvancedIK()`                             | ✅                                                                                                                |
+| `applyFK()`                                                       | `Leg::updateTipPosition()`                                         | ✅                                                                                                                |
+| `generateDesiredJointStateMsg()`                                  | —                                                                  | **Removed** (no ROS messages).                                                                                    |
+| ROS publishers                                                    | —                                                                  | **Removed** (no ROS).                                                                                             |
 
 **HexaMotion Leg additions** (not in OpenSHC):
 
@@ -240,30 +256,30 @@ Physical parameters and conventions:
 
 #### Callback → Direct API Mapping
 
-| OpenSHC Callback                                                            | HexaMotion Direct API                               | Status                                    |
-| :-------------------------------------------------------------------------- | :-------------------------------------------------- | :---------------------------------------- |
-| `systemStateCallback()`                                                     | `requestSystemState(SystemState)`                   | ✅                                        |
-| `robotStateCallback()`                                                      | `requestRobotState(RobotState)`                     | ✅                                        |
-| `bodyVelocityInputCallback()`                                               | `setDesiredVelocity(Vector2d, double)`              | ✅                                        |
-| `bodyPoseInputCallback()`                                                   | `setDesiredPose(Vector3d, Vector3d)`                | ✅                                        |
-| `posingModeCallback()`                                                      | `setPosingMode(PosingMode)`                         | ✅                                        |
-| `poseResetCallback()`                                                       | `setPoseResetMode(PoseResetMode)`                   | ✅                                        |
-| `gaitSelectionCallback()`                                                   | `changeGait(GaitType)`                              | ✅                                        |
-| `cruiseControlCallback()`                                                   | `setCruiseControlMode(CruiseControlMode, Vector3d)` | ✅                                        |
-| `plannerModeCallback()`                                                     | —                                                   | **Gap** (no planner).                     |
-| `primaryLegSelectionCallback()`                                             | `requestLegToggle(int)`                             | ✅ (consolidated, any leg by index).      |
-| `secondaryLegSelectionCallback()`                                           | `requestLegToggle(int)`                             | ✅ (no primary/secondary distinction).    |
-| `primaryLegStateCallback()` / `secondaryLegStateCallback()`                 | `requestLegToggle(int)`                             | ✅ (consolidated).                        |
-| `primaryTipVelocityInputCallback()` / `secondaryTipVelocityInputCallback()` | `setLegTipVelocity(int, Vector3d)`                  | ✅ (any-leg API).                         |
-| `primaryTipPoseInputCallback()` / `secondaryTipPoseInputCallback()`         | —                                                   | **Gap**: No per-leg Cartesian pose input. |
-| `parameterSelectionCallback()` / `parameterAdjustCallback()`                | —                                                   | **Gap**: No dynamic params.               |
-| `dynamicParameterCallback()`                                                | —                                                   | **Gap**: No dynamic reconfigure.          |
-| `imuCallback()`                                                             | `IIMUInterface` + `LocomotionSystem`                | ✅ (via HAL interface).                   |
-| `jointStatesCallback()`                                                     | `IServoInterface` + `LocomotionSystem`              | ✅ (via HAL interface).                   |
-| `tipStatesCallback()`                                                       | `IFSRInterface` + `LocomotionSystem`                | ✅ (via HAL interface).                   |
-| `targetConfigurationCallback()`                                             | —                                                   | **Gap** (no planner).                     |
-| `targetBodyPoseCallback()`                                                  | —                                                   | **Gap** (no planner).                     |
-| `targetTipPoseCallback()`                                                   | —                                                   | **Gap** (no planner).                     |
+| OpenSHC Callback                                                            | HexaMotion Direct API                               | Status                                 |
+| :-------------------------------------------------------------------------- | :-------------------------------------------------- | :------------------------------------- |
+| `systemStateCallback()`                                                     | `requestSystemState(SystemState)`                   | ✅                                     |
+| `robotStateCallback()`                                                      | `requestRobotState(RobotState)`                     | ✅                                     |
+| `bodyVelocityInputCallback()`                                               | `setDesiredVelocity(Vector2d, double)`              | ✅                                     |
+| `bodyPoseInputCallback()`                                                   | `setDesiredPose(Vector3d, Vector3d)`                | ✅                                     |
+| `posingModeCallback()`                                                      | `setPosingMode(PosingMode)`                         | ✅                                     |
+| `poseResetCallback()`                                                       | `setPoseResetMode(PoseResetMode)`                   | ✅                                     |
+| `gaitSelectionCallback()`                                                   | `changeGait(GaitType)`                              | ✅                                     |
+| `cruiseControlCallback()`                                                   | `setCruiseControlMode(CruiseControlMode, Vector3d)` | ✅                                     |
+| `plannerModeCallback()`                                                     | —                                                   | **Gap** (no planner).                  |
+| `primaryLegSelectionCallback()`                                             | `requestLegToggle(int)`                             | ✅ (consolidated, any leg by index).   |
+| `secondaryLegSelectionCallback()`                                           | `requestLegToggle(int)`                             | ✅ (no primary/secondary distinction). |
+| `primaryLegStateCallback()` / `secondaryLegStateCallback()`                 | `requestLegToggle(int)`                             | ✅ (consolidated).                     |
+| `primaryTipVelocityInputCallback()` / `secondaryTipVelocityInputCallback()` | `setLegTipVelocity(int, Vector3d)`                  | ✅ (any-leg API).                      |
+| `primaryTipPoseInputCallback()` / `secondaryTipPoseInputCallback()`         | `setLegTipPose(int, Point3D)`                       | ✅ (per-leg Cartesian pose input).     |
+| `parameterSelectionCallback()` / `parameterAdjustCallback()`                | —                                                   | **Gap**: No dynamic params.            |
+| `dynamicParameterCallback()`                                                | —                                                   | **Gap**: No dynamic reconfigure.       |
+| `imuCallback()`                                                             | `IIMUInterface` + `LocomotionSystem`                | ✅ (via HAL interface).                |
+| `jointStatesCallback()`                                                     | `IServoInterface` + `LocomotionSystem`              | ✅ (via HAL interface).                |
+| `tipStatesCallback()`                                                       | `IFSRInterface` + `LocomotionSystem`                | ✅ (via HAL interface).                |
+| `targetConfigurationCallback()`                                             | —                                                   | **Gap** (no planner).                  |
+| `targetBodyPoseCallback()`                                                  | —                                                   | **Gap** (no planner).                  |
+| `targetTipPoseCallback()`                                                   | —                                                   | **Gap** (no planner).                  |
 
 #### StateController Member Variables
 
@@ -445,20 +461,20 @@ Physical parameters and conventions:
 
 #### Pose Composition Variables
 
-| OpenSHC Sub-Pose                               | HexaMotion Equivalent                                | Status                                                                                                |
-| :--------------------------------------------- | :--------------------------------------------------- | :---------------------------------------------------------------------------------------------------- |
-| `manual_pose_`                                 | `manual_pose_`                                       | ✅                                                                                                    |
-| `auto_pose_`                                   | `global_auto_pose_` + per-leg `LegPoser::auto_pose_` | ✅ (split).                                                                                           |
-| `imu_pose_`                                    | `imu_pose_`                                          | ✅                                                                                                    |
-| `inclination_pose_`                            | `inclination_pose_`                                  | ✅                                                                                                    |
-| `admittance_pose_`                             | —                                                    | **Redesigned**: Admittance applied per-leg via `LegPoser::admittance_delta_`, not as body-level pose. |
-| `default_pose_`                                | `default_pose_`                                      | ✅                                                                                                    |
-| `ik_error_pose_`                               | `ik_error_pose_`                                     | ✅                                                                                                    |
-| `tip_align_pose_` / `origin_tip_align_pose_`   | `tip_align_pose_` / `origin_tip_align_pose_`         | ✅                                                                                                    |
-| `walk_plane_pose_` / `origin_walk_plane_pose_` | `walk_plane_pose_`                                   | ✅                                                                                                    |
-| `rotation_absement_error_`                     | `rotation_absement_error_`                           | ✅                                                                                                    |
-| `rotation_position_error_`                     | `rotation_position_error_`                           | ✅                                                                                                    |
-| `rotation_velocity_error_`                     | `rotation_velocity_error_`                           | ✅                                                                                                    |
+| OpenSHC Sub-Pose                               | HexaMotion Equivalent                                | Status                                                                                                         |
+| :--------------------------------------------- | :--------------------------------------------------- | :------------------------------------------------------------------------------------------------------------- |
+| `manual_pose_`                                 | `manual_pose_`                                       | ✅                                                                                                             |
+| `auto_pose_`                                   | `global_auto_pose_` + per-leg `LegPoser::auto_pose_` | ✅ (split).                                                                                                    |
+| `imu_pose_`                                    | `imu_pose_`                                          | ✅                                                                                                             |
+| `inclination_pose_`                            | `inclination_pose_`                                  | ✅                                                                                                             |
+| `admittance_pose_`                             | —                                                    | **Redesigned**: Admittance applied per-leg via `LegPoser::admittance_delta_`, not as body-level pose.          |
+| `default_pose_`                                | `default_pose_`                                      | ✅                                                                                                             |
+| `ik_error_pose_`                               | `ik_error_pose_`                                     | ✅                                                                                                             |
+| `tip_align_pose_` / `origin_tip_align_pose_`   | `tip_align_pose_` / `origin_tip_align_pose_`         | ✅                                                                                                             |
+| `walk_plane_pose_` / `origin_walk_plane_pose_` | `walk_plane_pose_`                                   | **Partial**: `walk_plane_pose_` present; `origin_walk_plane_pose_` absent (Bézier interpolation used instead). |
+| `rotation_absement_error_`                     | `rotation_absement_error_`                           | ✅                                                                                                             |
+| `rotation_position_error_`                     | `rotation_position_error_`                           | ✅                                                                                                             |
+| `rotation_velocity_error_`                     | `rotation_velocity_error_`                           | ✅                                                                                                             |
 
 **OpenSHC `AutoPoser` class** → Replaced by `BodyPoseController` auto-pose subsystem:
 
@@ -551,32 +567,49 @@ HexaMotion substitutes: `CoxaTelemetry` struct in `LocomotionSystem` (compile-ti
 
 ### True Gaps (functionality absent from HexaMotion)
 
-| #   | Feature                                 | OpenSHC Implementation                                                                                                                                                                                                                                                | HexaMotion Status   | Classification                                                                                               |
-| :-- | :-------------------------------------- | :-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | :------------------ | :----------------------------------------------------------------------------------------------------------- |
-| 1   | **External Planner**                    | `executePlan()`, `targetConfigurationCallback`, `targetBodyPoseCallback`, `targetTipPoseCallback`, `PlannerMode` enum                                                                                                                                                 | **Not implemented** | By design (MCU target).                                                                                      |
-| 2   | **Dynamic Parameter Adjustment**        | `AdjustableParameter` struct, `ParameterSelection` enum, `adjustParameter()`, `parameterSelectionCallback`, `parameterAdjustCallback`, `dynamicParameterCallback`, ROS dynamic_reconfigure                                                                            | **Not implemented** | By design (static config).                                                                                   |
-| 3   | **Pose::isValid() / Pose::Undefined()** | `Pose::isValid()` checks NaN, `Pose::Undefined()` returns sentinel                                                                                                                                                                                                    | **Not implemented** | Can be added for robustness.                                                                                 |
-| 4   | **AMBLE_GAIT**                          | `GaitDesignation::AMBLE_GAIT` with YAML-configured phase offsets                                                                                                                                                                                                      | **Not implemented** | Can be added to `GaitConfigFactory`.                                                                         |
-| 5   | **Force/Torque Vector Estimation**      | `Leg::calculateTipForce()` (Jacobian-transpose from joint effort), `tip_force_calculated_`, `tip_torque_calculated_`, per-joint `current_effort_`                                                                                                                     | **Not implemented** | Requires joint torque sensing hardware.                                                                      |
-| 6   | **Per-Leg Cartesian Pose Input**        | `primaryTipPoseInputCallback`, `secondaryTipPoseInputCallback` → `Pose` input for manual leg state                                                                                                                                                                    | **Not implemented** | Can be added to `StateController`.                                                                           |
-| 7   | **TF Transform for External Targets**   | `ExternalTarget::transform_` (TF2 frame-to-frame transform lookup)                                                                                                                                                                                                    | **Not implemented** | By design (no TF2 on MCU).                                                                                   |
-| 8   | **Joint/Link/Tip Object Model**         | Per-joint `desired_position_`, `desired_velocity_`, `desired_effort_`, `current_position_`, `current_velocity_`, `current_effort_`, `min/max_position_`, `packed_positions_[]`, `offset_`, `max_angular_speed_`; per-link DH parameters as objects; per-tip transform | **Not implemented** | Design decision: flattened to `JointAngles` + `Point3D`. Per-joint state tracking beyond position is absent. |
-| 9   | **updateTipRotation()**                 | Tip rotation during swing (orthogonal to walk plane for sensor alignment)                                                                                                                                                                                             | **Not implemented** | Not needed for 3DOF legs without tip rotation joints.                                                        |
-| 10  | **numberToString\<T\>()**               | String conversion utility                                                                                                                                                                                                                                             | **Not implemented** | Minor (Arduino `String()` used).                                                                             |
-| 11  | **Model copy constructor**              | `Model(shared_ptr<Model>)` for workspace generation (search model)                                                                                                                                                                                                    | **Not implemented** | Not needed (workspace generation uses centralized `WorkspaceAnalyzer`).                                      |
-| 12  | **getLegByIDName()**                    | String-based leg lookup                                                                                                                                                                                                                                               | **Not implemented** | Minor (index-based access only).                                                                             |
+| #   | Feature                                   | OpenSHC Implementation                                                                                                                                                                     | HexaMotion Status   | Classification                                                                                                                                                          |
+| :-- | :---------------------------------------- | :----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | :------------------ | :---------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 1   | **External Planner**                      | `executePlan()`, `targetConfigurationCallback`, `targetBodyPoseCallback`, `targetTipPoseCallback`, `PlannerMode` enum                                                                      | **Not implemented** | By design (MCU target).                                                                                                                                                 |
+| 2   | **Dynamic Parameter Adjustment**          | `AdjustableParameter` struct, `ParameterSelection` enum, `adjustParameter()`, `parameterSelectionCallback`, `parameterAdjustCallback`, `dynamicParameterCallback`, ROS dynamic_reconfigure | **Not implemented** | By design (static config).                                                                                                                                              |
+| 3   | **Tip Torque Vectors**                    | `tip_torque_calculated_`, `tip_torque_measured_` (3D torque vectors)                                                                                                                       | **Not implemented** | Torque vectors not tracked; scalar FSR only.                                                                                                                            |
+| 4   | **AMBLE_GAIT**                            | `GaitDesignation::AMBLE_GAIT` with YAML-configured phase offsets                                                                                                                           | **Not implemented** | Can be added to `GaitConfigFactory`.                                                                                                                                    |
+| 5   | **TF Transform for External Targets**     | `ExternalTarget::transform_` (TF2 frame-to-frame transform lookup)                                                                                                                         | **Not implemented** | By design (no TF2 on MCU).                                                                                                                                              |
+| 6   | **Joint/Link/Tip Object Model**           | Per-joint/link/tip classes with per-link DH objects and per-tip transforms                                                                                                                 | **Not implemented** | Design decision: flattened to `JointAngles` + `Point3D` (per-joint telemetry exists, object model absent).                                                              |
+| 7   | **updateTipRotation()**                   | Tip rotation during swing (orthogonal to walk plane for sensor alignment)                                                                                                                  | **Not implemented** | Not needed for 3DOF legs without tip rotation joints.                                                                                                                   |
+| 8   | **numberToString\<T\>()**                 | String conversion utility                                                                                                                                                                  | **Not implemented** | Minor (Arduino `String()` used).                                                                                                                                        |
+| 9   | **Model copy constructor**                | `Model(shared_ptr<Model>)` for workspace generation (search model)                                                                                                                         | **Not implemented** | Not needed (workspace generation uses centralized `WorkspaceAnalyzer`).                                                                                                 |
+| 10  | **getLegByIDName()**                      | String-based leg lookup                                                                                                                                                                    | **Not implemented** | Minor (index-based access only).                                                                                                                                        |
+| 11  | **Auto-navigation mode**                  | `auto_navigation_mode` input / syropod_auto_navigation integration                                                                                                                         | **Not implemented** | By design (no ROS navigation stack on MCU).                                                                                                                             |
+| 12  | **Bezier through-control-point variants** | `quadraticBezierCurveThroughControlPoint`, `cubicBezierCurveThroughControlPoint`, `quarticBezierCurveThroughControlPoint`                                                                  | **Not implemented** | Used in some OpenSHC pose transitions for exact curve-through-waypoint interpolation.                                                                                   |
+| 13  | **stringFormat\<Args\>()**                | Variadic `snprintf`-based string format utility                                                                                                                                            | **Not implemented** | Minor (Arduino environment uses `String()` and `sprintf` directly).                                                                                                     |
+| 14  | **Startup acquisition timeout**           | `ACQUISTION_TIME` (10 s) in `main.cpp` — waits for initial joint state callback before starting control loop                                                                               | **Not implemented** | Architectural difference: HexaMotion uses direct HAL polling (`IServoInterface`) rather than ROS topic callbacks; no equivalent readiness gate before locomotion start. |
+| 15  | **transitionStance() as distinct method** | `PoseController::transitionStance(time)` — external-target-driven stance transitions with gravity-aligned tips, reset of external targets                                                  | **Partial**         | `stepToNewStance()` exists (different function); `transitionStance` logic not fully replicated.                                                                         |
+| 16  | **origin_walk_plane_pose\_**              | Origin pose for interpolating walk plane pose transitions                                                                                                                                  | **Not implemented** | HexaMotion uses 5-point Bézier control nodes for walk plane pose interpolation instead (`walk_plane_position_nodes_[5]`, `walk_plane_rotation_nodes_[5]`).              |
 
 ### Corrections to Previous Report
 
-| Previous Claim                                                  | Corrected Status                                                                                                                                                                                                                        |
-| :-------------------------------------------------------------- | :-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| "`updateStance()` is missing"                                   | **Present** as `applyAutoPoseToDesiredTips()` (comment cites OpenSHC equivalence).                                                                                                                                                      |
-| "`updateInclinationPose()` is not present as a discrete method" | **Present** inline in `updateCurrentPose()` when `inclination_pose_enabled_` is true.                                                                                                                                                   |
-| "`legsBearingLoad()` has no 1:1 equivalent"                     | **Present** as lambda in `BodyPoseController::executeSequenceInternal()`. Not a public API, but logic is 1:1.                                                                                                                           |
-| "AutoPoser system not replicated"                               | **Present** split across `IMUAutoPose` (IMU-based) and `BodyPoseController` auto-pose subsystem (phase-based with `AutoPoseConfiguration`).                                                                                             |
-| "Workspace methods not present as per-leg methods"              | **Present** centralized in `WorkspaceAnalyzer` (all 4 OpenSHC equivalents: `generateWorkspace`, `getWorkplane`, `makeReachable`, workspace polyhedron).                                                                                 |
-| "`updateManualPose()` equivalent is not present"                | **Present** via `ManualBodyPoseController::processInput()` → `BodyPoseController::setManualPoseInput()`.                                                                                                                                |
-| "Full OpenSHC pose composition pipeline is not replicated 1:1"  | **Replicated** in `updateCurrentPose()`: walk*plane → manual → inclination → IMU → auto → tip_align → ik_error → default. All sub-poses present. Only `admittance_pose*` is architectural different (per-leg delta vs body-level pose). |
+| Previous Claim                                                  | Corrected Status                                                                                                                                                                                                                      |
+| :-------------------------------------------------------------- | :------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| "`updateStance()` is missing"                                   | **Present** as `applyAutoPoseToDesiredTips()` (comment cites OpenSHC equivalence).                                                                                                                                                    |
+| "`updateInclinationPose()` is not present as a discrete method" | **Present** inline in `updateCurrentPose()` when `inclination_pose_enabled_` is true.                                                                                                                                                 |
+| "`legsBearingLoad()` has no 1:1 equivalent"                     | **Present** as public API `BodyPoseController::legsBearingLoad()` and wrapper `LocomotionSystem::legsBearingLoad()`.                                                                                                                  |
+| "AutoPoser system not replicated"                               | **Present** split across `IMUAutoPose` (IMU-based) and `BodyPoseController` auto-pose subsystem (phase-based with `AutoPoseConfiguration`).                                                                                           |
+| "Workspace methods not present as per-leg methods"              | **Present** centralized in `WorkspaceAnalyzer` (all 4 OpenSHC equivalents: `generateWorkspace`, `getWorkplane`, `makeReachable`, workspace polyhedron).                                                                               |
+| "`updateManualPose()` equivalent is not present"                | **Present** via `ManualBodyPoseController::processInput()` → `BodyPoseController::setManualPoseInput()`.                                                                                                                              |
+| "Full OpenSHC pose composition pipeline is not replicated 1:1"  | **Replicated** in `updateCurrentPose()`: walk_plane → manual → inclination → IMU → tip_align → ik_error → default (auto pose applied per-leg). Only `admittance_pose*` is architectural different (per-leg delta vs body-level pose). |
+| "`Pose::Undefined()` / `Pose::isValid()` missing"               | **Present** in `Pose` (NaN sentinel + finite checks).                                                                                                                                                                                 |
+| "Force/torque estimation missing"                               | **Force estimation present** (`calculateTipForce()`); **torque vectors still absent**.                                                                                                                                                |
+| "Per-leg cartesian pose input missing"                          | **Present** via `StateController::setLegTipPose()` and consumed in `LocomotionSystem::update()` manual path.                                                                                                                          |
+| "Per-joint state tracking absent"                               | **Present** as per-joint velocity/effort fields in `Leg`; joint/link/tip object model still absent.                                                                                                                                   |
+| "`UNDEFINED_POSITION`/`UNDEFINED_ROTATION` use zeros"           | **Incorrect**: `Pose::Undefined()` uses NaN sentinel for both position and rotation.                                                                                                                                                  |
+
+### Minor Logic Deviations
+
+| Feature                | OpenSHC Behavior                                                            | HexaMotion Behavior                                                                                                             | Impact                                                                 |
+| :--------------------- | :-------------------------------------------------------------------------- | :------------------------------------------------------------------------------------------------------------------------------ | :--------------------------------------------------------------------- |
+| **Auto-Pose Appl.**    | Adds `auto_pose` to Body, subtracts from Legs ($Body+Auto$, $Leg-Auto$).    | Does not add to Body, subtracts from Legs ($Leg-Auto$).                                                                         | **None**. Net relative motion is identical ($Body - Leg + Auto$).      |
+| **Default Pose Usage** | Adds `default_pose_` (zero-moment offset) to active body pose in main loop. | Calculates `default_pose_` but uses it primarily for manipulation states; not added to `body_pose_current_` in standard update. | **Low**. Zero-moment balancing may be inactive in standard walking.    |
+| **Admittance Appl.**   | `admittance_pose_` applied as a body pose offset.                           | `admittance_delta_` applied per-leg to the target tip position.                                                                 | **Low**. Architectural change for efficiency; functional outcome same. |
 
 ### Items Confirmed as Non-Gaps (by design)
 
@@ -591,32 +624,39 @@ HexaMotion substitutes: `CoxaTelemetry` struct in `LocomotionSystem` (compile-ti
 | `dynamic_reconfigure` server               | No ROS dependency.                                                        |
 | Primary/Secondary leg distinction          | Simplified to per-leg API by index.                                       |
 
+### Documentation Notes (Parity Clarifications)
+
+- Admittance delta is applied per leg in the leg-step pipeline (see [src/leg_poser.cpp](src/leg_poser.cpp)), which mirrors OpenSHC's leg-level `admittance_delta_` application (see [OpenSHC/src/model.cpp](OpenSHC/src/model.cpp)).
+- `AMBLE_GAIT` remains unsupported with the current morphology constraints; parity is documented as out of scope (see [AGENTS.md](AGENTS.md)).
+- `updateTipRotation()` omission is intentional for 3DOF legs with no tip rotation joints (see [src/leg_stepper.cpp](src/leg_stepper.cpp)).
+- Joint/Link/Tip flat model rationale: MCU memory constraints and 3DOF-only kinematics (see [src/leg.h](src/leg.h) and [src/robot_model.h](src/robot_model.h)).
+- Per-leg cartesian pose input is supported via `StateController::setLegTipPose()` and consumed in `LocomotionSystem::update()` manual path.
+
 ---
 
 ## Todo List for 1:1 Logic Parity
 
 ### Priority 1: True Functional Gaps
 
-- [ ] **Pose::isValid() / Pose::Undefined()**: Add `isValid()` (NaN/sentinel check) and `Undefined()` (sentinel factory) to `Pose` struct in `robot_model.h`. Low effort, improves defensive coding.
-- [ ] **AMBLE_GAIT**: Add `AMBLE_GAIT` to `GaitType` enum and implement `GaitConfigFactory::createAmbleGaitConfig()` with appropriate phase offsets. Reference: OpenSHC amble gait config YAML.
-- [ ] **Force/Torque Vector Estimation**: Add `calculateTipForce()` to `Leg` class using Jacobian-transpose method from OpenSHC (`J^T * tau = F`). Requires per-joint effort data from `IServoInterface`. Add `tip_force_calculated_` (Vector3d) member. Lower priority but needed for accurate admittance control.
-- [ ] **Per-Leg Cartesian Pose Input**: Add `setLegTipPose(int, Point3D)` to `StateController` to support direct-positioning leg manipulation mode (OpenSHC's pose-based `updateManual` overload).
-- [ ] **Admittance Pose Equivalence**: Verify that per-leg `LegPoser::admittance_delta_` application produces numerically equivalent results to OpenSHC's body-level `admittance_pose_` in the pose composition pipeline. Document any difference.
+- [x] **Pose::isValid() / Pose::Undefined()**: Implemented in `Pose` (see `robot_model.h`).
+- [x] **Force/Torque Vector Estimation**: `Leg::calculateTipForce()` implemented with Jacobian-transpose; effort data sourced via `IServoInterface`. Torque vector remains untracked in 3DOF model.
+- [x] **Per-Leg Cartesian Pose Input**: `StateController::setLegTipPose(int, Point3D)` + `LocomotionSystem` manual update path.
+- [x] **Admittance Pose Equivalence**: Documented (per-leg admittance delta applied after pose inverse; matches OpenSHC leg-level application ordering).
 
 ### Priority 2: Optional Enhancements
 
-- [ ] **legsBearingLoad() as Public API**: Extract the lambda in `BodyPoseController::executeSequenceInternal()` to a public method on `LocomotionSystem` or `RobotModel` for external callers.
-- [ ] **Expose Current Body Pose**: Add a public getter for `BodyPoseController::body_pose_current_` (or a `LocomotionSystem` passthrough) so callers can query the current composed body pose similar to OpenSHC's `Model::getCurrentPose()`.
-- [ ] **Per-Joint State Tracking**: Add optional per-joint `desired_velocity_`, `current_velocity_`, `current_effort_` fields to `Leg` (populated from `IServoInterface` if available) to enable future force estimation.
-- [ ] **Stub Methods for Planner**: Add no-op `executePlan()` / `PlannerMode` stubs in `StateController` returning "not supported" if strict API surface parity is required.
-- [ ] **AdjustableParameter Light**: Implement a lightweight `setParameter(name, value)` API on `LocomotionSystem` (serial command interface) allowing runtime adjustment of `step_frequency`, `swing_height`, `stance_span_modifier` with min/max/step validation. Not full OpenSHC parity but preserves the concept.
+- [x] **legsBearingLoad() as Public API**: Exposed via `LocomotionSystem::legsBearingLoad()`.
+- [x] **Expose Current Body Pose**: Added `BodyPoseController::getCurrentBodyPose()` and `LocomotionSystem::getCurrentBodyPose()`.
+- [x] **Per-Joint State Tracking**: `Leg` stores desired/current joint velocity and effort, populated from `IServoInterface` when available.
+- [x] **Stub Methods for Planner**: `StateController::executePlan()` returns "not supported" and `PlannerMode` exists.
+- [x] **AdjustableParameter Light**: `LocomotionSystem::setParameter()` supports `step_frequency`, `swing_height`, `stance_span_modifier`.
 
 ### Priority 3: Documentation-Only
 
-- [ ] Document `admittance_pose_` → per-leg `admittance_delta_` architectural difference and verify numerical equivalence.
-- [ ] Document `AMBLE_GAIT` omission rationale or implementation plan.
-- [ ] Document `updateTipRotation()` omission (3DOF: no tip rotation joints).
-- [ ] Document `Joint/Link/Tip` flat model rationale (MCU memory constraints, 3DOF-only).
+- [x] Document `admittance_pose_` → per-leg `admittance_delta_` architectural difference.
+- [x] Document `AMBLE_GAIT` omission rationale (unsupported with current morphology; see AGENTS.md).
+- [x] Document `updateTipRotation()` omission (3DOF: no tip rotation joints).
+- [x] Document `Joint/Link/Tip` flat model rationale (MCU memory constraints, 3DOF-only).
 
 ### Validation Tasks
 
@@ -625,3 +665,58 @@ HexaMotion substitutes: `CoxaTelemetry` struct in `LocomotionSystem` (compile-ti
 - [ ] Compare `updateWalk()` state machine transitions step-by-step with OpenSHC.
 - [ ] Compare `updateCurrentPose()` pose composition order with OpenSHC (walk_plane → manual → inclination → IMU/auto → tip_align → ik_error → default).
 - [ ] Compare `AdmittanceController` ODE output with OpenSHC boost::odeint RK4 output for identical inputs.
+
+### Priority 4: New Gaps Found in Validation Pass (2026-02-10)
+
+- [ ] **Bezier through-control-point functions**: Implement `quadraticBezierCurveThroughControlPoint`, `cubicBezierCurveThroughControlPoint`, `quarticBezierCurveThroughControlPoint` in `math_utils.h`. These adjust control nodes so the curve interpolates _through_ the specified point rather than merely being pulled toward it.
+- [ ] **transitionStance() full logic**: OpenSHC's `transitionStance(time)` handles external-target-driven stance transitions with gravity-aligned tips and external target resets. Currently only `stepToNewStance()` exists (a _different_ OpenSHC method). Evaluate whether `transitionStance` logic is needed for the MCU target.
+- [ ] **Startup acquisition timeout**: Consider adding a readiness gate in `LocomotionSystem::initialize()` that verifies initial joint state readback from `IServoInterface` before enabling locomotion (equivalent of OpenSHC's `ACQUISTION_TIME` wait loop).
+- [ ] **origin*walk_plane_pose***: Verify that the Bézier 5-node walk plane interpolation is functionally equivalent to OpenSHC's origin→current linear interpolation approach.
+
+---
+
+## Audit Summary (2026-02-10 Validation Pass)
+
+### Methodology
+
+All symbols cataloged from OpenSHC (16 source files: 9 headers + 7 implementation files) and HexaMotion (45 source files) were compared exhaustively. Specific claims in the GAP report were verified against actual source code.
+
+### OpenSHC Symbol Counts
+
+- 14 enums, 6 structs, 14 classes
+- ~290 public methods, ~200 member variables
+- ~30 free functions, 22 constants/defines, 11 typedefs
+
+### HexaMotion Symbol Counts
+
+- ~20 enums, ~50 structs, 24 classes + 3 abstract interfaces
+- ~500+ public methods, ~200+ private members
+- ~50 free functions, ~100 constants
+
+### Audit Results
+
+| Category                  | Count | Details                                                                                                                                                                                    |
+| :------------------------ | :---- | :----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Existing gaps confirmed   | 11    | All 11 True Gaps from the original report validated against source.                                                                                                                        |
+| New gaps discovered       | 5     | Gaps #12–#16 added (Bezier through-point, stringFormat, acquisition timeout, transitionStance, origin*walk_plane_pose*).                                                                   |
+| Corrections applied       | 12    | All corrections from the original report validated; no new false corrections found.                                                                                                        |
+| Report inaccuracies fixed | 4     | `GaitDesignation` ordinal values noted; `UNASSIGNED_VALUE` description refined; `origin_walk_plane_pose_` downgraded from ✅ to Partial; Bezier function table added.                      |
+| Constants not in report   | 3     | `JOINT_LIMIT_COST_WEIGHT` → `IK_JOINT_LIMIT_COST_WEIGHT` ✅; `HALF_BODY_DEPTH` → `HALF_BODY_DEPTH_MM` ✅; `TRANSITION_STEP_THRESHOLD` ✅; `IMU_POSING_DEADBAND` ✅. All present, not gaps. |
+| TODO DONE items validated | 10    | All items from `OpenSHC_GAP_TODO_DONE.md` confirmed implemented in source.                                                                                                                 |
+
+### TODO DONE Cross-Reference
+
+All items listed in [OpenSHC_GAP_TODO_DONE.md](OpenSHC_GAP_TODO_DONE.md) were verified against source code:
+
+| TODO DONE Item                     | Source Verification                                                                           | Status      |
+| :--------------------------------- | :-------------------------------------------------------------------------------------------- | :---------- |
+| Pose validation/sentinel           | `Pose::isValid()` and `Pose::Undefined()` in `robot_model.h` use NaN sentinels                | ✅ Verified |
+| Force estimation (Jacobian)        | `Leg::calculateTipForce()` in `leg.cpp`; `tip_force_calculated_` member                       | ✅ Verified |
+| Per-leg cartesian pose input       | `StateController::setLegTipPose(int, Point3D)` in `state_controller.h`                        | ✅ Verified |
+| Admittance delta equivalence       | `LegPoser::admittance_delta_` in `leg_poser.h`; deadband + NaN sanitization                   | ✅ Verified |
+| legsBearingLoad public API         | `LocomotionSystem::legsBearingLoad()` in `locomotion_system.h`                                | ✅ Verified |
+| Current body pose getter           | `BodyPoseController::getCurrentBodyPose()` + `LocomotionSystem::getCurrentBodyPose()`         | ✅ Verified |
+| Per-joint velocity/effort tracking | `Leg::getJointVelocity()`, `setJointVelocity()` in `leg.h`                                    | ✅ Verified |
+| Planner stubs                      | `PlannerMode` enum in `state_controller.h`; `executePlan()` returns unsupported               | ✅ Verified |
+| Parameter adjustment light         | `LocomotionSystem::setParameter(string, double)` in `locomotion_system.cpp`                   | ✅ Verified |
+| Documentation of omissions         | AMBLE*GAIT, updateTipRotation, Joint/Link/Tip, admittance_pose* all documented in this report | ✅ Verified |

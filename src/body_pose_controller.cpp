@@ -1593,14 +1593,6 @@ int BodyPoseController::executeSequenceInternal(const std::string &sequence_type
         return min_proximity;
     };
 
-    auto legs_bearing_load = [&]() {
-        double body_height_estimate = 0.0;
-        for (int i = 0; i < NUM_LEGS; ++i) {
-            body_height_estimate += legs[i].getCurrentTipPositionGlobal().z;
-        }
-        return -(body_height_estimate / NUM_LEGS) > HALF_BODY_DEPTH_MM;
-    };
-
     if (execute_horizontal_transition) {
         if (set_target_) {
             set_target_ = false;
@@ -1623,7 +1615,7 @@ int BodyPoseController::executeSequenceInternal(const std::string &sequence_type
             }
         }
 
-        bool direct_step = !legs_bearing_load();
+        bool direct_step = !legsBearingLoad(legs);
         for (int i = 0; i < NUM_LEGS; ++i) {
             if (!leg_posers_[i])
                 continue;
@@ -1784,6 +1776,14 @@ int BodyPoseController::executeSequenceInternal(const std::string &sequence_type
 
     total_progress = std::min(total_progress + normalised_progress, PROGRESS_COMPLETE - 1);
     return (first_sequence_execution_ ? -1 : total_progress);
+}
+
+bool BodyPoseController::legsBearingLoad(const Leg legs[NUM_LEGS]) const {
+    double body_height_estimate = 0.0;
+    for (int i = 0; i < NUM_LEGS; ++i) {
+        body_height_estimate += legs[i].getCurrentTipPositionGlobal().z;
+    }
+    return -(body_height_estimate / NUM_LEGS) > HALF_BODY_DEPTH_MM;
 }
 
 int BodyPoseController::executeSequence(const std::string &sequence_type, Leg legs[NUM_LEGS]) {

@@ -103,6 +103,42 @@ class Leg {
     void setJointAngle(int joint_index, double angle);
 
     /**
+     * @brief Set desired joint velocities (driver units or rad/s depending on interface).
+     * @param velocities Desired joint velocities
+     */
+    void setDesiredJointVelocity(const JointAngles &velocities) { desired_joint_velocity_ = velocities; }
+
+    /**
+     * @brief Get desired joint velocities.
+     * @return Desired joint velocities
+     */
+    JointAngles getDesiredJointVelocity() const { return desired_joint_velocity_; }
+
+    /**
+     * @brief Set current joint velocities (rad/s) if available from hardware.
+     * @param velocities Current joint velocities
+     */
+    void setCurrentJointVelocity(const JointAngles &velocities);
+
+    /**
+     * @brief Get current joint velocities.
+     * @return Current joint velocities
+     */
+    JointAngles getCurrentJointVelocity() const { return current_joint_velocity_; }
+
+    /**
+     * @brief Set current joint efforts/torques if available from hardware.
+     * @param efforts Current joint efforts
+     */
+    void setCurrentJointEffort(const JointAngles &efforts);
+
+    /**
+     * @brief Get current joint efforts/torques.
+     * @return Current joint efforts
+     */
+    JointAngles getCurrentJointEffort() const { return current_joint_effort_; }
+
+    /**
      * @brief Get the current tip position in global coordinates
      */
     Point3D getCurrentTipPositionGlobal() const { return tip_position_; }
@@ -154,6 +190,17 @@ class Leg {
      * @return 3x3 Jacobian matrix
      */
     Eigen::Matrix3d getJacobian() const;
+
+    /**
+     * @brief Calculate tip force from joint efforts using Jacobian transpose (OpenSHC equivalent).
+     */
+    void calculateTipForce();
+
+    /**
+     * @brief Get calculated tip force (Cartesian) from joint effort estimation.
+     * @return Calculated tip force vector
+     */
+    Eigen::Vector3d getCalculatedTipForce() const { return tip_force_calculated_; }
 
     // ===== LEG STATE (OpenSHC equivalent) =====
 
@@ -373,19 +420,24 @@ class Leg {
     String leg_name_; //< Leg name string
 
     // ===== JOINT STATE =====
-    JointAngles joint_angles_; //< Current joint angles (coxa, femur, tibia)
-    Point3D tip_position_;     //< Current tip position in world coordinates
-    Point3D base_position_;    //< Leg base position in world coordinates
+    JointAngles joint_angles_;           //< Current joint angles (coxa, femur, tibia)
+    JointAngles desired_joint_velocity_; //< Desired joint velocities (driver units or rad/s)
+    JointAngles current_joint_velocity_; //< Current joint velocities (rad/s)
+    JointAngles current_joint_effort_;   //< Current joint efforts/torques (driver units)
+    bool has_effort_data_ = false;       //< True when current_joint_effort_ is populated
+    Point3D tip_position_;               //< Current tip position in world coordinates
+    Point3D base_position_;              //< Leg base position in world coordinates
 
     // ===== LEG STATE =====
     LegState leg_state_;    //< Current leg state (walking, manual, transitioning)
     double swing_progress_; //< Swing progress (0.0-1.0 during swing, -1.0 otherwise)
 
     // ===== GAIT STATE =====
-    StepPhase step_phase_; //< Current step phase
-    double gait_phase_;    //< Gait phase (0.0 to 1.0)
-    bool in_contact_;      //< Contact state with ground
-    double contact_force_; //< Contact force reading
+    StepPhase step_phase_;                 //< Current step phase
+    double gait_phase_;                    //< Gait phase (0.0 to 1.0)
+    bool in_contact_;                      //< Contact state with ground
+    double contact_force_;                 //< Contact force reading
+    Eigen::Vector3d tip_force_calculated_; //< Estimated tip force from joint effort
 
     // ===== FSR CONTACT HISTORY =====
     double fsr_contact_history_[3]; //< Circular buffer for FSR contact history (3 samples)

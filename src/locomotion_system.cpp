@@ -100,6 +100,20 @@ bool LocomotionSystem::isSystemEnabled() const {
     return system_enabled;
 }
 
+Pose LocomotionSystem::getCurrentBodyPose() const {
+    if (body_pose_ctrl) {
+        return body_pose_ctrl->getCurrentBodyPose();
+    }
+    return Pose::Identity();
+}
+
+bool LocomotionSystem::legsBearingLoad() const {
+    if (body_pose_ctrl) {
+        return body_pose_ctrl->legsBearingLoad(legs);
+    }
+    return false;
+}
+
 // System calibration
 bool LocomotionSystem::calibrateSystem() {
     // Calibrate IMU
@@ -244,6 +258,48 @@ bool LocomotionSystem::planGaitSequence(double velocity_x, double velocity_y, do
     return true;
 }
 
+bool LocomotionSystem::setParameter(const std::string &name, double value) {
+    if (!walk_ctrl) {
+        last_error = PARAMETER_ERROR;
+        return false;
+    }
+
+    auto clampAndStep = [](double input, double min_value, double max_value, double step) {
+        double clamped = math_utils::clamp(input, min_value, max_value);
+        if (step <= 0.0) {
+            return clamped;
+        }
+        double stepped = std::round((clamped - min_value) / step) * step + min_value;
+        return math_utils::clamp(stepped, min_value, max_value);
+    };
+
+    GaitConfiguration updated = walk_ctrl->getCurrentGaitConfig();
+    bool applied = false;
+
+    if (name == "step_frequency") {
+        double new_value = clampAndStep(value, 0.001, 2.0, 0.1);
+        updated.step_frequency = new_value;
+        params.step_frequency = new_value;
+        model.setStepFrequency(new_value);
+        applied = true;
+    } else if (name == "swing_height") {
+        double new_value = clampAndStep(value, 10.0, 80.0, 5.0);
+        updated.swing_height = new_value;
+        applied = true;
+    } else if (name == "stance_span_modifier") {
+        double new_value = clampAndStep(value, -1.0, 1.0, 0.1);
+        updated.stance_span_modifier = new_value;
+        applied = true;
+    }
+
+    if (!applied) {
+        last_error = PARAMETER_ERROR;
+        return false;
+    }
+
+    return walk_ctrl->setGaitConfiguration(updated);
+}
+
 // Forward locomotion control
 bool LocomotionSystem::walkForward(double velocity) {
     return planGaitSequence(velocity, 0.0f, 0.0f);
@@ -373,6 +429,13 @@ bool LocomotionSystem::checkStabilityMargin() {
     }
 
     return admittance_ctrl->checkStability(temp_leg_positions, temp_leg_states);
+}
+
+bool LocomotionSystem::legsBearingLoad() const {
+    if (!body_pose_ctrl) {
+        return false;
+    }
+    return body_pose_ctrl->legsBearingLoad(legs);
 }
 
 // Compute center of pressure
@@ -567,6 +630,8 @@ bool LocomotionSystem::update() {
         return false;
     }
 
+    updateLegJointTelemetry();
+
     if (walk_ctrl) {
         walk_ctrl->updateTerrainAdaptation(fsr_interface, imu_interface);
     }
@@ -609,6 +674,31 @@ bool LocomotionSystem::update() {
         walk_ctrl->updateWalk(applied_linear_velocity,
                               commanded_angular_velocity_,
                               body_position, body_orientation);
+
+        // STEP 1b: Apply manual leg inputs (OpenSHC updateManual equivalents)
+        if (state_controller_) {
+            int primary_leg = -1;
+            int secondary_leg = -1;
+            state_controller_->getManualLegIndices(primary_leg, secondary_leg);
+
+            Eigen::Vector3d primary_velocity = Eigen::Vector3d::Zero();
+            Eigen::Vector3d secondary_velocity = Eigen::Vector3d::Zero();
+            if (primary_leg >= 0) {
+                primary_velocity = state_controller_->getLegTipVelocity(primary_leg);
+            }
+            if (secondary_leg >= 0) {
+                secondary_velocity = state_controller_->getLegTipVelocity(secondary_leg);
+            }
+            walk_ctrl->updateManual(primary_leg, primary_velocity, secondary_leg, secondary_velocity);
+
+            Point3D primary_pose;
+            Point3D secondary_pose;
+            bool primary_pose_valid = state_controller_->getLegTipPose(primary_leg, primary_pose);
+            bool secondary_pose_valid = state_controller_->getLegTipPose(secondary_leg, secondary_pose);
+            if (primary_pose_valid || secondary_pose_valid) {
+                walk_ctrl->updateManual(primary_leg, primary_pose, secondary_leg, secondary_pose);
+            }
+        }
 
         // STEP 2: Collect desired positions from Bézier trajectories (= OpenSHC::setDesiredTipPose)
         for (int i = 0; i < NUM_LEGS; i++) {
@@ -677,6 +767,27 @@ bool LocomotionSystem::update() {
     }
 
     return true;
+}
+
+void LocomotionSystem::updateLegJointTelemetry() {
+    if (!servo_interface) {
+        return;
+    }
+
+    for (int i = 0; i < NUM_LEGS; ++i) {
+        JointAngles velocities;
+        velocities.coxa = servo_interface->getJointVelocity(i, 0);
+        velocities.femur = servo_interface->getJointVelocity(i, 1);
+        velocities.tibia = servo_interface->getJointVelocity(i, 2);
+        legs[i].setCurrentJointVelocity(velocities);
+
+        JointAngles efforts;
+        efforts.coxa = servo_interface->getJointEffort(i, 0);
+        efforts.femur = servo_interface->getJointEffort(i, 1);
+        efforts.tibia = servo_interface->getJointEffort(i, 2);
+        legs[i].setCurrentJointEffort(efforts);
+        legs[i].calculateTipForce();
+    }
 }
 
 // Error handling
@@ -1192,6 +1303,8 @@ void LocomotionSystem::publishJointAnglesToServos() {
             speeds[i][0] = velocity_controller ? velocity_controller->getServoSpeed(i, 0) : params.default_servo_speed;
             speeds[i][1] = velocity_controller ? velocity_controller->getServoSpeed(i, 1) : params.default_servo_speed;
             speeds[i][2] = velocity_controller ? velocity_controller->getServoSpeed(i, 2) : params.default_servo_speed;
+
+            legs[i].setDesiredJointVelocity(JointAngles(speeds[i][0], speeds[i][1], speeds[i][2]));
         }
 
         if (servo_interface->syncSetAllJointAnglesAndSpeeds(angles_deg, speeds)) {
@@ -1210,6 +1323,11 @@ void LocomotionSystem::publishJointAnglesToServos() {
     // Fallback: per-leg commands
     for (int i = 0; i < NUM_LEGS; i++) {
         JointAngles angles = legs[i].getJointAngles();
+
+        double coxa_speed = velocity_controller ? velocity_controller->getServoSpeed(i, 0) : params.default_servo_speed;
+        double femur_speed = velocity_controller ? velocity_controller->getServoSpeed(i, 1) : params.default_servo_speed;
+        double tibia_speed = velocity_controller ? velocity_controller->getServoSpeed(i, 2) : params.default_servo_speed;
+        legs[i].setDesiredJointVelocity(JointAngles(coxa_speed, femur_speed, tibia_speed));
 
         // Send all angles for this leg to servos
         if (!setLegJointAngles(i, angles)) {

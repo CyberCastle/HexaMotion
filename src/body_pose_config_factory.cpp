@@ -279,7 +279,7 @@ AutoPoseConfiguration createAutoPoseConfigurationForGait(const Parameters &param
             cfg.negation_transition_ratio[i] = 0.0;
         }
     } else {
-        // amble_gait u otros no soportados => cfg queda disabled
+        // Otros no soportados => cfg queda disabled
     }
     return cfg;
 }
