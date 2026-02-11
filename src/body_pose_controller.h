@@ -211,6 +211,20 @@ class BodyPoseController {
     bool stepToNewStance(Leg legs[NUM_LEGS], double step_height, double step_time);
 
     /**
+     * @brief Move all legs simultaneously to externally defined target poses.
+     *
+     * Iterates through all legs and, for each that has a defined ExternalTarget,
+     * composes the target tip pose from the external target's transform and pose,
+     * then steps to that position using the current body pose for the transition.
+     * Equivalent to OpenSHC PoseController::transitionStance().
+     *
+     * @param legs Array of Leg objects to update
+     * @param transition_time Time period for the transition (seconds)
+     * @return Progress percentage (0-100); PROGRESS_COMPLETE (100) when finished
+     */
+    int transitionStance(Leg legs[NUM_LEGS], double transition_time);
+
+    /**
      * @brief Set current gait type for startup sequence selection
      * @param gait_type The GaitType enum value
      */
@@ -438,6 +452,8 @@ class BodyPoseController {
         ik_error_pose_ = Pose::Identity();
         tip_align_pose_ = Pose::Identity();
         origin_tip_align_pose_ = Pose::Identity();
+        walk_plane_pose_ = Pose::Identity();
+        origin_walk_plane_pose_ = walk_plane_pose_;
         rotation_absement_error_ = Eigen::Vector3d::Zero();
         rotation_position_error_ = Eigen::Vector3d::Zero();
         rotation_velocity_error_ = Eigen::Vector3d::Zero();
@@ -520,6 +536,7 @@ class BodyPoseController {
 
     // OpenSHC walk plane pose system with Bézier curves
     Pose walk_plane_pose_;              //< Current walk plane pose for body clearance maintenance
+    Pose origin_walk_plane_pose_;       //< Origin pose used in interpolating walk plane pose (OpenSHC parity)
     bool walk_plane_pose_enabled;       //< Enable/disable walk plane pose system
     double walk_plane_update_threshold; //< Minimum change threshold for updates
 

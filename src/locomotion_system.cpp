@@ -39,6 +39,44 @@ LocomotionSystem::~LocomotionSystem() {
     delete velocity_controller;
 }
 
+// Attempt to read initial joint positions from all servos (OpenSHC ACQUISTION_TIME equivalent)
+bool LocomotionSystem::attemptJointAcquisition() {
+    // Number of polling cycles based on acquisition timeout and control frequency
+    const int max_cycles = static_cast<int>(ACQUISITION_TIMEOUT_S / params.time_delta);
+
+    for (int cycle = 0; cycle < max_cycles; cycle++) {
+        bool all_valid = true;
+        for (int leg = 0; leg < NUM_LEGS && all_valid; leg++) {
+            for (int joint = 0; joint < DOF_PER_LEG && all_valid; joint++) {
+                double angle = servo_interface->getJointAngle(leg, joint);
+                if (!std::isfinite(angle)) {
+                    all_valid = false;
+                }
+            }
+        }
+
+        if (all_valid) {
+            return true;
+        }
+
+        // Delay one control cycle before retrying.
+        // On Arduino use delay(); elsewhere use chrono.
+#ifdef ARDUINO
+        delay(static_cast<unsigned long>(params.time_delta * 1000.0));
+#else
+        {
+            auto dur = std::chrono::duration<double>(params.time_delta);
+            auto start = std::chrono::steady_clock::now();
+            while (std::chrono::steady_clock::now() - start < dur) {
+                // busy-wait (short cycle)
+            }
+        }
+#endif
+    }
+
+    return false; // Timed out — will use default joint positions
+}
+
 // System initialization
 bool LocomotionSystem::initialize(IIMUInterface *imu, IFSRInterface *fsr, IServoInterface *servo, const BodyPoseConfiguration &pose_config) {
     if (!imu || !fsr || !servo) {
@@ -65,6 +103,10 @@ bool LocomotionSystem::initialize(IIMUInterface *imu, IFSRInterface *fsr, IServo
         last_error = SERVO_ERROR;
         return false;
     }
+
+    // Attempt to acquire initial joint positions from servos (OpenSHC ACQUISTION_TIME equivalent).
+    // On failure, continue with default positions (mirrors OpenSHC's fallback behavior).
+    joint_positions_initialised_ = attemptJointAcquisition();
 
     // Initialize controllers with proper architecture
     body_pose_ctrl = new BodyPoseController(model, pose_config);
@@ -429,13 +471,6 @@ bool LocomotionSystem::checkStabilityMargin() {
     }
 
     return admittance_ctrl->checkStability(temp_leg_positions, temp_leg_states);
-}
-
-bool LocomotionSystem::legsBearingLoad() const {
-    if (!body_pose_ctrl) {
-        return false;
-    }
-    return body_pose_ctrl->legsBearingLoad(legs);
 }
 
 // Compute center of pressure

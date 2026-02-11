@@ -327,6 +327,116 @@ inline T quarticBezierDot(const T *points, double t) {
 }
 
 /**
+ * @brief Compute the Bézier control point that makes a quadratic curve pass through points[1] at parameter t.
+ *
+ * Given three points where points[0] is the start, points[2] is the end, and points[1] is
+ * the desired pass-through point at parameter t, this function returns the actual quadratic
+ * Bézier control point that achieves exact interpolation through points[1].
+ *
+ * OpenSHC equivalent: quadraticBezierCurveThroughControlPoint
+ *
+ * @tparam T Vector type supporting basic arithmetic (e.g. Eigen::Vector3d, Point3D).
+ * @param points Array of 3 points: [start, pass-through, end].
+ * @param t Curve parameter (0.0 to 1.0) at which the curve should pass through points[1].
+ * @return The control point to use in the standard quadratic Bézier formula.
+ */
+template <class T>
+inline T quadraticBezierCurveThroughControlPoint(const T *points, double t) {
+    double s = 1.0 - t;
+    double denom = 2.0 * t * s;
+    if (std::fabs(denom) < 1e-12) {
+        return points[1]; // Degenerate: t≈0 or t≈1, control point is the target itself
+    }
+    return (points[1] - points[0] * (s * s) - points[2] * (t * t)) / denom;
+}
+
+/**
+ * @brief Compute the Bézier control point that makes a cubic curve pass through a given point.
+ *
+ * Given four points defining the cubic Bézier, this solves for the actual control point at
+ * index control_point_index (1 or 2) such that the curve passes exactly through
+ * points[control_point_index] at parameter t.
+ *
+ * OpenSHC equivalent: cubicBezierCurveThroughControlPoint
+ *
+ * @tparam T Vector type supporting basic arithmetic.
+ * @param points Array of 4 points.
+ * @param t Curve parameter (0.0 to 1.0).
+ * @param control_point_index Which control point to solve for (1 or 2).
+ * @return The adjusted control point for the standard cubic Bézier formula.
+ */
+template <class T>
+inline T cubicBezierCurveThroughControlPoint(const T *points, double t, unsigned int control_point_index) {
+    double s = 1.0 - t;
+    if (control_point_index == 1) {
+        double denom = 3.0 * t * s * s;
+        if (std::fabs(denom) < 1e-12) {
+            return points[1];
+        }
+        return (points[1] - points[0] * (s * s * s) - points[2] * (3.0 * t * t * s) -
+                points[3] * (t * t * t)) /
+               denom;
+    } else if (control_point_index == 2) {
+        double denom = 3.0 * t * t * s;
+        if (std::fabs(denom) < 1e-12) {
+            return points[2];
+        }
+        return (points[2] - points[0] * (s * s * s) - points[1] * (3.0 * t * s * s) -
+                points[3] * (t * t * t)) /
+               denom;
+    }
+    // Invalid index: return zero vector
+    return T();
+}
+
+/**
+ * @brief Compute the Bézier control point that makes a quartic curve pass through a given point.
+ *
+ * Given five points defining the quartic Bézier, this solves for the actual control point at
+ * index control_point_index (1, 2, or 3) such that the curve passes exactly (or approximately,
+ * for complex target curves) through points[control_point_index] at parameter t.
+ *
+ * OpenSHC equivalent: quarticBezierCurveThroughControlPoint
+ *
+ * @tparam T Vector type supporting basic arithmetic.
+ * @param points Array of 5 points.
+ * @param t Curve parameter (0.0 to 1.0).
+ * @param control_point_index Which control point to solve for (1, 2, or 3).
+ * @return The adjusted control point for the standard quartic Bézier formula.
+ */
+template <class T>
+inline T quarticBezierCurveThroughControlPoint(const T *points, double t, unsigned int control_point_index) {
+    double s = 1.0 - t;
+    if (control_point_index == 1) {
+        double denom = 4.0 * t * s * s * s;
+        if (std::fabs(denom) < 1e-12) {
+            return points[1];
+        }
+        return (points[1] - points[0] * (s * s * s * s) - points[2] * (6.0 * t * t * s * s) -
+                points[3] * (4.0 * t * t * t * s) - points[4] * (t * t * t * t)) /
+               denom;
+    } else if (control_point_index == 2) {
+        double denom = 6.0 * t * t * s * s;
+        if (std::fabs(denom) < 1e-12) {
+            return points[2];
+        }
+        return (points[2] - points[0] * (s * s * s * s) - points[1] * (4.0 * t * s * s * s) -
+                points[3] * (4.0 * t * t * t * s) - points[4] * (t * t * t * t)) /
+               denom;
+    } else if (control_point_index == 3) {
+        double denom = 4.0 * t * t * t * s;
+        if (std::fabs(denom) < 1e-12) {
+            return points[3];
+        }
+        return (points[3] - points[0] * (s * s * s * s) - points[1] * (4.0 * t * s * s * s) -
+                points[2] * (6.0 * t * t * s * s) - points[4] * (t * t * t * t)) /
+               denom;
+    }
+    // Invalid index: return zero vector
+    return T();
+}
+
+/**
  * @brief Smooth step function for interpolation (OpenSHC equivalent)
  * Provides smooth interpolation with zero derivatives at endpoints
  * @param control_input The linear control input from 0.0 to 1.0

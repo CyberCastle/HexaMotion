@@ -26,6 +26,10 @@ class LocomotionSystem {
         STOP_SOFT     // Force stance without phase reset to preserve continuity
     };
 
+    /// Maximum time (seconds) to wait for initial servo joint readback during initialization.
+    /// Equivalent to OpenSHC ACQUISTION_TIME in main.cpp.
+    static constexpr int ACQUISITION_TIMEOUT_S = 10;
+
     // Error control
     enum ErrorCode {
         NO_ERROR = 0,
@@ -83,6 +87,20 @@ class LocomotionSystem {
     SystemState system_state;
     bool startup_in_progress;
     bool shutdown_in_progress;
+
+    // Joint acquisition state (OpenSHC ACQUISTION_TIME equivalent)
+    bool joint_positions_initialised_ = false;
+
+    /**
+     * @brief Attempt to read initial joint positions from all servos within a timeout.
+     *
+     * Polls servo_interface->getJointAngle() for every joint and considers acquisition
+     * successful when all joints return finite values. Equivalent to the spin-wait loop
+     * in OpenSHC main.cpp that waits up to ACQUISTION_TIME for joint callbacks.
+     *
+     * @return true if all joints responded with valid angles before the timeout.
+     */
+    bool attemptJointAcquisition();
 
     // Indicates we can resume walking without running the full body startup sequence
     bool resume_from_stop_ = false;
@@ -209,6 +227,9 @@ class LocomotionSystem {
     bool isStartupInProgress() const { return startup_in_progress; }
     /** Check if shutdown sequence is in progress */
     bool isShutdownInProgress() const { return shutdown_in_progress; }
+    /** Check if initial joint positions were successfully acquired from servos.
+     *  Equivalent to OpenSHC StateController::jointPositionsInitialised(). */
+    bool jointPositionsInitialised() const { return joint_positions_initialised_; }
     /**
      * @brief Attach a StateController to be updated from LocomotionSystem (non-owning).
      * @param controller Pointer to the state controller instance.
@@ -276,11 +297,6 @@ class LocomotionSystem {
     /** Compute a numeric stability index. */
     double calculateStabilityIndex();
 
-    /**
-     * @brief Check if the legs are bearing load (OpenSHC equivalent).
-     * @return True if average body height indicates load-bearing stance
-     */
-    bool legsBearingLoad() const;
     /** Enhanced stability calculation using absolute positioning data. */
     double calculateDynamicStabilityIndex();
     /** Check if the robot is statically stable. */

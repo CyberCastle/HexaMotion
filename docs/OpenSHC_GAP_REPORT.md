@@ -668,10 +668,10 @@ HexaMotion substitutes: `CoxaTelemetry` struct in `LocomotionSystem` (compile-ti
 
 ### Priority 4: New Gaps Found in Validation Pass (2026-02-10)
 
-- [ ] **Bezier through-control-point functions**: Implement `quadraticBezierCurveThroughControlPoint`, `cubicBezierCurveThroughControlPoint`, `quarticBezierCurveThroughControlPoint` in `math_utils.h`. These adjust control nodes so the curve interpolates _through_ the specified point rather than merely being pulled toward it.
-- [ ] **transitionStance() full logic**: OpenSHC's `transitionStance(time)` handles external-target-driven stance transitions with gravity-aligned tips and external target resets. Currently only `stepToNewStance()` exists (a _different_ OpenSHC method). Evaluate whether `transitionStance` logic is needed for the MCU target.
-- [ ] **Startup acquisition timeout**: Consider adding a readiness gate in `LocomotionSystem::initialize()` that verifies initial joint state readback from `IServoInterface` before enabling locomotion (equivalent of OpenSHC's `ACQUISTION_TIME` wait loop).
-- [ ] **origin*walk_plane_pose***: Verify that the Bézier 5-node walk plane interpolation is functionally equivalent to OpenSHC's origin→current linear interpolation approach.
+- [x] **Bezier through-control-point functions**: Implemented `quadraticBezierCurveThroughControlPoint`, `cubicBezierCurveThroughControlPoint`, `quarticBezierCurveThroughControlPoint` in `math_utils.h`. These adjust control nodes so the curve interpolates _through_ the specified point rather than merely being pulled toward it. Degenerate-case guards (`fabs(denom) < 1e-12`) replace OpenSHC's `ROS_WARN` fallback.
+- [x] **transitionStance() full logic**: Implemented `BodyPoseController::transitionStance(Leg[], double)` in `body_pose_controller.cpp`. Iterates all legs, composes target from `ExternalTarget.transform + ExternalTarget.pose`, calls `LegPoser::stepToPosition()` with body pose, applies IK, tracks minimum progress, and resets external targets on completion. Gravity-aligned tips omitted (not applicable to 3DOF MCU target).
+- [x] **Startup acquisition timeout**: Added `LocomotionSystem::attemptJointAcquisition()` which polls `IServoInterface::getJointAngle()` for all joints up to `ACQUISITION_TIMEOUT_S` (10 s), equivalent to OpenSHC's `ACQUISTION_TIME` spin loop. Called during `initialize()` with fallback to default positions on timeout. Added `jointPositionsInitialised()` public accessor.
+- [x] **origin*walk_plane_pose***: Added `origin_walk_plane_pose_` member to `BodyPoseController`. Bézier 5-node transitions now start from `origin_walk_plane_pose_` (not mid-transition `walk_plane_pose_`), matching OpenSHC's `origin.interpolate(c, new)` semantics. Updated on transition completion and direct assignment; included in `resetAllPosing()`.
 
 ---
 

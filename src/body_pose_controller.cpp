@@ -5,6 +5,7 @@
 #include "leg_poser.h"
 #include "math_utils.h"
 #include <algorithm>
+#include <climits>
 #include <cmath>
 #include <vector>
 
@@ -59,6 +60,7 @@ BodyPoseController::BodyPoseController(RobotModel &m, const BodyPoseConfiguratio
 
     // Initialize walk plane pose system (OpenSHC equivalent with Bézier curves)
     walk_plane_pose_ = Pose(Point3D(0.0, 0.0, body_pose_config.body_clearance), Eigen::Quaterniond::Identity());
+    origin_walk_plane_pose_ = walk_plane_pose_;
     walk_plane_pose_enabled = false;
     walk_plane_update_threshold = 1.0; // 1mm threshold
 
@@ -1117,6 +1119,51 @@ bool BodyPoseController::executeStartupSequence(Leg legs[NUM_LEGS]) {
     return progress == PROGRESS_COMPLETE;
 }
 
+// Transition all legs simultaneously to externally defined target poses (OpenSHC equivalent)
+int BodyPoseController::transitionStance(Leg legs[NUM_LEGS], double transition_time) {
+    int min_progress = INT_MAX; // Percentage progress (0% -> 100%)
+
+    for (int i = 0; i < NUM_LEGS; i++) {
+        if (!leg_posers_[i])
+            continue;
+
+        LegPoser *leg_poser = leg_posers_[i]->get();
+        ExternalTarget target = leg_poser->getExternalTarget();
+        Pose target_tip_pose = Pose::Identity();
+        double swing_clearance = 0.0;
+
+        // Update target if externally set target exists
+        if (target.defined) {
+            // Compose target: transform * pose (OpenSHC: target.transform_.addPose(target.pose_))
+            target_tip_pose.position = target.transform.position + target.pose.position;
+            target_tip_pose.rotation = target.transform.rotation * target.pose.rotation;
+            swing_clearance = target.swing_clearance;
+        }
+
+        // Step to target pose using current body pose
+        int progress = leg_poser->stepToPosition(target_tip_pose, body_pose_current_,
+                                                 swing_clearance, transition_time, true);
+
+        // Update leg state from poser result
+        Point3D desired_tip = leg_poser->getCurrentPosition();
+        legs[i].setCurrentTipPositionGlobal(desired_tip);
+        JointAngles current_angles = legs[i].getJointAngles();
+        legs[i].setJointAngles(model.inverseKinematicsCurrentGlobalCoordinates(i, current_angles, desired_tip));
+        legs[i].setCurrentTipPositionGlobal(desired_tip);
+
+        min_progress = std::min(progress, min_progress);
+
+        // Reset external target when achieved
+        if (target.defined && progress == PROGRESS_COMPLETE) {
+            target.defined = false;
+            leg_poser->setExternalTarget(target);
+        }
+    }
+
+    executing_transition_ = (min_progress != 0 && min_progress != PROGRESS_COMPLETE);
+    return min_progress;
+}
+
 int BodyPoseController::getStartupProgressPercent() const {
     int percent = last_startup_progress_;
     if (percent < 0)
@@ -1208,6 +1255,7 @@ void BodyPoseController::updateWalkPlanePose(Leg legs[NUM_LEGS]) {
             walk_plane_pose_.rotation = walk_plane_rotation_nodes[0].slerp(smooth_t, walk_plane_rotation_nodes[4]);
             if (t >= 1.0) {
                 walk_plane_bezier_in_progress = false;
+                origin_walk_plane_pose_ = walk_plane_pose_;
 #ifdef TESTING_ENABLED
                 std::cout << "[WalkPlane] Bezier transition completed." << std::endl;
 #endif
@@ -1225,6 +1273,7 @@ void BodyPoseController::updateWalkPlanePose(Leg legs[NUM_LEGS]) {
     // Small changes -> direct assignment (skip Bézier smoothing for minor adjustments)
     if (position_change < 200.0 && rotation_change < 0.1) {
         walk_plane_pose_ = target_walk_plane_pose;
+        origin_walk_plane_pose_ = walk_plane_pose_;
         walk_plane_bezier_in_progress = false;
 #ifdef TESTING_ENABLED
         std::cout << "[WalkPlane] Direct assignment applied. New height=" << walk_plane_pose_.position.z << std::endl;
@@ -1238,9 +1287,10 @@ void BodyPoseController::updateWalkPlanePose(Leg legs[NUM_LEGS]) {
                           walk_plane_rotation_nodes[4].angularDistance(target_walk_plane_pose.rotation) > 1e-4;
 
     if (target_changed) {
-        Point3D start_position = walk_plane_pose_.position;
+        // Use origin_walk_plane_pose_ as the Bézier start (OpenSHC parity: interpolate from origin)
+        Point3D start_position = origin_walk_plane_pose_.position;
         Point3D end_position = target_walk_plane_pose.position;
-        Eigen::Quaterniond start_rotation = walk_plane_pose_.rotation;
+        Eigen::Quaterniond start_rotation = origin_walk_plane_pose_.rotation;
         Eigen::Quaterniond end_rotation = target_walk_plane_pose.rotation;
 
         // Generate quartic Bézier control nodes for position (OpenSHC-inspired smoothing) only when target changes
@@ -1274,6 +1324,7 @@ void BodyPoseController::updateWalkPlanePose(Leg legs[NUM_LEGS]) {
         walk_plane_pose_.rotation = walk_plane_rotation_nodes[0].slerp(smooth_t, walk_plane_rotation_nodes[4]);
         if (t >= 1.0) {
             walk_plane_bezier_in_progress = false;
+            origin_walk_plane_pose_ = walk_plane_pose_;
 
 #ifdef TESTING_ENABLED
             std::cout << "[WalkPlane] Bezier transition completed." << std::endl;
