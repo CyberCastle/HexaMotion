@@ -558,11 +558,8 @@ void WalkController::updateWalk(const Point3D &linear_velocity_input, double ang
         leg_stepper->setTouchdownDetection(terrain_adaptation_.hasTouchdownDetection(static_cast<int>(i)));
 
         if (is_active_walking && step_cycle_calculated) {
-            // Advance per-leg phase by 1 (keeping global coordination for gait duration)
             int current_phase = leg_stepper->getPhase();
-            current_phase = (current_phase + 1) % step_cycle.period_;
-            leg_stepper->setPhase(current_phase);
-            // Let leg stepper derive state from its own phase
+            // Let leg stepper derive state from its current phase (pre-increment)
             leg_stepper->updateStepStateFromPhase();
 
             // OpenSHC STARTING state: per-leg phase synchronization
@@ -619,6 +616,10 @@ void WalkController::updateWalk(const Point3D &linear_velocity_input, double ang
             legs_array_[i].setStepPhase(in_swing ? SWING_PHASE : STANCE_PHASE);
             // Local phase-based tip update
             leg_stepper->updateTipPosition(time_delta_, rough_terrain_mode, force_normal_touchdown);
+
+            // Advance per-leg phase for the next tick
+            current_phase = (current_phase + 1) % step_cycle.period_;
+            leg_stepper->setPhase(current_phase);
         } else {
             // Force stance for non-active states
             legs_array_[i].setStepPhase(STANCE_PHASE);

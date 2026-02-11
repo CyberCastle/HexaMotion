@@ -882,7 +882,7 @@ void testGaitConfigurationValidation(const Parameters &p, BodyPoseController &po
             auto leg_stepper = wc.getLegStepper(i);
             if (leg_stepper != nullptr) {
                 StepState state = leg_stepper->getStepState();
-                assert(state == STEP_SWING || state == STEP_STANCE || state == STEP_FORCE_STOP);
+                assert(state == STEP_SWING || state == STEP_STANCE || state == STEP_FORCE_STOP || state == STEP_FORCE_STANCE);
             }
         }
     }

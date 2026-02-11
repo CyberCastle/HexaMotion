@@ -3,6 +3,7 @@
 
 #include "gait_types.h" // Centralized gait enum
 #include "hexamotion_constants.h"
+#include "math_utils.h"
 #include <array>
 #include <cmath>
 #include <map>
@@ -104,40 +105,34 @@ struct GaitConfiguration {
         StepCycle step_cycle{};
         int base_step_period = phase_config.stance_phase + phase_config.swing_phase;
         if (time_delta <= 0.0 || base_step_period <= 0 || step_frequency <= 0.0) {
-            // Defensive invalid state
             step_cycle.period_ = 0;
             step_cycle.frequency_ = 0.0;
             return step_cycle;
         }
 
-        // Target total iterations for one full cycle based purely on desired frequency and loop dt
-        double target_iterations = (1.0 / step_frequency) / time_delta;
+        step_cycle.stance_end_ = static_cast<int>(phase_config.stance_phase * 0.5);
+        step_cycle.swing_start_ = step_cycle.stance_end_;
+        step_cycle.swing_end_ = step_cycle.swing_start_ + phase_config.swing_phase;
+        step_cycle.stance_start_ = step_cycle.swing_end_;
 
-        // Determine integer normaliser (multiplier of base_step_period) that minimizes frequency error.
-        double ideal_normaliser = target_iterations / base_step_period;
-        int n_floor = std::max(1, (int)std::floor(ideal_normaliser));
-        int n_ceil = std::max(1, (int)std::ceil(ideal_normaliser));
-        // Evaluate both candidates
-        auto freq_for = [&](int n) { return 1.0 / (double(n * base_step_period) * time_delta); };
-        double freq_floor = freq_for(n_floor);
-        double freq_ceil = freq_for(n_ceil);
-        double err_floor = std::fabs(freq_floor - step_frequency);
-        double err_ceil = std::fabs(freq_ceil - step_frequency);
-        int normaliser = (err_floor <= err_ceil) ? n_floor : n_ceil;
-        // Ensure at least 1
-        if (normaliser < 1)
-            normaliser = 1;
+        double swing_ratio = double(phase_config.swing_phase) / double(base_step_period);
+        double raw_step_period = ((1.0 / step_frequency) / time_delta) / swing_ratio;
+        int even_normaliser = math_utils::roundToEvenInt(raw_step_period / base_step_period);
+        if (even_normaliser < 1) {
+            even_normaliser = 1;
+        }
 
-        step_cycle.period_ = normaliser * base_step_period;
+        step_cycle.period_ = even_normaliser * base_step_period;
         step_cycle.frequency_ = 1.0 / (step_cycle.period_ * time_delta);
 
-        // Partition periods proportionally
-        step_cycle.stance_period_ = phase_config.stance_phase * normaliser;
-        step_cycle.swing_period_ = phase_config.swing_phase * normaliser;
-        step_cycle.stance_start_ = 0;
-        step_cycle.stance_end_ = step_cycle.stance_period_;
-        step_cycle.swing_start_ = step_cycle.stance_period_;
-        step_cycle.swing_end_ = step_cycle.period_;
+        int normaliser = step_cycle.period_ / base_step_period;
+        step_cycle.stance_end_ *= normaliser;
+        step_cycle.swing_start_ *= normaliser;
+        step_cycle.swing_end_ *= normaliser;
+        step_cycle.stance_start_ *= normaliser;
+
+        step_cycle.stance_period_ = math_utils::mod(step_cycle.stance_end_ - step_cycle.stance_start_, step_cycle.period_);
+        step_cycle.swing_period_ = step_cycle.swing_end_ - step_cycle.swing_start_;
 
         return step_cycle;
     }

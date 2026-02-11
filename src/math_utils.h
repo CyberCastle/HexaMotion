@@ -87,36 +87,35 @@ inline Eigen::Quaterniond correctRotation(const Eigen::Quaterniond &rotation,
 }
 
 /**
- * @brief Convert Eigen::Quaterniond to Euler angles using intrinsic ZYX convention.
+ * @brief Convert Eigen::Quaterniond to Euler angles using OpenSHC conventions.
  * Equivalent to OpenSHC's quaternionToEulerAngles for Quaterniond types.
  * @param q Input quaternion
- * @param extrinsic If true, use extrinsic convention (OpenSHC default)
+ * @param extrinsic If true, use intrinsic XYZ (OpenSHC intrinsic branch). Default uses extrinsic XYZ.
  * @return Euler angles as Vector3d (roll, pitch, yaw) in radians
  */
 inline Eigen::Vector3d quaterniondToEulerAngles(const Eigen::Quaterniond &q, bool extrinsic = false) {
     Eigen::Quaterniond qn = q.normalized();
     if (extrinsic) {
-        // Extrinsic XYZ = Intrinsic ZYX
-        Eigen::Vector3d euler = qn.toRotationMatrix().eulerAngles(2, 1, 0);
-        return Eigen::Vector3d(euler[2], euler[1], euler[0]); // roll, pitch, yaw
+        Eigen::Vector3d euler = qn.toRotationMatrix().eulerAngles(0, 1, 2);
+        return Eigen::Vector3d(euler[0], euler[1], euler[2]);
     }
     Eigen::Vector3d euler = qn.toRotationMatrix().eulerAngles(2, 1, 0);
     return Eigen::Vector3d(euler[2], euler[1], euler[0]);
 }
 
 /**
- * @brief Convert Euler angles to Eigen::Quaterniond using intrinsic ZYX convention.
+ * @brief Convert Euler angles to Eigen::Quaterniond using OpenSHC conventions.
  * Equivalent to OpenSHC's eulerAnglesToQuaternion for Quaterniond types.
  * @param euler Euler angles as Vector3d (roll, pitch, yaw) in radians
- * @param extrinsic If true, use extrinsic convention (OpenSHC default)
+ * @param extrinsic If true, use intrinsic XYZ (OpenSHC intrinsic branch). Default uses extrinsic XYZ.
  * @return Quaternion
  */
 inline Eigen::Quaterniond eulerAnglesToQuaterniond(const Eigen::Vector3d &euler, bool extrinsic = false) {
     if (extrinsic) {
         return Eigen::Quaterniond(
-            Eigen::AngleAxisd(euler[2], Eigen::Vector3d::UnitZ()) *
+            Eigen::AngleAxisd(euler[0], Eigen::Vector3d::UnitX()) *
             Eigen::AngleAxisd(euler[1], Eigen::Vector3d::UnitY()) *
-            Eigen::AngleAxisd(euler[0], Eigen::Vector3d::UnitX()));
+            Eigen::AngleAxisd(euler[2], Eigen::Vector3d::UnitZ()));
     }
     return Eigen::Quaterniond(
         Eigen::AngleAxisd(euler[2], Eigen::Vector3d::UnitZ()) *

@@ -96,7 +96,7 @@ void BodyPoseController::setManualPoseInput(const Point3D &translation, const Po
 
     manual_pose_.position = clamped_translation;
     Eigen::Vector3d clamped_euler(clamped_rotation.x, clamped_rotation.y, clamped_rotation.z);
-    manual_pose_.rotation = math_utils::eulerAnglesToQuaterniond(clamped_euler);
+    manual_pose_.rotation = math_utils::eulerAnglesToQuaterniond(clamped_euler, true);
 }
 
 void BodyPoseController::setIMUData(const IMUData &imu_data) {

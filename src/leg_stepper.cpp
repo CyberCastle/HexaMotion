@@ -59,10 +59,10 @@ LegStepper::LegStepper(int leg_index, const Point3D &identity_tip_pose, Leg &leg
     step_cycle_.period_ = 4;
     step_cycle_.stance_period_ = 3;
     step_cycle_.swing_period_ = 1;
-    step_cycle_.stance_start_ = 0;
-    step_cycle_.stance_end_ = 3;
-    step_cycle_.swing_start_ = 3;
-    step_cycle_.swing_end_ = 4;
+    step_cycle_.stance_end_ = 1;
+    step_cycle_.swing_start_ = 1;
+    step_cycle_.swing_end_ = 2;
+    step_cycle_.stance_start_ = 2;
 
     // Initialize gait configuration parameters (not part of StepCycle)
     swing_width_ = 5.0;            // Default swing width (will be overridden by gait configuration)
@@ -476,25 +476,38 @@ void LegStepper::updateTipPositionIterative(int iteration, double time_delta, bo
     // Update current iteration (global style)
     current_iteration_ = iteration;
 
+    int swing_iteration = 0;
+    int stance_iteration = 0;
+
     if (step_state_ == STEP_SWING) {
-        // For swing phase, calculate progress based on swing iterations
-        // Need to determine which iteration within the swing period we're at
-        int swing_iteration = current_iteration_ % swing_iterations_;
+        swing_iteration = iteration - step_cycle_.swing_start_ + 1;
+        if (swing_iteration < 1)
+            swing_iteration = 1;
+        if (swing_iteration > swing_iterations_)
+            swing_iteration = swing_iterations_;
+
         step_progress_ = (swing_iterations_ > 0) ? static_cast<double>(swing_iteration) / static_cast<double>(swing_iterations_) : 0.0;
         step_progress_ = std::min(1.0, step_progress_);
 
         // OpenSHC: update default tip position at start of swing when rough terrain mode enabled
-        if (rough_terrain_mode && swing_iteration == 0) { // swing_iteration==0 corresponds to first iteration pre-increment
+        if (rough_terrain_mode && swing_iteration == 1) {
             updateDefaultTipPosition();
         }
     } else {
-        // For stance phase, calculate progress based on stance iterations
-        int stance_iteration = current_iteration_ % stance_iterations_;
+        int modified_stance_start = completed_first_step_
+                                        ? step_cycle_.stance_start_
+                                        : static_cast<int>(std::round(getPhaseOffset() * step_cycle_.period_));
+        stance_iteration = math_utils::mod(iteration + (step_cycle_.period_ - modified_stance_start), step_cycle_.period_) + 1;
+        if (stance_iteration < 1)
+            stance_iteration = 1;
+        if (stance_iteration > stance_iterations_)
+            stance_iteration = stance_iterations_;
+
         step_progress_ = (stance_iterations_ > 0) ? static_cast<double>(stance_iteration) / static_cast<double>(stance_iterations_) : 0.0;
         step_progress_ = std::min(1.0, step_progress_);
 
         // OpenSHC: update default tip position at start of stance when rough terrain mode enabled
-        if (rough_terrain_mode && stance_iteration == 0) {
+        if (rough_terrain_mode && stance_iteration == 1) {
             updateDefaultTipPosition();
         }
     }
@@ -534,7 +547,7 @@ void LegStepper::updateTipPositionIterative(int iteration, double time_delta, bo
 
     if (step_state_ == STEP_SWING) {
         // Initialize swing period on first iteration
-        initializeSwingPeriod(iteration);
+        initializeSwingPeriod(swing_iteration);
 
         // Detect ground contact via FSR (if enabled) for adaptive touchdown (OpenSHC style)
         bool ground_contact = false;
@@ -570,10 +583,6 @@ void LegStepper::updateTipPositionIterative(int iteration, double time_delta, bo
         }
 
         // Determine which half of swing we're in based on actual swing progress
-        int swing_iteration = iteration % swing_iterations_;
-        if (swing_iteration == 0)
-            swing_iteration = swing_iterations_; // Handle modulo edge case
-
         int half_iterations = swing_iterations_ / 2;
         bool first_half = swing_iteration <= half_iterations;
 
@@ -613,17 +622,6 @@ void LegStepper::updateTipPositionIterative(int iteration, double time_delta, bo
         current_tip_velocity_ = delta_pos / time_delta;
 
     } else if (step_state_ == STEP_STANCE) {
-
-        // Stance iteration mapping: we convert the running iteration counter into a 1-based local index
-        // inside [1..stance_iterations_]. A prior bug compared against swing_iterations_ (often equal),
-        // freezing stance_iteration at 1 and eliminating displacement. The direct modulo mapping below
-        // fixes that and is used by both modes (tangential or original).
-        int stance_iteration = (iteration % std::max(1, stance_iterations_)) + 1; // 1..stance_iterations_
-
-        // Defensive clamp (in case stance_iterations_ changes dynamically)
-        if (stance_iteration > stance_iterations_) {
-            stance_iteration = stance_iterations_;
-        }
 
         // Initialize stance origin if needed (hybrid anti-drift extension).
         if (stance_iteration == 1) {
@@ -849,7 +847,7 @@ void LegStepper::updateDefaultTipPosition() {
     }
 }
 
-// Update using internal phase_ (phase_ already incremented externally or will be incremented after call)
+// Update using internal phase_ (controller advances phase after this call).
 void LegStepper::updateTipPosition(double time_delta, bool rough_terrain_mode, bool force_normal_touchdown) {
     // Derive iteration number for legacy code path from internal phase_.
     // NOTE: We reuse existing logic by calling updateTipPositionIterative with 'phase_' so we do not duplicate the long body.
@@ -859,11 +857,12 @@ void LegStepper::updateTipPosition(double time_delta, bool rough_terrain_mode, b
 void LegStepper::updateStepStateFromPhase() {
     // Determine state directly from phase_ relative to configured step_cycle_.
     // step_cycle_ may have been set from gait configuration.
-    int swing_start_iter = step_cycle_.stance_period_; // stance first, then swing
+    if (step_cycle_.period_ <= 0) {
+        return;
+    }
 
-    // swing_end_iter conceptually equal to step_cycle_.period_ (end exclusive) but not needed here.
-    int local = phase_ % step_cycle_.period_;
-    bool in_swing = (local >= swing_start_iter);
+    int local = math_utils::mod(phase_, step_cycle_.period_);
+    bool in_swing = (local >= step_cycle_.swing_start_ && local < step_cycle_.swing_end_);
     if (step_state_ == STEP_FORCE_STOP)
         return;
     // OpenSHC parity: FORCE_STANCE prevents transition to SWING in swing range,
@@ -874,7 +873,7 @@ void LegStepper::updateStepStateFromPhase() {
             initializeSwingPeriod(1);
             beginSwingPhase();
         }
-    } else if (!in_swing) {
+    } else if (!in_swing && (local < step_cycle_.stance_end_ || local >= step_cycle_.stance_start_)) {
         // Unconditionally transition to STANCE (including from FORCE_STANCE)
         if (step_state_ != STEP_STANCE) {
             setStepState(STEP_STANCE);
