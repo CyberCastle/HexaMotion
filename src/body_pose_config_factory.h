@@ -44,4 +44,4 @@ BodyPoseConfiguration getDefaultBodyPoseConfig(const Parameters &params);
  */
 AutoPoseConfiguration createAutoPoseConfigurationForGait(const Parameters &params, const std::string &gait_name);
 
-#endif // BODY_POSE_CONFIG_FACTORY_H
+#endif /**< BODY_POSE_CONFIG_FACTORY_H */

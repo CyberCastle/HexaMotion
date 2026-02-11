@@ -1,10 +1,10 @@
 #ifndef ARDUINO_H
 #define ARDUINO_H
 
+#include <chrono>
+#include <iostream>
 #include <stdint.h>
 #include <string>
-#include <iostream>
-#include <chrono>
 
 using String = std::string;
 
@@ -15,17 +15,17 @@ inline unsigned long millis() {
 }
 
 class HardwareSerial {
-public:
+  public:
     template <typename T>
-    void print(const T& val) { std::cout << val; }
+    void print(const T &val) { std::cout << val; }
     template <typename T>
-    void print(const T& val, int) { std::cout << val; }
+    void print(const T &val, int) { std::cout << val; }
     template <typename T>
-    void println(const T& val) { std::cout << val << std::endl; }
+    void println(const T &val) { std::cout << val << std::endl; }
     template <typename T>
-    void println(const T& val, int) { std::cout << val << std::endl; }
+    void println(const T &val, int) { std::cout << val << std::endl; }
 };
 
 static HardwareSerial Serial;
 
-#endif // ARDUINO_H
+#endif /**< ARDUINO_H */

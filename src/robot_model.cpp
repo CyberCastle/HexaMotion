@@ -13,12 +13,12 @@
 #include <stdexcept>
 #include <vector>
 
-// Remove BASE_THETA_OFFSETS definition from here and move it to hexamotion_constants.h
+/** Remove BASE_THETA_OFFSETS definition from here and move it to hexamotion_constants.h. */
 
 RobotModel::RobotModel(const Parameters &params)
     : params(params), workspace_analyzer_(nullptr) {
-    // Convert configuration angles from degrees to radians for internal use
-    // Keep original parameters in degrees for configuration
+    /** Convert configuration angles from degrees to radians for internal use. */
+    /** Keep original parameters in degrees for configuration. */
     for (int i = 0; i < 2; ++i) {
         coxa_angle_limits_rad[i] = math_utils::degreesToRadians(params.coxa_angle_limits[i]);
         femur_angle_limits_rad[i] = math_utils::degreesToRadians(params.femur_angle_limits[i]);
@@ -32,16 +32,16 @@ RobotModel::RobotModel(const Parameters &params)
 }
 
 RobotModel::~RobotModel() {
-    // The destructor must be in the .cpp where WorkspaceAnalyzer is fully defined
+    /** The destructor must be in the .cpp where WorkspaceAnalyzer is fully defined. */
 }
 
 void RobotModel::workspaceAnalyzerInitializer(ComputeConfig config, const ValidationConfig *validation_config) {
-    // Create the WorkspaceAnalyzer only if it doesn't exist
+    /** Create the WorkspaceAnalyzer only if it does not exist. */
     if (!workspace_analyzer_) {
         if (validation_config) {
             workspace_analyzer_ = std::make_unique<WorkspaceAnalyzer>(*this, config, *validation_config);
         } else {
-            // Use default configuration
+            /** Use default configuration. */
             ValidationConfig default_config;
             workspace_analyzer_ = std::make_unique<WorkspaceAnalyzer>(*this, config, default_config);
         }
@@ -51,7 +51,7 @@ void RobotModel::workspaceAnalyzerInitializer(ComputeConfig config, const Valida
 
 WorkspaceAnalyzer &RobotModel::getWorkspaceAnalyzer() {
     if (!workspace_analyzer_) {
-        // If it hasn't been initialized, use default configuration
+        /** If it has not been initialized, use default configuration. */
         workspaceAnalyzerInitializer();
     }
     return *workspace_analyzer_;
@@ -66,47 +66,48 @@ const WorkspaceAnalyzer &RobotModel::getWorkspaceAnalyzer() const {
 
 Point3D RobotModel::getLegDefaultPosition(int leg_index) const {
     if (leg_index < 0 || leg_index >= NUM_LEGS) {
-        return Point3D(0, 0, 0); // Return origin for invalid index
+        /** Return origin for invalid index. */
+        return Point3D(0, 0, 0);
     }
 
-    // Calculate default position using zero joint angles (standing pose)
+    /** Calculate default position using zero joint angles (standing pose). */
     JointAngles zero_angles(0, 0, 0);
     return forwardKinematicsGlobalCoordinates(leg_index, zero_angles);
 }
 
 void RobotModel::initializeDH() {
 
-    // Initialize default DH parameters if custom parameters are not used.
-    // The analytic model pitches the femur and tibia about the Y axis. We
-    // replicate that behavior by later applying dhTransformY on rows 2 and 3.
+    /** Initialize default DH parameters if custom parameters are not used. */
+    /** The analytic model pitches the femur and tibia about the Y axis. */
+    /** Replicate that behavior by later applying dhTransformY on rows 2 and 3. */
     if (!params.use_custom_dh_parameters) {
         for (int l = 0; l < NUM_LEGS; ++l) {
-            // ── Row 0: fixed base ────────────────────────────
-            dh_transforms[l][0][0] = params.hexagon_radius; // a0 = 200mm
-            dh_transforms[l][0][1] = 0.0f;                  // alpha0
-            dh_transforms[l][0][2] = 0.0f;                  // d1
-            dh_transforms[l][0][3] = BASE_THETA_OFFSETS[l]; // θ0 (fixed)
+            /** Row 0: fixed base. */
+            dh_transforms[l][0][0] = params.hexagon_radius;
+            dh_transforms[l][0][1] = 0.0f;
+            dh_transforms[l][0][2] = 0.0f;
+            dh_transforms[l][0][3] = BASE_THETA_OFFSETS[l];
 
-            // ── Row 1: yaw servo + coxa ─────────────────────
-            dh_transforms[l][1][0] = params.coxa_length; // a1 = 50
-            dh_transforms[l][1][1] = 0.0f;               // alpha1
-            dh_transforms[l][1][2] = 0.0f;               // d2
-            dh_transforms[l][1][3] = 0.0f;               // θ1 offset (adds ψ)
+            /** Row 1: yaw servo + coxa. */
+            dh_transforms[l][1][0] = params.coxa_length;
+            dh_transforms[l][1][1] = 0.0f;
+            dh_transforms[l][1][2] = 0.0f;
+            dh_transforms[l][1][3] = 0.0f;
 
-            // ── Row 2: femur pitch servo ────────────────────
-            dh_transforms[l][2][0] = params.femur_length; // a2 = 101
-            dh_transforms[l][2][1] = 0.0f;                // alpha2
-            dh_transforms[l][2][2] = 0.0f;                // d3
-            dh_transforms[l][2][3] = 0.0f;                // θ2 offset (adds θ₁)
+            /** Row 2: femur pitch servo. */
+            dh_transforms[l][2][0] = params.femur_length;
+            dh_transforms[l][2][1] = 0.0f;
+            dh_transforms[l][2][2] = 0.0f;
+            dh_transforms[l][2][3] = 0.0f;
 
-            // ── Row 3: knee pitch servo + tibia ─────────────
-            dh_transforms[l][3][0] = 0.0f;                 // a3
-            dh_transforms[l][3][1] = 0.0f;                 // alpha3
-            dh_transforms[l][3][2] = -params.tibia_length; // d4 = -208
-            dh_transforms[l][3][3] = 0.0f;                 // θ3 offset (adds θ₂)
+            /** Row 3: knee pitch servo + tibia. */
+            dh_transforms[l][3][0] = 0.0f;
+            dh_transforms[l][3][1] = 0.0f;
+            dh_transforms[l][3][2] = -params.tibia_length;
+            dh_transforms[l][3][3] = 0.0f;
         }
     } else {
-        // Copy custom DH parameters provided in params.dh_parameters
+        /** Copy custom DH parameters provided in params.dh_parameters. */
         for (int l = 0; l < NUM_LEGS; ++l) {
             for (int j = 0; j < DOF_PER_LEG + 1; ++j) {
                 for (int k = 0; k < 4; ++k) {
@@ -117,60 +118,61 @@ void RobotModel::initializeDH() {
     }
 }
 
-// OpenSHC-style Damped Least Squares (DLS) iterative inverse kinematics
+/** OpenSHC-style Damped Least Squares (DLS) iterative inverse kinematics. */
 JointAngles RobotModel::solveIK(int leg, const Point3D &global_target, JointAngles current) const {
     const double tolerance = IK_TOLERANCE;
     const double dls_coefficient = IK_DLS_COEFFICIENT;
-    const double max_angle_change = math_utils::degreesToRadians(IK_MAX_ANGLE_STEP); // Max angle change per iteration
+    /** Max angle change per iteration. */
+    const double max_angle_change = math_utils::degreesToRadians(IK_MAX_ANGLE_STEP);
 
     for (int iter = 0; iter < params.ik.max_iterations; ++iter) {
-        // OpenSHC parity: compute error in global frame (matches Jacobian frame).
-        // Previous code transformed FK output through legTransform.inverse(), which
-        // cancelled out (FK IS legTransform * origin), yielding current_pos ≈ (0,0,0).
+        /** OpenSHC parity: compute error in global frame (matches Jacobian frame). */
+        /** Previous code transformed FK output through legTransform.inverse(). */
+        /** That cancelled out (FK is legTransform * origin), yielding current_pos ~= (0, 0, 0). */
         Point3D current_pos = forwardKinematicsGlobalCoordinates(leg, current);
 
-        // Calculate position error in global frame
+        /** Calculate position error in global frame. */
         Eigen::Vector3d position_error3;
         position_error3 << (global_target.x - current_pos.x),
             (global_target.y - current_pos.y),
             (global_target.z - current_pos.z);
 
-        // Check convergence
+        /** Check convergence. */
         if (position_error3.norm() < tolerance) {
             break;
         }
 
-        // Calculate Jacobian (already in global frame via numerical FK perturbation)
+        /** Calculate Jacobian (already in global frame via numerical FK perturbation). */
         Eigen::Matrix3d jacobian_pos = calculateJacobian(leg, current, global_target);
 
-        // Damped Least Squares (DLS) solution
+        /** Damped Least Squares (DLS) solution. */
         Eigen::Matrix3d JJT3 = jacobian_pos * jacobian_pos.transpose();
         Eigen::Matrix3d identity3 = Eigen::Matrix3d::Identity();
         Eigen::Matrix3d damped_inv3 = (JJT3 + dls_coefficient * dls_coefficient * identity3).inverse();
         Eigen::Matrix3d jacobian_inverse3 = jacobian_pos.transpose() * damped_inv3;
 
-        // Calculate joint angle changes
+        /** Calculate joint angle changes. */
         Eigen::Vector3d angle_delta = jacobian_inverse3 * position_error3;
 
-        // Apply step size limiting for stability
+        /** Apply step size limiting for stability. */
         double max_delta = std::max({std::abs(angle_delta(0)), std::abs(angle_delta(1)), std::abs(angle_delta(2))});
         double step_scale = (max_delta > max_angle_change) ? max_angle_change / max_delta : 1.0;
 
-        // Update joint angles
+        /** Update joint angles. */
         current.coxa += angle_delta(0) * step_scale;
         current.femur += angle_delta(1) * step_scale;
         current.tibia += angle_delta(2) * step_scale;
 
-        // Normalize angles to [-PI, PI]
+        /** Normalize angles to [-PI, PI]. */
         current.coxa = normalizeAngle(current.coxa);
         current.femur = normalizeAngle(current.femur);
         current.tibia = normalizeAngle(current.tibia);
 
-        // NOTE: OpenSHC approach - DO NOT clamp during iterations, let IK converge naturally
-        // Clamping will be applied at the end if needed
+        /** OpenSHC approach: do not clamp during iterations, let IK converge naturally. */
+        /** Clamping will be applied at the end if needed. */
     }
 
-    // Apply final clamping only after convergence (OpenSHC style)
+    /** Apply final clamping only after convergence (OpenSHC style). */
     if (params.ik.clamp_joints) {
         clampJointAngles(current);
     }
@@ -178,7 +180,7 @@ JointAngles RobotModel::solveIK(int leg, const Point3D &global_target, JointAngl
     return current;
 }
 
-// Helper method to transform global coordinates to local leg coordinates
+/** Helper method to transform global coordinates to local leg coordinates. */
 Point3D RobotModel::transformGlobalToLocalLegCoordinates(int leg, const Point3D &global_target) const {
     const double base_angle_rad = BASE_THETA_OFFSETS[leg];
     double base_x = params.hexagon_radius * cos(base_angle_rad);
@@ -195,7 +197,7 @@ Point3D RobotModel::transformGlobalToLocalLegCoordinates(int leg, const Point3D 
     return local_target;
 }
 
-// Helper method to clamp joint angles to limits
+/** Helper method to clamp joint angles to limits. */
 void RobotModel::clampJointAngles(JointAngles &angles) const {
     if (params.ik.clamp_joints) {
         angles.coxa = constrainAngle(angles.coxa, coxa_angle_limits_rad[0], coxa_angle_limits_rad[1]);
@@ -228,18 +230,17 @@ void RobotModel::clampJointAngles(JointAngles &angles) const {
  *              if clamping is enabled).
  */
 JointAngles RobotModel::inverseKinematicsGlobalCoordinates(int leg, const Point3D &p) const {
-    // Transform target to leg coordinate system for initial guess only
+    /** Transform target to leg coordinate system for initial guess only. */
     Point3D local_target = transformGlobalToLocalLegCoordinates(leg, p);
 
     const double f = params.femur_length;
     const double t = params.tibia_length;
     const double base_angle = BASE_THETA_OFFSETS[leg];
-    // Small tolerance for floating-point boundary comparisons
+    /** Small tolerance for floating-point boundary comparisons. */
     const double eps = 1e-9;
 
-    // Coxa from atan2 may point "forward" when the leg is actually folded
-    // backward (high femur angles). Build candidate coxa angles: the direct
-    // atan2 result AND the π-flipped version, then pick the best analytical fit.
+    /** Coxa from atan2 may point forward when the leg is folded backward (high femur angles). */
+    /** Build candidate coxa angles: direct atan2 result and the pi-flipped version. */
     double coxa_raw = atan2(local_target.y, local_target.x);
     double coxa_candidates[2] = {coxa_raw, normalizeAngle(coxa_raw + M_PI)};
 
@@ -251,15 +252,17 @@ JointAngles RobotModel::inverseKinematicsGlobalCoordinates(int leg, const Point3
                                        coxa_angle_limits_rad[0], coxa_angle_limits_rad[1]);
         double total_angle = base_angle + coxa_c;
 
-        // Femur pivot in global coordinates
+        /** Femur pivot in global coordinates. */
         double fp_x = params.hexagon_radius * cos(base_angle) + params.coxa_length * cos(total_angle);
         double fp_y = params.hexagon_radius * sin(base_angle) + params.coxa_length * sin(total_angle);
 
-        // Displacement from femur pivot to target, projected onto coxa radial direction
+        /** Displacement from femur pivot to target, projected onto coxa radial direction. */
         double gdx = p.x - fp_x;
         double gdy = p.y - fp_y;
-        double dx = cos(total_angle) * gdx + sin(total_angle) * gdy; // radial
-        double dz = p.z;                                             // vertical (femur pivot z = 0)
+        /** Radial. */
+        double dx = cos(total_angle) * gdx + sin(total_angle) * gdy;
+        /** Vertical (femur pivot z = 0). */
+        double dz = p.z;
 
         double R2 = dx * dx + dz * dz;
         double sin_tibia = (f * f + t * t - R2) / (2.0 * f * t);
@@ -267,7 +270,7 @@ JointAngles RobotModel::inverseKinematicsGlobalCoordinates(int leg, const Point3
             continue;
         sin_tibia = std::max(-1.0, std::min(1.0, sin_tibia));
 
-        // Try both tibia solutions (elbow up / elbow down)
+        /** Try both tibia solutions (elbow up / elbow down). */
         double tibia_sols[2] = {asin(sin_tibia), M_PI - asin(sin_tibia)};
         for (int s = 0; s < 2; ++s) {
             double tibia_e = tibia_sols[s];
@@ -275,16 +278,16 @@ JointAngles RobotModel::inverseKinematicsGlobalCoordinates(int leg, const Point3
             double Q = t * cos(tibia_e);
             double femur_e = atan2(-(Q * dx + P * dz), P * dx - Q * dz);
 
-            // Skip if clearly outside joint limits (with floating-point tolerance)
+            /** Skip if clearly outside joint limits (with floating-point tolerance). */
             if (femur_e < femur_angle_limits_rad[0] - eps || femur_e > femur_angle_limits_rad[1] + eps ||
                 tibia_e < tibia_angle_limits_rad[0] - eps || tibia_e > tibia_angle_limits_rad[1] + eps)
                 continue;
 
-            // Clamp to exact limits before FK evaluation
+            /** Clamp to exact limits before FK evaluation. */
             femur_e = std::max(femur_angle_limits_rad[0], std::min(femur_angle_limits_rad[1], femur_e));
             tibia_e = std::max(tibia_angle_limits_rad[0], std::min(tibia_angle_limits_rad[1], tibia_e));
 
-            // Evaluate FK error for this candidate
+            /** Evaluate FK error for this candidate. */
             JointAngles candidate(coxa_c, femur_e, tibia_e);
             Point3D fk = forwardKinematicsGlobalCoordinates(leg, candidate);
             double err = (fk.x - p.x) * (fk.x - p.x) +
@@ -297,20 +300,20 @@ JointAngles RobotModel::inverseKinematicsGlobalCoordinates(int leg, const Point3
         }
     }
 
-    // If no analytical candidate was found, fall back to clamped atan2
+    /** If no analytical candidate was found, fall back to clamped atan2. */
     if (best_error == std::numeric_limits<double>::max()) {
         double coxa_start = constrainAngle(coxa_raw, coxa_angle_limits_rad[0], coxa_angle_limits_rad[1]);
         best_guess = JointAngles(coxa_start, 0.0, 0.0);
         clampJointAngles(best_guess);
     }
 
-    // Pass global target directly — solveIK works in global frame (matching Jacobian)
+    /** Pass global target directly; solveIK works in global frame (matching Jacobian). */
     return solveIK(leg, p, best_guess);
 }
 
 JointAngles RobotModel::inverseKinematicsCurrentGlobalCoordinates(int leg, const JointAngles &current,
                                                                   const Point3D &target) const {
-    // Pass global target directly — solveIK works in global frame (matching Jacobian)
+    /** Pass global target directly; solveIK works in global frame (matching Jacobian). */
     JointAngles start = current;
     clampJointAngles(start);
 
@@ -318,33 +321,33 @@ JointAngles RobotModel::inverseKinematicsCurrentGlobalCoordinates(int leg, const
 }
 
 Point3D RobotModel::forwardKinematicsGlobalCoordinates(int leg, const JointAngles &q) const {
-    // Forward kinematics: compute full DH transform chain
-    // Use double precision for improved stability
+    /** Forward kinematics: compute full DH transform chain. */
+    /** Use double precision for improved stability. */
     Eigen::Matrix4d transform = legTransform(leg, q);
     return Point3D{transform(0, 3), transform(1, 3), transform(2, 3)};
 }
 
 Point3D RobotModel::getLegBasePosition(int leg_index) const {
-    // Calculate base position using DH transform matrix
-    // Apply only the base transform (row 0) without joint angles
+    /** Calculate base position using DH transform matrix. */
+    /** Apply only the base transform (row 0) without joint angles. */
     Eigen::Matrix4d base_transform = math_utils::dhTransform<double>(
-        dh_transforms[leg_index][0][0],  // a0 = hexagon_radius
-        dh_transforms[leg_index][0][1],  // alpha0 = 0
-        dh_transforms[leg_index][0][2],  // d1 = 0
-        dh_transforms[leg_index][0][3]); // theta0 = BASE_THETA_OFFSETS[leg_index]
+        dh_transforms[leg_index][0][0],
+        dh_transforms[leg_index][0][1],
+        dh_transforms[leg_index][0][2],
+        dh_transforms[leg_index][0][3]);
 
-    // Extract position from the transform matrix
+    /** Extract position from the transform matrix. */
     return Point3D{base_transform(0, 3), base_transform(1, 3), base_transform(2, 3)};
 }
 
 double RobotModel::getLegBaseAngleOffset(int leg_index) const {
-    // Return the base angle offset for the specified leg
-    // This is the theta offset from the DH parameters (BASE_THETA_OFFSETS)
+    /** Return the base angle offset for the specified leg. */
+    /** This is the theta offset from the DH parameters (BASE_THETA_OFFSETS). */
     return dh_transforms[leg_index][0][3];
 }
 
 Eigen::Matrix4d RobotModel::legTransform(int leg, const JointAngles &q) const {
-    // Base transform from DH parameters (body center to leg mount)
+    /** Base transform from DH parameters (body center to leg mount). */
     Eigen::Matrix4d T = math_utils::dhTransform<double>(
         dh_transforms[leg][0][0],
         dh_transforms[leg][0][1],
@@ -353,15 +356,19 @@ Eigen::Matrix4d RobotModel::legTransform(int leg, const JointAngles &q) const {
 
     const double joint_rad[DOF_PER_LEG] = {q.coxa, q.femur, q.tibia};
 
-    // Apply joint transforms.
-    // Femur and tibia joints pitch about the Y axis, so rows 2 and 3 use
-    // dhTransformY instead of the standard Z-axis version.
+    /** Apply joint transforms. */
+    /** Femur and tibia joints pitch about the Y axis, so rows 2 and 3 use dhTransformY. */
     for (int j = 1; j <= DOF_PER_LEG; ++j) {
-        double a = dh_transforms[leg][j][0];      // link length
-        double alpha = dh_transforms[leg][j][1];  // twist angle
-        double d = dh_transforms[leg][j][2];      // link offset
-        double theta0 = dh_transforms[leg][j][3]; // joint offset
-        double theta = theta0 + joint_rad[j - 1]; // total joint angle
+        /** Link length. */
+        double a = dh_transforms[leg][j][0];
+        /** Twist angle. */
+        double alpha = dh_transforms[leg][j][1];
+        /** Link offset. */
+        double d = dh_transforms[leg][j][2];
+        /** Joint offset. */
+        double theta0 = dh_transforms[leg][j][3];
+        /** Total joint angle. */
+        double theta = theta0 + joint_rad[j - 1];
         if (j >= 2) {
             T *= math_utils::dhTransformY<double>(a, alpha, d, theta);
         } else {
@@ -373,7 +380,7 @@ Eigen::Matrix4d RobotModel::legTransform(int leg, const JointAngles &q) const {
 }
 
 Eigen::Matrix3d RobotModel::calculateJacobian(int leg, const JointAngles &q, const Point3D &) const {
-    // Numerical Jacobian computation using DH-based forward kinematics
+    /** Numerical Jacobian computation using DH-based forward kinematics. */
     const double delta = JACOBIAN_DELTA;
 
     Point3D base = forwardKinematicsGlobalCoordinates(leg, q);
@@ -404,9 +411,9 @@ Eigen::Matrix3d RobotModel::calculateJacobian(int leg, const JointAngles &q, con
     return jacobian;
 }
 
-// Helper method to build DH transforms for a leg
+/** Helper method to build DH transforms for a leg. */
 std::vector<Eigen::Matrix4d> RobotModel::buildDHTransforms(int leg, const JointAngles &q) const {
-    // Base transform for this leg
+    /** Base transform for this leg. */
     Eigen::Matrix4d T_base = math_utils::dhTransform<double>(
         dh_transforms[leg][0][0],
         dh_transforms[leg][0][1],
@@ -418,14 +425,19 @@ std::vector<Eigen::Matrix4d> RobotModel::buildDHTransforms(int leg, const JointA
 
     const double joint_rad[DOF_PER_LEG] = {q.coxa, q.femur, q.tibia};
 
-    // Build transforms step by step using DH parameters.
-    // As above, pitch joints require the Y-axis transform variant.
+    /** Build transforms step by step using DH parameters. */
+    /** Pitch joints require the Y-axis transform variant. */
     for (int j = 1; j <= DOF_PER_LEG; ++j) {
-        double a = dh_transforms[leg][j][0];      // link length
-        double alpha = dh_transforms[leg][j][1];  // twist angle
-        double d = dh_transforms[leg][j][2];      // link offset
-        double theta0 = dh_transforms[leg][j][3]; // joint offset
-        double theta = theta0 + joint_rad[j - 1]; // total joint angle
+        /** Link length. */
+        double a = dh_transforms[leg][j][0];
+        /** Twist angle. */
+        double alpha = dh_transforms[leg][j][1];
+        /** Link offset. */
+        double d = dh_transforms[leg][j][2];
+        /** Joint offset. */
+        double theta0 = dh_transforms[leg][j][3];
+        /** Total joint angle. */
+        double theta = theta0 + joint_rad[j - 1];
         if (j >= 2) {
             transforms[j] = transforms[j - 1] *
                             math_utils::dhTransformY<double>(a, alpha, d, theta);
@@ -445,15 +457,15 @@ bool RobotModel::checkJointLimits(int leg_index, const JointAngles &angles) cons
 }
 
 double RobotModel::constrainAngle(double angle, double min_angle, double max_angle) const {
-    // First normalize angle to [-PI, PI] range to handle wraparound
+    /** First normalize angle to [-PI, PI] range to handle wraparound. */
     double normalized_angle = normalizeAngle(angle);
 
-    // Then clamp to the specified joint limits
+    /** Then clamp to the specified joint limits. */
     return std::max(min_angle, std::min(max_angle, normalized_angle));
 }
 
 double RobotModel::normalizeAngle(double angle_rad) const {
-    // Normalize angle to [-PI, PI] range using atan2 trick
+    /** Normalize angle to [-PI, PI] range using atan2 trick. */
     angle_rad = atan2(sin(angle_rad), cos(angle_rad));
     return angle_rad;
 }
@@ -467,13 +479,13 @@ std::pair<double, double> RobotModel::calculateHeightRange() const {
     double min_h = std::numeric_limits<double>::max();
     double max_h = -std::numeric_limits<double>::max();
 
-    // Workspace analysis: discretize the joint configuration space
-    // Based on "Introduction to Robotics" - Craig and "Robotics: Modelling, Planning and Control" - Siciliano
+    /** Workspace analysis: discretize the joint configuration space. */
+    /** Based on "Introduction to Robotics" (Craig) and "Robotics: Modelling, Planning and Control" (Siciliano). */
     const double coxa_step = (coxa_angle_limits_rad[1] - coxa_angle_limits_rad[0]) / WORKSPACE_RESOLUTION;
     const double femur_step = (femur_angle_limits_rad[1] - femur_angle_limits_rad[0]) / WORKSPACE_RESOLUTION;
     const double tibia_step = (tibia_angle_limits_rad[1] - tibia_angle_limits_rad[0]) / WORKSPACE_RESOLUTION;
 
-    // Evaluate the entire workspace of valid joint configurations
+    /** Evaluate the entire workspace of valid joint configurations. */
     for (int i = 0; i <= WORKSPACE_RESOLUTION; i++) {
         for (int j = 0; j <= WORKSPACE_RESOLUTION; j++) {
             for (int k = 0; k <= WORKSPACE_RESOLUTION; k++) {
@@ -482,17 +494,17 @@ std::pair<double, double> RobotModel::calculateHeightRange() const {
                 double tibia = tibia_angle_limits_rad[0] + k * tibia_step;
                 JointAngles q(coxa, femur, tibia);
 
-                // Check that angles are within limits
+                /** Check that angles are within limits. */
                 if (!checkJointLimits(0, q))
                     continue;
 
                 Point3D pos = forwardKinematicsGlobalCoordinates(0, q);
 
-                // Calculate body height considering the robot's physical offset
-                // pos.z is negative when the leg is below the body
+                /** Calculate body height considering the robot's physical offset. */
+                /** pos.z is negative when the leg is below the body. */
                 double height = -pos.z + params.height_offset;
 
-                // Only consider physically valid heights (positive)
+                /** Only consider physically valid heights (positive). */
                 if (height > 0) {
                     min_h = std::min(min_h, height);
                     max_h = std::max(max_h, height);
@@ -501,9 +513,9 @@ std::pair<double, double> RobotModel::calculateHeightRange() const {
         }
     }
 
-    // If no valid configurations were found, indicates parameter error
+    /** If no valid configurations were found, indicates parameter error. */
     if (min_h == std::numeric_limits<double>::max()) {
-        // Return values indicating error - inconsistent robot parameters
+        /** Return values indicating error; inconsistent robot parameters. */
         return {-1.0f, -1.0f};
     }
 
@@ -511,32 +523,32 @@ std::pair<double, double> RobotModel::calculateHeightRange() const {
 }
 
 Pose RobotModel::getPoseRobotFrame(int leg_index, const JointAngles &joint_angles, const Pose &leg_frame_pose) const {
-    // Get the full transform from robot frame to leg frame
+    /** Get the full transform from robot frame to leg frame. */
     Eigen::Matrix4d transform = legTransform(leg_index, joint_angles);
 
-    // Transform the leg frame pose to robot frame
+    /** Transform the leg frame pose to robot frame. */
     return leg_frame_pose.transform(transform);
 }
 
 Pose RobotModel::getPoseLegFrame(int leg_index, const JointAngles &joint_angles, const Pose &robot_frame_pose) const {
-    // Get the full transform from robot frame to leg frame
+    /** Get the full transform from robot frame to leg frame. */
     Eigen::Matrix4d transform = legTransform(leg_index, joint_angles);
 
-    // Transform the robot frame pose to leg frame (inverse transform)
+    /** Transform the robot frame pose to leg frame (inverse transform). */
     return robot_frame_pose.transform(transform.inverse());
 }
 
 double RobotModel::getLegReach() const {
-    // Maximum reach is femur + tibia lengths (coxa only provides lateral offset)
-    // The coxa rotates around Z-axis and doesn't extend the radial reach
+    /** Maximum reach is femur + tibia lengths (coxa only provides lateral offset). */
+    /** The coxa rotates around Z-axis and does not extend the radial reach. */
     return params.femur_length + params.tibia_length;
 }
 
 double RobotModel::computeStandingHorizontalReach(const Parameters &p) {
-    // Reuse shared femur angle computation (no duplication of trig logic)
+    /** Reuse shared femur angle computation (no duplication of trig logic). */
     bool ok = false;
     double femur_angle = 0.0;
-    // Internal lambda replicating height feasibility logic (shared with angle solver)
+    /** Internal lambda replicating height feasibility logic (shared with angle solver). */
     auto computeFemur = [&](double target_height_mm, bool &valid) -> double {
         valid = false;
         if (p.femur_length <= 0.0 || p.tibia_length <= 0.0 || p.coxa_length < 0.0)
@@ -544,15 +556,18 @@ double RobotModel::computeStandingHorizontalReach(const Parameters &p) {
         double min_h = std::max(0.0, p.tibia_length - p.femur_length);
         double max_h = p.tibia_length + p.femur_length;
         if (target_height_mm < min_h || target_height_mm > max_h)
-            return 0.0;                                                          // invalid
-        double sin_theta = (target_height_mm - p.tibia_length) / p.femur_length; // sin(femur)
+            /** Invalid. */
+            return 0.0;
+        /** sin(femur). */
+        double sin_theta = (target_height_mm - p.tibia_length) / p.femur_length;
         sin_theta = math_utils::clamp(sin_theta, -1.0, 1.0);
         valid = true;
         return std::asin(sin_theta);
     };
     femur_angle = computeFemur(p.standing_height, ok);
     if (!ok) {
-        return p.coxa_length; // conservative fallback
+        /** Conservative fallback. */
+        return p.coxa_length;
     }
     double horizontal_proj = p.femur_length * std::cos(femur_angle);
     return p.coxa_length + horizontal_proj;
@@ -564,40 +579,44 @@ double RobotModel::getStandingHorizontalReach() const {
 
 CalculatedServoAngles RobotModel::calculateServoAnglesForHeight(double target_height_mm, const Parameters &params) {
     CalculatedServoAngles result{0.0, 0.0, 0.0, false};
-    // Based on analytic_robot_model.cpp leg transform:
-    // T = T_base * R_coxa * T_coxa * R_femur * T_femur * R_tibia * T_tibia
-    //
-    // For leg height calculation with coxa = 0° (radial stance):
-    // - T_base: hexagon_radius in XY plane (Z = 0)
-    // - R_coxa: rotation around Z axis (coxa = 0°)
-    // - T_coxa: translation along X axis (coxa_length)
-    // - R_femur: rotation around Y axis (femur angle)
-    // - T_femur: translation along X axis (femur_length)
-    // - R_tibia: rotation around Y axis (tibia angle)
-    // - T_tibia: translation along Z axis (-tibia_length)
+    /**
+     * Based on analytic_robot_model.cpp leg transform:
+     * T = T_base * R_coxa * T_coxa * R_femur * T_femur * R_tibia * T_tibia
+     *
+     * For leg height calculation with coxa = 0 degrees (radial stance):
+     * - T_base: hexagon_radius in XY plane (Z = 0)
+     * - R_coxa: rotation around Z axis (coxa = 0 degrees)
+     * - T_coxa: translation along X axis (coxa_length)
+     * - R_femur: rotation around Y axis (femur angle)
+     * - T_femur: translation along X axis (femur_length)
+     * - R_tibia: rotation around Y axis (tibia angle)
+     * - T_tibia: translation along Z axis (-tibia_length)
+     *
+     * With coxa = 0 degrees, the Z component of foot position is:
+     * Z = -femur_length * sin(femur_angle) - tibia_length * cos(femur_angle + tibia_angle)
+     *
+     * For standing pose, we want tibia to be vertical (pointing down):
+     * femur_angle + tibia_angle = 0 degrees (tibia points straight down)
+     * Therefore: tibia_angle = -femur_angle
+     *
+     * Substituting:
+     * Z = -femur_length * sin(femur_angle) - tibia_length * cos(0 degrees)
+     * Z = -femur_length * sin(femur_angle) - tibia_length
+     *
+     * Solving for femur_angle:
+     * target_height = -femur_length * sin(femur_angle) - tibia_length
+     * sin(femur_angle) = -(target_height + tibia_length) / femur_length
+     */
 
-    // With coxa = 0°, the Z component of foot position is:
-    // Z = -femur_length * sin(femur_angle) - tibia_length * cos(femur_angle + tibia_angle)
-    //
-    // For standing pose, we want tibia to be vertical (pointing down):
-    // femur_angle + tibia_angle = 0° (so tibia points straight down)
-    // Therefore: tibia_angle = -femur_angle
-    //
-    // Substituting:
-    // Z = -femur_length * sin(femur_angle) - tibia_length * cos(0°)
-    // Z = -femur_length * sin(femur_angle) - tibia_length
-    //
-    // Solving for femur_angle:
-    // target_height = -femur_length * sin(femur_angle) - tibia_length
-    // sin(femur_angle) = -(target_height + tibia_length) / femur_length
-
-    // Convert to signed Z frame convention used in prior derivation
+    /** Convert to signed Z frame convention used in prior derivation. */
     double target_z = -target_height_mm;
     double sin_femur = -(target_z + params.tibia_length) / params.femur_length;
     if (sin_femur < -1.0 || sin_femur > 1.0)
-        return result; // impossible
+        /** Impossible. */
+        return result;
     double femur_rad = std::asin(sin_femur);
-    double tibia_rad = -femur_rad; // keeps tibia vertical
+    /** Keeps tibia vertical. */
+    double tibia_rad = -femur_rad;
 
     double femur_deg = math_utils::radiansToDegrees(femur_rad);
     double tibia_deg = math_utils::radiansToDegrees(tibia_rad);
@@ -613,38 +632,38 @@ CalculatedServoAngles RobotModel::calculateServoAnglesForHeight(double target_he
 }
 
 double RobotModel::getDefaultHeightOffset() const {
-    // Return the default height offset used in the robot model
+    /** Return the default height offset used in the robot model. */
     return params.default_height_offset;
 }
 
 JointAngles RobotModel::calculateTargetFromCurrentPosition(int leg, const JointAngles &current_angles,
                                                            const Pose &current_pose, const Point3D &target_in_current_frame) const {
-    // OpenSHC logic: transform target from current pose frame to robot frame
-    // This matches OpenSHC's: target_tip_position = model_->getCurrentPose().inverseTransformVector(default_tip_position);
+    /** OpenSHC logic: transform target from current pose frame to robot frame. */
+    /** This matches OpenSHC's: target_tip_position = model_->getCurrentPose().inverseTransformVector(default_tip_position). */
     Point3D target_in_robot_frame = current_pose.inverseTransformVector(target_in_current_frame);
 
-    // Use inverseKinematicsCurrent to calculate joint angles from current position to target
+    /** Use inverseKinematicsCurrent to calculate joint angles from current position to target. */
     return inverseKinematicsCurrentGlobalCoordinates(leg, current_angles, target_in_robot_frame);
 }
 
 JointAngles RobotModel::calculateTargetFromDefaultStance(int leg, const JointAngles &current_angles,
                                                          const Pose &current_pose, const Pose &default_stance_pose) const {
-    // The default pose is already in the robot frame, pass it directly
+    /** The default pose is already in the robot frame, pass it directly. */
     return inverseKinematicsCurrentGlobalCoordinates(leg, current_angles, default_stance_pose.position);
 }
 
 JointAngles RobotModel::solveIKLocalCoordinates(int leg, const Point3D &global_target,
                                                 const JointAngles &current_angles) const {
-    // solveIK now works in global frame — pass global target directly
+    /** solveIK now works in global frame; pass global target directly. */
     return solveIK(leg, global_target, current_angles);
 }
 
 Point3D RobotModel::transformGlobalToLocalCoordinates(int leg, const Point3D &global_position,
                                                       const JointAngles &current_angles) const {
-    // Create pose from global position
+    /** Create pose from global position. */
     Pose global_pose(global_position, Eigen::Quaterniond::Identity());
 
-    // Transform to local leg coordinates using OpenSHC approach
+    /** Transform to local leg coordinates using OpenSHC approach. */
     Pose local_pose = getPoseLegFrame(leg, current_angles, global_pose);
 
     return local_pose.position;
@@ -652,95 +671,95 @@ Point3D RobotModel::transformGlobalToLocalCoordinates(int leg, const Point3D &gl
 
 Point3D RobotModel::transformLocalToGlobalCoordinates(int leg, const Point3D &local_position,
                                                       const JointAngles &current_angles) const {
-    // Create pose from local position
+    /** Create pose from local position. */
     Pose local_pose(local_position, Eigen::Quaterniond::Identity());
 
-    // Transform to global robot coordinates using OpenSHC approach
+    /** Transform to global robot coordinates using OpenSHC approach. */
     Pose global_pose = getPoseRobotFrame(leg, current_angles, local_pose);
 
     return global_pose.position;
 }
 
 JointAngles RobotModel::estimateInitialAngles(int leg, const Point3D &target_position) const {
-    // Transform target to leg coordinate system for analysis
+    /** Transform target to leg coordinate system for analysis. */
     Point3D local_target = transformGlobalToLocalLegCoordinates(leg, target_position);
 
-    // Method 1: Improved neutral configuration (closer to typical stance)
-    // Use angles that are more likely to be in a reasonable stance position
+    /** Method 1: improved neutral configuration (closer to typical stance). */
+    /** Use angles that are more likely to be in a reasonable stance position. */
     JointAngles neutral_angles(
-        0.0,  // coxa: centered
-        -0.2, // femur: slightly negative for typical stance (-11.5 degrees)
-        0.2   // tibia: slightly positive for typical stance (11.5 degrees)
-    );
+        0.0,
+        -0.2,
+        0.2);
 
-    // Method 2: Simple geometric estimation (conservative approach)
+    /** Method 2: simple geometric estimation (conservative approach). */
     double coxa_estimate = atan2(local_target.y, local_target.x);
     coxa_estimate = constrainAngle(coxa_estimate, coxa_angle_limits_rad[0], coxa_angle_limits_rad[1]);
 
-    // Use conservative estimates for femur and tibia
-    double femur_estimate = -0.2; // Slightly negative stance angle
-    double tibia_estimate = 0.2;  // Slightly positive stance angle
+    /** Use conservative estimates for femur and tibia. */
+    double femur_estimate = -0.2;
+    double tibia_estimate = 0.2;
 
-    // Only adjust if target is significantly different from neutral stance
+    /** Only adjust if target is significantly different from neutral stance. */
     double horizontal_distance = std::sqrt(local_target.x * local_target.x + local_target.y * local_target.y);
 
-    if (horizontal_distance > 50.0) {             // Only adjust for targets far from base
-        double vertical_offset = -local_target.z; // limit scope to where it's used
-        // Simple adjustment based on target position
+    if (horizontal_distance > 50.0) {
+        /** Only adjust for targets far from base. */
+        double vertical_offset = -local_target.z;
+        /** Simple adjustment based on target position. */
         if (vertical_offset > 50.0) {
-            // Target is much lower - need more negative femur
-            femur_estimate = -0.4; // About -23 degrees
+            /** Target is much lower; need more negative femur. */
+            femur_estimate = -0.4;
         } else if (vertical_offset < -50.0) {
-            // Target is much higher - need more positive femur
-            femur_estimate = 0.0; // About 0 degrees
+            /** Target is much higher; need more positive femur. */
+            femur_estimate = 0.0;
         }
 
         if (horizontal_distance > 150.0) {
-            // Target is far - need more positive tibia
-            tibia_estimate = 0.4; // About 23 degrees
+            /** Target is far; need more positive tibia. */
+            tibia_estimate = 0.4;
         }
     }
 
-    // Create conservative estimate
+    /** Create conservative estimate. */
     JointAngles conservative_estimate(coxa_estimate, femur_estimate, tibia_estimate);
     clampJointAngles(conservative_estimate);
 
-    // Method 3: Return the conservative estimate as it's more likely to be stable
-    // This approach prioritizes stability over precision, which is better for hexapods
+    /** Method 3: return the conservative estimate as it is more likely to be stable. */
+    /** This approach prioritizes stability over precision. */
     return conservative_estimate;
 }
 
 Point3D RobotModel::makeReachable(int leg_index, const Point3D &reference_tip_position) const {
 
-    // Ensure that the workspace is generated (equivalent to OpenSHC's generateWorkspace())
-    // Note: We need to use const_cast because the method is const but we need to modify the workspace_analyzer
+    /** Ensure that the workspace is generated (equivalent to OpenSHC's generateWorkspace()). */
+    /** Use const_cast because the method is const but needs to modify workspace_analyzer. */
     const_cast<RobotModel *>(this)->getWorkspaceAnalyzer().generateWorkspace();
 
-    // The height used to query the workplane must consider the physical offset
+    /** The height used to query the workplane must consider the physical offset. */
     double workspace_query_height = reference_tip_position.z;
 
-    // Get the workplane for the target position's adjusted height
+    /** Get the workplane for the target position's adjusted height. */
     auto workplane = getWorkspaceAnalyzer().getWorkplane(leg_index, workspace_query_height);
 
     if (!workplane.empty()) {
-        // Convert the position to polar coordinates relative to the leg base
+        /** Convert the position to polar coordinates relative to the leg base. */
         Point3D leg_base = getLegBasePosition(leg_index);
         Point3D relative_pos = reference_tip_position - leg_base;
 
-        // Calculate bearing (angle) and radius
+        /** Calculate bearing (angle) and radius. */
         double bearing_rad = atan2(relative_pos.y, relative_pos.x);
         double bearing_deg = math_utils::radiansToDegrees(bearing_rad);
 
-        // Normalize bearing to [0, 360)
+        /** Normalize bearing to [0, 360). */
         if (bearing_deg < 0)
             bearing_deg += 360.0;
 
         double requested_radius = sqrt(relative_pos.x * relative_pos.x + relative_pos.y * relative_pos.y);
 
-        // Find the maximum allowed radius in the workplane for this bearing
+        /** Find the maximum allowed radius in the workplane for this bearing. */
         double max_radius = 0.0;
 
-        // Interpolation between adjacent bearings in the workplane
+        /** Interpolation between adjacent bearings in the workplane. */
         int bearing_int = static_cast<int>(bearing_deg);
         auto it_current = workplane.find(bearing_int);
         auto it_next = workplane.find((bearing_int + 1) % 360);
@@ -748,13 +767,13 @@ Point3D RobotModel::makeReachable(int leg_index, const Point3D &reference_tip_po
         if (it_current != workplane.end()) {
             max_radius = it_current->second;
 
-            // Linear interpolation if we have the next bearing
+            /** Linear interpolation if we have the next bearing. */
             if (it_next != workplane.end()) {
                 double fraction = bearing_deg - bearing_int;
                 max_radius = it_current->second * (1.0 - fraction) + it_next->second * fraction;
             }
         } else {
-            // If we don't have exact data, search for nearby bearings
+            /** If we do not have exact data, search for nearby bearings. */
             double min_bearing_diff = 360.0;
             for (const auto &bearing_pair : workplane) {
                 double diff = std::min(std::abs(bearing_deg - bearing_pair.first),
@@ -766,34 +785,35 @@ Point3D RobotModel::makeReachable(int leg_index, const Point3D &reference_tip_po
             }
         }
 
-        // If the requested position is outside the workspace, constrain it
+        /** If the requested position is outside the workspace, constrain it. */
         if (requested_radius > max_radius && max_radius > 0.0) {
             double scale_factor = max_radius / requested_radius;
             Point3D constrained_relative = relative_pos * scale_factor;
 
-            // Keep the original height considering the physical reference
+            /** Keep the original height considering the physical reference. */
             constrained_relative.z = relative_pos.z;
 
             return leg_base + constrained_relative;
         }
 
-        // The position is already within the workspace
+        /** The position is already within the workspace. */
         return reference_tip_position;
     }
 
-    // If the workplane is empty, use basic geometric constraint
-    // (this should only occur in exceptional cases)
+    /** If the workplane is empty, use basic geometric constraint. */
+    /** This should only occur in exceptional cases. */
     Point3D leg_base = getLegBasePosition(leg_index);
     Point3D target_vector = reference_tip_position - leg_base;
     double distance_to_target = target_vector.norm();
 
     double max_reach = params.femur_length + params.tibia_length;
-    double safe_max_reach = max_reach * 0.95; // 95% of the maximum reach
+    /** 95% of the maximum reach. */
+    double safe_max_reach = max_reach * 0.95;
 
     if (distance_to_target > safe_max_reach) {
         Point3D safe_direction = target_vector / distance_to_target;
         Point3D safe_position = leg_base + safe_direction * safe_max_reach;
-        // Keep the original height considering that the workspace already includes the physical offset
+        /** Keep the original height considering that the workspace already includes the physical offset. */
         safe_position.z = reference_tip_position.z;
         return safe_position;
     }
@@ -801,40 +821,37 @@ Point3D RobotModel::makeReachable(int leg_index, const Point3D &reference_tip_po
     return reference_tip_position;
 }
 
-// ====================================================================
-// ADVANCED IK IMPLEMENTATION
-// ====================================================================
-// ====================================================================
+/** Advanced IK implementation. */
 
 JointAngles RobotModel::applyAdvancedIK(int leg, const Point3D &current_tip_pose, const Point3D &desired_tip_pose,
                                         const JointAngles &current_angles, double time_delta) const {
-    // Following OpenSHC pattern exactly
-    // Calculate position delta in global coordinates
+    /** Following OpenSHC pattern exactly. */
+    /** Calculate position delta in global coordinates. */
     Eigen::Vector3d position_delta;
     position_delta << (desired_tip_pose.x - current_tip_pose.x),
         (desired_tip_pose.y - current_tip_pose.y),
         (desired_tip_pose.z - current_tip_pose.z);
 
-    // Create 6D delta vector (position only)
+    /** Create 6D delta vector (position only). */
     Eigen::MatrixXd delta = Eigen::Matrix<double, 6, 1>::Zero();
     delta(0) = position_delta[0];
     delta(1) = position_delta[1];
     delta(2) = position_delta[2];
 
-    // Get basic joint delta from DLS method (like OpenSHC's jacobian_inverse * delta)
+    /** Get basic joint delta from DLS method (like OpenSHC's jacobian_inverse * delta). */
     Eigen::Vector3d joint_delta = solveDeltaIK(leg, delta, current_angles);
 
-    // Calculate joint velocities for cost gradient (estimate from time_delta)
+    /** Calculate joint velocities for cost gradient (estimate from time_delta). */
     Eigen::Vector3d joint_velocities = Eigen::Vector3d::Zero();
     if (time_delta > 0.0) {
         joint_velocities = joint_delta / time_delta;
     }
 
-    // Apply OpenSHC joint limit cost gradient
-    // This matches: return jacobian_inverse * delta + (identity - jacobian_inverse * j) * combined_cost_gradient;
+    /** Apply OpenSHC joint limit cost gradient. */
+    /** Matches: return jacobian_inverse * delta + (identity - jacobian_inverse * j) * combined_cost_gradient. */
     Eigen::Vector3d cost_gradient = calculateJointLimitCostGradient(current_angles, joint_velocities, leg);
 
-    // Calculate Jacobian for nullspace projection (OpenSHC approach)
+    /** Calculate Jacobian for nullspace projection (OpenSHC approach). */
     Eigen::Matrix3d jacobian_pos = calculateJacobian(leg, current_angles, Point3D(0, 0, 0));
     const double dls_coeff = IK_DLS_COEFFICIENT;
     Eigen::Matrix3d identity = Eigen::Matrix3d::Identity();
@@ -842,25 +859,25 @@ JointAngles RobotModel::applyAdvancedIK(int leg, const Point3D &current_tip_pose
     Eigen::Matrix3d jacobian_inverse = jacobian_pos.transpose() *
                                        (JJT + dls_coeff * dls_coeff * identity).inverse();
 
-    // Apply nullspace projection: (I - J^+ * J) * cost_gradient
+    /** Apply nullspace projection: (I - J^+ * J) * cost_gradient. */
     Eigen::Matrix3d nullspace_projector = identity - jacobian_inverse * jacobian_pos;
     Eigen::Vector3d nullspace_motion = nullspace_projector * cost_gradient;
 
-    // Combine primary motion with nullspace motion (OpenSHC approach)
+    /** Combine primary motion with nullspace motion (OpenSHC approach). */
     joint_delta += nullspace_motion;
 
-    // Apply joint angle changes to current configuration
+    /** Apply joint angle changes to current configuration. */
     JointAngles new_angles = current_angles;
     new_angles.coxa += joint_delta(0);
     new_angles.femur += joint_delta(1);
     new_angles.tibia += joint_delta(2);
 
-    // Normalize angles to [-PI, PI]
+    /** Normalize angles to [-PI, PI]. */
     new_angles.coxa = normalizeAngle(new_angles.coxa);
     new_angles.femur = normalizeAngle(new_angles.femur);
     new_angles.tibia = normalizeAngle(new_angles.tibia);
 
-    // Apply joint limits
+    /** Apply joint limits. */
     if (params.ik.clamp_joints) {
         clampJointAngles(new_angles);
     }
@@ -869,25 +886,25 @@ JointAngles RobotModel::applyAdvancedIK(int leg, const Point3D &current_tip_pose
 }
 
 Eigen::Vector3d RobotModel::solveDeltaIK(int leg, const Eigen::MatrixXd &delta, const JointAngles &current_angles) const {
-    // Core IK method - exact replication for 3DOF case
-    // Calculate Jacobian
+    /** Core IK method: exact replication for 3DOF case. */
+    /** Calculate Jacobian. */
     Eigen::Matrix3d jacobian_pos = calculateJacobian(leg, current_angles, Point3D(0, 0, 0));
 
-    // DLS Method
+    /** DLS method. */
     const double dls_coeff = IK_DLS_COEFFICIENT;
     Eigen::Matrix3d identity = Eigen::Matrix3d::Identity();
     Eigen::Matrix3d JJT = jacobian_pos * jacobian_pos.transpose();
     Eigen::Matrix3d jacobian_inverse = jacobian_pos.transpose() *
                                        (JJT + dls_coeff * dls_coeff * identity).inverse();
 
-    // Extract position part of delta (first 3 elements)
+    /** Extract position part of delta (first 3 elements). */
     Eigen::Vector3d position_delta = delta.block<3, 1>(0, 0);
 
     return jacobian_inverse * position_delta;
 }
 Eigen::Vector3d RobotModel::calculateJointLimitCostGradient(const JointAngles &current_angles,
                                                             const Eigen::Vector3d &joint_velocities, int /*leg*/) const {
-    // OpenSHC-style joint limit cost gradient (position + velocity)
+    /** OpenSHC-style joint limit cost gradient (position + velocity). */
     const double cost_weight = IK_JOINT_LIMIT_COST_WEIGHT;
 
     Eigen::Vector3d position_cost_gradient = Eigen::Vector3d::Zero();
@@ -896,14 +913,15 @@ Eigen::Vector3d RobotModel::calculateJointLimitCostGradient(const JointAngles &c
     double position_limit_cost = 0.0;
     double velocity_limit_cost = 0.0;
 
-    // Joint data arrays for iteration
+    /** Joint data arrays for iteration. */
     double joint_positions[3] = {current_angles.coxa, current_angles.femur, current_angles.tibia};
     double joint_limits_min[3] = {coxa_angle_limits_rad[0], femur_angle_limits_rad[0], tibia_angle_limits_rad[0]};
     double joint_limits_max[3] = {coxa_angle_limits_rad[1], femur_angle_limits_rad[1], tibia_angle_limits_rad[1]};
-    double max_velocities[3] = {3.0, 3.0, 3.0}; // rad/s (placeholder typical values)
+    /** rad/s (placeholder typical values). */
+    double max_velocities[3] = {3.0, 3.0, 3.0};
 
     for (int i = 0; i < 3; ++i) {
-        // Position limit contribution
+        /** Position limit contribution. */
         double joint_position_range = joint_limits_max[i] - joint_limits_min[i];
         if (joint_position_range > 0.0) {
             double position_range_centre = joint_limits_min[i] + joint_position_range * 0.5;
@@ -913,17 +931,18 @@ Eigen::Vector3d RobotModel::calculateJointLimitCostGradient(const JointAngles &c
                                         (joint_position_range * joint_position_range);
         }
 
-        // Velocity limit contribution
+        /** Velocity limit contribution. */
         double joint_velocity_range = 2.0 * max_velocities[i];
         if (joint_velocity_range > 0.0) {
-            double vel_term = cost_weight * (joint_velocities[i]) / joint_velocity_range; // centre = 0
+            /** Centre = 0. */
+            double vel_term = cost_weight * (joint_velocities[i]) / joint_velocity_range;
             velocity_limit_cost += vel_term * vel_term;
             velocity_cost_gradient[i] = -cost_weight * cost_weight * (joint_velocities[i]) /
                                         (joint_velocity_range * joint_velocity_range);
         }
     }
 
-    // Normalize gradients to prevent scale explosion
+    /** Normalize gradients to prevent scale explosion. */
     if (position_limit_cost > 0.0) {
         position_cost_gradient /= std::sqrt(position_limit_cost);
     }
@@ -931,7 +950,7 @@ Eigen::Vector3d RobotModel::calculateJointLimitCostGradient(const JointAngles &c
         velocity_cost_gradient /= std::sqrt(velocity_limit_cost);
     }
 
-    // Blend: emphasize position limits (75%) while still considering velocity (25%)
+    /** Blend: emphasize position limits (75%) while still considering velocity (25%). */
     return 0.75 * position_cost_gradient + 0.25 * velocity_cost_gradient;
 }
 
@@ -969,4 +988,4 @@ GaitType RobotModel::stringToGaitType(const std::string &gait_name) {
     }
 }
 
-// End of file
+/** End of file. */

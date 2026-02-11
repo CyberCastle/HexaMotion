@@ -12,117 +12,103 @@ class LocomotionSystem;
 #include <ArduinoEigen.h>
 #include <memory>
 
-// Maximum number of legs that can be manually controlled simultaneously
+/** Maximum number of legs that can be manually controlled simultaneously. */
 #define MAX_MANUAL_LEGS 2
-#define PACK_TIME 2.0f        // Joint transition time during pack/unpack sequences (seconds)
-#define PROGRESS_COMPLETE 100 // Progress value indicating completion
-#define JOINT_TOLERANCE 0.1f  // Joint position tolerance for state detection
-#define THROTTLE_PERIOD 1.0f  // Throttle period for repeated messages
+/** Joint transition time during pack/unpack sequences (seconds). */
+#define PACK_TIME 2.0f
+/** Progress value indicating completion. */
+#define PROGRESS_COMPLETE 100
+/** Joint position tolerance for state detection. */
+#define JOINT_TOLERANCE 0.1f
+/** Throttle period for repeated messages. */
+#define THROTTLE_PERIOD 1.0f
 
-//
-// Designation for potential states of the robot.
-//
+/** Designation for potential states of the robot. */
 enum RobotState {
-    ROBOT_PACKED,       //< The robot is in a 'packed' state with all joints at defined 'packed' positions
-    ROBOT_READY,        //< The robot is in a 'ready' state with all joints at defined 'unpacked' positions
-    ROBOT_RUNNING,      //< The robot is in a 'running' state. This state is where all posing and walking occurs
-    ROBOT_STATE_COUNT,  //< Misc enum defining number of Robot States
-    ROBOT_UNKNOWN = -1, //< The robot is in an initial 'unknown' state, controller will estimate an actual state from it
-    ROBOT_OFF = -2,     //< The robot is in 'off' state. Only used as alternative to 'running' state for direct start up
+    ROBOT_PACKED,       /**< Robot is packed with all joints at defined packed positions. */
+    ROBOT_READY,        /**< Robot is ready with all joints at defined unpacked positions. */
+    ROBOT_RUNNING,      /**< Robot is running; posing and walking occur in this state. */
+    ROBOT_STATE_COUNT,  /**< Number of robot states. */
+    ROBOT_UNKNOWN = -1, /**< Robot is in an initial unknown state; controller will estimate it. */
+    ROBOT_OFF = -2,     /**< Robot is off; alternative to running for direct startup. */
 };
 
-//
-// Designation for potential manual body posing input modes.
-//
+/** Designation for potential manual body posing input modes. */
 enum PosingMode {
-    POSING_NONE,       //< Mode allowing no manual body posing
-    POSING_X_Y,        //< Mode allowing for manual posing of the robot body via x/y axis translation
-    POSING_PITCH_ROLL, //< Mode allowing for manual posing of the robot body via pitch/roll rotation
-    POSING_Z_YAW,      //< Mode allowing for manual posing of the robot body via z axis translation and yaw rotation
-    POSING_EXTERNAL,   //< Mode allowing for posing input from external source
-    POSING_MODE_COUNT, //< Misc enum defining number of Posing Modes
+    POSING_NONE,       /**< No manual body posing. */
+    POSING_X_Y,        /**< Manual body posing via x/y translation. */
+    POSING_PITCH_ROLL, /**< Manual body posing via pitch/roll rotation. */
+    POSING_Z_YAW,      /**< Manual body posing via z translation and yaw rotation. */
+    POSING_EXTERNAL,   /**< Manual body posing from an external source. */
+    POSING_MODE_COUNT, /**< Number of posing modes. */
 };
 
-//
-// Designation for potential cruise control modes.
-//
+/** Designation for potential cruise control modes. */
 enum CruiseControlMode {
-    CRUISE_CONTROL_OFF,           //< Cruise control mode is off
-    CRUISE_CONTROL_ON,            //< Cruise control mode is on
-    CRUISE_CONTROL_MODE_COUNT,    //< Misc enum defining number of Cruise Control Modes
-    CRUISE_CONTROL_EXTERNAL = -1, //< Cruise control mode is external
+    CRUISE_CONTROL_OFF,           /**< Cruise control is off. */
+    CRUISE_CONTROL_ON,            /**< Cruise control is on. */
+    CRUISE_CONTROL_MODE_COUNT,    /**< Number of cruise control modes. */
+    CRUISE_CONTROL_EXTERNAL = -1, /**< Cruise control mode is external. */
 };
 
-//
-// Designation for potential planner modes (stub parity with OpenSHC).
-//
+/** Designation for potential planner modes (stub parity with OpenSHC). */
 enum PlannerMode {
-    PLANNER_MODE_OFF,  //< Planner disabled
-    PLANNER_MODE_ON,   //< Planner enabled (not supported on MCU)
-    PLANNER_MODE_COUNT //< Misc enum defining number of Planner Modes
+    PLANNER_MODE_OFF,  /**< Planner disabled. */
+    PLANNER_MODE_ON,   /**< Planner enabled (not supported on MCU). */
+    PLANNER_MODE_COUNT /**< Number of planner modes. */
 };
 
-//
-// Designation for potential posing states used in auto-posing.
-//
+/** Designation for potential posing states used in auto-posing. */
 enum PosingState {
-    POSE_POSING,             //< State signifiying that auto-poser objects should start their posing cycle
-    POSE_STOP_POSING,        //< State signifiying that auto-poser objects should end their posing cycle
-    POSE_POSING_COMPLETE,    //< State signifiying that ALL auto-poser objects have completed their individual posing cycles
-    POSE_POSING_STATE_COUNT, //< Misc enum defining number of Posing States
+    POSE_POSING,             /**< Auto-poser objects should start their posing cycle. */
+    POSE_STOP_POSING,        /**< Auto-poser objects should end their posing cycle. */
+    POSE_POSING_COMPLETE,    /**< All auto-poser objects have completed their cycles. */
+    POSE_POSING_STATE_COUNT, /**< Number of posing states. */
 };
 
-//
-// Designation for potential manual pose reset input modes.
-//
+/** Designation for potential manual pose reset input modes. */
 enum PoseResetMode {
-    POSE_RESET_NONE,           //< State requesting no reseting of manual body posing is requested
-    POSE_RESET_Z_AND_YAW,      //< State requesting manual body z-axis translation or yaw rotation posing to reset to zero
-    POSE_RESET_X_AND_Y,        //< State requesting manual body x-axis or y-axis translation posing to reset to zero
-    POSE_RESET_PITCH_AND_ROLL, //< State requesting manual body roll or pitch rotation posing to reset to zero
-    POSE_RESET_ALL,            //< State requesting all manual body posing (in any axis) to reset to zero
-    POSE_RESET_IMMEDIATE_ALL,  //< State forcing all manual body posing (in any axis) to reset to zero instantaneously
-    POSE_RESET_MODE_COUNT,     //< Misc enum defining number of Pose-Reset States
+    POSE_RESET_NONE,           /**< No manual body pose reset requested. */
+    POSE_RESET_Z_AND_YAW,      /**< Reset z translation or yaw rotation to zero. */
+    POSE_RESET_X_AND_Y,        /**< Reset x or y translation to zero. */
+    POSE_RESET_PITCH_AND_ROLL, /**< Reset roll or pitch rotation to zero. */
+    POSE_RESET_ALL,            /**< Reset all manual body posing to zero. */
+    POSE_RESET_IMMEDIATE_ALL,  /**< Immediately reset all manual body posing to zero. */
+    POSE_RESET_MODE_COUNT,     /**< Number of pose reset modes. */
 };
 
-//
-// Designations for potential legs within the robot model - up to 6 legs for hexapod.
-//
+/** Designations for potential legs within the robot model (up to 6 legs for hexapod). */
 enum LegDesignation {
-    LEG_0,                 //< 1st leg - The front right most leg of the robot
-    LEG_1,                 //< 2nd leg - The leg following the 1st leg in a clockwise direction around the robot body
-    LEG_2,                 //< 3rd leg - Middle right leg
-    LEG_3,                 //< 4th leg - Rear right leg
-    LEG_4,                 //< 5th leg - Rear left leg
-    LEG_5,                 //< 6th leg - Middle left leg
-    LEG_DESIGNATION_COUNT, //< Misc enum defining number of Leg Designations
-    LEG_UNDESIGNATED = -1, //< Undesignated leg
+    LEG_0,                 /**< 1st leg - front right most leg of the robot. */
+    LEG_1,                 /**< 2nd leg - clockwise following leg 0 around the body. */
+    LEG_2,                 /**< 3rd leg - middle right leg. */
+    LEG_3,                 /**< 4th leg - rear right leg. */
+    LEG_4,                 /**< 5th leg - rear left leg. */
+    LEG_5,                 /**< 6th leg - middle left leg. */
+    LEG_DESIGNATION_COUNT, /**< Number of leg designations. */
+    LEG_UNDESIGNATED = -1, /**< Undesignated leg. */
 };
 
-//
-// Sequence execution types for pose controller transitions.
-//
+/** Sequence execution types for pose controller transitions. */
 enum SequenceType {
-    SEQUENCE_START_UP,  //< Start-up sequence from ready to running
-    SEQUENCE_SHUT_DOWN, //< Shut-down sequence from running to ready
-    SEQUENCE_PACK,      //< Pack sequence to packed state
-    SEQUENCE_UNPACK,    //< Unpack sequence from packed state
-    SEQUENCE_COUNT,     //< Number of sequence types
+    SEQUENCE_START_UP,  /**< Start-up sequence from ready to running. */
+    SEQUENCE_SHUT_DOWN, /**< Shut-down sequence from running to ready. */
+    SEQUENCE_PACK,      /**< Pack sequence to packed state. */
+    SEQUENCE_UNPACK,    /**< Unpack sequence from packed state. */
+    SEQUENCE_COUNT,     /**< Number of sequence types. */
 };
 
-//
-// State machine configuration parameters.
-//
+/** State machine configuration parameters. */
 struct StateMachineConfig {
-    bool enable_startup_sequence = true;     //< Enable multi-step startup sequence
-    bool enable_direct_startup = false;      //< Allow direct startup without sequences
-    double transition_timeout = 10.0f;       //< Maximum time for state transitions (seconds)
-    double pack_unpack_time = 2.0f;          //< Time for pack/unpack sequences (seconds)
-    bool enable_auto_posing = false;         //< Enable automatic body posing
-    bool enable_manual_posing = true;        //< Enable manual body posing
-    bool enable_cruise_control = true;       //< Enable cruise control mode
-    double cruise_control_time_limit = 0.0f; //< Time limit for cruise control (0 = unlimited)
-    int max_manual_legs = 2;                 //< Maximum number of manually controlled legs
+    bool enable_startup_sequence = true;     /**< Enable multi-step startup sequence. */
+    bool enable_direct_startup = false;      /**< Allow direct startup without sequences. */
+    double transition_timeout = 10.0f;       /**< Maximum time for state transitions (seconds). */
+    double pack_unpack_time = 2.0f;          /**< Time for pack/unpack sequences (seconds). */
+    bool enable_auto_posing = false;         /**< Enable automatic body posing. */
+    bool enable_manual_posing = true;        /**< Enable manual body posing. */
+    bool enable_cruise_control = true;       /**< Enable cruise control mode. */
+    double cruise_control_time_limit = 0.0f; /**< Time limit for cruise control (0 = unlimited). */
+    int max_manual_legs = 2;                 /**< Maximum number of manually controlled legs. */
 };
 
 /**
@@ -160,9 +146,7 @@ class StateController {
      */
     void update(double time_delta);
 
-    // ==============================
-    // STATE ACCESSORS
-    // ==============================
+    /** State accessors. */
 
     /**
      * @brief Get the current system state.
@@ -224,11 +208,13 @@ class StateController {
      */
     double getCruiseRemainingTime() const {
         if (cruise_end_time_ == 0 || current_cruise_control_mode_ != CruiseControlMode::CRUISE_CONTROL_ON) {
-            return 0.0f; // Unlimited or not active
+            /** Unlimited or not active. */
+            return 0.0f;
         }
         unsigned long current_time = millis();
         if (current_time >= cruise_end_time_) {
-            return 0.0f; // Expired
+            /** Expired. */
+            return 0.0f;
         }
         return (cruise_end_time_ - current_time) / 1000.0f;
     }
@@ -242,7 +228,8 @@ class StateController {
             return false;
         }
         if (cruise_end_time_ == 0) {
-            return true; // No time limit
+            /** No time limit. */
+            return true;
         }
         return millis() < cruise_end_time_;
     }
@@ -259,9 +246,7 @@ class StateController {
      */
     inline bool isReadyForOperation() const { return current_robot_state_ == ROBOT_RUNNING; }
 
-    // ==============================
-    // STATE SETTERS
-    // ==============================
+    /** State setters. */
 
     /**
      * @brief Request a system state transition.
@@ -306,9 +291,7 @@ class StateController {
      */
     bool setPoseResetMode(PoseResetMode mode);
 
-    // ==============================
-    // LEG CONTROL
-    // ==============================
+    /** Leg control. */
 
     /**
      * @brief Get the state of a specific leg.
@@ -344,9 +327,7 @@ class StateController {
      */
     bool requestLegToggle(int leg_index);
 
-    // ==============================
-    // VELOCITY AND POSE CONTROL
-    // ==============================
+    /** Velocity and pose control. */
 
     /**
      * @brief Set desired body velocity.
@@ -430,9 +411,7 @@ class StateController {
      */
     inline Eigen::Vector3d getDesiredBodyOrientation() const { return desired_body_orientation_; }
 
-    // ==============================
-    // GAIT CONTROL
-    // ==============================
+    /** Gait control. */
 
     /**
      * @brief Change the current gait type.
@@ -441,9 +420,7 @@ class StateController {
      */
     bool changeGait(GaitType gait);
 
-    // ==============================
-    // STATUS AND DIAGNOSTICS
-    // ==============================
+    /** Status and diagnostics. */
 
     /**
      * @brief Check if the state machine has any errors.
@@ -491,14 +468,12 @@ class StateController {
     bool executePlan();
 
   private:
-    // ==============================
-    // PRIVATE MEMBERS
-    // ==============================
+    /** Private members. */
 
     LocomotionSystem &locomotion_system_;
     StateMachineConfig config_;
 
-    // Current states
+    /** Current states. */
     SystemState current_system_state_;
     RobotState current_robot_state_;
     WalkState current_walk_state_;
@@ -507,23 +482,23 @@ class StateController {
     PlannerMode current_planner_mode_;
     PoseResetMode current_pose_reset_mode_;
 
-    // Desired states (for transitions)
+    /** Desired states for transitions. */
     SystemState desired_system_state_;
     RobotState desired_robot_state_;
 
-    // Leg states
+    /** Leg states. */
     LegState leg_states_[NUM_LEGS];
     int manual_leg_count_;
 
-    // Leg state toggle tracking (OpenSHC equivalent)
-    int toggle_leg_index_;          //< Index of leg currently toggling (-1 if none)
-    bool toggle_leg_state_pending_; //< Flag indicating a leg state toggle is in progress
+    /** Leg state toggle tracking (OpenSHC equivalent). */
+    int toggle_leg_index_;          /**< Index of leg currently toggling (-1 if none). */
+    bool toggle_leg_state_pending_; /**< Flag indicating a leg state toggle is in progress. */
 
-    // Transition management
+    /** Transition management. */
     bool is_transitioning_;
     unsigned long transition_start_time_;
 
-    // Control inputs
+    /** Control inputs. */
     Eigen::Vector2d desired_linear_velocity_;
     double desired_angular_velocity_;
     Eigen::Vector3d desired_body_position_;
@@ -532,19 +507,19 @@ class StateController {
     Point3D leg_tip_poses_[NUM_LEGS];
     bool leg_tip_pose_valid_[NUM_LEGS];
 
-    // Cruise control
+    /** Cruise control. */
     Eigen::Vector3d cruise_velocity_;
     unsigned long cruise_start_time_;
-    unsigned long cruise_end_time_; //< End time for cruise control (when time limit is set)
+    unsigned long cruise_end_time_; /**< End time for cruise control (when time limit is set). */
 
-    // Timing
+    /** Timing. */
     unsigned long last_update_time_;
-    double time_delta_; // Measured time delta for diagnostics (nominal params.time_delta otherwise)
+    double time_delta_; /**< Measured time delta for diagnostics (nominal params.time_delta otherwise). */
 
-    // Error handling
+    /** Error handling. */
     bool has_error_;
     String last_error_message_;
-    // Sequence execution state to avoid static locals
+    /** Sequence execution state to avoid static locals. */
     int startup_step_;
     bool startup_transition_initialized_;
     int startup_transition_step_count_;
@@ -554,18 +529,16 @@ class StateController {
     int pack_step_;
     int unpack_step_;
 
-    // Initialization flag
+    /** Initialization flag. */
     bool is_initialized_;
 
-    // Pose control
+    /** Pose control. */
     std::unique_ptr<BodyPoseController> body_pose_controller_;
-    // Precomputed joint angle targets for packed and ready states
+    /** Precomputed joint angle targets for packed and ready states. */
     JointAngles packed_target_angles_[NUM_LEGS];
     JointAngles ready_target_angles_[NUM_LEGS];
 
-    // ==============================
-    // PRIVATE METHODS
-    // ==============================
+    /** Private methods. */
 
     /**
      * @brief Update the main state machine logic.
@@ -687,4 +660,4 @@ class StateController {
     void applyPoseReset();
 };
 
-#endif // STATE_CONTROLLER_H
+#endif /**< STATE_CONTROLLER_H */

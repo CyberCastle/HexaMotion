@@ -21,9 +21,9 @@
  * @brief 2D position configuration for leg tip positions (OpenSHC equivalent)
  */
 struct LegStancePosition {
-    double x; //< X position relative to body center (millimeters)
-    double y; //< Y position relative to body center (millimeters)
-    double z; //< Z position relative to body center (millimeters)
+    double x; /**< X position relative to body center (millimeters). */
+    double y; /**< Y position relative to body center (millimeters). */
+    double z; /**< Z position relative to body center (millimeters). */
 };
 
 /**
@@ -31,9 +31,9 @@ struct LegStancePosition {
  * In OpenSHC, standing pose is configured, not calculated from kinematics
  */
 struct StandingPoseJoints {
-    double coxa;  //< Coxa joint angle in radians
-    double femur; //< Femur joint angle in radians
-    double tibia; //< Tibia joint angle in radians
+    double coxa;  /**< Coxa joint angle in radians. */
+    double femur; /**< Femur joint angle in radians. */
+    double tibia; /**< Tibia joint angle in radians. */
 };
 
 /**
@@ -43,12 +43,12 @@ struct StandingPoseJoints {
 struct BodyPoseConfiguration {
     Parameters params;
     BodyPoseConfiguration(const Parameters &p) : params(p) {
-
-        // Sensible defaults to silence static analysis uninit warnings
+        /** Set defaults to silence static analysis uninitialized warnings. */
         auto_pose_type = "none";
         start_up_sequence = false;
         time_to_start = 0.0;
-        body_clearance = params.standing_height; // default clearance
+        /** Default body clearance. */
+        body_clearance = params.standing_height;
         swing_height = params.standing_height * BODY_POSE_DEFAULT_SWING_HEIGHT_FACTOR;
         max_translation = {0.0, 0.0, 0.0};
         max_rotation = {0.0, 0.0, 0.0};
@@ -57,7 +57,7 @@ struct BodyPoseConfiguration {
         gravity_aligned_tips = false;
         force_symmetric_pose = false;
         leg_manipulation_mode = "none";
-        // Zero initialize stance & pose arrays
+        /** Zero-initialize stance and pose arrays. */
         for (auto &ls : leg_stance_positions) {
             ls = {0.0, 0.0, 0.0};
         }
@@ -66,48 +66,51 @@ struct BodyPoseConfiguration {
         }
         standing_horizontal_reach = 0.0;
     }
-    // OpenSHC equivalent stance positions
+    /** OpenSHC-equivalent stance positions. */
     std::array<LegStancePosition, NUM_LEGS> leg_stance_positions;
 
-    // OpenSHC equivalent standing pose (configured, not calculated)
+    /** OpenSHC-equivalent standing pose (configured, not calculated). */
     std::array<StandingPoseJoints, NUM_LEGS> standing_pose_joints;
 
-    // Horizontal reach (from body center to foot) contribution beyond hexagon radius
-    // computed from the configured standing pose joints (coxa pivot projection):
-    // standing_horizontal_reach = coxa_length + femur_length * cos(femur_angle_standing)
-    // (tibia vertical => no horizontal component). Used for stance & walkspace sizing.
+    /**
+     * @brief Horizontal reach beyond hexagon radius (body center to foot).
+     *
+     * Computed from the configured standing pose joints (coxa pivot projection):
+     * standing_horizontal_reach = coxa_length + femur_length * cos(femur_angle_standing)
+     * (tibia vertical => no horizontal component). Used for stance and walkspace sizing.
+     */
     double standing_horizontal_reach;
 
-    // OpenSHC equivalent pose controller parameters
-    std::string auto_pose_type; //< String denoting the default auto posing cycle type
-    bool start_up_sequence;     //< Flag allowing execution of start up and shutdown sequences
-    double time_to_start;       //< The time to complete a direct start up
+    /** OpenSHC-equivalent pose controller parameters. */
+    std::string auto_pose_type; /**< Default auto-pose cycle type. */
+    bool start_up_sequence;     /**< Allow startup and shutdown sequences. */
+    double time_to_start;       /**< Time to complete a direct startup. */
 
-    // OpenSHC equivalent body clearance and swing parameters
-    double body_clearance; //< The requested height of the robot body above ground (mm)
-    double swing_height;   //< Vertical displacement of swing trajectory above default (mm)
+    /** OpenSHC-equivalent body clearance and swing parameters. */
+    double body_clearance; /**< Requested body height above ground (mm). */
+    double swing_height;   /**< Swing trajectory vertical displacement above default (mm). */
 
-    // OpenSHC equivalent pose limits
+    /** OpenSHC-equivalent pose limits. */
     struct {
-        double x; //< Maximum X translation (millimeters)
-        double y; //< Maximum Y translation (millimeters)
-        double z; //< Maximum Z translation (millimeters)
+        double x; /**< Maximum X translation (millimeters). */
+        double y; /**< Maximum Y translation (millimeters). */
+        double z; /**< Maximum Z translation (millimeters). */
     } max_translation;
 
     struct {
-        double roll;  //< Maximum roll rotation (radians)
-        double pitch; //< Maximum pitch rotation (radians)
-        double yaw;   //< Maximum yaw rotation (radians)
+        double roll;  /**< Maximum roll rotation (radians). */
+        double pitch; /**< Maximum pitch rotation (radians). */
+        double yaw;   /**< Maximum yaw rotation (radians). */
     } max_rotation;
 
-    // OpenSHC equivalent velocity limits
-    double max_translation_velocity; //< Maximum translation velocity (mm/s)
-    double max_rotation_velocity;    //< Maximum rotation velocity (rad/s)
+    /** OpenSHC-equivalent velocity limits. */
+    double max_translation_velocity; /**< Maximum translation velocity (mm/s). */
+    double max_rotation_velocity;    /**< Maximum rotation velocity (rad/s). */
 
-    // OpenSHC equivalent pose control flags
-    bool gravity_aligned_tips;         //< Flag denoting if tip should align with gravity direction
-    bool force_symmetric_pose;         //< Force hexagonal symmetry if true
-    std::string leg_manipulation_mode; //< String denoting the type of leg manipulation
+    /** OpenSHC-equivalent pose control flags. */
+    bool gravity_aligned_tips;         /**< Align tips with gravity direction when true. */
+    bool force_symmetric_pose;         /**< Force hexagonal symmetry when true. */
+    std::string leg_manipulation_mode; /**< Leg manipulation mode identifier. */
 };
 
 /**
@@ -115,34 +118,37 @@ struct BodyPoseConfiguration {
  * Based on OpenSHC's auto_pose.yaml configuration structure
  */
 struct AutoPoseConfiguration {
-    bool enabled = false;         //< Enable/disable auto-pose during gait
-    double pose_frequency = -1.0; //< Pose frequency (-1.0 = sync with gait cycle)
-    int pose_phase_length = 0;    //< Base phase length (from YAML) used when pose_frequency != -1
+    bool enabled = false;         /**< Enable auto-pose during gait. */
+    double pose_frequency = -1.0; /**< Pose frequency (-1.0 = sync with gait cycle). */
+    int pose_phase_length = 0;    /**< Base phase length from YAML when pose_frequency != -1. */
 
-    // Phase segmentation (ordered as in auto_pose.yaml for the active gait)
-    std::vector<int> pose_phase_starts; //< Start indices (inclusive)
-    std::vector<int> pose_phase_ends;   //< End indices (exclusive cyclic) matching starts
+    /** Phase segmentation ordered as in auto_pose.yaml for the active gait. */
+    std::vector<int> pose_phase_starts; /**< Start indices (inclusive). */
+    std::vector<int> pose_phase_ends;   /**< End indices (exclusive, cyclic), matching starts. */
 
-    // Per-leg negation windows (indices into unified posing cycle). Size NUM_LEGS
+    /** Per-leg negation windows (indices into unified posing cycle). Size NUM_LEGS. */
     int negation_phase_start[NUM_LEGS] = {0};
     int negation_phase_end[NUM_LEGS] = {0};
-    double negation_transition_ratio[NUM_LEGS] = {0.0}; //< 0 => cambio inmediato, >0 suaviza transición
+    double negation_transition_ratio[NUM_LEGS] = {0.0}; /**< 0 = immediate change, >0 smooths transition. */
 
-    // Auto-pose amplitudes por fase (vector length = number of phases)
-    std::vector<double> roll_amplitudes;    //< rad
-    std::vector<double> pitch_amplitudes;   //< rad
-    std::vector<double> yaw_amplitudes;     //< rad
-    std::vector<double> x_amplitudes;       //< mm
-    std::vector<double> y_amplitudes;       //< mm
-    std::vector<double> z_amplitudes;       //< mm
-    std::vector<double> gravity_amplitudes; //< unitless / factor
+    /** Auto-pose amplitudes per phase (vector length = number of phases). */
+    std::vector<double> roll_amplitudes;    /**< Radians. */
+    std::vector<double> pitch_amplitudes;   /**< Radians. */
+    std::vector<double> yaw_amplitudes;     /**< Radians. */
+    std::vector<double> x_amplitudes;       /**< Millimeters. */
+    std::vector<double> y_amplitudes;       /**< Millimeters. */
+    std::vector<double> z_amplitudes;       /**< Millimeters. */
+    std::vector<double> gravity_amplitudes; /**< Unitless factor. */
 
-    // Metadata
-    std::string gait_name; //< Nombre del gait al que pertenece esta configuración
+    /** Metadata. */
+    std::string gait_name; /**< Gait name associated with this configuration. */
 
-    // Application threshold: minimum absolute displacement magnitude (mm) to apply
-    // the computed auto-pose offset to avoid micro jitter due to noise / phase edge blending.
-    double apply_threshold_mm = 0.5; //< Default matches legacy heuristic
+    /**
+     * @brief Minimum displacement magnitude (mm) to apply auto-pose offsets.
+     *
+     * Prevents micro jitter from noise or phase edge blending.
+     */
+    double apply_threshold_mm = 0.5; /**< Default matches legacy heuristic. */
 };
 
-#endif // BODY_POSE_CONFIG_H
+#endif /**< BODY_POSE_CONFIG_H */

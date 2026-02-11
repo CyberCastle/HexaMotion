@@ -1,6 +1,7 @@
 #include "admittance_controller.h"
 #include "hexamotion_constants.h"
-#include "workspace_analyzer.h" // Use unified analyzer for workspace utilities
+/** Use unified analyzer for workspace utilities. */
+#include "workspace_analyzer.h"
 
 /**
  * @file admittance_controller.cpp
@@ -12,8 +13,9 @@
 #include <cmath>
 
 namespace {
-// File-scope empty state to avoid static local initialization
+/** File-scope empty state to avoid static local initialization. */
 static const AdmittanceController::LegAdmittanceState EMPTY_LEG_STATE;
+/** End anonymous namespace. */
 } // namespace
 
 AdmittanceController::AdmittanceController(RobotModel &model, IIMUInterface *imu, IFSRInterface *fsr,
@@ -23,16 +25,18 @@ AdmittanceController::AdmittanceController(RobotModel &model, IIMUInterface *imu
       load_stiffness_scaler_(1.5f), step_clearance_(40.0f),
       current_time_(0.0) {
 
-    // Initialize workspace analyzer for position calculations
+    /** Initialize workspace analyzer for position calculations. */
     ValidationConfig validator_config;
-    validator_config.enable_collision_checking = false;   // Disable for performance in admittance control
-    validator_config.enable_joint_limit_checking = false; // Not needed for stiffness calculations
+    /** Disable collision checking for performance in admittance control. */
+    validator_config.enable_collision_checking = false;
+    /** Joint limit checks are not needed for stiffness calculations. */
+    validator_config.enable_joint_limit_checking = false;
     workspace_analyzer_ = std::make_unique<WorkspaceAnalyzer>(model_, ComputeConfig::low(), validator_config);
 
     delta_time_ = config_.getDeltaTime();
     selectIntegrationMethod();
 
-    // Initialize state vectors and external forces
+    /** Initialize state vectors and external forces. */
     for (int i = 0; i < NUM_LEGS; i++) {
         leg_dynamics_state_[i] = math_utils::StateVector<Point3D>(Point3D(0, 0, 0), Point3D(0, 0, 0));
         external_forces_[i] = Point3D(0, 0, 0);
@@ -61,10 +65,10 @@ Point3D AdmittanceController::applyForceAndIntegrate(int leg_index, const Point3
     LegAdmittanceState &state = leg_states_[leg_index];
     state.params.applied_force = applied_force;
 
-    // Store external force for derivative calculation
+    /** Store external force for derivative calculation. */
     external_forces_[leg_index] = applied_force;
 
-    // Always use derivative-based integration with math_utils functions
+    /** Always use derivative-based integration with math_utils functions. */
     Point3D position_delta = integrateDerivatives(leg_index);
 
     state.params.position_delta = position_delta;
@@ -76,7 +80,7 @@ void AdmittanceController::updateAllLegs(const Point3D forces[NUM_LEGS], Point3D
         position_deltas[i] = applyForceAndIntegrate(i, forces[i]);
     }
 
-    // Update time for integration
+    /** Update time for integration. */
     current_time_ += delta_time_;
 }
 
@@ -94,26 +98,26 @@ void AdmittanceController::updateStiffness(const StepPhase leg_states[NUM_LEGS],
 
     step_clearance_ = step_clearance;
 
-    // Reset all stiffness to default
+    /** Reset all stiffness to default. */
     for (int i = 0; i < NUM_LEGS; i++) {
         leg_states_[i].stiffness_scale = 1.0f;
     }
 
-    // Apply dynamic stiffness based on leg states
+    /** Apply dynamic stiffness based on leg states. */
     for (int i = 0; i < NUM_LEGS; i++) {
         if (leg_states[i] == SWING_PHASE) {
-            // Calculate stiffness scaling for swing leg
+            /** Calculate stiffness scaling for swing leg. */
             double scale = calculateStiffnessScale(i, leg_states[i], leg_positions[i]);
             leg_states_[i].stiffness_scale = scale * swing_stiffness_scaler_;
 
-            // Update adjacent legs with increased stiffness
+            /** Update adjacent legs with increased stiffness. */
             updateAdjacentLegStiffness(i, load_stiffness_scaler_);
         }
     }
 
-    // Apply stiffness scaling to virtual stiffness
+    /** Apply stiffness scaling to virtual stiffness. */
     for (int i = 0; i < NUM_LEGS; i++) {
-        // Get base stiffness and apply scaling
+        /** Get base stiffness and apply scaling. */
         double base_stiffness = leg_states_[i].params.virtual_stiffness / leg_states_[i].stiffness_scale;
         leg_states_[i].params.virtual_stiffness = base_stiffness * leg_states_[i].stiffness_scale;
     }
@@ -163,13 +167,16 @@ void AdmittanceController::selectIntegrationMethod() {
 
 void AdmittanceController::initializeDefaultParameters() {
     for (int i = 0; i < NUM_LEGS; i++) {
-        leg_states_[i].params.virtual_mass = WORKSPACE_SCALING_FACTOR;       // 500g virtual mass
-        leg_states_[i].params.virtual_damping = ANGULAR_ACCELERATION_FACTOR; // Critical damping
-        leg_states_[i].params.virtual_stiffness = 100.0f;                    // Medium stiffness
+        /** 500 g virtual mass. */
+        leg_states_[i].params.virtual_mass = WORKSPACE_SCALING_FACTOR;
+        /** Critical damping. */
+        leg_states_[i].params.virtual_damping = ANGULAR_ACCELERATION_FACTOR;
+        /** Medium stiffness. */
+        leg_states_[i].params.virtual_stiffness = 100.0f;
         leg_states_[i].active = true;
         leg_states_[i].stiffness_scale = DEFAULT_ANGULAR_SCALING;
 
-        // Initialize state vectors for derivative-based integration
+        /** Initialize state vectors for derivative-based integration. */
         leg_dynamics_state_[i] = math_utils::StateVector<Point3D>(Point3D(0, 0, 0), Point3D(0, 0, 0));
         external_forces_[i] = Point3D(0, 0, 0);
     }
@@ -177,8 +184,11 @@ void AdmittanceController::initializeDefaultParameters() {
 }
 
 Point3D AdmittanceController::calculateAcceleration(const AdmittanceParams &params, const Point3D &position_error) {
-    // Admittance equation: M*a + D*v + K*x = F
-    // Solving for acceleration: a = (F - D*v - K*x) / M
+    /**
+     * @brief Admittance equation: M*a + D*v + K*x = F.
+     *
+     * Solve for acceleration: a = (F - D*v - K*x) / M.
+     */
 
     Point3D spring_force = position_error * (-params.virtual_stiffness);
     Point3D damping_force = params.velocity * (-params.virtual_damping);
@@ -192,20 +202,23 @@ double AdmittanceController::calculateStiffnessScale(int leg_index, StepPhase le
     if (leg_state != SWING_PHASE)
         return 1.0f;
 
-    // Use WorkspaceAnalyzer for default position calculation
+    /** Use WorkspaceAnalyzer for default position calculation. */
     if (!workspace_analyzer_) {
-        return 1.0f; // Safety fallback
+        /** Safety fallback. */
+        return 1.0f;
     }
 
-    // Get workspace bounds for more accurate default position
+    /** Get workspace bounds for more accurate default position. */
     auto bounds = workspace_analyzer_->getWorkspaceBounds(leg_index);
-    Point3D default_pos = bounds.center_position; // Use workspace center as reference
+    /** Use workspace center as reference. */
+    Point3D default_pos = bounds.center_position;
 
     double z_diff = abs(leg_position.z - default_pos.z);
 
-    // Scale based on step clearance using workspace height range
+    /** Scale based on step clearance using workspace height range. */
     double workspace_height_range = bounds.max_height - bounds.min_height;
-    double normalized_clearance = std::max(step_clearance_, workspace_height_range * 0.1f); // Min 10% of workspace
+    /** Minimum 10% of workspace height range. */
+    double normalized_clearance = std::max(step_clearance_, workspace_height_range * 0.1f);
 
     double step_reference = z_diff / normalized_clearance;
     step_reference = math_utils::clamp<double>(step_reference, 0.0, 1.0);
@@ -217,12 +230,12 @@ void AdmittanceController::updateAdjacentLegStiffness(int swing_leg_index, doubl
     int adjacent1 = (swing_leg_index + 1) % NUM_LEGS;
     int adjacent2 = (swing_leg_index + NUM_LEGS - 1) % NUM_LEGS;
 
-    // Add load stiffness to adjacent legs (additive as per OpenSHC)
+    /** Add load stiffness to adjacent legs (additive as per OpenSHC). */
     leg_states_[adjacent1].stiffness_scale += (load_scaling - 1.0f);
     leg_states_[adjacent2].stiffness_scale += (load_scaling - 1.0f);
 }
 
-// Legacy compatibility methods
+/** Legacy compatibility methods. */
 Point3D AdmittanceController::orientationError(const Point3D &target) {
     if (!imu_)
         return Point3D(0, 0, 0);
@@ -263,12 +276,15 @@ Point3D AdmittanceController::integrateDerivatives(int leg_index) {
 
     LegAdmittanceState &state = leg_states_[leg_index];
 
-    // For derivative-based integration, we work with position error from equilibrium
-    // In a full implementation, this would get current leg position from locomotion system
-    // For now, we'll use the tracked state position error
+    /**
+     * @brief Use position error from equilibrium for derivative-based integration.
+     *
+     * In a full implementation, this would read current leg position from the locomotion system.
+     * For now, the tracked state position error is used.
+     */
     Point3D position_error = leg_dynamics_state_[leg_index].position;
 
-    // Setup parameters for derivative function
+    /** Set up parameters for the derivative function. */
     AdmittanceDerivativeParams params;
     params.mass = state.params.virtual_mass;
     params.damping = state.params.virtual_damping;
@@ -276,12 +292,12 @@ Point3D AdmittanceController::integrateDerivatives(int leg_index) {
     params.external_force = external_forces_[leg_index];
     params.equilibrium = state.equilibrium_position;
 
-    // Choose integration method based on precision configuration using math_utils functions
+    /** Choose integration method based on precision configuration using math_utils functions. */
     math_utils::StateVector<Point3D> new_state;
 
     switch (config_.precision) {
     case PRECISION_HIGH:
-        // Use RK4 for maximum accuracy
+        /** Use RK4 for maximum accuracy. */
         new_state = math_utils::rungeKutta4<Point3D>(
             admittanceDerivatives,
             leg_dynamics_state_[leg_index],
@@ -291,7 +307,7 @@ Point3D AdmittanceController::integrateDerivatives(int leg_index) {
         break;
 
     case PRECISION_MEDIUM:
-        // Use RK2 for balanced performance
+        /** Use RK2 for balanced performance. */
         new_state = math_utils::rungeKutta2<Point3D>(
             admittanceDerivatives,
             leg_dynamics_state_[leg_index],
@@ -302,7 +318,7 @@ Point3D AdmittanceController::integrateDerivatives(int leg_index) {
 
     case PRECISION_LOW:
     default:
-        // Use Euler for fastest computation
+        /** Use Euler for fastest computation. */
         new_state = math_utils::forwardEuler<Point3D>(
             admittanceDerivatives,
             leg_dynamics_state_[leg_index],
@@ -312,23 +328,27 @@ Point3D AdmittanceController::integrateDerivatives(int leg_index) {
         break;
     }
 
-    // Update state
+    /** Update state. */
     leg_dynamics_state_[leg_index] = new_state;
 
-    // Update legacy params for compatibility
+    /** Update legacy params for compatibility. */
     state.params.velocity = new_state.velocity;
 
-    // Calculate position delta from velocity
+    /** Calculate position delta from velocity. */
     Point3D position_delta = new_state.velocity * delta_time_;
 
-    // For validation and comparison, also calculate using direct acceleration method
+    /** For validation, also calculate using the direct acceleration method. */
     if (config_.precision == PRECISION_HIGH) {
-        // Use calculateAcceleration for validation against derivative method
+        /** Use calculateAcceleration for validation against derivative method. */
         Point3D direct_acceleration = calculateAcceleration(state.params, position_error);
 
-        // The results should be mathematically equivalent
-        // This can be used for debugging or switching integration methods
-        (void)direct_acceleration; // Suppress unused variable warning for now
+        /**
+         * @brief Results should be mathematically equivalent.
+         *
+         * Use this for debugging or switching integration methods.
+         */
+        /** Suppress unused variable warning for now. */
+        (void)direct_acceleration;
     }
 
     return position_delta;
@@ -339,7 +359,7 @@ math_utils::StateVector<Point3D> AdmittanceController::admittanceDerivatives(
     double t,
     void *params) {
 
-    // Cast parameters
+    /** Cast parameters. */
     AdmittanceDerivativeParams *admittance_params =
         static_cast<AdmittanceDerivativeParams *>(params);
 
@@ -347,12 +367,17 @@ math_utils::StateVector<Point3D> AdmittanceController::admittanceDerivatives(
         return math_utils::StateVector<Point3D>(Point3D(0, 0, 0), Point3D(0, 0, 0));
     }
 
-    // Extract state variables
-    Point3D position = state.position; // x = displacement from equilibrium
-    Point3D velocity = state.velocity; // ẋ = velocity
+    /** Extract state variables. */
+    /** x = displacement from equilibrium. */
+    Point3D position = state.position;
+    /** x-dot = velocity. */
+    Point3D velocity = state.velocity;
 
-    // Admittance differential equation: M*ẍ + B*ẋ + K*x = F_ext
-    // Solving for acceleration: ẍ = (F_ext - B*ẋ - K*x) / M
+    /**
+     * @brief Admittance differential equation: M*x-ddot + B*x-dot + K*x = F_ext.
+     *
+     * Solve for acceleration: x-ddot = (F_ext - B*x-dot - K*x) / M.
+     */
 
     Point3D spring_force = position * (-admittance_params->stiffness);
     Point3D damping_force = velocity * (-admittance_params->damping);
@@ -360,6 +385,6 @@ math_utils::StateVector<Point3D> AdmittanceController::admittanceDerivatives(
 
     Point3D acceleration = net_force * (DEFAULT_ANGULAR_SCALING / admittance_params->mass);
 
-    // Return derivatives: [dx/dt, dv/dt] = [velocity, acceleration]
+    /** Return derivatives: [dx/dt, dv/dt] = [velocity, acceleration]. */
     return math_utils::StateVector<Point3D>(velocity, acceleration);
 }

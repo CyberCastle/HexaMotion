@@ -10,7 +10,8 @@ int main() {
     p.coxa_length = 50;
     p.femur_length = 101;
     p.tibia_length = 208;
-    p.default_height_offset = -208.0; // Set to -tibia_length for explicit configuration
+    /** Set to -tibia_length for explicit configuration. */
+    p.default_height_offset = -208.0;
     p.robot_height = 208;
     p.time_delta = 1.0 / 50.0;
     p.coxa_angle_limits[0] = -65;
@@ -21,7 +22,8 @@ int main() {
     p.tibia_angle_limits[1] = 45;
 
     RobotModel model(p);
-    model.workspaceAnalyzerInitializer(); // Inicializar WorkspaceAnalyzer
+    /** Initialize WorkspaceAnalyzer. */
+    model.workspaceAnalyzerInitializer();
     if (!model.validate()) {
         std::cerr << "Invalid model parameters" << std::endl;
         return 1;
@@ -49,11 +51,11 @@ int main() {
                         continue;
                     }
 
-                    // FK in global coordinates
+                    /** FK in global coordinates. */
                     Point3D global_pos = model.forwardKinematicsGlobalCoordinates(leg, angles);
-                    // Transform back to local coordinates using zero pose as reference
+                    /** Transform back to local coordinates using zero pose as reference. */
                     Point3D local_pos = model.transformGlobalToLocalCoordinates(leg, global_pos, JointAngles(0, 0, 0));
-                    // Check IK round-trip
+                    /** Check IK round-trip. */
                     JointAngles ik_angles = model.inverseKinematicsGlobalCoordinates(leg, global_pos);
                     Point3D fk_verify = model.forwardKinematicsGlobalCoordinates(leg, ik_angles);
                     double err = std::sqrt(std::pow(fk_verify.x - global_pos.x, 2) +
@@ -79,7 +81,8 @@ int main() {
 
     std::cout << "Max IK/FK error encountered: " << max_error << " mm" << std::endl;
 
-    const double max_acceptable_error = 0.01; // 0.01 mm tolerance
+    /** 0.01 mm tolerance. */
+    const double max_acceptable_error = 0.01;
     if (max_error > max_acceptable_error) {
         std::cerr << "FAIL: IK/FK round-trip error " << max_error
                   << " mm exceeds tolerance " << max_acceptable_error << " mm" << std::endl;

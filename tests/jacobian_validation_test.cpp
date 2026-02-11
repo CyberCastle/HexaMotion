@@ -4,16 +4,16 @@
 #include <iomanip>
 #include <iostream>
 
-// Numerical differentiation to validate Jacobian
+/** Numerical differentiation to validate Jacobian. */
 Eigen::Matrix3d numericalJacobian(const RobotModel &model, int leg,
                                   const JointAngles &angles,
                                   double delta = JACOBIAN_DELTA) {
     Eigen::Matrix3d jacobian;
 
-    // Get base position
+    /** Get base position. */
     Point3D base_pos = model.forwardKinematicsGlobalCoordinates(leg, angles);
 
-    // Test each joint using central differences for better accuracy
+    /** Test each joint using central differences for better accuracy. */
     for (int joint = 0; joint < 3; ++joint) {
         JointAngles plus = angles;
         JointAngles minus = angles;
@@ -36,7 +36,7 @@ Eigen::Matrix3d numericalJacobian(const RobotModel &model, int leg,
         Point3D pos_plus = model.forwardKinematicsGlobalCoordinates(leg, plus);
         Point3D pos_minus = model.forwardKinematicsGlobalCoordinates(leg, minus);
 
-        // Calculate partial derivative
+        /** Calculate partial derivative. */
         jacobian(0, joint) = (pos_plus.x - pos_minus.x) / delta;
         jacobian(1, joint) = (pos_plus.y - pos_minus.y) / delta;
         jacobian(2, joint) = (pos_plus.z - pos_minus.z) / delta;
@@ -86,7 +86,8 @@ int main() {
     p.coxa_length = 50;
     p.femur_length = 101;
     p.tibia_length = 208;
-    p.default_height_offset = -208.0; // Set to -tibia_length for explicit configuration
+    /** Set to -tibia_length for explicit configuration. */
+    p.default_height_offset = -208.0;
     p.robot_height = 208;
     p.time_delta = 1.0 / 50.0;
     p.coxa_angle_limits[0] = -65;
@@ -97,7 +98,8 @@ int main() {
     p.tibia_angle_limits[1] = 45;
 
     RobotModel model(p);
-    model.workspaceAnalyzerInitializer(); // Inicializar WorkspaceAnalyzer
+    /** Initialize WorkspaceAnalyzer. */
+    model.workspaceAnalyzerInitializer();
 
     std::cout << std::fixed << std::setprecision(6);
 
@@ -115,7 +117,7 @@ int main() {
     std::cout << "╚══════════════════════════════════════════════════════════════╝" << std::endl;
     std::cout << std::endl;
 
-    // Test with zero angles first
+    /** Test with zero angles first. */
     JointAngles zero_angles(0, 0, 0);
 
     for (int leg = 0; leg < NUM_LEGS; ++leg) {
@@ -146,13 +148,14 @@ int main() {
         printErrorAnalysis(analytical_jacobian, numerical_jacobian);
     }
 
-    // Test with a very simple case - just one joint
+    /** Test with a very simple case: just one joint. */
     std::cout << "╔══════════════════════════════════════════════════════════════╗" << std::endl;
     std::cout << "║                 SINGLE JOINT PERTURBATION TEST              ║" << std::endl;
     std::cout << "╚══════════════════════════════════════════════════════════════╝" << std::endl;
     std::cout << std::endl;
 
-    for (int leg = 0; leg < 1; ++leg) { // Just test leg 0
+    /** Just test leg 0. */
+    for (int leg = 0; leg < 1; ++leg) {
         std::cout << "🔍 Detailed Analysis for Leg " << leg << ":" << std::endl;
         std::cout << std::endl;
 
@@ -162,8 +165,9 @@ int main() {
                   << ", " << std::setw(8) << base_pos.y
                   << ", " << std::setw(8) << base_pos.z << ") mm" << std::endl;
 
-        // Test coxa joint only
-        double perturbation = JACOBIAN_DELTA; // 0.001 radians ≈ 0.057 degree
+        /** Test coxa joint only. */
+        /** 0.001 radians ~= 0.057 degree. */
+        double perturbation = JACOBIAN_DELTA;
 
         JointAngles plus = test_angles;
         JointAngles minus = test_angles;
@@ -193,7 +197,7 @@ int main() {
 
         std::cout << std::endl;
 
-        // Calculate individual errors
+        /** Calculate individual errors. */
         double error_x = std::abs(dx - analytical_jacobian(0, 0));
         double error_y = std::abs(dy - analytical_jacobian(1, 0));
         double error_z = std::abs(dz - analytical_jacobian(2, 0));

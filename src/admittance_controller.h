@@ -6,7 +6,7 @@
 #include <memory>
 #include <vector>
 
-// Forward declarations to avoid circular dependency
+/** Forward declarations to avoid circular dependency. */
 class RobotModel;
 class TerrainAdaptation;
 class WorkspaceAnalyzer;
@@ -28,13 +28,13 @@ class AdmittanceController {
      * @brief Admittance parameters for virtual leg model
      */
     struct AdmittanceParams {
-        double virtual_mass;      //< Virtual mass (kg)
-        double virtual_damping;   //< Damping coefficient
-        double virtual_stiffness; //< Spring stiffness
-        Point3D velocity;         //< Current velocity
-        Point3D acceleration;     //< Current acceleration
-        Point3D applied_force;    //< Applied force
-        Point3D position_delta;   //< Position change from admittance
+        double virtual_mass;      /**< Virtual mass (kg). */
+        double virtual_damping;   /**< Damping coefficient. */
+        double virtual_stiffness; /**< Spring stiffness. */
+        Point3D velocity;         /**< Current velocity. */
+        Point3D acceleration;     /**< Current acceleration. */
+        Point3D applied_force;    /**< Applied force. */
+        Point3D position_delta;   /**< Position change from admittance. */
 
         AdmittanceParams() : virtual_mass(0.5f), virtual_damping(2.0f),
                              virtual_stiffness(100.0f), velocity(0, 0, 0),
@@ -45,11 +45,11 @@ class AdmittanceController {
      * @brief Parameters for derivative function in admittance equation
      */
     struct AdmittanceDerivativeParams {
-        double mass;            //< Virtual mass
-        double damping;         //< Damping coefficient
-        double stiffness;       //< Spring stiffness
-        Point3D external_force; //< External force applied
-        Point3D equilibrium;    //< Equilibrium position
+        double mass;            /**< Virtual mass. */
+        double damping;         /**< Damping coefficient. */
+        double stiffness;       /**< Spring stiffness. */
+        Point3D external_force; /**< External force applied. */
+        Point3D equilibrium;    /**< Equilibrium position. */
 
         AdmittanceDerivativeParams() : mass(0.5f), damping(2.0f), stiffness(100.0f),
                                        external_force(0, 0, 0), equilibrium(0, 0, 0) {}
@@ -59,9 +59,9 @@ class AdmittanceController {
      * @brief ODE integration methods
      */
     enum IntegrationMethod {
-        EULER_METHOD,  //< First-order Euler (fastest)
-        RUNGE_KUTTA_2, //< Second-order RK (balanced)
-        RUNGE_KUTTA_4  //< Fourth-order RK (most accurate)
+        EULER_METHOD,  /**< First-order Euler (fastest). */
+        RUNGE_KUTTA_2, /**< Second-order RK (balanced). */
+        RUNGE_KUTTA_4  /**< Fourth-order RK (most accurate). */
     };
 
     /**
@@ -71,24 +71,24 @@ class AdmittanceController {
         AdmittanceParams params;
         Point3D equilibrium_position;
         bool active;
-        double stiffness_scale; //< Dynamic stiffness scaling
+        double stiffness_scale; /**< Dynamic stiffness scaling. */
 
         LegAdmittanceState() : equilibrium_position(0, 0, 0), active(true), stiffness_scale(1.0f) {}
     };
 
   private:
     RobotModel &model_;
-    std::unique_ptr<WorkspaceAnalyzer> workspace_analyzer_; // Workspace analysis and validation
+    std::unique_ptr<WorkspaceAnalyzer> workspace_analyzer_; /**< Workspace analysis and validation. */
     IIMUInterface *imu_;
     IFSRInterface *fsr_;
     ComputeConfig config_;
     IntegrationMethod integration_method_;
 
-    // Per-leg admittance state
+    /** Per-leg admittance state. */
     LegAdmittanceState leg_states_[NUM_LEGS];
     double delta_time_;
 
-    // Dynamic stiffness parameters
+    /** Dynamic stiffness parameters. */
     bool dynamic_stiffness_enabled_;
     double swing_stiffness_scaler_;
     double load_stiffness_scaler_;
@@ -104,7 +104,8 @@ class AdmittanceController {
      */
     AdmittanceController(RobotModel &model, IIMUInterface *imu, IFSRInterface *fsr,
                          ComputeConfig config = ComputeConfig::medium());
-    ~AdmittanceController(); // Needed for unique_ptr with forward declaration
+    /** Needed for unique_ptr with forward declaration. */
+    ~AdmittanceController();
 
     /**
      * @brief Initialize admittance controller
@@ -177,7 +178,7 @@ class AdmittanceController {
      */
     void setPrecisionConfig(const ComputeConfig &config);
 
-    // Legacy compatibility methods
+    /** Legacy compatibility methods. */
     /**
      * @brief Compute orientation error with respect to a target pose.
      * @param target Desired roll, pitch and yaw in degrees.
@@ -206,27 +207,27 @@ class AdmittanceController {
     void selectIntegrationMethod();
     void initializeDefaultParameters();
 
-    // Admittance equation calculation
+    /** Admittance equation calculation. */
     Point3D calculateAcceleration(const AdmittanceParams &params, const Point3D &position_error);
 
-    // Derivative-based integration using math_utils functions
+    /** Derivative-based integration using math_utils functions. */
     Point3D integrateDerivatives(int leg_index);
 
-    // Derivative function for admittance system
+    /** Derivative function for admittance system. */
     static math_utils::StateVector<Point3D> admittanceDerivatives(
         const math_utils::StateVector<Point3D> &state,
         double t,
         void *params);
 
-    // Current state tracking for derivative integration
+    /** Current state tracking for derivative integration. */
     math_utils::StateVector<Point3D> leg_dynamics_state_[NUM_LEGS];
     Point3D external_forces_[NUM_LEGS];
     double current_time_;
 
-    // Dynamic stiffness calculation
+    /** Dynamic stiffness calculation. */
     double calculateStiffnessScale(int leg_index, StepPhase leg_state,
                                    const Point3D &leg_position);
     void updateAdjacentLegStiffness(int swing_leg_index, double load_scaling);
 };
 
-#endif // ADMITTANCE_CONTROLLER_H
+#endif /**< ADMITTANCE_CONTROLLER_H */

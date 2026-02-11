@@ -13,24 +13,24 @@
 
 #include <string>
 #include <vector>
-// Forward declarations
+/** Forward declarations. */
 class WalkController;
 class StateController;
 
-// Main locomotion system class
+/** Main locomotion system class. */
 class LocomotionSystem {
   public:
-    // Stop behavior options for stopWalking()
+    /** Stop behavior options for stopWalking(). */
     enum StopMode {
-        STOP_UNIFORM, // Force identical stance (phase reset, identity pose) for all legs
-        STOP_SOFT     // Force stance without phase reset to preserve continuity
+        STOP_UNIFORM, /**< Force identical stance (phase reset, identity pose) for all legs. */
+        STOP_SOFT     /**< Force stance without phase reset to preserve continuity. */
     };
 
-    /// Maximum time (seconds) to wait for initial servo joint readback during initialization.
-    /// Equivalent to OpenSHC ACQUISTION_TIME in main.cpp.
+    /** Maximum time (seconds) to wait for initial servo joint readback during initialization. */
+    /** Equivalent to OpenSHC ACQUISTION_TIME in main.cpp. */
     static constexpr int ACQUISITION_TIMEOUT_S = 10;
 
-    // Error control
+    /** Error control. */
     enum ErrorCode {
         NO_ERROR = 0,
         IMU_ERROR = 1,
@@ -39,32 +39,32 @@ class LocomotionSystem {
         KINEMATICS_ERROR = 4,
         STABILITY_ERROR = 5,
         PARAMETER_ERROR = 6,
-        SENSOR_ERROR = 7,        // General sensor communication error
-        SERVO_BLOCKED_ERROR = 8, // Servo blocked by status flags
-        STATE_ERROR = 9          // System state error
+        SENSOR_ERROR = 7,        /**< General sensor communication error. */
+        SERVO_BLOCKED_ERROR = 8, /**< Servo blocked by status flags. */
+        STATE_ERROR = 9          /**< System state error. */
     };
 
   private:
-    // Robot parameters
+    /** Robot parameters. */
     Parameters params;
 
-    // Hardware interfaces
+    /** Hardware interfaces. */
     IIMUInterface *imu_interface;
     IFSRInterface *fsr_interface;
     IServoInterface *servo_interface;
 
-    // System states
-    Eigen::Vector3d body_position;    // Body position [x,y,z]
-    Eigen::Vector3d body_orientation; // Body orientation [roll,pitch,yaw]
-    Leg legs[NUM_LEGS];               // Leg objects containing all leg data
+    /** System states. */
+    Eigen::Vector3d body_position;    /**< Body position [x,y,z]. */
+    Eigen::Vector3d body_orientation; /**< Body orientation [roll,pitch,yaw]. */
+    Leg legs[NUM_LEGS];               /**< Leg objects containing all leg data. */
 
-    // Control variables
+    /** Control variables. */
     bool system_enabled;
 
-    // Velocity control
+    /** Velocity control. */
     CartesianVelocityController *velocity_controller;
 
-    // Error variables
+    /** Error variables. */
     ErrorCode last_error;
 
     RobotModel model;
@@ -72,23 +72,26 @@ class LocomotionSystem {
     WalkController *walk_ctrl;
     AdmittanceController *admittance_ctrl;
 
-    // Optional state controller integration (non-owning).
+    /** Optional state controller integration (non-owning). */
     StateController *state_controller_ = nullptr;
 
-    // --- Debug / instrumentation helpers ---
-    // Track last phase we logged for each leg to debounce repetitive FSR transition spam when other
-    // subsystems (e.g., WalkController) overwrite phases each cycle. Only used when debug_fsr_transitions is true.
+    /** Debug/instrumentation helpers. */
+    /**
+     * @brief Track last phase logged per leg to debounce repetitive FSR transition spam.
+     *
+     * Used only when debug_fsr_transitions is true and other subsystems overwrite phases each cycle.
+     */
 #ifdef TESTING_ENABLED
     StepPhase last_logged_leg_phase_[NUM_LEGS];
     bool last_logged_initialized_ = false;
 #endif
 
-    // System state management
+    /** System state management. */
     SystemState system_state;
     bool startup_in_progress;
     bool shutdown_in_progress;
 
-    // Joint acquisition state (OpenSHC ACQUISTION_TIME equivalent)
+    /** Joint acquisition state (OpenSHC ACQUISTION_TIME equivalent). */
     bool joint_positions_initialised_ = false;
 
     /**
@@ -102,60 +105,62 @@ class LocomotionSystem {
      */
     bool attemptJointAcquisition();
 
-    // Indicates we can resume walking without running the full body startup sequence
+    /** Indicates we can resume walking without running the full body startup sequence. */
     bool resume_from_stop_ = false;
 
-    // Último comando de velocidad deseado (OpenSHC-style persistent velocities)
-    double commanded_linear_velocity_x_ = 0.0; // X component
-    double commanded_linear_velocity_y_ = 0.0; // Y component
+    /** Last desired velocity command (OpenSHC-style persistent velocities). */
+    double commanded_linear_velocity_x_ = 0.0; /**< X component. */
+    double commanded_linear_velocity_y_ = 0.0; /**< Y component. */
     double commanded_angular_velocity_ = 0.0;
 
     bool setLegJointAngles(int leg_index, const JointAngles &q);
 
-    // OpenSHC-style IK batch processing functions
+    /** OpenSHC-style IK batch processing functions. */
     void applyInverseKinematicsToAllLegs();
     void publishJointAnglesToServos();
 
-    // Update per-joint telemetry (velocity/effort) from servo interface if available
+    /** Update per-joint telemetry (velocity/effort) from servo interface if available. */
     void updateLegJointTelemetry();
 
-    // Runtime-only switch to gate coxa servo output during tests
+    /** Runtime-only switch to gate coxa servo output during tests. */
     bool coxa_movement_enabled_ = true;
 
 #ifdef TESTING_ENABLED
-    // --- Coxa telemetry instrumentation (TESTING ONLY) ---
+    /** Coxa telemetry instrumentation (testing only). */
     struct CoxaTelemetrySample {
-        double time;                         // simulation time (s)
-        double global_angle[NUM_LEGS];       // absolute coxa joint angle (rad)
-        double local_angle[NUM_LEGS];        // local (offset-compensated) coxa angle (rad)
-        double global_velocity[NUM_LEGS];    // d(global_angle)/dt (rad/s)
-        double local_velocity[NUM_LEGS];     // d(local_angle)/dt (rad/s)
-        double global_accel[NUM_LEGS];       // d(global_velocity)/dt (rad/s^2)
-        double local_accel[NUM_LEGS];        // d(local_velocity)/dt (rad/s^2)
-        StepPhase phase[NUM_LEGS];           // resolved phase (STANCE/SWING)
-        double stride_dx[NUM_LEGS];          // current (tip.x - stance_start_tip.x) in global frame (mm)
-        double stride_dy[NUM_LEGS];          // current (tip.y - stance_start_tip.y) in global frame (mm)
-        double body_vel_x;                   // commanded linear X velocity (mm/s)
-        double body_vel_y;                   // commanded linear Y velocity (mm/s)
-        double body_ang_vel;                 // commanded angular velocity (deg/s)
-        double servo_command_coxa[NUM_LEGS]; // last servo command for coxa (rad, internal sign-compensated)
+        double time;                         /**< Simulation time (s). */
+        double global_angle[NUM_LEGS];       /**< Absolute coxa joint angle (rad). */
+        double local_angle[NUM_LEGS];        /**< Local (offset-compensated) coxa angle (rad). */
+        double global_velocity[NUM_LEGS];    /**< d(global_angle)/dt (rad/s). */
+        double local_velocity[NUM_LEGS];     /**< d(local_angle)/dt (rad/s). */
+        double global_accel[NUM_LEGS];       /**< d(global_velocity)/dt (rad/s^2). */
+        double local_accel[NUM_LEGS];        /**< d(local_velocity)/dt (rad/s^2). */
+        StepPhase phase[NUM_LEGS];           /**< Resolved phase (STANCE/SWING). */
+        double stride_dx[NUM_LEGS];          /**< tip.x - stance_start_tip.x in global frame (mm). */
+        double stride_dy[NUM_LEGS];          /**< tip.y - stance_start_tip.y in global frame (mm). */
+        double body_vel_x;                   /**< Commanded linear X velocity (mm/s). */
+        double body_vel_y;                   /**< Commanded linear Y velocity (mm/s). */
+        double body_ang_vel;                 /**< Commanded angular velocity (deg/s). */
+        double servo_command_coxa[NUM_LEGS]; /**< Last servo command for coxa (rad, sign-compensated). */
     };
-    bool telemetry_enabled_ = false;                      // runtime toggle
-    double telemetry_time_accumulator_ = 0.0;             // simulated time accumulator
-    std::vector<CoxaTelemetrySample> telemetry_;          // ring / linear buffer
-    static constexpr size_t kMaxTelemetrySamples_ = 8192; // cap to avoid unbounded growth in tests
-    // Previous state for velocity/accel estimation
+    bool telemetry_enabled_ = false;                      /**< Runtime toggle. */
+    double telemetry_time_accumulator_ = 0.0;             /**< Simulated time accumulator. */
+    std::vector<CoxaTelemetrySample> telemetry_;          /**< Ring/linear buffer. */
+    static constexpr size_t kMaxTelemetrySamples_ = 8192; /**< Cap to avoid unbounded growth in tests. */
+    /** Previous state for velocity/accel estimation. */
     double prev_coxa_angle_[NUM_LEGS] = {0};
     double prev_coxa_velocity_[NUM_LEGS] = {0};
     bool prev_valid_ = false;
-    // Stride start tip position per leg (updated when entering STANCE)
+    /** Stride start tip position per leg (updated when entering STANCE). */
     Point3D stride_start_tip_[NUM_LEGS];
     bool stride_start_valid_[NUM_LEGS] = {false, false, false, false, false, false};
-    // Last servo command (degrees) captured in publish step to compare vs internal angle
+    /** Last servo command (degrees) captured in publish step to compare vs internal angle. */
     double last_servo_cmd_deg_[NUM_LEGS][DOF_PER_LEG] = {{0}};
 
-    void recordCoxaTelemetrySample(); // internal helper (called inside update())
-  public:                             // test-only public accessors (still under TESTING_ENABLED)
+    /** Internal helper (called inside update()). */
+    void recordCoxaTelemetrySample();
+
+  public: /**< Test-only public accessors (still under TESTING_ENABLED). */
     void enableTelemetry(bool enable) { telemetry_enabled_ = enable; }
     bool isTelemetryEnabled() const { return telemetry_enabled_; }
     size_t getTelemetrySampleCount() const { return telemetry_.size(); }
@@ -197,7 +202,7 @@ class LocomotionSystem {
      */
     bool isSystemEnabled() const;
 
-    // Inverse kinematics
+    /** Inverse kinematics. */
     /** Compute joint angles for a desired leg tip position. */
     JointAngles calculateInverseKinematics(int leg_index, const Point3D &target_position);
 
@@ -208,7 +213,7 @@ class LocomotionSystem {
     /** Get joint limit proximity (1.0 = far from limits, 0.0 = at limits). */
     double getJointLimitProximity(int leg_index, const JointAngles &angles);
 
-    // Gait planner
+    /** Gait planner. */
     /** Select the active gait configuration. */
     bool setGaitConfiguration(const GaitConfiguration &gait_config);
     /** Plan the next gait step from desired velocities. */
@@ -222,13 +227,16 @@ class LocomotionSystem {
      */
     bool setParameter(const std::string &name, double value);
 
-    // State management (OpenSHC equivalent)
-    /** Check if startup sequence is in progress */
+    /** State management (OpenSHC equivalent). */
+    /** Check if startup sequence is in progress. */
     bool isStartupInProgress() const { return startup_in_progress; }
-    /** Check if shutdown sequence is in progress */
+    /** Check if shutdown sequence is in progress. */
     bool isShutdownInProgress() const { return shutdown_in_progress; }
-    /** Check if initial joint positions were successfully acquired from servos.
-     *  Equivalent to OpenSHC StateController::jointPositionsInitialised(). */
+    /**
+     * @brief Check if initial joint positions were successfully acquired from servos.
+     *
+     * Equivalent to OpenSHC StateController::jointPositionsInitialised().
+     */
     bool jointPositionsInitialised() const { return joint_positions_initialised_; }
     /**
      * @brief Attach a StateController to be updated from LocomotionSystem (non-owning).
@@ -245,13 +253,13 @@ class LocomotionSystem {
      * @return True if state controller pointer is set.
      */
     bool hasStateController() const { return state_controller_ != nullptr; }
-    /** Get current system state */
+    /** Get current system state. */
     SystemState getSystemState() const { return system_state; }
     /** Get current composed body pose (OpenSHC Model::getCurrentPose equivalent). */
     Pose getCurrentBodyPose() const;
     /** Check if legs are bearing load based on body pose controller estimate. */
     bool legsBearingLoad() const;
-    /** Get startup progress percent (0-100). Returns 100 if startup already completed or controller missing. */
+    /** Get startup progress percent (0-100). Returns 100 if startup is complete or controller missing. */
     int getStartupProgressPercent() const {
         if (!body_pose_ctrl)
             return 100;
@@ -260,7 +268,7 @@ class LocomotionSystem {
         return body_pose_ctrl->getStartupProgressPercent();
     }
 
-    // Locomotion control
+    /** Locomotion control. */
     /** Start walking forward indefinitely. */
     bool walkForward(double velocity);
     /** Start walking backward indefinitely. */
@@ -282,14 +290,14 @@ class LocomotionSystem {
      */
     bool executeShutdownSequence();
 
-    // OpenSHC-style walking control
+    /** OpenSHC-style walking control. */
     /** Start walking (startup sequence only). Gait and velocities must have been set beforehand. */
     bool startWalking();
 
-    /** Stop walking and keep all feet on ground without shutdown; behavior selectable */
+    /** Stop walking and keep all feet on ground without shutdown; behavior selectable. */
     bool stopWalking(StopMode mode = STOP_UNIFORM);
 
-    // Stability analysis
+    /** Stability analysis. */
     /** Verify that current pose maintains stability margin. */
     bool checkStabilityMargin();
     /** Calculate center of pressure under the robot. */
@@ -302,8 +310,8 @@ class LocomotionSystem {
     /** Check if the robot is statically stable. */
     bool isStaticallyStable();
 
-    // Body pose control
-    /** Set robot to standing pose */
+    /** Body pose control. */
+    /** Set robot to standing pose. */
     bool setStandingPose();
 
     /**
@@ -318,7 +326,7 @@ class LocomotionSystem {
     /** Query if initial standing pose transition is active. */
     bool isInitialStandingPoseActive() const { return body_pose_ctrl && body_pose_ctrl->isInitialStandingPoseActive(); }
 
-    /** Set body pose with position and orientation (orientation in radians) */
+    /** Set body pose with position and orientation (orientation in radians). */
     bool setBodyPose(const Eigen::Vector3d &position, const Eigen::Vector3d &orientation);
 
     /**
@@ -329,34 +337,34 @@ class LocomotionSystem {
      */
     bool setManualBodyPoseInput(const Eigen::Vector3d &position, const Eigen::Vector3d &orientation);
 
-    /** Check if smooth movement is in progress */
+    /** Check if smooth movement is in progress. */
     bool isSmoothMovementInProgress() const;
 
-    /** Reset smooth movement trajectory */
+    /** Reset smooth movement trajectory. */
     void resetSmoothMovement();
 
     ErrorCode getLastError() const { return last_error; }
     String getErrorMessage(ErrorCode error);
     bool handleError(ErrorCode error);
 
-    // Leg state management
+    /** Leg state management. */
     /** Update leg contact states based on FSR sensor readings. */
     void updateLegStates();
 
-    // System update
+    /** System update. */
     /** Update all controllers and state machines. */
     bool update();
 
     /** Update FSR and IMU sensors in parallel for optimal performance. */
     bool updateSensorsParallel();
 
-    /** Enable/disable coxa joint movement globally */
+    /** Enable/disable coxa joint movement globally. */
     void setCoxaMovementEnabled(bool enabled) { coxa_movement_enabled_ = enabled; }
 
     /** Query coxa joint movement state. */
     bool isCoxaMovementEnabled() const { return coxa_movement_enabled_; }
 
-    // Getters
+    /** Getters. */
     const Parameters &getParameters() const { return params; }
     RobotModel &getRobotModel() { return model; }
     const RobotModel &getRobotModel() const { return model; }
@@ -367,7 +375,7 @@ class LocomotionSystem {
     JointAngles getJointAngles(int leg_index) const { return legs[leg_index].getJointAngles(); }
     Point3D getLegPosition(int leg_index) const { return legs[leg_index].getCurrentTipPositionGlobal(); }
 
-    // Leg access methods
+    /** Leg access methods. */
     /** Get leg object by index. */
     const Leg &getLeg(int leg_index) const { return legs[leg_index]; }
     /** Get leg object by index (mutable). */
@@ -375,11 +383,11 @@ class LocomotionSystem {
     /** Get pointer to legs array (for batch operations like poseForLegManipulation). */
     Leg *getLegsArray() { return legs; }
 
-    // Setters
+    /** Setters. */
     /** Replace the current parameter set. */
     bool setParameters(const Parameters &new_params);
 
-    // Cartesian velocity control
+    /** Cartesian velocity control. */
     /** Get the velocity controller instance for configuration. */
     CartesianVelocityController *getVelocityController() { return velocity_controller; }
 
@@ -398,22 +406,22 @@ class LocomotionSystem {
     /** Get robot parameters. */
     const Parameters &getParams() const { return params; }
 
-    // Getter for WalkController
+    /** Getter for WalkController. */
     WalkController *getWalkController() { return walk_ctrl; }
 
-    /** Direct access to BodyPoseController (tests & advanced instrumentation) */
+    /** Direct access to BodyPoseController (tests and advanced instrumentation). */
     BodyPoseController *getBodyPoseController() { return body_pose_ctrl; }
     const BodyPoseController *getBodyPoseController() const { return body_pose_ctrl; }
 
   private:
-    // Helper methods
+    /** Helper methods. */
     double constrainAngle(double angle, double min_angle, double max_angle);
     bool validateParameters();
     bool checkJointLimits(int leg_index, const JointAngles &angles);
 
-    // (Removed unused adaptive control helpers flagged by static analysis)
+    /** Removed unused adaptive control helpers flagged by static analysis. */
 };
 
 #include "math_utils.h"
 
-#endif // LOCOMOTION_SYSTEM_H
+#endif /**< LOCOMOTION_SYSTEM_H */

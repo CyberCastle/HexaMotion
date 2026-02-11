@@ -24,7 +24,7 @@
  *
  * Typical usage for kinematic control:
  *   1. leg.setDesiredTipPose(target_position);
- *   2. leg.applyIK(); // No need to pass RobotModel - it's stored as a reference
+ *   2. leg.applyIK(); (No need to pass RobotModel; it is stored as a reference.)
  *
  * ---
  *
@@ -54,7 +54,7 @@ class Leg {
      */
     ~Leg() = default;
 
-    // ===== IDENTIFICATION AND CONFIGURATION =====
+    /** Identification and configuration. */
 
     /**
      * @brief Get the leg identification number.
@@ -74,7 +74,7 @@ class Leg {
      */
     int getDOF() const { return DOF_PER_LEG; }
 
-    // ===== JOINT ANGLES AND POSITIONS =====
+    /** Joint angles and positions. */
 
     /**
      * @brief Get current joint angles.
@@ -159,7 +159,7 @@ class Leg {
      */
     void updateTipPosition();
 
-    // ===== KINEMATIC STATE =====
+    /** Kinematic state. */
 
     /**
      * @brief Apply inverse kinematics to reach a target position and update joint angles & tip position.
@@ -202,7 +202,7 @@ class Leg {
      */
     Eigen::Vector3d getCalculatedTipForce() const { return tip_force_calculated_; }
 
-    // ===== LEG STATE (OpenSHC equivalent) =====
+    /** Leg state (OpenSHC equivalent). */
 
     /**
      * @brief Get current leg state (walking, manual, transitioning).
@@ -228,7 +228,7 @@ class Leg {
      */
     void setSwingProgress(double progress) { swing_progress_ = progress; }
 
-    // ===== GAIT AND CONTACT STATE =====
+    /** Gait and contact state. */
 
     /**
      * @brief Get current step phase.
@@ -278,7 +278,7 @@ class Leg {
      */
     void setContactForce(double force) { contact_force_ = force; }
 
-    // ===== OPENSHC-STYLE DESIRED POSITION MANAGEMENT =====
+    /** OpenSHC-style desired position management. */
 
     /**
      * @brief Set desired tip position for OpenSHC-style batch IK processing
@@ -292,7 +292,7 @@ class Leg {
      */
     Point3D getDesiredTipPosition() const { return desired_tip_position_; }
 
-    // ===== FSR CONTACT HISTORY =====
+    /** FSR contact history. */
 
     /**
      * @brief Update FSR contact history with new reading.
@@ -333,7 +333,7 @@ class Leg {
      */
     void resetFSRHistory();
 
-    // ===== GAIT PHASE OFFSET =====
+    /** Gait phase offset. */
 
     /**
      * @brief Set the phase offset for this leg in the gait cycle.
@@ -370,7 +370,7 @@ class Leg {
      */
     bool shouldBeInSwing(double global_gait_phase, double stance_duration) const;
 
-    // ===== INITIALIZATION =====
+    /** Initialization. */
 
     /**
      * @brief Initialize leg with default stance position.
@@ -389,7 +389,7 @@ class Leg {
      */
     Point3D getDefaultTipPosition() const { return default_tip_position_; }
 
-    // ===== UTILITY FUNCTIONS =====
+    /** Utility functions. */
 
     /**
      * @brief Calculate distance from current tip to target.
@@ -412,46 +412,46 @@ class Leg {
     bool isInDefaultStance(double tolerance = 5.0) const;
 
   private:
-    // ===== ROBOT MODEL REFERENCE =====
-    const RobotModel &model_; //< Reference to robot model for all calculations
+    /** Robot model reference. */
+    const RobotModel &model_; /**< Reference to robot model for all calculations. */
 
-    // ===== IDENTIFICATION =====
-    int leg_id_;      //< Leg identification number (0-5)
-    String leg_name_; //< Leg name string
+    /** Identification. */
+    int leg_id_;      /**< Leg identification number (0-5). */
+    String leg_name_; /**< Leg name string. */
 
-    // ===== JOINT STATE =====
-    JointAngles joint_angles_;           //< Current joint angles (coxa, femur, tibia)
-    JointAngles desired_joint_velocity_; //< Desired joint velocities (driver units or rad/s)
-    JointAngles current_joint_velocity_; //< Current joint velocities (rad/s)
-    JointAngles current_joint_effort_;   //< Current joint efforts/torques (driver units)
-    bool has_effort_data_ = false;       //< True when current_joint_effort_ is populated
-    Point3D tip_position_;               //< Current tip position in world coordinates
-    Point3D base_position_;              //< Leg base position in world coordinates
+    /** Joint state. */
+    JointAngles joint_angles_;           /**< Current joint angles (coxa, femur, tibia). */
+    JointAngles desired_joint_velocity_; /**< Desired joint velocities (driver units or rad/s). */
+    JointAngles current_joint_velocity_; /**< Current joint velocities (rad/s). */
+    JointAngles current_joint_effort_;   /**< Current joint efforts/torques (driver units). */
+    bool has_effort_data_ = false;       /**< True when current_joint_effort_ is populated. */
+    Point3D tip_position_;               /**< Current tip position in world coordinates. */
+    Point3D base_position_;              /**< Leg base position in world coordinates. */
 
-    // ===== LEG STATE =====
-    LegState leg_state_;    //< Current leg state (walking, manual, transitioning)
-    double swing_progress_; //< Swing progress (0.0-1.0 during swing, -1.0 otherwise)
+    /** Leg state. */
+    LegState leg_state_;    /**< Current leg state (walking, manual, transitioning). */
+    double swing_progress_; /**< Swing progress (0.0-1.0 during swing, -1.0 otherwise). */
 
-    // ===== GAIT STATE =====
-    StepPhase step_phase_;                 //< Current step phase
-    double gait_phase_;                    //< Gait phase (0.0 to 1.0)
-    bool in_contact_;                      //< Contact state with ground
-    double contact_force_;                 //< Contact force reading
-    Eigen::Vector3d tip_force_calculated_; //< Estimated tip force from joint effort
+    /** Gait state. */
+    StepPhase step_phase_;                 /**< Current step phase. */
+    double gait_phase_;                    /**< Gait phase (0.0 to 1.0). */
+    bool in_contact_;                      /**< Contact state with ground. */
+    double contact_force_;                 /**< Contact force reading. */
+    Eigen::Vector3d tip_force_calculated_; /**< Estimated tip force from joint effort. */
 
-    // ===== FSR CONTACT HISTORY =====
-    double fsr_contact_history_[3]; //< Circular buffer for FSR contact history (3 samples)
-    int fsr_history_index_;         //< Current index in the circular buffer
+    /** FSR contact history. */
+    double fsr_contact_history_[3]; /**< Circular buffer for FSR contact history (3 samples). */
+    int fsr_history_index_;         /**< Current index in the circular buffer. */
 
-    // ===== GAIT PHASE OFFSET =====
-    double leg_phase_offset_; //< Phase offset for this leg in gait cycle (0.0 to 1.0)
+    /** Gait phase offset. */
+    double leg_phase_offset_; /**< Phase offset for this leg in gait cycle (0.0 to 1.0). */
 
-    // ===== OPENSHC-STYLE DESIRED POSITION =====
-    Point3D desired_tip_position_; //< Desired tip position from Bézier trajectory (OpenSHC-style)
+    /** OpenSHC-style desired position. */
+    Point3D desired_tip_position_; /**< Desired tip position from Bezier trajectory (OpenSHC-style). */
 
-    // ===== DEFAULT CONFIGURATION =====
-    JointAngles default_angles_;   //< Default joint angles
-    Point3D default_tip_position_; //< Default tip position
+    /** Default configuration. */
+    JointAngles default_angles_;   /**< Default joint angles. */
+    Point3D default_tip_position_; /**< Default tip position. */
 };
 
-#endif // LEG_H
+#endif /**< LEG_H */

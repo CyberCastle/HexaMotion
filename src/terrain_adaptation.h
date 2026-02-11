@@ -6,7 +6,7 @@
 #include <memory>
 #include <vector>
 
-// Forward declaration to avoid circular dependency
+/** Forward declaration to avoid circular dependency. */
 class WorkspaceAnalyzer;
 
 /**
@@ -26,11 +26,11 @@ class TerrainAdaptation {
      * @brief External target structure for terrain-aware stepping
      */
     struct ExternalTarget {
-        Point3D position;        //< Target tip position
-        double swing_clearance;  //< Height clearance during swing
-        std::string frame_id;    //< Reference frame ID
-        unsigned long timestamp; //< Request timestamp
-        bool defined;            //< Whether target is valid
+        Point3D position;        /**< Target tip position. */
+        double swing_clearance;  /**< Height clearance during swing. */
+        std::string frame_id;    /**< Reference frame ID. */
+        unsigned long timestamp; /**< Request timestamp. */
+        bool defined;            /**< Whether target is valid. */
 
         ExternalTarget() : position(0, 0, 0), swing_clearance(0),
                            frame_id(""), timestamp(0), defined(false) {}
@@ -40,10 +40,10 @@ class TerrainAdaptation {
      * @brief Step plane detection structure
      */
     struct StepPlane {
-        Point3D position;  //< Step surface position
-        Point3D normal;    //< Step surface normal vector
-        bool valid;        //< Whether detection is valid
-        double confidence; //< Detection confidence (0-1)
+        Point3D position;  /**< Step surface position. */
+        Point3D normal;    /**< Step surface normal vector. */
+        bool valid;        /**< Whether detection is valid. */
+        double confidence; /**< Detection confidence (0-1). */
 
         StepPlane() : position(0, 0, 0), normal(0, 0, 1), valid(false), confidence(0) {}
     };
@@ -52,43 +52,44 @@ class TerrainAdaptation {
      * @brief Walk plane estimation structure
      */
     struct WalkPlane {
-        Eigen::Vector3d coeffs; //< Plane coefficients [a,b,c] for ax+by+c=z
-        Eigen::Vector3d normal; //< Plane normal vector
-        bool valid;             //< Whether estimation is valid
-        double confidence;      //< Estimation confidence (0-1)
+        Eigen::Vector3d coeffs; /**< Plane coefficients [a,b,c] for ax+by+c=z. */
+        Eigen::Vector3d normal; /**< Plane normal vector. */
+        bool valid;             /**< Whether estimation is valid. */
+        double confidence;      /**< Estimation confidence (0-1). */
 
         WalkPlane() : coeffs(0, 0, 0), normal(0, 0, 1), valid(false), confidence(0) {}
     };
 
   private:
     RobotModel &model_;
-    std::unique_ptr<WorkspaceAnalyzer> workspace_analyzer_; // Workspace analysis and validation
+    std::unique_ptr<WorkspaceAnalyzer> workspace_analyzer_; /**< Workspace analysis and validation. */
     bool rough_terrain_mode_;
     bool force_normal_touchdown_;
     bool gravity_aligned_tips_;
 
-    // Terrain detection parameters
-    double touchdown_threshold_; //< FSR threshold for touchdown detection
-    double liftoff_threshold_;   //< FSR threshold for liftoff detection
-    double step_depth_;          //< Depth to probe for reactive terrain detection
+    /** Terrain detection parameters. */
+    double touchdown_threshold_; /**< FSR threshold for touchdown detection. */
+    double liftoff_threshold_;   /**< FSR threshold for liftoff detection. */
+    double step_depth_;          /**< Depth to probe for reactive terrain detection. */
 
-    // Walk plane estimation
+    /** Walk plane estimation. */
     WalkPlane current_walk_plane_;
     std::vector<Point3D> foot_contact_history_;
     static const size_t MAX_CONTACT_HISTORY = 20;
 
-    // Per-leg terrain data
+    /** Per-leg terrain data. */
     ExternalTarget external_targets_[NUM_LEGS];
     ExternalTarget external_defaults_[NUM_LEGS];
     StepPlane step_planes_[NUM_LEGS];
     bool touchdown_detection_[NUM_LEGS];
 
-    // IMU integration for gravity estimation
+    /** IMU integration for gravity estimation. */
     Eigen::Vector3d gravity_estimate_;
 
   public:
     explicit TerrainAdaptation(RobotModel &model);
-    ~TerrainAdaptation(); // Needed for unique_ptr with forward declaration
+    /** Destructor required for unique_ptr with forward declaration. */
+    ~TerrainAdaptation();
 
     /**
      * @brief Initialize terrain adaptation system
@@ -311,4 +312,4 @@ class TerrainAdaptation {
     bool hasValidFootContactData() const;
 };
 
-#endif // TERRAIN_ADAPTATION_H
+#endif /**< TERRAIN_ADAPTATION_H */

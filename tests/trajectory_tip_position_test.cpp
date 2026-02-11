@@ -13,9 +13,9 @@
 #include <iostream>
 #include <vector>
 
-// Helper function to check if a position is reachable using basic kinematic validation
+/** Helper function to check if a position is reachable using basic kinematic validation. */
 bool isPositionReachable(const RobotModel &model, int leg_id, const Point3D &position) {
-    // Use basic inverse kinematics validation
+    /** Use basic inverse kinematics validation. */
     JointAngles angles = model.inverseKinematicsCurrentGlobalCoordinates(leg_id, JointAngles(0, 0, 0), position);
     return model.checkJointLimits(leg_id, angles);
 }
@@ -23,26 +23,28 @@ bool isPositionReachable(const RobotModel &model, int leg_id, const Point3D &pos
 void debugTipPositionGeneration(LegStepper &stepper, Leg &leg, const RobotModel &model, const GaitConfiguration &gait_config) {
     std::cout << "\n=== TRAJECTORY: Tip Position Generation (Gait: " << gait_config.gait_name << ") ===" << std::endl;
 
-    // Use the actual current position from the leg that was set up via StandingPose
-    // This follows the complete BodyPoseConfiguration -> StandingPose -> leg pose flow
+    /** Use the actual current position from the leg that was set up via StandingPose. */
+    /** This follows the complete BodyPoseConfiguration -> StandingPose -> leg pose flow. */
     Point3D initial_position = leg.getCurrentTipPositionGlobal();
     std::cout << "Initial tip position (from StandingPose setup): (" << initial_position.x << ", " << initial_position.y << ", " << initial_position.z << ")" << std::endl;
 
-    // Test both IK methods with initial position
+    /** Test both IK methods with initial position. */
     bool traditional_ik_success = leg.applyIK(initial_position);
     JointAngles traditional_angles = leg.getJointAngles();
     Point3D traditional_actual_pos = leg.getCurrentTipPositionGlobal();
     double traditional_ik_error = (traditional_actual_pos - initial_position).norm();
 
-    // Reset leg and test advanced delta-based IK
-    leg.setJointAngles(traditional_angles); // Reset to same starting point
+    /** Reset leg and test advanced delta-based IK. */
+    /** Reset to same starting point. */
+    leg.setJointAngles(traditional_angles);
     JointAngles current_angles = leg.getJointAngles();
     Point3D current_pos = leg.getCurrentTipPositionGlobal();
     JointAngles new_angles = model.applyAdvancedIK(leg.getLegId(), current_pos, initial_position, current_angles, model.getTimeDelta());
     leg.setJointAngles(new_angles);
     Point3D delta_actual_pos = leg.getCurrentTipPositionGlobal();
     double delta_ik_error = (delta_actual_pos - initial_position).norm();
-    bool delta_ik_success = (delta_ik_error < 1.0); // Success if error < 1mm
+    /** Success if error < 1 mm. */
+    bool delta_ik_success = (delta_ik_error < 1.0);
 
     std::cout << "=== IK METHOD COMPARISON ===" << std::endl;
     std::cout << "Traditional IK - Success: " << (traditional_ik_success ? "YES" : "NO") << ", Error: " << traditional_ik_error << " mm" << std::endl;
@@ -52,11 +54,11 @@ void debugTipPositionGeneration(LegStepper &stepper, Leg &leg, const RobotModel 
               << "°, femur=" << math_utils::radiansToDegrees(new_angles.femur)
               << "°, tibia=" << math_utils::radiansToDegrees(new_angles.tibia) << "°" << std::endl;
 
-    // Check if initial position is reachable
+    /** Check if initial position is reachable. */
     bool is_reachable = isPositionReachable(model, leg.getLegId(), initial_position);
     std::cout << "Initial position reachable: " << (is_reachable ? "YES" : "NO") << std::endl;
 
-    // Get leg reach information
+    /** Get leg reach information. */
     double max_reach = model.getLegReach();
     Point3D base_pos = leg.getBasePosition();
     double distance_from_base = (initial_position - base_pos).norm();
@@ -64,53 +66,59 @@ void debugTipPositionGeneration(LegStepper &stepper, Leg &leg, const RobotModel 
     std::cout << "Max leg reach: " << max_reach << " mm" << std::endl;
     std::cout << "Distance from base: " << distance_from_base << " mm" << std::endl;
 
-    // Calculate workspace limits around current position for debug
-    Point3D workspace_center = base_pos + Point3D(150, 0, -150); // Conservative reachable position
+    /** Calculate workspace limits around current position for debug. */
+    /** Conservative reachable position. */
+    Point3D workspace_center = base_pos + Point3D(150, 0, -150);
     double workspace_center_distance = (workspace_center - base_pos).norm();
     bool workspace_center_reachable = isPositionReachable(model, leg.getLegId(), workspace_center);
     std::cout << "Workspace center test: " << workspace_center.x << ", " << workspace_center.y << ", " << workspace_center.z << ")" << std::endl;
     std::cout << "Workspace center distance: " << workspace_center_distance << " mm, reachable: " << (workspace_center_reachable ? "YES" : "NO") << std::endl;
 
-    // Debug stepper state before update
+    /** Debug stepper state before update. */
     std::cout << "Identity tip pose: (" << stepper.getIdentityTipPose().x << ", " << stepper.getIdentityTipPose().y << ", " << stepper.getIdentityTipPose().z << ")" << std::endl;
     std::cout << "Default tip pose: (" << stepper.getDefaultTipPose().x << ", " << stepper.getDefaultTipPose().y << ", " << stepper.getDefaultTipPose().z << ")" << std::endl;
     std::cout << "Target tip pose: (" << stepper.getTargetTipPose().x << ", " << stepper.getTargetTipPose().y << ", " << stepper.getTargetTipPose().z << ")" << std::endl;
     std::cout << "Stride vector: (" << stepper.getStrideVector().x << ", " << stepper.getStrideVector().y << ", " << stepper.getStrideVector().z << ")" << std::endl;
     std::cout << "Swing clearance: (" << stepper.getSwingClearance().x << ", " << stepper.getSwingClearance().y << ", " << stepper.getSwingClearance().z << ")" << std::endl;
 
-    // Use the stride that was already configured in main() from tripod gait
-    // DON'T override with zero velocity - keep the calculated stride
+    /** Use the stride that was already configured in main() from tripod gait. */
+    /** Do not override with zero velocity; keep the calculated stride. */
     Point3D current_stride = stepper.getStrideVector();
     std::cout << "\nUsing stride calculated from tripod gait velocity:" << std::endl;
     std::cout << "Stride vector: (" << current_stride.x << ", " << current_stride.y << ", " << current_stride.z << ")" << std::endl;
 
-    // Calculate velocity from current stride for debugging
+    /** Calculate velocity from current stride for debugging. */
     StepCycle step_cycle = stepper.getStepCycle();
     double step_cycle_time = 1.0 / step_cycle.frequency_;
     Point3D calculated_velocity = current_stride / step_cycle_time;
     std::cout << "Calculated velocity from stride: (" << calculated_velocity.x << ", " << calculated_velocity.y << ", " << calculated_velocity.z << ") mm/s" << std::endl;
 
-    // Set stepper to swing state with gait configuration
+    /** Set stepper to swing state with gait configuration. */
     stepper.setStepState(STEP_SWING);
     stepper.setPhase(gait_config.phase_config.swing_phase);
     stepper.setStepProgress(0.5);
 
-    // Configure iteration count using OpenSHC-compatible calculation
-    // OpenSHC formula: swing_iterations = int((swing_period/period) / (frequency * time_delta))
-    double time_delta = model.getTimeDelta(); // unified global timestep
+    /** Configure iteration count using OpenSHC-compatible calculation. */
+    /** OpenSHC formula: swing_iterations = int((swing_period/period) / (frequency * time_delta)). */
+    /** Unified global timestep. */
+    double time_delta = model.getTimeDelta();
 
-    // Use the SAME StepCycle values that the LegStepper uses (not gait_config values)
-    double period = step_cycle.period_;               // Use normalized period from StepCycle
-    double swing_period = step_cycle.swing_period_;   // Use normalized swing_period from StepCycle
-    double stance_period = step_cycle.stance_period_; // Use normalized stance_period from StepCycle
-    double frequency = step_cycle.frequency_;         // Use normalized frequency from StepCycle
+    /** Use the same StepCycle values that the LegStepper uses (not gait_config values). */
+    /** Use normalized period from StepCycle. */
+    double period = step_cycle.period_;
+    /** Use normalized swing_period from StepCycle. */
+    double swing_period = step_cycle.swing_period_;
+    /** Use normalized stance_period from StepCycle. */
+    double stance_period = step_cycle.stance_period_;
+    /** Use normalized frequency from StepCycle. */
+    double frequency = step_cycle.frequency_;
 
-    // Calculate iterations using the SAME method as LegStepper::calculateSwingTiming()
+    /** Calculate iterations using the same method as LegStepper::calculateSwingTiming(). */
     int swing_iterations = (int)((double(swing_period) / period) / (frequency * time_delta));
     int stance_iterations = (int)((double(stance_period) / period) / (frequency * time_delta));
     int total_iterations = swing_iterations + stance_iterations;
 
-    // Use OpenSHC-compatible iteration time
+    /** Use OpenSHC-compatible iteration time. */
     double iteration_time = time_delta;
 
     std::cout << "OpenSHC-compatible gait timing:" << std::endl;
@@ -120,14 +128,15 @@ void debugTipPositionGeneration(LegStepper &stepper, Leg &leg, const RobotModel 
     std::cout << "  swing_iterations=" << swing_iterations << ", stance_iterations=" << stance_iterations << std::endl;
     std::cout << "  total_iterations=" << total_iterations << ", iteration_time=" << iteration_time << "s" << std::endl;
 
-    // CRITICAL: Initialize timing parameters by calling updateTipPositionIterative first
-    // This will internally call calculateSwingTiming() and generate control nodes
-    // BUT first we need to set the stepper to SWING state and reset to iteration 1
+    /** Initialize timing parameters by calling updateTipPositionIterative first. */
+    /** This will internally call calculateSwingTiming() and generate control nodes. */
+    /** First set the stepper to SWING state and reset to iteration 1. */
     stepper.setStepState(STEP_SWING);
-    stepper.setCurrentTipPose(initial_position); // Reset to initial position
+    /** Reset to initial position. */
+    stepper.setCurrentTipPose(initial_position);
     stepper.updateTipPositionIterative(1, iteration_time, false, false);
 
-    // Now display the control nodes that were generated
+    /** Display the control nodes that were generated. */
     std::cout << "\nTarget tip pose: (" << stepper.getTargetTipPose().x << ", " << stepper.getTargetTipPose().y << ", " << stepper.getTargetTipPose().z << ")" << std::endl;
     std::cout << "Expected stride displacement: " << stepper.getStrideVector().norm() << " mm" << std::endl;
 
@@ -143,58 +152,60 @@ void debugTipPositionGeneration(LegStepper &stepper, Leg &leg, const RobotModel 
         std::cout << "  Node " << i << ": (" << node.x << ", " << node.y << ", " << node.z << ")" << std::endl;
     }
 
-    // Test position update
+    /** Test position update. */
     std::cout << "\nBefore updateTipPosition:" << std::endl;
     std::cout << "step_progress_: " << stepper.getStepProgress() << std::endl;
 
-    // Generate complete swing trajectory using gait configuration
-    // IMPORTANT: Only generate swing_iterations, not total_iterations
+    /** Generate complete swing trajectory using gait configuration. */
+    /** Only generate swing_iterations, not total_iterations. */
     std::cout << "\n=== SWING TRAJECTORY WITH JOINT ANGLES (Gait: " << gait_config.gait_name << ") ===" << std::endl;
     std::cout << "Step | Position (x, y, z) | Coxa (deg) | Femur (deg) | Tibia (deg) | Radio | Delta R" << std::endl;
     std::cout << "-----+--------------------+------------+-------------+-------------+-------+--------" << std::endl;
     std::cout << "Note: OpenSHC derivative integration does not guarantee Z returns to standing height during swing." << std::endl;
 
-    // Reset to initial position for trajectory generation
+    /** Reset to initial position for trajectory generation. */
     stepper.setCurrentTipPose(initial_position);
     Point3D previous_pos = initial_position;
 
-    // Calculate initial joint angles for reference in trajectory
+    /** Calculate initial joint angles for reference in trajectory. */
     leg.applyIK(initial_position);
     JointAngles trajectory_initial_angles = leg.getJointAngles();
 
-    // Calculate initial radio for comparison
+    /** Calculate initial radio for comparison. */
     double initial_radio = std::sqrt(initial_position.x * initial_position.x + initial_position.y * initial_position.y);
 
-    // GENERATE ONLY SWING TRAJECTORY (not stance)
+    /** Generate only swing trajectory (not stance). */
     for (int iteration = 1; iteration <= swing_iterations; iteration++) {
-        // Get current joint angles BEFORE update to calculate delta
+        /** Get current joint angles before update to calculate delta. */
         JointAngles angles_before = leg.getJointAngles();
         Point3D pos_before = leg.getCurrentTipPositionGlobal();
 
-        // Update tip position using iteration-based approach (OpenSHC style)
-        // This internally applies IK to the calculated Bezier position
+        /** Update tip position using iteration-based approach (OpenSHC style). */
+        /** This internally applies IK to the calculated Bezier position. */
         stepper.updateTipPositionIterative(iteration, iteration_time, false, false);
 
-        // Get the new position calculated by the stepper (Bezier result)
+        /** Get the new position calculated by the stepper (Bezier result). */
         Point3D pos_bezier = stepper.getCurrentTipPose();
 
-        // Test advanced delta-based IK method
-        leg.setJointAngles(angles_before); // Reset to same starting point
+        /** Test advanced delta-based IK method. */
+        /** Reset to same starting point. */
+        leg.setJointAngles(angles_before);
         JointAngles new_angles = model.applyAdvancedIK(leg.getLegId(), pos_before, pos_bezier, angles_before, iteration_time);
         leg.setJointAngles(new_angles);
         JointAngles angles_after = leg.getJointAngles();
-        bool delta_ik_success = true; // Always successful with advanced IK
+        /** Always successful with advanced IK. */
+        bool delta_ik_success = true;
 
-        // Convert joint angles from radians to degrees
+        /** Convert joint angles from radians to degrees. */
         double coxa_deg = math_utils::radiansToDegrees(angles_after.coxa);
         double femur_deg = math_utils::radiansToDegrees(angles_after.femur);
         double tibia_deg = math_utils::radiansToDegrees(angles_after.tibia);
 
-        // Calculate radio (distance from origin in XY plane)
+        /** Calculate radio (distance from origin in XY plane). */
         double radio = std::sqrt(pos_bezier.x * pos_bezier.x + pos_bezier.y * pos_bezier.y);
         double delta_radio = radio - initial_radio;
 
-        // Check if joint limits are being violated
+        /** Check if joint limits are being violated. */
         bool valid_joints = model.checkJointLimits(0, angles_after);
         std::string joint_status = valid_joints ? "✓" : "❌";
 
@@ -205,10 +216,10 @@ void debugTipPositionGeneration(LegStepper &stepper, Leg &leg, const RobotModel 
         previous_pos = pos_bezier;
     }
 
-    // Reset to original state and test final position (complete swing)
+    /** Reset to original state and test final position (complete swing). */
     stepper.setCurrentTipPose(initial_position);
 
-    // Execute complete swing trajectory using calculated iterations
+    /** Execute complete swing trajectory using calculated iterations. */
     for (int iter = 1; iter <= swing_iterations; iter++) {
         stepper.updateTipPositionIterative(iter, iteration_time, false, false);
     }
@@ -224,7 +235,7 @@ void debugTipPositionGeneration(LegStepper &stepper, Leg &leg, const RobotModel 
     double position_change = (final_position - initial_position).norm();
     double target_error = (final_position - target_position).norm();
 
-    // In OpenSHC logic, the expected swing displacement is stride_vector * 0.5
+    /** In OpenSHC logic, the expected swing displacement is stride_vector * 0.5. */
     double expected_swing_displacement = expected_stride.norm() * 0.5;
     double expected_distance = expected_stride.norm();
     double swing_precision_percentage = (position_change / expected_swing_displacement) * 100.0;
@@ -244,16 +255,17 @@ void debugTipPositionGeneration(LegStepper &stepper, Leg &leg, const RobotModel 
         std::cout << "✅ TARGET PRECISION ACCEPTABLE: Error " << target_error << "mm < 1.0mm threshold" << std::endl;
     }
 
-    // Verify joint limits for extreme positions
+    /** Verify joint limits for extreme positions. */
     std::cout << "\n=== JOINT LIMITS VERIFICATION ===" << std::endl;
     bool all_valid = true;
-    stepper.setCurrentTipPose(initial_position); // Reset position
+    /** Reset position. */
+    stepper.setCurrentTipPose(initial_position);
 
     for (int iteration = 1; iteration <= total_iterations; iteration++) {
         stepper.updateTipPositionIterative(iteration, iteration_time, false, false);
         Point3D pos = stepper.getCurrentTipPose();
 
-        // Test both IK methods on extreme positions
+        /** Test both IK methods on extreme positions. */
         JointAngles current_angles = leg.getJointAngles();
         Point3D current_pos = leg.getCurrentTipPositionGlobal();
         JointAngles new_angles = model.applyAdvancedIK(leg.getLegId(), current_pos, pos, current_angles, model.getTimeDelta());
@@ -270,40 +282,41 @@ void debugTipPositionGeneration(LegStepper &stepper, Leg &leg, const RobotModel 
         }
     }
 
-    // Test stance phase validation
+    /** Test stance phase validation. */
     std::cout << "\n=== STANCE PHASE VALIDATION ===" << std::endl;
     std::cout << "Testing stance phase to verify XY plane displacement" << std::endl;
 
-    // Reset stepper to initial position and set to stance state
+    /** Reset stepper to initial position and set to stance state. */
     stepper.setCurrentTipPose(initial_position);
     stepper.setStepState(STEP_STANCE);
     stepper.setPhase(gait_config.phase_config.stance_phase);
     stepper.setStepProgress(0.0);
     stepper.setCompletedFirstStep(true);
 
-    // IMPORTANT: For stance phase, we need to simulate the body movement
-    // In a real hexapod, during stance the leg stays on ground while body moves forward
-    // This creates relative backward movement of the leg tip in body coordinates
+    /** For stance phase, simulate body movement. */
+    /** In a real hexapod, during stance the leg stays on ground while body moves forward. */
+    /** This creates relative backward movement of the leg tip in body coordinates. */
 
-    // Calculate expected stance movement based on stride
+    /** Calculate expected stance movement based on stride. */
     Point3D stride_vector = stepper.getStrideVector();
-    Point3D expected_stance_displacement = stride_vector * -1.0; // Opposite to full stride movement
+    /** Opposite to full stride movement. */
+    Point3D expected_stance_displacement = stride_vector * -1.0;
 
     std::cout << "Expected stance displacement (body movement simulation): ("
               << expected_stance_displacement.x << ", " << expected_stance_displacement.y
               << ", " << expected_stance_displacement.z << ")" << std::endl;
 
-    // DEBUG: Check stance control nodes BEFORE iteration starts
+    /** Debug: check stance control nodes before iteration starts. */
     std::cout << "\n=== DEBUG: STANCE CONTROL NODES ANALYSIS ===" << std::endl;
-    // Force generation of stance nodes first
+    /** Force generation of stance nodes first. */
     stepper.setCurrentTipPose(initial_position);
     stepper.setStepState(STEP_STANCE);
 
-    // Generate stance nodes manually to inspect them
+    /** Generate stance nodes manually to inspect them. */
     Point3D current_stride_vector = stepper.getStrideVector();
     std::cout << "Current stride vector: (" << current_stride_vector.x << ", " << current_stride_vector.y << ", " << current_stride_vector.z << ")" << std::endl;
 
-    // We need to manually trigger stance node generation to see what's happening
+    /** Manually trigger stance node generation to see what is happening. */
     stepper.updateTipPositionIterative(swing_iterations + 1, iteration_time, false, false);
 
     std::cout << "\nStance control nodes:" << std::endl;
@@ -312,12 +325,12 @@ void debugTipPositionGeneration(LegStepper &stepper, Leg &leg, const RobotModel 
         std::cout << "  Node " << i << ": (" << node.x << ", " << node.y << ", " << node.z << ")" << std::endl;
     }
 
-    // Generate stance trajectory
+    /** Generate stance trajectory. */
     std::cout << "\n=== STANCE TRAJECTORY WITH JOINT ANGLES (Gait: " << gait_config.gait_name << ") ===" << std::endl;
     std::cout << "Step | Position (x, y, z) | Coxa (deg) | Femur (deg) | Tibia (deg) | Radio | Delta R" << std::endl;
     std::cout << "-----+--------------------+------------+-------------+-------------+-------+--------" << std::endl;
 
-    // Store initial joint angles for comparison
+    /** Store initial joint angles for comparison. */
     JointAngles temp_angles = leg.getJointAngles();
     Point3D temp_pos = leg.getCurrentTipPositionGlobal();
     JointAngles updated_angles = model.applyAdvancedIK(leg.getLegId(), temp_pos, initial_position, temp_angles, model.getTimeDelta());
@@ -329,45 +342,50 @@ void debugTipPositionGeneration(LegStepper &stepper, Leg &leg, const RobotModel 
     int stance_start_iteration = stance_cycle.stance_start_;
     for (int stance_iter = 1; stance_iter <= stance_iterations; stance_iter++) {
         int iteration = stance_start_iteration + (stance_iter - 1);
-        // Get joint angles before update
+        /** Get joint angles before update. */
         JointAngles angles_before = leg.getJointAngles();
         Point3D pos_before = leg.getCurrentTipPositionGlobal();
 
-        // Update tip position for stance phase
+        /** Update tip position for stance phase. */
         stepper.updateTipPositionIterative(iteration, iteration_time, false, false);
 
-        // Get new position and apply advanced delta-based IK (consistent with swing phase)
+        /** Get new position and apply advanced delta-based IK (consistent with swing phase). */
         Point3D pos_stance = stepper.getCurrentTipPose();
 
-        leg.setJointAngles(angles_before); // Reset to same starting point
+        /** Reset to same starting point. */
+        leg.setJointAngles(angles_before);
         JointAngles new_angles = model.applyAdvancedIK(leg.getLegId(), pos_before, pos_stance, angles_before, iteration_time);
         leg.setJointAngles(new_angles);
         JointAngles angles_after = leg.getJointAngles();
 
-        // Calculate position delta in XY plane
+        /** Calculate position delta in XY plane. */
         Point3D xy_delta = pos_stance - previous_stance_pos;
-        xy_delta.z = 0; // Only consider XY displacement
+        /** Only consider XY displacement. */
+        xy_delta.z = 0;
         double xy_displacement = xy_delta.norm();
 
-        // Convert joint angles to degrees
+        /** Convert joint angles to degrees. */
         double coxa_deg = math_utils::radiansToDegrees(angles_after.coxa);
         double femur_deg = math_utils::radiansToDegrees(angles_after.femur);
         double tibia_deg = math_utils::radiansToDegrees(angles_after.tibia);
 
-        // Calculate joint angle deltas from initial stance position
+        /** Calculate joint angle deltas from initial stance position. */
         double coxa_delta = math_utils::radiansToDegrees(angles_after.coxa - initial_stance_angles.coxa);
         double femur_delta = math_utils::radiansToDegrees(angles_after.femur - initial_stance_angles.femur);
         double tibia_delta = math_utils::radiansToDegrees(angles_after.tibia - initial_stance_angles.tibia);
 
-        // Analyze movement pattern
+        /** Analyze movement pattern. */
         std::string movement_analysis = "";
-        if (std::abs(coxa_delta) > 1.0) { // Significant coxa movement
+        if (std::abs(coxa_delta) > 1.0) {
+            /** Significant coxa movement. */
             movement_analysis += "C";
         }
-        if (std::abs(femur_delta) > 1.0) { // Significant femur movement
+        if (std::abs(femur_delta) > 1.0) {
+            /** Significant femur movement. */
             movement_analysis += "F";
         }
-        if (std::abs(tibia_delta) > 1.0) { // Significant tibia movement
+        if (std::abs(tibia_delta) > 1.0) {
+            /** Significant tibia movement. */
             movement_analysis += "T";
         }
         if (movement_analysis.empty()) {
@@ -384,10 +402,10 @@ void debugTipPositionGeneration(LegStepper &stepper, Leg &leg, const RobotModel 
         previous_stance_pos = pos_stance;
     }
 
-    // Analyze overall stance movement
+    /** Analyze overall stance movement. */
     stepper.setCurrentTipPose(initial_position);
 
-    // Execute complete stance trajectory
+    /** Execute complete stance trajectory. */
     for (int stance_iter = 1; stance_iter <= stance_iterations; stance_iter++) {
         int iteration = stance_start_iteration + (stance_iter - 1);
         stepper.updateTipPositionIterative(iteration, iteration_time, false, false);
@@ -400,7 +418,7 @@ void debugTipPositionGeneration(LegStepper &stepper, Leg &leg, const RobotModel 
     leg.setJointAngles(final_updated_angles);
     JointAngles final_stance_angles = leg.getJointAngles();
 
-    // Calculate total movement analysis
+    /** Calculate total movement analysis. */
     Point3D total_xy_movement = final_stance_position - initial_position;
     total_xy_movement.z = 0;
     double total_xy_displacement = total_xy_movement.norm();
@@ -434,7 +452,7 @@ void debugTipPositionGeneration(LegStepper &stepper, Leg &leg, const RobotModel 
     bool tibia_at_limit = (std::abs(final_tibia_deg - tibia_min_deg) <= limit_tolerance) ||
                           (std::abs(final_tibia_deg - tibia_max_deg) <= limit_tolerance);
 
-    // Validate stance movement pattern
+    /** Validate stance movement pattern. */
     double expected_xy_displacement = expected_stance_displacement.norm();
     double displacement_error = std::abs(total_xy_displacement - expected_xy_displacement);
     double displacement_tolerance = std::max(1.0, expected_xy_displacement * 0.25);
@@ -459,7 +477,7 @@ void debugTipPositionGeneration(LegStepper &stepper, Leg &leg, const RobotModel 
         }
     }
 
-    // Show movement efficiency
+    /** Show movement efficiency. */
     if (total_xy_displacement > 0.1) {
         double coxa_dominance = (std::abs(total_coxa_change) / (std::abs(total_femur_change) + std::abs(total_tibia_change) + 0.1)) * 100.0;
         std::cout << "Coxa movement dominance: " << coxa_dominance << "%" << std::endl;
@@ -471,7 +489,7 @@ void debugTipPositionGeneration(LegStepper &stepper, Leg &leg, const RobotModel 
         std::cout << "  Note: In real hexapods, stance legs remain stationary while body moves" << std::endl;
     }
 
-    // Final comparative analysis
+    /** Final comparative analysis. */
     std::cout << "\n=== DELTA-BASED IK INTEGRATION ANALYSIS ===" << std::endl;
     std::cout << "✅ Successfully integrated OpenSHC-style delta-based IK" << std::endl;
     std::cout << "✅ Both traditional and delta-based IK methods are functional" << std::endl;
@@ -488,13 +506,14 @@ void debugTipPositionGeneration(LegStepper &stepper, Leg &leg, const RobotModel 
 int main() {
     std::cout << "=== Trajectory Tip Position Test (Tripod Gait Configuration) ===" << std::endl;
 
-    // Initialize parameters
+    /** Initialize parameters. */
     Parameters p{};
     p.hexagon_radius = 200;
     p.coxa_length = 50;
     p.femur_length = 101;
     p.tibia_length = 208;
-    p.default_height_offset = -208.0; // Set to -tibia_length for explicit configuration
+    /** Set to -tibia_length for explicit configuration. */
+    p.default_height_offset = -208.0;
     p.robot_height = 208;
     p.standing_height = 150;
     p.time_delta = 1.0 / 50.0;
@@ -506,11 +525,10 @@ int main() {
     p.tibia_angle_limits[1] = 45;
     p.enable_phase_end_snap = false;
 
-    // Configure gait factors for tripod gait (use OpenSHC equivalent constants)
-    // p.gait_factors.tripod_length_factor = GAIT_TRIPOD_LENGTH_FACTOR;  // Removed - using constants directly
-    // p.gait_factors.tripod_height_factor = GAIT_TRIPOD_HEIGHT_FACTOR;  // Removed - using constants directly
+    /** Configure gait factors for tripod gait (use OpenSHC equivalent constants). */
+    /** Removed; using constants directly. */
 
-    // Create tripod gait configuration
+    /** Create tripod gait configuration. */
     GaitConfiguration tripod_config = createTripodGaitConfig(p);
     std::cout << "Tripod Gait Configuration Loaded:" << std::endl;
     std::cout << "  Step length: " << tripod_config.step_length << " mm" << std::endl;
@@ -520,19 +538,20 @@ int main() {
     std::cout << "  Swing ratio: " << tripod_config.getSwingRatio() << std::endl;
 
     RobotModel model(p);
-    model.workspaceAnalyzerInitializer(); // Inicializar WorkspaceAnalyzer
+    /** Initialize WorkspaceAnalyzer. */
+    model.workspaceAnalyzerInitializer();
 
-    // Create leg object for testing (using leg 0)
+    /** Create leg object for testing (using leg 0). */
     Leg test_leg(0, model);
     test_leg.initialize(Pose::Identity());
     test_leg.updateTipPosition();
 
-    // Configure standing pose using BodyPoseController
+    /** Configure standing pose using BodyPoseController. */
     BodyPoseConfiguration pose_config = getDefaultBodyPoseConfig(p);
     BodyPoseController pose_controller(model, pose_config);
     pose_controller.setWalkPlanePoseEnabled(true);
 
-    // Create array of legs for pose controller initialization
+    /** Create array of legs for pose controller initialization. */
     Leg test_legs[NUM_LEGS] = {
         Leg(0, model), Leg(1, model), Leg(2, model),
         Leg(3, model), Leg(4, model), Leg(5, model)};
@@ -545,7 +564,7 @@ int main() {
     pose_controller.initializeLegPosers(test_legs);
     assert(pose_controller.setStandingPose(test_legs));
 
-    // Debug: Show the standing pose configuration
+    /** Debug: show the standing pose configuration. */
     std::cout << "\n=== STANDING POSE CONFIGURATION ===" << std::endl;
     for (int i = 0; i < NUM_LEGS; i++) {
         Point3D pos = test_legs[i].getCurrentTipPositionGlobal();
@@ -556,53 +575,56 @@ int main() {
                   << "°, tibia=" << math_utils::radiansToDegrees(angles.tibia) << "°" << std::endl;
     }
 
-    // Get leg's identity pose from BodyPoseConfiguration (OpenSHC equivalent)
-    // Use leg stance position to calculate identity tip pose like in OpenSHC
+    /** Get leg identity pose from BodyPoseConfiguration (OpenSHC equivalent). */
+    /** Use leg stance position to calculate identity tip pose like in OpenSHC. */
     const LegStancePosition leg_stance_position = pose_config.leg_stance_positions[0];
     Point3D identity_tip_pose = Point3D(
         leg_stance_position.x,
         leg_stance_position.y,
-        leg_stance_position.z); // Use standing height
+        leg_stance_position.z);
 
     std::cout << "\nLeg stance position from config: (" << leg_stance_position.x << ", " << leg_stance_position.y << ", " << leg_stance_position.z << ")" << std::endl;
     std::cout << "Identity tip pose: (" << identity_tip_pose.x << ", " << identity_tip_pose.y << ", " << identity_tip_pose.z << ")" << std::endl;
 
-    // Create LegStepper for leg 0 using the correct identity tip pose
+    /** Create LegStepper for leg 0 using the correct identity tip pose. */
     LegStepper stepper(0, identity_tip_pose, test_legs[0], const_cast<RobotModel &>(model));
     stepper.setDefaultTipPose(identity_tip_pose);
 
-    // *** CONFIGURE USING TRIPOD GAIT PARAMETERS ***
-    // Configure StepCycle from tripod gait configuration (OpenSHC style)
-    // Use OpenSHC default frequency (1.0 Hz) to ensure consistency with tripod_walk_visualization_test
-    double openshc_default_frequency = 1.0; // OpenSHC uses 1.0 Hz as default frequency
+    /** Configure using tripod gait parameters. */
+    /** Configure StepCycle from tripod gait configuration (OpenSHC style). */
+    /** Use OpenSHC default frequency (1.0 Hz) to ensure consistency with tripod_walk_visualization_test. */
+    /** OpenSHC uses 1.0 Hz as default frequency. */
+    double openshc_default_frequency = 1.0;
 
-    // generateStepCycle() now uses internally stored step_frequency (params.step_frequency) and time_delta
+    /** generateStepCycle() uses internally stored step_frequency (params.step_frequency) and time_delta. */
     StepCycle step_cycle = tripod_config.generateStepCycle();
     stepper.setStepCycle(step_cycle);
     std::cout << "StepCycle configurado desde tripod gait: frequency=" << step_cycle.frequency_ << "Hz, period=" << step_cycle.period_ << std::endl;
     std::cout << "Using configured step frequency: " << step_cycle.frequency_ << "Hz (OpenSHC default expected 1.0)" << std::endl;
 
-    // Note: All other gait parameters are now configured through the StepCycle structure
-    // The stepper will use the StepCycle values directly via generateStepCycle()
+    /** Note: all other gait parameters are configured through the StepCycle structure. */
+    /** The stepper will use the StepCycle values directly via generateStepCycle(). */
     std::cout << "Gait parameters configured from GaitConfiguration (OpenSHC exact):" << std::endl;
     std::cout << "  Stance ratio: " << tripod_config.getStanceRatio() << std::endl;
     std::cout << "  Swing ratio: " << tripod_config.getSwingRatio() << std::endl;
     std::cout << "  Step frequency: " << tripod_config.getStepFrequency() << " Hz" << std::endl;
 
-    // Configure velocity to generate proper stride using tripod gait step length
-    // Use XY velocity to force significant coxa movement during stance
-    // This will test if the IK system can handle XY plane displacements
+    /** Configure velocity to generate proper stride using tripod gait step length. */
+    /** Use XY velocity to force significant coxa movement during stance. */
+    /** This will test if the IK system can handle XY plane displacements. */
 
-    // Start with desired velocity and check workspace constraints
-    double desired_velocity_x = 60.0; // mm/s in X direction (increased for more stance movement)
-    double desired_velocity_y = 60.0; // mm/s in Y direction (increased for more stance movement)
+    /** Start with desired velocity and check workspace constraints. */
+    /** mm/s in X direction (increased for more stance movement). */
+    double desired_velocity_x = 60.0;
+    /** mm/s in Y direction (increased for more stance movement). */
+    double desired_velocity_y = 60.0;
 
-    // Set initial velocity and calculate stride
+    /** Set initial velocity and calculate stride. */
     stepper.setDesiredVelocity(Point3D(desired_velocity_x, desired_velocity_y, 0), 0.0);
     stepper.updateStride();
     Point3D calculated_stride = stepper.getStrideVector();
 
-    // WORKSPACE VALIDATION: Check if target is reachable and adjust if necessary
+    /** Workspace validation: check if target is reachable and adjust if necessary. */
     Point3D initial_target = identity_tip_pose + calculated_stride * 0.5;
     bool target_reachable = isPositionReachable(model, test_legs[0].getLegId(), initial_target);
 
@@ -610,11 +632,11 @@ int main() {
     std::cout << "Initial target: (" << initial_target.x << ", " << initial_target.y << ", " << initial_target.z << ")" << std::endl;
     std::cout << "Target reachable: " << (target_reachable ? "YES" : "NO") << std::endl;
 
-    // If not reachable, or if we want to optimize for better precision, adjust velocity
+    /** If not reachable, or if we want to optimize for better precision, adjust velocity. */
     if (!target_reachable) {
         std::cout << "⚠ WORKSPACE WARNING: Target not reachable, adjusting velocity..." << std::endl;
 
-        // Reduce velocity by 20% and try again
+        /** Reduce velocity by 20% and try again. */
         desired_velocity_x *= 0.8;
         desired_velocity_y *= 0.8;
         stepper.setDesiredVelocity(Point3D(desired_velocity_x, desired_velocity_y, 0), 0.0);
@@ -629,7 +651,7 @@ int main() {
         std::cout << "Adjusted reachable: " << (adjusted_reachable ? "YES" : "NO") << std::endl;
     }
 
-    // Calculate distance from base to target for analysis
+    /** Calculate distance from base to target for analysis. */
     Point3D base_pos = test_legs[0].getBasePosition();
     Point3D final_target = identity_tip_pose + calculated_stride * 0.5;
     double target_distance_from_base = (final_target - base_pos).norm();
@@ -647,14 +669,15 @@ int main() {
     std::cout << "Velocidad configurada: (" << desired_velocity_x << ", " << desired_velocity_y << ", 0) mm/s para movimiento en plano XY" << std::endl;
     std::cout << "Stride vector calculado: (" << calculated_stride.x << ", " << calculated_stride.y << ", " << calculated_stride.z << ")" << std::endl;
 
-    // Configure timing parameters from tripod gait
-    // Use stance and swing ratios for phase calculations
-    int total_iterations = 30; // Test iterations (increased for more detailed stance analysis)
+    /** Configure timing parameters from tripod gait. */
+    /** Use stance and swing ratios for phase calculations. */
+    /** Test iterations (increased for more detailed stance analysis). */
+    int total_iterations = 30;
     int swing_iterations = (int)(total_iterations * tripod_config.getSwingRatio());
     int stance_iterations = total_iterations - swing_iterations;
     std::cout << "Timing configurado - Total: " << total_iterations << ", Swing: " << swing_iterations << ", Stance: " << stance_iterations << std::endl;
 
-    // Show gait configuration being used
+    /** Show gait configuration being used. */
     std::cout << "\nUsing configuration " << tripod_config.gait_name << ":" << std::endl;
     std::cout << "  Stance phase: " << tripod_config.phase_config.stance_phase << std::endl;
     std::cout << "  Swing phase: " << tripod_config.phase_config.swing_phase << std::endl;

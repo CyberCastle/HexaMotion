@@ -2,9 +2,9 @@
 #define GAIT_CONFIG_FACTORY_H
 
 #include "gait_config.h"
-#include "gait_types.h" // For GaitType enum
+#include "gait_types.h" /**< For GaitType enum. */
 #include "leg_stepper.h"
-#include "robot_model.h" // For model access
+#include "robot_model.h" /**< For model access. */
 #include <string>
 #include <vector>
 
@@ -16,7 +16,7 @@
  * that match OpenSHC's gait.yaml structure and parameters.
  */
 
-// Gait configuration creation functions
+/** Gait configuration creation functions. */
 GaitConfiguration createWaveGaitConfig(const Parameters &params);
 GaitConfiguration createTripodGaitConfig(const Parameters &params);
 GaitConfiguration createRippleGaitConfig(const Parameters &params);
@@ -30,7 +30,7 @@ GaitConfiguration createMetachronalGaitConfig(const Parameters &params);
  */
 GaitConfiguration createGaitConfig(GaitType gait_type, const Parameters &params);
 
-// Gait selection configuration
+/** Gait selection configuration. */
 GaitSelectionConfig createGaitSelectionConfig(const Parameters &params);
 
-#endif // GAIT_CONFIG_FACTORY_H
+#endif /**< GAIT_CONFIG_FACTORY_H */

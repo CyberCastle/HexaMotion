@@ -108,7 +108,8 @@ struct PairBuffer {
 
 int main() {
     Parameters params = createDefaultParameters();
-    params.max_velocity = 1000.0; // keep velocity limits permissive for diagnostics
+    /** Keep velocity limits permissive for diagnostics. */
+    params.max_velocity = 1000.0;
 
     LocomotionSystem system(params);
     DummyIMU imu;
@@ -128,7 +129,8 @@ int main() {
 
     GaitConfiguration tripod = createGaitConfig(TRIPOD_GAIT, params);
     double reach = RobotModel::computeStandingHorizontalReach(params);
-    tripod.step_length = reach * 2.0; // replicate locomotion test configuration
+    /** Replicate locomotion test configuration. */
+    tripod.step_length = reach * 2.0;
     tripod.time_to_max_stride = 0.2;
 
     if (!system.setGaitConfiguration(tripod)) {
@@ -142,7 +144,7 @@ int main() {
         return 1;
     }
 
-    // Execute startup sequence exactly once before sampling debug data
+    /** Execute startup sequence exactly once before sampling debug data. */
     const int MAX_STARTUP_ITERATIONS = 400;
     int startup_iterations = 0;
     bool startup_completed = false;
@@ -220,7 +222,8 @@ int main() {
                 previous_phase[leg] = phase;
 
                 if (phase != STANCE_PHASE) {
-                    continue; // only inspect transitions into stance for precise drift checks
+                    /** Only inspect transitions into stance for precise drift checks. */
+                    continue;
                 }
 
                 stance_transition_samples++;
@@ -253,7 +256,7 @@ int main() {
                 row += " | ";
                 row += formatNumber(coxa_deg, 7, 2);
 
-                // Register sample for pairwise comparison when matching iterations are observed
+                /** Register sample for pairwise comparison when matching iterations are observed. */
                 LegSample sample;
                 sample.leg = leg;
                 sample.iteration = debug.iteration;

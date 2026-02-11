@@ -1,6 +1,7 @@
 #include "../src/body_pose_config_factory.h"
 #include "../src/body_pose_controller.h"
-#include "../src/gait_config_factory.h" // Added for createTripodGaitConfig
+/** Added for createTripodGaitConfig. */
+#include "../src/gait_config_factory.h"
 #include "../src/hexamotion_constants.h"
 #include "../src/leg.h"
 #include "../src/robot_model.h"
@@ -18,13 +19,14 @@
 int main() {
     std::cout << "=== WorkspaceAnalyzer Fusion Test ===" << std::endl;
 
-    // Create a robot model with real robot parameters from AGENTS.md
+    /** Create a robot model with real robot parameters from AGENTS.md. */
     Parameters params{};
     params.hexagon_radius = 200;
     params.coxa_length = 50;
     params.femur_length = 101;
     params.tibia_length = 208;
-    params.default_height_offset = -208.0; // Set to -tibia_length for explicit configuration
+    /** Set to -tibia_length for explicit configuration. */
+    params.default_height_offset = -208.0;
     params.robot_height = 208;
     params.standing_height = 150;
     params.time_delta = 1.0 / 50.0;
@@ -38,30 +40,32 @@ int main() {
     params.max_angular_velocity = 45.0;
 
     RobotModel model(params);
-    model.workspaceAnalyzerInitializer(); // Inicializar WorkspaceAnalyzer
+    /** Initialize WorkspaceAnalyzer. */
+    model.workspaceAnalyzerInitializer();
 
-    // Test unified WorkspaceAnalyzer creation
+    /** Test unified WorkspaceAnalyzer creation. */
     std::cout << "Creating WorkspaceAnalyzer..." << std::endl;
-    ComputeConfig config = ComputeConfig::high(); // Use medium precision for realistic testing
+    /** Use medium precision for realistic testing. */
+    ComputeConfig config = ComputeConfig::high();
     WorkspaceAnalyzer analyzer(model, config);
 
-    // Initialize the analyzer to ensure proper setup
+    /** Initialize the analyzer to ensure proper setup. */
     std::cout << "Initializing WorkspaceAnalyzer..." << std::endl;
     analyzer.initialize();
 
-    // Test workspace generation (from WalkspaceAnalyzer)
+    /** Test workspace generation (from WalkspaceAnalyzer). */
     std::cout << "Testing workspace generation..." << std::endl;
     try {
         analyzer.generateWorkspace();
         std::cout << "✅ Workspace generation successful" << std::endl;
 
-        // Validate generateWorkspace() results
+        /** Validate generateWorkspace() results. */
         std::cout << "Validating generateWorkspace() results..." << std::endl;
         const auto &walkspace_map = analyzer.getWalkspaceMap();
         if (!walkspace_map.empty()) {
             std::cout << "✅ Walkspace map generated with " << walkspace_map.size() << " bearing entries" << std::endl;
 
-            // Test some specific bearings
+            /** Test some specific bearings. */
             for (int bearing = 0; bearing <= 360; bearing += 90) {
                 auto it = walkspace_map.find(bearing);
                 if (it != walkspace_map.end()) {
@@ -71,7 +75,7 @@ int main() {
                 }
             }
 
-            // Validate symmetry (bearing 0° should equal bearing 360°)
+            /** Validate symmetry (bearing 0 degrees should equal bearing 360 degrees). */
             auto bearing_0 = walkspace_map.find(0);
             auto bearing_360 = walkspace_map.find(360);
             if (bearing_0 != walkspace_map.end() && bearing_360 != walkspace_map.end()) {
@@ -88,10 +92,10 @@ int main() {
         std::cout << "❌ Workspace generation failed: " << e.what() << std::endl;
     }
 
-    // Validate WalkController::generateWalkspace() produces equivalent data
+    /** Validate WalkController::generateWalkspace() produces equivalent data. */
     std::cout << "\n=== WalkController::generateWalkspace validation ===" << std::endl;
     {
-        // Create independent leg instances for the walk controller (avoid reusing FK-only data)
+        /** Create independent leg instances for the walk controller (avoid reusing FK-only data). */
         Leg wc_legs[NUM_LEGS] = {Leg(0, model), Leg(1, model), Leg(2, model),
                                  Leg(3, model), Leg(4, model), Leg(5, model)};
 
@@ -110,7 +114,7 @@ int main() {
             WalkController walk_controller(model, wc_legs, pose_config);
             walk_controller.setBodyPoseController(&pose_controller);
 
-            // WalkController constructor already calls generateWalkspace(), but re-run to ensure deterministic behaviour
+            /** WalkController constructor already calls generateWalkspace; re-run to ensure deterministic behavior. */
             walk_controller.generateWalkspace();
             auto walkspace_wc = walk_controller.getWalkspace();
             const auto walkspace_analyzer = analyzer.getWalkspaceMap();
@@ -123,10 +127,10 @@ int main() {
                 std::cout << "✅ WalkController walkspace map generated with " << walkspace_wc.size()
                           << " bearing entries" << std::endl;
 
-                // Ensure key bearings exist and align (within tolerance) with WorkspaceAnalyzer results
+                /** Ensure key bearings exist and align (within tolerance) with WorkspaceAnalyzer results. */
                 const double tolerance = 1e-3;
 
-                // Compare every bearing produced by the analyzer for parity
+                /** Compare every bearing produced by the analyzer for parity. */
                 for (const auto &entry : walkspace_analyzer) {
                     int bearing = entry.first;
                     auto it_wc = walkspace_wc.find(bearing);
@@ -154,7 +158,7 @@ int main() {
                     }
                 }
 
-                // Validate periodic symmetry (bearing 0 and 360)
+                /** Validate periodic symmetry (bearing 0 and 360). */
                 auto wc0 = walkspace_wc.find(0);
                 auto wc360 = walkspace_wc.find(360);
                 if (wc0 != walkspace_wc.end() && wc360 != walkspace_wc.end() &&
@@ -174,19 +178,20 @@ int main() {
         }
     }
 
-    // Test validation functions (from WorkspaceValidator)
+    /** Test validation functions (from WorkspaceValidator). */
     std::cout << "Testing validation functions..." << std::endl;
-    // Test point within reasonable reach (robot has max reach ~359mm: coxa+femur+tibia)
-    Point3D test_point(250, 100, -150); // More realistic test point
+    /** Test point within reasonable reach (robot has max reach ~359 mm: coxa+femur+tibia). */
+    /** More realistic test point. */
+    Point3D test_point(250, 100, -150);
     bool is_reachable = analyzer.isPositionReachable(0, test_point, false);
     std::cout << "Point (" << test_point.x << ", " << test_point.y << ", " << test_point.z
               << ") reachable for leg 0: " << (is_reachable ? "YES" : "NO") << std::endl;
 
-    // Test getWorkplane() function (OpenSHC equivalent)
+    /** Test getWorkplane() function (OpenSHC equivalent). */
     std::cout << "\nTesting getWorkplane() function..." << std::endl;
     try {
-        // Test workplane at different heights for leg 0
-        // Note: Robot default height is 208mm, standing height is 150mm (body at z=-208)
+        /** Test workplane at different heights for leg 0. */
+        /** Robot default height is 208 mm, standing height is 150 mm (body at z = -208). */
         std::vector<double> test_heights = {-250.0, -200.0, -150.0, -100.0, -50.0};
 
         for (double height : test_heights) {
@@ -196,17 +201,18 @@ int main() {
             if (!workplane.empty()) {
                 std::cout << "workplane with " << workplane.size() << " bearings" << std::endl;
 
-                // Show sample bearings and their radii
+                /** Show sample bearings and their radii. */
                 int sample_count = 0;
                 for (const auto &bearing_radius : workplane) {
-                    if (sample_count < 3) { // Show first 3 entries as sample
+                    /** Show first 3 entries as sample. */
+                    if (sample_count < 3) {
                         std::cout << "    Bearing " << bearing_radius.first
                                   << "°: radius = " << bearing_radius.second << " mm" << std::endl;
                         sample_count++;
                     }
                 }
 
-                // Validate workplane consistency
+                /** Validate workplane consistency. */
                 auto bearing_0 = workplane.find(0);
                 auto bearing_360 = workplane.find(360);
                 if (bearing_0 != workplane.end() && bearing_360 != workplane.end()) {
@@ -221,15 +227,16 @@ int main() {
             }
         }
 
-        // Test workplane interpolation
+        /** Test workplane interpolation. */
         std::cout << "\nTesting workplane interpolation..." << std::endl;
-        double interpolated_height = -175.0; // Between -200 and -150
+        /** Between -200 and -150. */
+        double interpolated_height = -175.0;
         Workplane interpolated_workplane = analyzer.getWorkplane(0, interpolated_height);
         if (!interpolated_workplane.empty()) {
             std::cout << "✅ Workplane interpolation successful at height "
                       << interpolated_height << " mm" << std::endl;
 
-            // Compare with adjacent heights to validate interpolation
+            /** Compare with adjacent heights to validate interpolation. */
             Workplane lower_workplane = analyzer.getWorkplane(0, -200.0);
             Workplane upper_workplane = analyzer.getWorkplane(0, -150.0);
 
@@ -242,10 +249,12 @@ int main() {
                     lower_0 != lower_workplane.end() &&
                     upper_0 != upper_workplane.end()) {
 
-                    double expected = lower_0->second * 0.5 + upper_0->second * 0.5; // 50% interpolation
+                    /** 50% interpolation. */
+                    double expected = lower_0->second * 0.5 + upper_0->second * 0.5;
                     double actual = interp_0->second;
 
-                    if (std::abs(actual - expected) < 10.0) { // 10mm tolerance for realistic interpolation
+                    /** 10 mm tolerance for realistic interpolation. */
+                    if (std::abs(actual - expected) < 10.0) {
                         std::cout << "✅ Workplane interpolation accuracy validated" << std::endl;
                     } else {
                         std::cout << "❌ Workplane interpolation accuracy failed (expected: "
@@ -257,7 +266,7 @@ int main() {
             std::cout << "❌ Workplane interpolation failed" << std::endl;
         }
 
-        // Test invalid leg index
+        /** Test invalid leg index. */
         Workplane invalid_workplane = analyzer.getWorkplane(NUM_LEGS + 1, 0.0);
         if (invalid_workplane.empty()) {
             std::cout << "✅ getWorkplane() correctly handles invalid leg index" << std::endl;
@@ -269,7 +278,7 @@ int main() {
         std::cout << "❌ getWorkplane() test failed: " << e.what() << std::endl;
     }
 
-    // Test workspace bounds
+    /** Test workspace bounds. */
     std::cout << "Testing workspace bounds..." << std::endl;
     auto bounds = analyzer.getWorkspaceBounds(0);
     std::cout << "Leg 0 workspace bounds:" << std::endl;
@@ -278,20 +287,21 @@ int main() {
     std::cout << "  Min height: " << bounds.min_height << " mm" << std::endl;
     std::cout << "  Max height: " << bounds.max_height << " mm" << std::endl;
 
-    // Test analysis functions
+    /** Test analysis functions. */
     std::cout << "Testing analysis functions..." << std::endl;
     Point3D leg_positions[NUM_LEGS];
 
-    // Get realistic leg positions from robot model using forward kinematics
-    // According to AGENTS.md: with all angles at 0°, the robot stands stably by default
-    // - Femur remains horizontal, in line with the coxa
-    // - Tibia remains vertical, perpendicular to ground
-    // - Robot body positioned at z = -208 (tibia length)
+    /** Get realistic leg positions from robot model using forward kinematics. */
+    /** With all angles at 0 degrees, the robot stands stably by default. */
+    /** Femur remains horizontal, in line with the coxa. */
+    /** Tibia remains vertical, perpendicular to ground. */
+    /** Robot body positioned at z = -208 (tibia length). */
     for (int i = 0; i < NUM_LEGS; i++) {
-        // Use default configuration: all angles at 0° for stable standing position
-        JointAngles default_angles(0.0, 0.0, 0.0); // coxa, femur, tibia all at 0°
+        /** Use default configuration: all angles at 0 degrees for stable standing position. */
+        /** Coxa, femur, tibia all at 0 degrees. */
+        JointAngles default_angles(0.0, 0.0, 0.0);
 
-        // Calculate actual position using robot model's forward kinematics
+        /** Calculate actual position using robot model forward kinematics. */
         leg_positions[i] = model.forwardKinematicsGlobalCoordinates(i, default_angles);
 
         std::cout << "  Leg " << i << " position (0° angles): ("
@@ -304,24 +314,25 @@ int main() {
     std::cout << "Walkspace analysis result: " << (analysis_result.is_stable ? "STABLE" : "UNSTABLE") << std::endl;
     std::cout << "Stability margin: " << analysis_result.stability_margin << " mm" << std::endl;
 
-    // Test OpenSHC compatibility validation
+    /** Test OpenSHC compatibility validation. */
     std::cout << "\n=== OpenSHC Compatibility Validation ===" << std::endl;
 
-    // Verify that generateWorkspace() and getWorkplane() work together
+    /** Verify that generateWorkspace() and getWorkplane() work together. */
     std::cout << "Testing generateWorkspace() + getWorkplane() integration..." << std::endl;
 
-    // First ensure workspace is generated
+    /** First ensure workspace is generated. */
     analyzer.generateWorkspace();
 
-    // Test that workplanes are consistent across all legs
+    /** Test that workplanes are consistent across all legs. */
     bool integration_success = true;
     for (int leg = 0; leg < NUM_LEGS; leg++) {
-        Workplane workplane = analyzer.getWorkplane(leg, -150.0); // Test at standing height
+        /** Test at standing height. */
+        Workplane workplane = analyzer.getWorkplane(leg, -150.0);
         if (workplane.empty()) {
             std::cout << "❌ Leg " << leg << " has empty workplane at standing height" << std::endl;
             integration_success = false;
         } else {
-            // Check that workplane has reasonable values
+            /** Check that workplane has reasonable values. */
             auto bearing_0 = workplane.find(0);
             if (bearing_0 != workplane.end() && bearing_0->second > 0) {
                 std::cout << "✅ Leg " << leg << " workplane valid (radius at 0°: "
@@ -339,13 +350,13 @@ int main() {
         std::cout << "❌ OpenSHC integration has issues" << std::endl;
     }
 
-    // Test getLegWorkspace() for complete 3D workspace
+    /** Test getLegWorkspace() for complete 3D workspace. */
     std::cout << "\nTesting getLegWorkspace() for 3D workspace data..." << std::endl;
     Workspace leg_workspace = analyzer.getLegWorkspace(0);
     if (!leg_workspace.empty()) {
         std::cout << "✅ 3D workspace data available with " << leg_workspace.size() << " height layers" << std::endl;
 
-        // Show height range
+        /** Show height range. */
         double min_height = leg_workspace.begin()->first;
         double max_height = leg_workspace.rbegin()->first;
         std::cout << "  Height range: " << min_height << " to " << max_height << " mm" << std::endl;
@@ -355,15 +366,13 @@ int main() {
 
     std::cout << "=== All WorkspaceAnalyzer functions tested successfully! ===" << std::endl;
 
-    // ==============================================================
-    // VelocityLimits integration & behavior validation
-    // ==============================================================
+    /** VelocityLimits integration and behavior validation. */
     std::cout << "\n=== VelocityLimits Behavior Tests ===" << std::endl;
 
     VelocityLimits velocity_limits(model);
 
-    // Provide a realistic gait configuration so that step_length > 0 and velocity limits are non-zero.
-    // Without this, VelocityLimits uses a default GaitConfig with step_length=0, yielding all zero limits.
+    /** Provide a realistic gait configuration so that step_length > 0 and velocity limits are non-zero. */
+    /** Without this, VelocityLimits uses a default GaitConfig with step_length = 0, yielding all zero limits. */
     auto tripod_gait = createTripodGaitConfig(model.getParams());
     velocity_limits.generateLimits(tripod_gait);
 
@@ -392,7 +401,7 @@ int main() {
         }
     }
 
-    // Interpolation test (0° a 1°)
+    /** Interpolation test (0 degrees to 1 degree). */
     auto limit0 = velocity_limits.getLimit(0.0);
     auto limit1 = velocity_limits.getLimit(1.0);
     auto mid = velocity_limits.getLimit(0.5);
@@ -404,9 +413,9 @@ int main() {
         std::cout << "✅ Interpolation bounds check passed" << std::endl;
     }
 
-    // Angular scaling & coupling test
+    /** Angular scaling and coupling test. */
     auto base_limits = velocity_limits.getLimit(0.0);
-    // 0% angular demand should not reduce linear limits now
+    /** 0% angular demand should not reduce linear limits. */
     VelocityLimits::LimitValues no_demand_scaled = velocity_limits.scaleVelocityLimits(base_limits, 0.0);
     if (std::abs(no_demand_scaled.linear_x - base_limits.linear_x) > 1e-6 ||
         std::abs(no_demand_scaled.linear_y - base_limits.linear_y) > 1e-6) {
@@ -416,11 +425,12 @@ int main() {
         std::cout << "✅ No linear reduction at zero angular demand" << std::endl;
     }
 
-    // 100% angular demand should enforce v_planar <= w * r
+    /** 100% angular demand should enforce v_planar <= w * r. */
     VelocityLimits::LimitValues full_scaled = velocity_limits.scaleVelocityLimits(base_limits, 1.0);
     double planar_mag = std::hypot(full_scaled.linear_x, full_scaled.linear_y);
     double stance_r = std::max(1.0, velocity_limits.getWorkspaceConfig().stance_radius);
-    double kinematic_cap = base_limits.angular_z * stance_r; // base (not scaled angular_z)
+    /** Base (not scaled angular_z). */
+    double kinematic_cap = base_limits.angular_z * stance_r;
     if (planar_mag - kinematic_cap > 1e-6) {
         std::cout << "❌ Kinematic coupling violated (" << planar_mag << " > " << kinematic_cap << ")" << std::endl;
         velocity_limits_ok = false;
@@ -428,7 +438,7 @@ int main() {
         std::cout << "✅ Kinematic coupling respected (planar mag ≤ ω * r)" << std::endl;
     }
 
-    // Forward progress expectation: ensure forward linear_x is a meaningful fraction of configured cap
+    /** Forward progress expectation: ensure forward linear_x is a meaningful fraction of configured cap. */
     double expected_min_forward = 0.3 * (params.max_velocity > 0 ? params.max_velocity : DEFAULT_MAX_LINEAR_VELOCITY);
     if (base_limits.linear_x < expected_min_forward) {
         std::cout << "❌ Forward linear_x too low (" << base_limits.linear_x << " < " << expected_min_forward << ")" << std::endl;
@@ -437,7 +447,7 @@ int main() {
         std::cout << "✅ Forward linear_x acceptable (" << base_limits.linear_x << " mm/s)" << std::endl;
     }
 
-    // Validation function (in-range)
+    /** Validation function (in-range). */
     double test_vx = base_limits.linear_x * 0.5;
     double test_vy = base_limits.linear_y * 0.4;
     double test_wz = base_limits.angular_z * 0.6;
@@ -448,7 +458,7 @@ int main() {
         std::cout << "✅ validateVelocityInputs accepted in-range velocities" << std::endl;
     }
 
-    // Over-limit linear
+    /** Over-limit linear. */
     if (velocity_limits.validateVelocityInputs(base_limits.linear_x * 1.05, 0, 0)) {
         std::cout << "❌ validateVelocityInputs failed to reject over-limit linear_x" << std::endl;
         velocity_limits_ok = false;
@@ -456,11 +466,12 @@ int main() {
         std::cout << "✅ Over-limit linear_x correctly rejected" << std::endl;
     }
 
-    // Overshoot sanity
+    /** Overshoot sanity. */
     double ox = velocity_limits.getOvershootX();
     double oy = velocity_limits.getOvershootY();
     double walk_r = workspace_cfg.walkspace_radius;
-    double overshoot_cap = 0.25 * walk_r + 1e-6; // tolerance
+    /** Tolerance. */
+    double overshoot_cap = 0.25 * walk_r + 1e-6;
     if (ox <= 0 || oy <= 0) {
         std::cout << "❌ Overshoot should be positive" << std::endl;
         velocity_limits_ok = false;
@@ -477,25 +488,25 @@ int main() {
         std::cout << "❌ VelocityLimits tests encountered failures" << std::endl;
     }
 
-    // ==============================================================
-    // Standing pose workplane height validation (added test)
-    // ==============================================================
+    /** Standing pose workplane height validation (added test). */
     {
         std::cout << "\n=== Standing Pose Height Validation ===" << std::endl;
-        double expected_standing_height = params.standing_height; // 150 mm (absolute foot height => foot Z = -standing_height)
+        /** 150 mm (absolute foot height => foot Z = -standing_height). */
+        double expected_standing_height = params.standing_height;
 
-        // Therefore the standing workplane is at Z = -standing_height.
-        double target_workplane_height = -expected_standing_height; // -150
+        /** Therefore the standing workplane is at Z = -standing_height. */
+        /** -150. */
+        double target_workplane_height = -expected_standing_height;
 
         std::cout << "Expected standing tip Z: " << target_workplane_height << " mm" << std::endl;
 
-        // Obtain workplane at computed height
+        /** Obtain workplane at computed height. */
         Workplane standing_plane = analyzer.getWorkplane(0, target_workplane_height);
         if (standing_plane.empty()) {
             std::cout << "❌ Standing workplane not found at height " << target_workplane_height << " mm" << std::endl;
         } else {
             std::cout << "✅ Standing workplane found (" << standing_plane.size() << " bearings)" << std::endl;
-            // Basic semantic check: bearing 0 and 180 radii should be non-zero and consistent with walkspace map bounds
+            /** Basic semantic check: bearing 0 and 180 radii should be non-zero and consistent with walkspace map bounds. */
             double r0 = 0.0;
             double r180 = 0.0;
             double r360 = 0.0;
@@ -522,7 +533,7 @@ int main() {
             } else {
                 std::cout << "✅ Standing plane radii valid (r0=" << r0 << ", r180=" << r180 << ")" << std::endl;
             }
-            // Cross-check that height lies within global workspace bounds for leg 0
+            /** Cross-check that height lies within global workspace bounds for leg 0. */
             WorkspaceBounds wb = analyzer.getWorkspaceBounds(0);
             if (target_workplane_height < wb.min_height - 1e-3 || target_workplane_height > wb.max_height + 1e-3) {
                 std::cout << "❌ Standing height outside reported bounds (" << wb.min_height << ", " << wb.max_height << ")" << std::endl;
