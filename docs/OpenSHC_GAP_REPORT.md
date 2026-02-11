@@ -23,6 +23,7 @@ Development and testing constraints:
 - Implementation files live exclusively in `src` and `include`. Do not add Arduino examples.
 - Review `OpenSHC` first when modifying functionality to keep logic equivalent.
 - Run tests with `tests/setup.sh` (Eigen install) and `make`.
+- **Eigen**: OpenSHC targets Eigen **3.4.0**, while HexaMotion is currently validated/building against Eigen **5.0.1**.
 
 Physical parameters and conventions:
 

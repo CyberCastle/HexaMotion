@@ -96,10 +96,10 @@ inline Eigen::Quaterniond correctRotation(const Eigen::Quaterniond &rotation,
 inline Eigen::Vector3d quaterniondToEulerAngles(const Eigen::Quaterniond &q, bool extrinsic = false) {
     Eigen::Quaterniond qn = q.normalized();
     if (extrinsic) {
-        Eigen::Vector3d euler = qn.toRotationMatrix().eulerAngles(0, 1, 2);
+        Eigen::Vector3d euler = qn.toRotationMatrix().canonicalEulerAngles(0, 1, 2);
         return Eigen::Vector3d(euler[0], euler[1], euler[2]);
     }
-    Eigen::Vector3d euler = qn.toRotationMatrix().eulerAngles(2, 1, 0);
+    Eigen::Vector3d euler = qn.toRotationMatrix().canonicalEulerAngles(2, 1, 0);
     return Eigen::Vector3d(euler[2], euler[1], euler[0]);
 }
 
