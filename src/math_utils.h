@@ -107,11 +107,11 @@ inline Eigen::Vector3d quaterniondToEulerAngles(const Eigen::Quaterniond &q, boo
  * @brief Convert Euler angles to Eigen::Quaterniond using OpenSHC conventions.
  * Equivalent to OpenSHC's eulerAnglesToQuaternion for Quaterniond types.
  * @param euler Euler angles as Vector3d (roll, pitch, yaw) in radians
- * @param extrinsic If true, use intrinsic XYZ (OpenSHC intrinsic branch). Default uses extrinsic XYZ.
+ * @param intrinsic If true, use intrinsic XYZ (X*Y*Z). Default uses extrinsic XYZ (Z*Y*X).
  * @return Quaternion
  */
-inline Eigen::Quaterniond eulerAnglesToQuaterniond(const Eigen::Vector3d &euler, bool extrinsic = false) {
-    if (extrinsic) {
+inline Eigen::Quaterniond eulerAnglesToQuaterniond(const Eigen::Vector3d &euler, bool intrinsic = false) {
+    if (intrinsic) {
         return Eigen::Quaterniond(
             Eigen::AngleAxisd(euler[0], Eigen::Vector3d::UnitX()) *
             Eigen::AngleAxisd(euler[1], Eigen::Vector3d::UnitY()) *
