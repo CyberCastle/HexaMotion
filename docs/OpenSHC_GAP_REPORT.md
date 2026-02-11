@@ -69,70 +69,71 @@ Physical parameters and conventions:
 
 #### Constants — Detailed Mapping
 
-| OpenSHC Constant                   | HexaMotion Equivalent                      | Location                                                                                  |
-| :--------------------------------- | :----------------------------------------- | :---------------------------------------------------------------------------------------- |
-| `UNASSIGNED_VALUE`                 | —                                          | **Gap**: No global sentinel constant; uses validity flags or local `1e9` large sentinels. |
-| `UNDEFINED_POSITION`               | `Pose::Undefined()`                        | Uses NaN sentinel in `Pose` (no global constant).                                         |
-| `UNDEFINED_ROTATION`               | `Pose::Undefined()`                        | Uses NaN quaternion sentinel (no global constant).                                        |
-| `GRAVITY_ACCELERATION`             | Computed from IMU or hardcoded per context | Distributed.                                                                              |
-| `PROGRESS_COMPLETE` (100)          | `PROGRESS_COMPLETE` (100)                  | `state_controller.h` ✅                                                                   |
-| `THROTTLE_PERIOD` (5)              | `THROTTLE_PERIOD` (1.0f)                   | `state_controller.h` — value changed.                                                     |
-| `IK_TOLERANCE` (0.005)             | `IK_TOLERANCE`                             | `hexamotion_constants.h` ✅                                                               |
-| `DLS_COEFFICIENT` (0.02)           | `IK_DLS_COEFFICIENT`                       | `hexamotion_constants.h` ✅                                                               |
-| `BEARING_STEP` (45)                | `BEARING_STEP`                             | `hexamotion_constants.h` ✅                                                               |
-| `MAX_POSITION_DELTA` (0.002)       | `MAX_POSITION_DELTA`                       | `hexamotion_constants.h` ✅                                                               |
-| `MAX_WORKSPACE_RADIUS` (1.0)       | `MAX_WORKSPACE_RADIUS`                     | `hexamotion_constants.h` ✅                                                               |
-| `WORKSPACE_LAYERS` (10)            | `WORKSPACE_LAYERS`                         | `hexamotion_constants.h` ✅                                                               |
-| `JOINT_TOLERANCE` (0.01)           | `JOINT_TOLERANCE` (0.1f)                   | `state_controller.h` — value relaxed.                                                     |
-| `TIP_TOLERANCE` (0.01)             | `TIP_TOLERANCE`                            | `hexamotion_constants.h` ✅                                                               |
-| `SAFETY_FACTOR` (0.15)             | `SAFETY_FACTOR`                            | `hexamotion_constants.h` ✅                                                               |
-| `PACK_TIME` (2.0)                  | `PACK_TIME` (2.0f)                         | `state_controller.h` ✅                                                                   |
-| `MAX_MANUAL_LEGS` (2)              | `MAX_MANUAL_LEGS` (2)                      | `state_controller.h` ✅                                                                   |
-| `HORIZONTAL_TRANSITION_TIME` (1.0) | `HORIZONTAL_TRANSITION_TIME`               | `hexamotion_constants.h` ✅                                                               |
-| `VERTICAL_TRANSITION_TIME` (3.0)   | `VERTICAL_TRANSITION_TIME`                 | `hexamotion_constants.h` ✅                                                               |
-| `STABILITY_THRESHOLD` (100)        | `DEFAULT_STABILITY_THRESHOLD`              | `hexamotion_constants.h` ✅                                                               |
-| `ADMITTANCE_DEADBAND` (0.0)        | Inline in `AdmittanceController`           | ✅                                                                                        |
+| OpenSHC Constant                   | HexaMotion Equivalent                   | Location                                                                                  |
+| :--------------------------------- | :-------------------------------------- | :---------------------------------------------------------------------------------------- |
+| `UNASSIGNED_VALUE`                 | —                                       | **Gap**: No global sentinel constant; uses validity flags or local `1e9` large sentinels. |
+| `UNDEFINED_POSITION`               | `Pose::Undefined()`                     | Uses NaN sentinel in `Pose` (no global constant).                                         |
+| `UNDEFINED_ROTATION`               | `Pose::Undefined()`                     | Uses NaN quaternion sentinel (no global constant).                                        |
+| `GRAVITY_ACCELERATION`             | `GRAVITY_ACCELERATION` (9806.65 mm/s^2) | `math_utils.h` ✅                                                                         |
+| `PROGRESS_COMPLETE` (100)          | `PROGRESS_COMPLETE` (100)               | `state_controller.h` ✅                                                                   |
+| `THROTTLE_PERIOD` (5)              | `THROTTLE_PERIOD` (1.0f)                | `state_controller.h` — value changed.                                                     |
+| `IK_TOLERANCE` (0.005)             | `IK_TOLERANCE`                          | `hexamotion_constants.h` ✅                                                               |
+| `DLS_COEFFICIENT` (0.02)           | `IK_DLS_COEFFICIENT`                    | `hexamotion_constants.h` ✅                                                               |
+| `BEARING_STEP` (45)                | `BEARING_STEP`                          | `hexamotion_constants.h` ✅                                                               |
+| `MAX_POSITION_DELTA` (0.002)       | `MAX_POSITION_DELTA`                    | `hexamotion_constants.h` ✅                                                               |
+| `MAX_WORKSPACE_RADIUS` (1.0)       | `MAX_WORKSPACE_RADIUS`                  | `hexamotion_constants.h` ✅                                                               |
+| `WORKSPACE_LAYERS` (10)            | `WORKSPACE_LAYERS`                      | `hexamotion_constants.h` ✅                                                               |
+| `JOINT_TOLERANCE` (0.01)           | `JOINT_TOLERANCE` (0.1f)                | `state_controller.h` — value relaxed.                                                     |
+| `TIP_TOLERANCE` (0.01)             | `TIP_TOLERANCE`                         | `hexamotion_constants.h` ✅                                                               |
+| `SAFETY_FACTOR` (0.15)             | `SAFETY_FACTOR`                         | `hexamotion_constants.h` ✅                                                               |
+| `PACK_TIME` (2.0)                  | `PACK_TIME` (2.0f)                      | `state_controller.h` ✅                                                                   |
+| `MAX_MANUAL_LEGS` (2)              | `MAX_MANUAL_LEGS` (2)                   | `state_controller.h` ✅                                                                   |
+| `HORIZONTAL_TRANSITION_TIME` (1.0) | `HORIZONTAL_TRANSITION_TIME`            | `hexamotion_constants.h` ✅                                                               |
+| `VERTICAL_TRANSITION_TIME` (3.0)   | `VERTICAL_TRANSITION_TIME`              | `hexamotion_constants.h` ✅                                                               |
+| `STABILITY_THRESHOLD` (100)        | `DEFAULT_STABILITY_THRESHOLD`           | `hexamotion_constants.h` ✅                                                               |
+| `ADMITTANCE_DEADBAND` (0.0)        | Inline in `AdmittanceController`        | ✅                                                                                        |
 
 ### 2. standard_includes.h (OpenSHC) vs HexaMotion utility/constants
 
 **Status**: Refactored — Logic Preserved
 
-| OpenSHC Function                | HexaMotion Equivalent       | Location       | Status                                                                    |
-| :------------------------------ | :-------------------------- | :------------- | :------------------------------------------------------------------------ |
-| `degreesToRadians()`            | `degreesToRadians()`        | `math_utils.h` | ✅                                                                        |
-| `radiansToDegrees()`            | `radiansToDegrees()`        | `math_utils.h` | ✅                                                                        |
-| `mod<T>()`                      | `mod<T>()`                  | `math_utils.h` | ✅                                                                        |
-| `sqr<T>()`                      | `sqr<T>()`                  | `math_utils.h` | ✅                                                                        |
-| `sign<T>()`                     | `sign<T>()`                 | `math_utils.h` | ✅                                                                        |
-| `roundToInt()`                  | `roundToInt()`              | `math_utils.h` | ✅                                                                        |
-| `roundToEvenInt()`              | `roundToEvenInt()`          | `math_utils.h` | ✅                                                                        |
-| `clamped<T>(value, min, max)`   | `clamped()`                 | `math_utils.h` | ✅                                                                        |
-| `clamped<T>(vector, magnitude)` | `clamped()`                 | `math_utils.h` | ✅                                                                        |
-| `setPrecision(double, int)`     | `setPrecision()`            | `math_utils.h` | ✅                                                                        |
-| `setPrecision(Vector3d, int)`   | `setPrecision()`            | `math_utils.h` | ✅                                                                        |
-| `smoothStep()`                  | `smoothStep()`              | `math_utils.h` | ✅                                                                        |
-| `getProjection()`               | `getProjection()`           | `math_utils.h` | ✅                                                                        |
-| `getRejection()`                | `getRejection()`            | `math_utils.h` | ✅                                                                        |
-| `interpolate<T>()`              | `interpolate<T>()`          | `math_utils.h` | ✅                                                                        |
-| `correctRotation()`             | `correctRotation()`         | `math_utils.h` | ✅                                                                        |
-| `eulerAnglesToQuaternion()`     | `eulerAnglesToQuaternion()` | `math_utils.h` | ✅                                                                        |
-| `quaternionToEulerAngles()`     | `quaternionToEulerAngles()` | `math_utils.h` | ✅                                                                        |
-| `numberToString<T>()`           | —                           | —              | **Gap** (minor utility, `String()` used).                                 |
-| `stringFormat<Args>()`          | —                           | —              | **Gap** (minor utility, snprintf-based format; no HexaMotion equivalent). |
+| OpenSHC Function                  | HexaMotion Equivalent                                | Location       | Status                                                                    |
+| :-------------------------------- | :--------------------------------------------------- | :------------- | :------------------------------------------------------------------------ |
+| `degreesToRadians()`              | `degreesToRadians()`                                 | `math_utils.h` | ✅                                                                        |
+| `radiansToDegrees()`              | `radiansToDegrees()`                                 | `math_utils.h` | ✅                                                                        |
+| `mod<T>()`                        | `mod<T>()`                                           | `math_utils.h` | ✅                                                                        |
+| `sqr<T>()`                        | `sqr<T>()`                                           | `math_utils.h` | ✅                                                                        |
+| `sign<T>()`                       | `sign<T>()`                                          | `math_utils.h` | ✅                                                                        |
+| `roundToInt()`                    | `roundToInt()`                                       | `math_utils.h` | ✅                                                                        |
+| `roundToEvenInt()`                | `roundToEvenInt()`                                   | `math_utils.h` | ✅                                                                        |
+| `clamped<T>(value, min, max)`     | `clamped()`                                          | `math_utils.h` | ✅                                                                        |
+| `clamped<T>(vector, magnitude)`   | `clampedVector()`                                    | `math_utils.h` | ✅ (renamed)                                                              |
+| `clamped<T>(vector2d, magnitude)` | `clampedVector2d()`                                  | `math_utils.h` | ✅ (renamed)                                                              |
+| `setPrecision(double, int)`       | `setPrecision()`                                     | `math_utils.h` | ✅                                                                        |
+| `setPrecision(Vector3d, int)`     | `setPrecisionVec()`                                  | `math_utils.h` | ✅ (renamed)                                                              |
+| `smoothStep()`                    | `smoothStep()`                                       | `math_utils.h` | ✅                                                                        |
+| `getProjection()`                 | `projectVector()`                                    | `math_utils.h` | ✅ (renamed)                                                              |
+| `getRejection()`                  | `rejectVector()`                                     | `math_utils.h` | ✅ (renamed)                                                              |
+| `interpolate<T>()`                | `interpolate<T>()`                                   | `math_utils.h` | ✅                                                                        |
+| `correctRotation()`               | `correctRotation()`                                  | `math_utils.h` | ✅                                                                        |
+| `eulerAnglesToQuaternion()`       | `eulerAnglesToQuaterniond()` / `eulerToQuaternion()` | `math_utils.h` | ✅ (renamed; Quaterniond/Vector4d variants)                               |
+| `quaternionToEulerAngles()`       | `quaterniondToEulerAngles()` / `quaternionToEuler()` | `math_utils.h` | ✅ (renamed; Quaterniond/Vector4d variants)                               |
+| `numberToString<T>()`             | —                                                    | —              | **Gap** (minor utility, `String()` used).                                 |
+| `stringFormat<Args>()`            | —                                                    | —              | **Gap** (minor utility, snprintf-based format; no HexaMotion equivalent). |
 
 #### Bezier / DH Functions (OpenSHC standard_includes.h) — Detailed Mapping
 
-| OpenSHC Function                               | HexaMotion Equivalent   | Location       | Status                                                                            |
-| :--------------------------------------------- | :---------------------- | :------------- | :-------------------------------------------------------------------------------- |
-| `quadraticBezier<T>()`                         | `quadraticBezier<T>()`  | `math_utils.h` | ✅                                                                                |
-| `quadraticBezierCurveThroughControlPoint<T>()` | —                       | —              | **Gap**: Adjusts control point so curve passes _through_ it (not just toward it). |
-| `cubicBezier<T>()`                             | `cubicBezier<T>()`      | `math_utils.h` | ✅                                                                                |
-| `cubicBezierDot<T>()`                          | `cubicBezierDot<T>()`   | `math_utils.h` | ✅                                                                                |
-| `cubicBezierCurveThroughControlPoint<T>()`     | —                       | —              | **Gap**: Through-control-point variant (parameterized by node index).             |
-| `quarticBezier<T>()`                           | `quarticBezier<T>()`    | `math_utils.h` | ✅                                                                                |
-| `quarticBezierDot<T>()`                        | `quarticBezierDot<T>()` | `math_utils.h` | ✅                                                                                |
-| `quarticBezierCurveThroughControlPoint<T>()`   | —                       | —              | **Gap**: Through-control-point variant (parameterized by node index).             |
-| `createDHMatrix(theta, d, r, alpha)`           | `dhTransform<T>()`      | `math_utils.h` | ✅ (renamed, templated).                                                          |
+| OpenSHC Function                               | HexaMotion Equivalent                          | Location       | Status                                        |
+| :--------------------------------------------- | :--------------------------------------------- | :------------- | :-------------------------------------------- |
+| `quadraticBezier<T>()`                         | `quadraticBezier<T>()`                         | `math_utils.h` | ✅                                            |
+| `quadraticBezierCurveThroughControlPoint<T>()` | `quadraticBezierCurveThroughControlPoint<T>()` | `math_utils.h` | ✅ (implemented with degenerate-case guards). |
+| `cubicBezier<T>()`                             | `cubicBezier<T>()`                             | `math_utils.h` | ✅                                            |
+| `cubicBezierDot<T>()`                          | `cubicBezierDot<T>()`                          | `math_utils.h` | ✅                                            |
+| `cubicBezierCurveThroughControlPoint<T>()`     | `cubicBezierCurveThroughControlPoint<T>()`     | `math_utils.h` | ✅ (implemented with degenerate-case guards). |
+| `quarticBezier<T>()`                           | `quarticBezier<T>()`                           | `math_utils.h` | ✅                                            |
+| `quarticBezierDot<T>()`                        | `quarticBezierDot<T>()`                        | `math_utils.h` | ✅                                            |
+| `quarticBezierCurveThroughControlPoint<T>()`   | `quarticBezierCurveThroughControlPoint<T>()`   | `math_utils.h` | ✅ (implemented with degenerate-case guards). |
+| `createDHMatrix(theta, d, r, alpha)`           | `dhTransform<T>()`                             | `math_utils.h` | ✅ (renamed, templated).                      |
 
 ### 3. Pose class (OpenSHC pose.h) vs HexaMotion Pose
 
@@ -567,24 +568,22 @@ HexaMotion substitutes: `CoxaTelemetry` struct in `LocomotionSystem` (compile-ti
 
 ### True Gaps (functionality absent from HexaMotion)
 
-| #   | Feature                                   | OpenSHC Implementation                                                                                                                                                                     | HexaMotion Status   | Classification                                                                                                                                                          |
-| :-- | :---------------------------------------- | :----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | :------------------ | :---------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| 1   | **External Planner**                      | `executePlan()`, `targetConfigurationCallback`, `targetBodyPoseCallback`, `targetTipPoseCallback`, `PlannerMode` enum                                                                      | **Not implemented** | By design (MCU target).                                                                                                                                                 |
-| 2   | **Dynamic Parameter Adjustment**          | `AdjustableParameter` struct, `ParameterSelection` enum, `adjustParameter()`, `parameterSelectionCallback`, `parameterAdjustCallback`, `dynamicParameterCallback`, ROS dynamic_reconfigure | **Not implemented** | By design (static config).                                                                                                                                              |
-| 3   | **Tip Torque Vectors**                    | `tip_torque_calculated_`, `tip_torque_measured_` (3D torque vectors)                                                                                                                       | **Not implemented** | Torque vectors not tracked; scalar FSR only.                                                                                                                            |
-| 4   | **AMBLE_GAIT**                            | `GaitDesignation::AMBLE_GAIT` with YAML-configured phase offsets                                                                                                                           | **Not implemented** | Can be added to `GaitConfigFactory`.                                                                                                                                    |
-| 5   | **TF Transform for External Targets**     | `ExternalTarget::transform_` (TF2 frame-to-frame transform lookup)                                                                                                                         | **Not implemented** | By design (no TF2 on MCU).                                                                                                                                              |
-| 6   | **Joint/Link/Tip Object Model**           | Per-joint/link/tip classes with per-link DH objects and per-tip transforms                                                                                                                 | **Not implemented** | Design decision: flattened to `JointAngles` + `Point3D` (per-joint telemetry exists, object model absent).                                                              |
-| 7   | **updateTipRotation()**                   | Tip rotation during swing (orthogonal to walk plane for sensor alignment)                                                                                                                  | **Not implemented** | Not needed for 3DOF legs without tip rotation joints.                                                                                                                   |
-| 8   | **numberToString\<T\>()**                 | String conversion utility                                                                                                                                                                  | **Not implemented** | Minor (Arduino `String()` used).                                                                                                                                        |
-| 9   | **Model copy constructor**                | `Model(shared_ptr<Model>)` for workspace generation (search model)                                                                                                                         | **Not implemented** | Not needed (workspace generation uses centralized `WorkspaceAnalyzer`).                                                                                                 |
-| 10  | **getLegByIDName()**                      | String-based leg lookup                                                                                                                                                                    | **Not implemented** | Minor (index-based access only).                                                                                                                                        |
-| 11  | **Auto-navigation mode**                  | `auto_navigation_mode` input / syropod_auto_navigation integration                                                                                                                         | **Not implemented** | By design (no ROS navigation stack on MCU).                                                                                                                             |
-| 12  | **Bezier through-control-point variants** | `quadraticBezierCurveThroughControlPoint`, `cubicBezierCurveThroughControlPoint`, `quarticBezierCurveThroughControlPoint`                                                                  | **Not implemented** | Used in some OpenSHC pose transitions for exact curve-through-waypoint interpolation.                                                                                   |
-| 13  | **stringFormat\<Args\>()**                | Variadic `snprintf`-based string format utility                                                                                                                                            | **Not implemented** | Minor (Arduino environment uses `String()` and `sprintf` directly).                                                                                                     |
-| 14  | **Startup acquisition timeout**           | `ACQUISTION_TIME` (10 s) in `main.cpp` — waits for initial joint state callback before starting control loop                                                                               | **Not implemented** | Architectural difference: HexaMotion uses direct HAL polling (`IServoInterface`) rather than ROS topic callbacks; no equivalent readiness gate before locomotion start. |
-| 15  | **transitionStance() as distinct method** | `PoseController::transitionStance(time)` — external-target-driven stance transitions with gravity-aligned tips, reset of external targets                                                  | **Partial**         | `stepToNewStance()` exists (different function); `transitionStance` logic not fully replicated.                                                                         |
-| 16  | **origin_walk_plane_pose\_**              | Origin pose for interpolating walk plane pose transitions                                                                                                                                  | **Not implemented** | HexaMotion uses 5-point Bézier control nodes for walk plane pose interpolation instead (`walk_plane_position_nodes_[5]`, `walk_plane_rotation_nodes_[5]`).              |
+| #   | Feature                               | OpenSHC Implementation                                                                                                                                                                     | HexaMotion Status   | Classification                                                                                             |
+| :-- | :------------------------------------ | :----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | :------------------ | :--------------------------------------------------------------------------------------------------------- |
+| 1   | **External Planner**                  | `executePlan()`, `targetConfigurationCallback`, `targetBodyPoseCallback`, `targetTipPoseCallback`, `PlannerMode` enum                                                                      | **Not implemented** | By design (MCU target).                                                                                    |
+| 2   | **Dynamic Parameter Adjustment**      | `AdjustableParameter` struct, `ParameterSelection` enum, `adjustParameter()`, `parameterSelectionCallback`, `parameterAdjustCallback`, `dynamicParameterCallback`, ROS dynamic_reconfigure | **Not implemented** | By design (static config).                                                                                 |
+| 3   | **Tip Torque Vectors**                | `tip_torque_calculated_`, `tip_torque_measured_` (3D torque vectors)                                                                                                                       | **Not implemented** | Torque vectors not tracked; scalar FSR only.                                                               |
+| 4   | **AMBLE_GAIT**                        | `GaitDesignation::AMBLE_GAIT` with YAML-configured phase offsets                                                                                                                           | **Not implemented** | Can be added to `GaitConfigFactory`.                                                                       |
+| 5   | **TF Transform for External Targets** | `ExternalTarget::transform_` (TF2 frame-to-frame transform lookup)                                                                                                                         | **Not implemented** | By design (no TF2 on MCU).                                                                                 |
+| 6   | **Joint/Link/Tip Object Model**       | Per-joint/link/tip classes with per-link DH objects and per-tip transforms                                                                                                                 | **Not implemented** | Design decision: flattened to `JointAngles` + `Point3D` (per-joint telemetry exists, object model absent). |
+| 7   | **updateTipRotation()**               | Tip rotation during swing (orthogonal to walk plane for sensor alignment)                                                                                                                  | **Not implemented** | Not needed for 3DOF legs without tip rotation joints.                                                      |
+| 8   | **numberToString\<T\>()**             | String conversion utility                                                                                                                                                                  | **Not implemented** | Minor (Arduino `String()` used).                                                                           |
+| 9   | **Model copy constructor**            | `Model(shared_ptr<Model>)` for workspace generation (search model)                                                                                                                         | **Not implemented** | Not needed (workspace generation uses centralized `WorkspaceAnalyzer`).                                    |
+| 10  | **getLegByIDName()**                  | String-based leg lookup                                                                                                                                                                    | **Not implemented** | Minor (index-based access only).                                                                           |
+| 11  | **Auto-navigation mode**              | `auto_navigation_mode` input / syropod_auto_navigation integration                                                                                                                         | **Not implemented** | By design (no ROS navigation stack on MCU).                                                                |
+| 12  | **stringFormat\<Args\>()**            | Variadic `snprintf`-based string format utility                                                                                                                                            | **Not implemented** | Minor (Arduino environment uses `String()` and `sprintf` directly).                                        |
+
+**Resolved items (2026-02-10)**: Bézier through-control-point variants, `transitionStance()` parity, `origin_walk_plane_pose_`, and startup acquisition timeout are implemented (see Priority 4 section).
 
 ### Corrections to Previous Report
 
