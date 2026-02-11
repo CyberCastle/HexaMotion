@@ -648,31 +648,23 @@ void LocomotionSystem::resetSmoothMovement() {
  * Usage pattern:
  * @code
  * while (system_running) {
- *     /* Handle startup/shutdown sequences separately. */
-*if (locomotion_system.isStartupInProgress()) {
-    *if (locomotion_system.executeStartupSequence()) {
-        *locomotion_system.startup_in_progress = false;
-        *
-    }
-    *
-}
-else if (locomotion_system.isShutdownInProgress()) {
-    *if (locomotion_system.executeShutdownSequence()) {
-        *locomotion_system.shutdown_in_progress = false;
-        *
-    }
-    *
-}
-else {
-    * /* Only update leg trajectories when system is in normal operation. */
-        *locomotion_system.update();
-    *
-}
-*
-}
-*@endcode
-        * /
-    bool LocomotionSystem::update() {
+ *     // Handle startup/shutdown sequences separately
+ *     if (locomotion_system.isStartupInProgress()) {
+ *         if (locomotion_system.executeStartupSequence()) {
+ *             locomotion_system.startup_in_progress = false;
+ *         }
+ *     } else if (locomotion_system.isShutdownInProgress()) {
+ *         if (locomotion_system.executeShutdownSequence()) {
+ *             locomotion_system.shutdown_in_progress = false;
+ *         }
+ *     } else {
+ *         // Only update leg trajectories when system is in normal operation
+ *         locomotion_system.update();
+ *     }
+ * }
+ * @endcode
+ */
+bool LocomotionSystem::update() {
 
     /** Update state machine first when attached (OpenSHC-style orchestration). */
     if (state_controller_ && state_controller_->isInitialized()) {
