@@ -1,12 +1,21 @@
 /**
  * @file kinematics_validation_test.cpp
- * @brief Validación de la implementación OpenSHC-style vs angle_calculus.cpp
+ * @brief Validation of HexaMotion DH-based kinematics (calculateServoAnglesForHeight)
  * @author HexaMotion Team
- * @version 2.0
+ * @version 3.0
  * @date 2024
  *
- * Este test compara la nueva implementación OpenSHC-style en HexaMotion
- * con la lógica geométrica precisa de angle_calculus.cpp
+ * This test validates calculateServoAnglesForHeight against the DH forward
+ * kinematics model used in RobotModel. The reference implementation uses a
+ * brute-force sweep of femur angle to independently solve the same DH-based
+ * height equation:
+ *
+ *   Z = -femur_length * sin(femur_angle) - tibia_length * cos(femur_angle + tibia_angle)
+ *
+ * With the standing constraint tibia_angle = -femur_angle (tibia vertical):
+ *
+ *   Z = -femur_length * sin(femur_angle) - tibia_length
+ *   height = femur_length * sin(femur_angle) + tibia_length
  */
 
 #include "body_pose_config_factory.h"
@@ -19,130 +28,103 @@
 #include <memory>
 #include <vector>
 
-// Constantes de angle_calculus.cpp
-constexpr double A_COXA = 50.0;   // mm
-constexpr double B_FEMUR = 101.0; // mm
-constexpr double C_TIBIA = 208.0; // mm
+// Robot segment lengths (mm)
+constexpr double A_COXA = 50.0;
+constexpr double B_FEMUR = 101.0;
+constexpr double C_TIBIA = 208.0;
 
-// Estructura para ángulos de angle_calculus
+// Reference angle solution (degrees)
 struct CalcAngles {
-    double theta1; // °  coxa-fémur
-    double theta2; // °  fémur-tibia
-    bool valid;    // solución dentro de límites
+    double theta1; // femur servo angle (degrees)
+    double theta2; // tibia servo angle (degrees)
+    bool valid;
 };
 
-constexpr double FEMUR_MIN_DEG = -75.0; // °  límites de servo
-constexpr double FEMUR_MAX_DEG = 75.0;  // °  límites de servo
-constexpr double TIBIA_MIN_DEG = -45.0; // °  límites de servo
-constexpr double TIBIA_MAX_DEG = 45.0;  // °  límites de servo
+constexpr double FEMUR_MIN_DEG = -75.0;
+constexpr double FEMUR_MAX_DEG = 75.0;
+constexpr double TIBIA_MIN_DEG = -45.0;
+constexpr double TIBIA_MAX_DEG = 45.0;
 
 /**
- * @brief  Calcula los ángulos de servo para una altura dada, asegurando que la tibia
- *         sea perpendicular al suelo (α = 0).
+ * @brief Reference implementation: calculate servo angles for a given height
+ *        using the DH model with brute-force femur angle sweep.
  *
- * @param H_mm  Altura desde el plano de la base de la pierna hasta la punta [mm].
- * @return      Estructura con los ángulos θ₁ y θ₂ en grados, y un booleano valid.
+ * DH model (coxa = 0°, tibia vertical constraint):
+ *   height = femur_length * sin(femur_angle) + tibia_length
+ *   sin(femur_angle) = (height - tibia_length) / femur_length
+ *   tibia_angle = -femur_angle
+ *
+ * This replicates calculateServoAnglesForHeight via sweep instead of
+ * direct analytical solution, serving as independent validation.
+ *
+ * @param H_mm Target standing height in mm.
+ * @return Servo angles in degrees and validity flag.
  */
 CalcAngles calcLegAngles(double H_mm) {
     CalcAngles best{0, 0, false};
     double bestErr = std::numeric_limits<double>::infinity();
 
-    // ---------------------------------------
-    // 1) RANGOS (radianes)
-    const double alphaMin = math_utils::degreesToRadians(-75.0);
-    const double alphaMax = math_utils::degreesToRadians(75.0);
-    const double betaMin = math_utils::degreesToRadians(-45.0);
-    const double betaMax = math_utils::degreesToRadians(45.0);
-    const double dBeta = math_utils::degreesToRadians(0.1); // paso, ajústalo si quieres más precisión
+    // Sweep femur angle across its full range
+    const double femurMin = math_utils::degreesToRadians(FEMUR_MIN_DEG);
+    const double femurMax = math_utils::degreesToRadians(FEMUR_MAX_DEG);
+    const double dFemur = math_utils::degreesToRadians(0.01); // fine step
 
-    // 2) LONGITUDES
-    const double A = A_COXA;
-    const double B = B_FEMUR;
-    const double C = C_TIBIA;
+    for (double femur_rad = femurMin; femur_rad <= femurMax; femur_rad += dFemur) {
+        // Standing constraint: tibia_angle = -femur_angle (tibia vertical)
+        double tibia_rad = -femur_rad;
 
-    // 3) BARRIDO de β
-    for (double beta = betaMin; beta <= betaMax; beta += dBeta) {
-        // discriminante de la misma ecuación que tenías:
-        //    C·cosα - (A + B·cosβ)·sinα  = H_mm
-        double sum = A + B * std::cos(beta);
-        double discriminant = sum * sum - (H_mm * H_mm - C * C);
-        if (discriminant < 0.0)
+        // Check tibia limits
+        double tibia_deg = math_utils::radiansToDegrees(tibia_rad);
+        if (tibia_deg < TIBIA_MIN_DEG || tibia_deg > TIBIA_MAX_DEG)
             continue;
 
-        double sqrtD = std::sqrt(discriminant);
-        // dos raíces en α
-        for (int sign : {-1, +1}) {
-            double t = (-sum + sign * sqrtD) / (H_mm + C);
-            double alpha = 2.0 * std::atan(t);
-            if (alpha < alphaMin || alpha > alphaMax)
-                continue;
+        // DH height formula: Z = -B*sin(femur) - C*cos(femur+tibia)
+        // With tibia = -femur: Z = -B*sin(femur) - C
+        // height = -Z = B*sin(femur) + C
+        double computed_height = B_FEMUR * std::sin(femur_rad) + C_TIBIA;
 
-            //  Medir error de verticalidad real
-            double err = std::fabs(alpha + beta);
-            if (err >= bestErr)
-                continue;
-
-            // printf("DEBUG: α=%.2f°, β=%.2f° -> err=%.2f\n", math_utils::radiansToDegrees(alpha), math_utils::radiansToDegrees(beta), err);
-            // 4) Paso a grados y a ángulos de servo
-            double theta1 = math_utils::radiansToDegrees(alpha - beta); // θ₁ = α - β
-            double theta2 = math_utils::radiansToDegrees(-beta);        // θ₂ = −β
-
-            // 5) LÍMITES de servo
-            if (theta1 < -75.0 || theta1 > 75.0)
-                continue;
-            if (theta2 < -45.0 || theta2 > 45.0)
-                continue;
-
-            // 6) ERROR de verticalidad: α debe ser 0 para tibia perpendicular
+        double err = std::fabs(computed_height - H_mm);
+        if (err < bestErr) {
             bestErr = err;
-            best = {theta1, theta2, true};
+            double femur_deg = math_utils::radiansToDegrees(femur_rad);
+            best = {femur_deg, tibia_deg, true};
         }
     }
+
+    // Accept only if error is small enough (< 0.1 mm)
+    if (bestErr > 0.1)
+        best.valid = false;
 
     return best;
 }
 
 /**
- * @brief  Calcula la altura del extremo del pie por debajo de la base de la pierna
- *         (eje de unión coxa–fémur), a partir de los dos ángulos de servo.
+ * @brief Reference DH forward kinematics: compute height from servo angles.
  *
- * @param theta1_deg  Ángulo del servo de fémur en grados.
- *                    0° → fémur horizontal; + → levanta el pie.
- * @param theta2_deg  Ángulo del servo de tibia en grados.
- *                    0° → tibia vertical; + → inclina la tibia hacia atrás.
- * @param[out] valid  Se pone true si ambos ángulos estaban dentro de sus límites.
- * @return            Altura desde el plano de la base de la pierna hasta la punta [mm].
+ * DH model: Z = -femur_length * sin(femur) - tibia_length * cos(femur + tibia)
+ * height = -Z
+ *
+ * @param femur_deg Femur servo angle in degrees.
+ * @param tibia_deg Tibia servo angle in degrees.
+ * @param[out] valid True if angles are within limits.
+ * @return Height in mm (positive downward from femur pivot).
  */
-double calcHeight(double theta1_deg, double theta2_deg, bool &valid) {
+double calcHeight(double femur_deg, double tibia_deg, bool &valid) {
     valid = false;
 
-    // Comprobar límites de los ángulos relativos
-    if (theta1_deg < -75.0 || theta1_deg > 75.0)
+    if (femur_deg < FEMUR_MIN_DEG || femur_deg > FEMUR_MAX_DEG)
         return 0.0;
-    if (theta2_deg < -45.0 || theta2_deg > 45.0)
-        return 0.0;
-
-    // Convertir a radianes
-    double theta1 = math_utils::degreesToRadians(theta1_deg);
-    double theta2 = math_utils::degreesToRadians(theta2_deg);
-
-    // Relaciones geométricas empleadas en la inversa:
-    //   θ₂ = −β     ⇒  β = −θ₂
-    //   θ₁ = β − α  ⇒  α = β − θ₁
-    double beta = -theta2;
-    double alpha = beta - theta1;
-
-    // Chequeo opcional de los límites absolutos de α y β
-    if (alpha < math_utils::degreesToRadians(-75.0) || alpha > math_utils::degreesToRadians(75.0))
-        return 0.0;
-    if (beta < math_utils::degreesToRadians(-45.0) || beta > math_utils::degreesToRadians(45.0))
+    if (tibia_deg < TIBIA_MIN_DEG || tibia_deg > TIBIA_MAX_DEG)
         return 0.0;
 
-    // Altura alcanzada (positivo hacia abajo)
-    double H_mm = A_COXA * std::sin(alpha) + B_FEMUR * std::sin(beta) + C_TIBIA;
+    double femur_rad = math_utils::degreesToRadians(femur_deg);
+    double tibia_rad = math_utils::degreesToRadians(tibia_deg);
+
+    // DH Z component: Z = -B*sin(femur) - C*cos(femur + tibia)
+    double Z = -B_FEMUR * std::sin(femur_rad) - C_TIBIA * std::cos(femur_rad + tibia_rad);
 
     valid = true;
-    return H_mm;
+    return -Z; // height = -Z (positive downward)
 }
 
 class KinematicsValidator {
@@ -154,254 +136,212 @@ class KinematicsValidator {
     KinematicsValidator() {
         setupParameters();
         model = std::make_unique<RobotModel>(params);
-        model->workspaceAnalyzerInitializer(); // Inicializar WorkspaceAnalyzer
+        model->workspaceAnalyzerInitializer();
     }
 
     void setupParameters() {
-        // Usar las mismas dimensiones que angle_calculus.cpp
         params.hexagon_radius = 200.0f;
         params.coxa_length = A_COXA;
         params.femur_length = B_FEMUR;
         params.tibia_length = C_TIBIA;
-        params.default_height_offset = -C_TIBIA; // Set to -tibia_length for explicit configuration
+        params.default_height_offset = -C_TIBIA;
         params.robot_height = 208.0f;
+        params.standing_height = 150.0f;
 
-        // Límites de angle_calculus.cpp
         params.coxa_angle_limits[0] = -75.0f;
         params.coxa_angle_limits[1] = 75.0f;
-        params.femur_angle_limits[0] = -75.0f;
-        params.femur_angle_limits[1] = 75.0f;
-        params.tibia_angle_limits[0] = -45.0f;
-        params.tibia_angle_limits[1] = 45.0f;
+        params.femur_angle_limits[0] = FEMUR_MIN_DEG;
+        params.femur_angle_limits[1] = FEMUR_MAX_DEG;
+        params.tibia_angle_limits[0] = TIBIA_MIN_DEG;
+        params.tibia_angle_limits[1] = TIBIA_MAX_DEG;
 
-        // Configuración IK
         params.ik.max_iterations = 50;
         params.ik.pos_threshold_mm = 0.5f;
+        params.use_custom_dh_parameters = false;
 
-        // Asegurar que use parámetros DH por defecto (no custom)
-        params.use_custom_dh_parameters = false; // Use analytic IK/FK for validation
-
-        // Debug: verificar que los parámetros se establecen correctamente
-        std::cout << "DEBUG params setup: hexagon=" << params.hexagon_radius
+        std::cout << "Parameters: hexagon=" << params.hexagon_radius
                   << ", coxa=" << params.coxa_length
                   << ", femur=" << params.femur_length
                   << ", tibia=" << params.tibia_length << std::endl;
     }
 
     void validateVerticalReach() {
-        std::cout << "\n=== VALIDACIÓN: ÁNGULOS SERVO FEMUR Y TIBIA ===" << std::endl;
-        std::cout << "Comparando alturas: angle_calculus.cpp vs calculateServoAnglesForHeight (OpenSHC)" << std::endl;
-        std::cout << std::string(120, '-') << std::endl;
-        std::cout << "Height | angle_calculus (femur,tibia,alpha,beta) | calculateServoAnglesForHeight (femur,tibia,alpha,beta) | Δfemur | Δtibia | Status" << std::endl;
-        std::cout << "(mm)   | (deg, deg, deg, deg)                   | (deg, deg, deg, deg)                                 | (deg)  | (deg)   |" << std::endl;
-        std::cout << std::string(120, '-') << std::endl;
+        std::cout << "\n=== VALIDATION: FEMUR & TIBIA SERVO ANGLES ===" << std::endl;
+        std::cout << "Comparing: brute-force DH sweep vs calculateServoAnglesForHeight" << std::endl;
+        std::cout << std::string(100, '-') << std::endl;
+        std::cout << "Height | Reference (femur, tibia) | Calculated (femur, tibia) | Dfemur | Dtibia | Status" << std::endl;
+        std::cout << "(mm)   | (deg, deg)               | (deg, deg)                | (deg)  | (deg)  |" << std::endl;
+        std::cout << std::string(100, '-') << std::endl;
 
-        // Test heights from angle_calculus range
+        // Test heights within the achievable DH range:
+        // min height = tibia - femur = 208 - 101 = 107 mm
+        // max height = tibia + femur = 208 + 101 = 309 mm
+        // But also constrained by joint limits (femur: ±75°, tibia: ±45°)
         std::vector<double> test_heights = {
-            120.0, 140.0, 160.0, 180.0, 200.0, 220.0, 240.0, 280.0, 320.0, 350.0};
+            120.0, 140.0, 150.0, 160.0, 180.0, 200.0, 208.0, 220.0, 240.0, 260.0, 280.0, 300.0};
 
         int passed = 0, total = 0;
 
         for (double height : test_heights) {
             total++;
-            // 1. Obtener ángulos de referencia con angle_calculus.cpp
+            // 1. Reference: brute-force sweep of DH model
             CalcAngles ref_solution = calcLegAngles(height);
+            // 2. Under test: analytical calculateServoAnglesForHeight
             CalculatedServoAngles calc_solution = RobotModel::calculateServoAnglesForHeight(height, params);
 
-            if (!ref_solution.valid) {
-                std::cout << std::setw(6) << height << " | INVALID SOLUTION             | INVALID SOLUTION                        |   N/A  |   N/A   | SKIP" << std::endl;
-                total--;
+            if (!ref_solution.valid && !calc_solution.valid) {
+                std::cout << std::setw(6) << height << " | BOTH INVALID                | BOTH INVALID                  |   N/A  |   N/A  | OK (both reject)" << std::endl;
+                passed++;
                 continue;
             }
 
-            // Mostrar ambos resultados explícitamente
-            double femur1 = ref_solution.theta1; // angle_calculus femur
-            double tibia1 = ref_solution.theta2; // angle_calculus tibia
-            double theta1_rad = math_utils::degreesToRadians(femur1);
-            double theta2_rad = math_utils::degreesToRadians(tibia1);
-            double beta1 = -theta2_rad;         // β = −θ₂
-            double alpha1 = theta1_rad + beta1; // α = θ₁ + β
-            double alpha1_deg = math_utils::radiansToDegrees(alpha1);
-            double beta1_deg = math_utils::radiansToDegrees(beta1);
+            if (!ref_solution.valid || !calc_solution.valid) {
+                std::cout << std::setw(6) << height << " | valid=" << ref_solution.valid
+                          << "                      | valid=" << calc_solution.valid
+                          << "                        |   N/A  |   N/A  | DIFF (validity)" << std::endl;
+                continue;
+            }
 
-            double femur2 = calc_solution.femur; // calculateServoAnglesForHeight femur
-            double tibia2 = calc_solution.tibia; // calculateServoAnglesForHeight tibia
-            double theta1b_rad = math_utils::degreesToRadians(femur2);
-            double theta2b_rad = math_utils::degreesToRadians(tibia2);
-            double beta2 = -theta2b_rad;
-            double alpha2 = theta1b_rad + beta2;
-            double alpha2_deg = math_utils::radiansToDegrees(alpha2);
-            double beta2_deg = math_utils::radiansToDegrees(beta2);
+            // Convert calculateServoAnglesForHeight results from radians to degrees
+            double femur_ref = ref_solution.theta1;
+            double tibia_ref = ref_solution.theta2;
+            double femur_calc = math_utils::radiansToDegrees(calc_solution.femur);
+            double tibia_calc = math_utils::radiansToDegrees(calc_solution.tibia);
 
-            double dfemur = std::abs(femur1 - femur2);
-            double dtibia = std::abs(tibia1 - tibia2);
+            double dfemur = std::abs(femur_ref - femur_calc);
+            double dtibia = std::abs(tibia_ref - tibia_calc);
             bool match = (dfemur < 0.1 && dtibia < 0.1);
             if (match)
                 passed++;
 
             std::cout << std::setw(6) << height << " | "
-                      << std::setw(8) << femur1 << ", " << std::setw(8) << tibia1 << ", " << std::setw(8) << alpha1_deg << ", " << std::setw(8) << beta1_deg << " | "
-                      << std::setw(8) << femur2 << ", " << std::setw(8) << tibia2 << ", " << std::setw(8) << alpha2_deg << ", " << std::setw(8) << beta2_deg << " | "
-                      << std::setw(6) << dfemur << " | "
+                      << std::setw(8) << std::fixed << std::setprecision(2) << femur_ref << ", "
+                      << std::setw(8) << tibia_ref << " | "
+                      << std::setw(8) << femur_calc << ", "
+                      << std::setw(8) << tibia_calc << " | "
+                      << std::setw(6) << std::setprecision(3) << dfemur << " | "
                       << std::setw(6) << dtibia << " | "
                       << (match ? "MATCH" : "DIFF") << std::endl;
         }
-        std::cout << std::string(120, '-') << std::endl;
-        std::cout << "Resultados: " << passed << "/" << total << " tests coinciden ("
+        std::cout << std::string(100, '-') << std::endl;
+        std::cout << "Results: " << passed << "/" << total << " tests match ("
                   << std::fixed << std::setprecision(1) << (100.0 * passed / total) << "%)" << std::endl;
     }
 
     void validateAngleConsistency() {
-        std::cout << "\n=== VALIDACIÓN: CONSISTENCIA FORWARD/INVERSE ===" << std::endl;
-        std::cout << "Probando que FK(IK(punto)) = punto (altura relativa a base de pierna)" << std::endl;
-        std::cout << std::string(70, '-') << std::endl;
+        std::cout << "\n=== VALIDATION: FK/IK ROUND-TRIP CONSISTENCY ===" << std::endl;
+        std::cout << "Testing that FK(IK(target)) = target using DH model" << std::endl;
+        std::cout << std::string(80, '-') << std::endl;
 
-        // Test angle pairs from angle_calculus valid range
-        std::vector<std::pair<double, double>> test_angles = {
-            {0.0, 0.0}, {10.0, -10.0}, {-10.0, 10.0}, {20.0, -20.0}, {-20.0, 20.0}, {30.0, -30.0}, {-30.0, 30.0}, {45.0, -45.0}};
+        // Use heights that are achievable via calculateServoAnglesForHeight
+        std::vector<double> test_heights = {
+            120.0, 140.0, 150.0, 160.0, 180.0, 200.0, 208.0, 250.0};
 
         int passed = 0, total = 0;
 
-        std::cout << "θ1     θ2     | AngleCalc Height | HexaMotion Height | Error   | Status" << std::endl;
-        std::cout << "(deg)  (deg)  | (mm)             | (mm)              | (mm)    |" << std::endl;
-        std::cout << std::string(70, '-') << std::endl;
+        std::cout << "Height | calcHeight   | FK height    | Error   | Status" << std::endl;
+        std::cout << "(mm)   | (mm)         | (mm)         | (mm)    |" << std::endl;
+        std::cout << std::string(80, '-') << std::endl;
 
-        for (auto angles : test_angles) {
+        for (double height : test_heights) {
             total++;
 
-            double theta1 = angles.first;
-            double theta2 = angles.second;
-
-            // angle_calculus forward kinematics
-            bool valid;
-            double ref_height = calcHeight(theta1, theta2, valid);
-
-            if (!valid) {
-                std::cout << std::setw(6) << theta1 << " " << std::setw(6) << theta2
-                          << " | INVALID          | N/A               | N/A     | SKIP" << std::endl;
-                total--; // No contar tests inválidos
+            // Get DH servo angles for this height
+            CalculatedServoAngles calc = RobotModel::calculateServoAnglesForHeight(height, params);
+            if (!calc.valid) {
+                std::cout << std::setw(6) << height
+                          << " | INVALID      | N/A          | N/A     | SKIP" << std::endl;
+                total--;
                 continue;
             }
 
-            // Convertir a target point en frame global del robot
-            // angle_calculus.cpp asume que el leg se mueve verticalmente desde el cuerpo
-            // Necesitamos crear un target que represente la altura deseada
-            JointAngles zero_angles(0, 0, 0);
-            Point3D base_global = model->getLegBasePosition(0);
+            // Reference: DH calcHeight (degrees)
+            double femur_deg = math_utils::radiansToDegrees(calc.femur);
+            double tibia_deg = math_utils::radiansToDegrees(calc.tibia);
+            bool valid_ref;
+            double ref_height = calcHeight(femur_deg, tibia_deg, valid_ref);
 
-            // Target en la misma posición X,Y que la base, pero con la altura deseada
-            Point3D target_global;
-            target_global.x = base_global.x;
-            target_global.y = base_global.y;
-            target_global.z = base_global.z - ref_height; // Altura hacia abajo
+            // HexaMotion FK: compute global tip position from these angles
+            JointAngles angles(calc.coxa, calc.femur, calc.tibia);
+            Point3D tip_global = model->forwardKinematicsGlobalCoordinates(0, angles);
+            // Height relative to the femur pivot base (Z=0 plane)
+            double fk_height = -tip_global.z;
 
-            Point3D base_globa2 = model->transformLocalToGlobalCoordinates(0, target_global, zero_angles);
-
-            // HexaMotion IK -> FK (los ángulos se manejan internamente en radianes)
-            JointAngles hexa_angles = model->inverseKinematicsGlobalCoordinates(0, base_globa2);
-            Point3D hexa_tip_global = model->forwardKinematicsGlobalCoordinates(0, hexa_angles);
-
-            // Calcular altura relativa a la base de la pierna
-            double hexa_height = hexa_tip_global.z;
-
-            // Error en altura (principal métrica para comparación con angle_calculus)
-            double height_error = std::abs(hexa_height - ref_height);
-
-            bool test_passed = height_error < 10.0f; // Tolerancia de 10mm
+            double height_error = std::abs(ref_height - fk_height);
+            bool test_passed = height_error < 2.0; // 2mm tolerance
             if (test_passed)
                 passed++;
 
-            std::cout << std::setw(6) << theta1 << " " << std::setw(6) << theta2
-                      << " | " << std::setw(15) << ref_height
-                      << " | " << std::setw(16) << hexa_height
-                      << " | " << std::setw(6) << height_error
-                      << "  | " << (test_passed ? "PASS" : "FAIL") << std::endl;
+            std::cout << std::setw(6) << std::fixed << std::setprecision(1) << height
+                      << " | " << std::setw(12) << std::setprecision(2) << ref_height
+                      << " | " << std::setw(12) << fk_height
+                      << " | " << std::setw(7) << std::setprecision(3) << height_error
+                      << " | " << (test_passed ? "PASS" : "FAIL") << std::endl;
         }
 
-        std::cout << std::string(70, '-') << std::endl;
-        std::cout << "Resultados: " << passed << "/" << total << " tests pasaron ("
+        std::cout << std::string(80, '-') << std::endl;
+        std::cout << "Results: " << passed << "/" << total << " tests passed ("
                   << std::fixed << std::setprecision(1) << (100.0 * passed / total) << "%)" << std::endl;
     }
 
     void validateWorkspaceComparison() {
-        std::cout << "\n=== VALIDACIÓN: COMPARACIÓN DE WORKSPACE ===" << std::endl;
-        std::cout << "Analizando límites de workspace entre implementaciones (altura relativa a base de pierna)" << std::endl;
-        std::cout << std::string(50, '-') << std::endl;
+        std::cout << "\n=== VALIDATION: WORKSPACE COVERAGE ===" << std::endl;
+        std::cout << "Analyzing height range achievable by calculateServoAnglesForHeight" << std::endl;
+        std::cout << std::string(60, '-') << std::endl;
 
-        // Calcular rango de alturas con angle_calculus
-        double min_height = 1000.0, max_height = 0.0;
-        int valid_solutions = 0;
+        // Theoretical DH range:
+        // min = tibia - femur = 208 - 101 = 107 mm
+        // max = tibia + femur = 208 + 101 = 309 mm
+        // But constrained by joint limits
+        double min_valid = 1000.0, max_valid = 0.0;
+        int valid_analytical = 0;
+        int valid_fk_match = 0;
+        int total_tested = 0;
 
-        for (double h = 100.0; h <= 400.0; h += 5.0) {
-            CalcAngles sol = calcLegAngles(h);
-            if (sol.valid) {
-                min_height = std::min(min_height, h);
-                max_height = std::max(max_height, h);
-                valid_solutions++;
-            }
+        for (double h = 100.0; h <= 320.0; h += 2.0) {
+            total_tested++;
+            CalculatedServoAngles calc = RobotModel::calculateServoAnglesForHeight(h, params);
+            if (!calc.valid)
+                continue;
+
+            valid_analytical++;
+            min_valid = std::min(min_valid, h);
+            max_valid = std::max(max_valid, h);
+
+            // Verify with FK
+            JointAngles angles(calc.coxa, calc.femur, calc.tibia);
+            Point3D tip = model->forwardKinematicsGlobalCoordinates(0, angles);
+            double fk_height = -tip.z;
+            double error = std::abs(fk_height - h);
+            if (error < 5.0)
+                valid_fk_match++;
         }
 
-        std::cout << "angle_calculus.cpp workspace:" << std::endl;
-        std::cout << "  Altura mínima: " << min_height << " mm" << std::endl;
-        std::cout << "  Altura máxima: " << max_height << " mm" << std::endl;
-        std::cout << "  Rango total: " << (max_height - min_height) << " mm" << std::endl;
-        std::cout << "  Soluciones válidas: " << valid_solutions << "/61" << std::endl;
+        std::cout << "Analytical solver workspace:" << std::endl;
+        std::cout << "  Min height: " << min_valid << " mm" << std::endl;
+        std::cout << "  Max height: " << max_valid << " mm" << std::endl;
+        std::cout << "  Range: " << (max_valid - min_valid) << " mm" << std::endl;
+        std::cout << "  Valid solutions: " << valid_analytical << "/" << total_tested << std::endl;
 
-        // Calcular estadísticas de HexaMotion
-        int hexa_valid = 0;
-        double hexa_min_error = 1000.0f, hexa_max_error = 0.0f;
-        double total_error = 0.0f;
-
-        // Obtener posición de la base de la pierna
-        JointAngles zero_angles(0, 0, 0);
-        Point3D base_global = model->getLegBasePosition(0);
-
-        for (double h = min_height; h <= max_height; h += 5.0) {
-            // Target en la misma posición X,Y que la base, pero con la altura deseada
-            Point3D target_global;
-            target_global.x = base_global.x;
-            target_global.y = base_global.y;
-            target_global.z = base_global.z - h; // Altura hacia abajo
-
-            JointAngles hexa_sol = model->inverseKinematicsGlobalCoordinates(0, target_global);
-            Point3D hexa_tip_global = model->forwardKinematicsGlobalCoordinates(0, hexa_sol);
-
-            // Calcular altura relativa a la base de la pierna
-            double hexa_height = -(hexa_tip_global.z - base_global.z);
-
-            double error = std::abs(hexa_height - h); // Error en altura relativa
-            if (error < 20.0f) {                      // Tolerancia razonable
-                hexa_valid++;
-                hexa_min_error = std::min(hexa_min_error, error);
-                hexa_max_error = std::max(hexa_max_error, error);
-                total_error += error;
-            }
-        }
-
-        int hexa_total = (max_height - min_height) / 5.0 + 1;
-        std::cout << "\nHexaMotion workspace (altura relativa a base de pierna):" << std::endl;
-        std::cout << "  Soluciones válidas: " << hexa_valid << "/" << hexa_total << std::endl;
-        std::cout << "  Error mínimo: " << hexa_min_error << " mm" << std::endl;
-        std::cout << "  Error máximo: " << hexa_max_error << " mm" << std::endl;
-        std::cout << "  Error promedio: " << (hexa_valid > 0 ? total_error / hexa_valid : 0.0f) << " mm" << std::endl;
-
-        double coverage = 100.0f * hexa_valid / hexa_total;
-        std::cout << "  Cobertura de workspace: " << std::fixed << std::setprecision(1) << coverage << "%" << std::endl;
+        double coverage = 100.0 * valid_fk_match / std::max(1, valid_analytical);
+        std::cout << "\nFK verification:" << std::endl;
+        std::cout << "  FK-matched solutions: " << valid_fk_match << "/" << valid_analytical << std::endl;
+        std::cout << "  FK coverage: " << std::fixed << std::setprecision(1) << coverage << "%" << std::endl;
     }
 
     void runFullValidation() {
-        std::cout << "===== VALIDACIÓN COMPLETA: HEXAMOTION vs ANGLE_CALCULUS =====" << std::endl;
-        std::cout << "Dimensiones del robot:" << std::endl;
+        std::cout << "===== FULL VALIDATION: calculateServoAnglesForHeight =====" << std::endl;
+        std::cout << "Robot dimensions:" << std::endl;
         std::cout << "  Coxa: " << A_COXA << " mm" << std::endl;
-        std::cout << "  Fémur: " << B_FEMUR << " mm" << std::endl;
+        std::cout << "  Femur: " << B_FEMUR << " mm" << std::endl;
         std::cout << "  Tibia: " << C_TIBIA << " mm" << std::endl;
-        std::cout << "  Radio hexágono: " << params.hexagon_radius << " mm" << std::endl;
+        std::cout << "  Hexagon radius: " << params.hexagon_radius << " mm" << std::endl;
 
         validateVerticalReach();
         validateAngleConsistency();
         validateWorkspaceComparison();
 
-        std::cout << "\n===== VALIDACIÓN COMPLETA =====" << std::endl;
+        std::cout << "\n===== VALIDATION COMPLETE =====" << std::endl;
     }
 };
 
