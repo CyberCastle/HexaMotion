@@ -234,13 +234,13 @@ int main() {
     std::cout << "\n--- Test 7: Hexagon Symmetry Validation ---" << std::endl;
 
     // Check that mirrored legs (angle offsets summing to zero) share the same X coordinate and opposite Y.
-    // BASE_THETA_OFFSETS is ordered as follows:
-    //   0 ->  30° (AR = Anterior Right)
-    //   1 ->  90° (BR = Back Right)
-    //   2 -> 150° (CR = Center Right)
-    //   3 -> -150° (CL = Center Left)
-    //   4 ->  -90° (BL = Back Left)
-    //   5 ->  -30° (AL = Anterior Left)
+    // BASE_THETA_OFFSETS is ordered as follows (OpenSHC DH base theta convention):
+    //   0 ->  -30° (AR = Anterior Right)
+    //   1 ->  -90° (BR = Back Right)
+    //   2 -> -150° (CR = Center Right)
+    //   3 -> +150° (CL = Center Left)
+    //   4 ->  +90° (BL = Back Left)
+    //   5 ->  +30° (AL = Anterior Left)
     // After the OpenSHC alignment, the mirrored pairs that cancel their offsets (θ_leg_a + θ_leg_b = 0)
     // are (0,5), (1,4) and (2,3). In this configuration the feet sit on parallel Y axes, so their
     // X components should match and Y components should be opposite. The previous origin-symmetry check

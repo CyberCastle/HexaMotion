@@ -209,15 +209,19 @@ enum SystemState {
 
 // Per-leg base orientation offsets in radians, ordered clockwise from the
 // anterior right leg (AR) to match OpenSHC's default robot configuration.
-// Opposing leg pairs now cancel out (AR+AL, BR+BL, CR+CL), preserving the
+//
+// OpenSHC convention (default.yaml DH base_link_parameters.theta):
+//   AR=-30°, BR=-90°, CR=-150°, CL=+150°, BL=+90°, AL=+30°.
+//
+// Opposing leg pairs cancel out (AR+AL, BR+BL, CR+CL), preserving the
 // DH-origin symmetry relied upon by analytic tests and gait factories.
 const double BASE_THETA_OFFSETS[NUM_LEGS] = {
-    math_utils::degreesToRadians(30.0),   // Leg 0 (AR)
-    math_utils::degreesToRadians(90.0),   // Leg 1 (BR)
-    math_utils::degreesToRadians(150.0),  // Leg 2 (CR)
-    math_utils::degreesToRadians(-150.0), // Leg 3 (CL)
-    math_utils::degreesToRadians(-90.0),  // Leg 4 (BL)
-    math_utils::degreesToRadians(-30.0)   // Leg 5 (AL)
+    math_utils::degreesToRadians(-30.0),  // Leg 0 (AR)
+    math_utils::degreesToRadians(-90.0),  // Leg 1 (BR)
+    math_utils::degreesToRadians(-150.0), // Leg 2 (CR)
+    math_utils::degreesToRadians(150.0),  // Leg 3 (CL)
+    math_utils::degreesToRadians(90.0),   // Leg 4 (BL)
+    math_utils::degreesToRadians(30.0)    // Leg 5 (AL)
 };
 
 #endif // HEXAMOTION_CONSTANTS_H
