@@ -58,6 +58,12 @@ BodyPoseController::BodyPoseController(RobotModel &m, const BodyPoseConfiguratio
         trajectory_target_angles[i] = JointAngles(0, 0, 0);
     }
 
+    // Initialize per-leg walk plane normal snapshots (OpenSHC parity)
+    for (int i = 0; i < NUM_LEGS; i++) {
+        tip_align_walk_plane_normals_[i] = Eigen::Vector3d::UnitZ();
+        tip_align_normal_captured_[i] = false;
+    }
+
     // Initialize walk plane pose system (OpenSHC equivalent with Bézier curves)
     walk_plane_pose_ = Pose(Point3D(0.0, 0.0, body_pose_config.body_clearance), Eigen::Quaterniond::Identity());
     origin_walk_plane_pose_ = walk_plane_pose_;
@@ -106,24 +112,25 @@ void BodyPoseController::setIMUData(const IMUData &imu_data) {
 
 // -------------------------------------------------------------------------------------------------
 // NOTE OpenSHC PoseController::updateCurrentPose adaptation status
-// Implemented here:
+// Implemented here (1:1 with OpenSHC unless noted):
 //  - Walk plane pose estimation (height + normal) with Bézier smoothing and clearance integration.
-//  - Global body pose composition currently == walk_plane_pose_ (stored in body_pose_current_).
-//  - Global body pose application (rotation + translation) to desired tip positions prior to per‑leg auto pose.
+//  - Multi-layer body pose composition (walk plane -> manual -> inclination -> IMU/auto -> tip align -> IK error).
+//  - Inclination posing with manual+auto rotation compensation removal (OpenSHC parity).
+//  - IMU and auto-pose mutual exclusion (OpenSHC parity: if/else pattern).
 //  - Auto pose per‑leg modulation plus stance‑leg averaged global_auto_pose_ (removal/addition ordering mirrors OpenSHC).
+//  - Tip alignment pose with per-leg walk plane normal snapshots frozen at swing start (OpenSHC parity).
+//  - IK error compensation pose (disabled by default — commented out in OpenSHC).
+//  - Default (zero-moment) pose for leg manipulation balance (disabled by default — commented out in OpenSHC).
 //
 // Missing / Deferred relative to full OpenSHC PoseController capabilities:
-//  - IMU-based gravity / inclination fusion (imu_pose_) for continuous leveling.
 //  - Manual / external body pose input filtering & interpolation inside updateCurrentPose (currently externalised).
 //  - Pose reset / recovery and progress tracking sequences (startup/shutdown progress only partially elsewhere).
 //  - Dynamic stiffness / compliance modulation tied to pose transitions.
-//  - Chained multi-layer pose composition (manual -> imu -> walk plane -> auto -> tip alignment orientation).
 //  - Advanced quaternion averaging (current incremental SLERP adequate for small auto pose deltas only).
 //  - Per-leg asymmetric stance weighting / adaptive exclusion for slipping or faulted legs.
 //  - Velocity & acceleration limiting of body pose changes beyond Bézier walk plane smoothing.
-//  - Tip orientation alignment / end-effector rotational modulation (only positional offsets applied now).
 //
-// Rationale: Non-critical layers (IMU, manual commands, admittance) are centralised in LocomotionSystem or dedicated modules
+// Rationale: Non-critical layers (admittance) are centralised in LocomotionSystem or dedicated modules
 // to keep this controller focused on geometric walk plane maintenance plus auto pose synthesis. Items above remain TODOs for
 // future parity with full OpenSHC if required.
 void BodyPoseController::updateCurrentPose(int gait_phase, Leg legs[NUM_LEGS]) {
@@ -139,19 +146,30 @@ void BodyPoseController::updateCurrentPose(int gait_phase, Leg legs[NUM_LEGS]) {
     }
 
     if (inclination_pose_enabled_ && imu_data_valid_) {
-        Eigen::Vector3d imu_euler = Eigen::Vector3d::Zero();
+        // Build IMU orientation quaternion
+        Eigen::Quaterniond imu_orientation = Eigen::Quaterniond::Identity();
         if (imu_data_.absolute_data.absolute_orientation_valid) {
-            imu_euler = Eigen::Vector3d(math_utils::degreesToRadians(imu_data_.absolute_data.absolute_roll),
-                                        math_utils::degreesToRadians(imu_data_.absolute_data.absolute_pitch),
-                                        math_utils::degreesToRadians(imu_data_.absolute_data.absolute_yaw));
+            Eigen::Vector3d euler_rad(math_utils::degreesToRadians(imu_data_.absolute_data.absolute_roll),
+                                      math_utils::degreesToRadians(imu_data_.absolute_data.absolute_pitch),
+                                      math_utils::degreesToRadians(imu_data_.absolute_data.absolute_yaw));
+            imu_orientation = math_utils::eulerAnglesToQuaterniond(euler_rad);
         } else {
-            imu_euler = Eigen::Vector3d(math_utils::degreesToRadians(imu_data_.roll),
-                                        math_utils::degreesToRadians(imu_data_.pitch),
-                                        math_utils::degreesToRadians(imu_data_.yaw));
+            Eigen::Vector3d euler_rad(math_utils::degreesToRadians(imu_data_.roll),
+                                      math_utils::degreesToRadians(imu_data_.pitch),
+                                      math_utils::degreesToRadians(imu_data_.yaw));
+            imu_orientation = math_utils::eulerAnglesToQuaterniond(euler_rad);
         }
 
-        double longitudinal = -body_pose_config.body_clearance * std::tan(imu_euler.y());
-        double lateral = body_pose_config.body_clearance * std::tan(imu_euler.x());
+        // Remove manual + auto pose rotation compensation (OpenSHC parity:
+        // isolate terrain inclination from any manually or automatically applied rotations)
+        Eigen::Quaterniond compensation_combined =
+            (manual_pose_.rotation * global_auto_pose_.rotation).normalized();
+        Eigen::Quaterniond compensation_removed =
+            (imu_orientation * compensation_combined.inverse()).normalized();
+        Eigen::Vector3d compensated_euler = math_utils::quaterniondToEulerAngles(compensation_removed);
+
+        double longitudinal = -body_pose_config.body_clearance * std::tan(compensated_euler.y());
+        double lateral = body_pose_config.body_clearance * std::tan(compensated_euler.x());
         longitudinal = math_utils::clamp(longitudinal, -body_pose_config.max_translation.x, body_pose_config.max_translation.x);
         lateral = math_utils::clamp(lateral, -body_pose_config.max_translation.y, body_pose_config.max_translation.y);
         inclination_pose_.position = Point3D(longitudinal, lateral, 0.0);
@@ -159,6 +177,7 @@ void BodyPoseController::updateCurrentPose(int gait_phase, Leg legs[NUM_LEGS]) {
         new_pose = new_pose.addPose(inclination_pose_);
     }
 
+    // IMU and auto-pose are mutually exclusive (OpenSHC parity: if/else pattern)
     if (imu_pose_enabled_ && imu_data_valid_) {
         updateIMUPosePID();
         new_pose = new_pose.addPose(imu_pose_);
@@ -186,7 +205,10 @@ void BodyPoseController::updateCurrentPose(int gait_phase, Leg legs[NUM_LEGS]) {
     // Update (but do NOT yet apply) auto-pose patterning. We aggregate into global_auto_pose_
     // and per-leg posers; actual spatial effect on desired tip positions happens in
     // applyAutoPoseToDesiredTips() just before IK (mirrors OpenSHC ordering: compose then apply).
-    if (auto_pose_enabled && auto_pose_config.enabled) {
+    // NOTE: Auto-pose and IMU posing are mutually exclusive (OpenSHC parity: if/else pattern).
+    // When IMU posing is active, auto-pose updates are skipped; stale values persist for per-leg application.
+    bool imu_posing_active = imu_pose_enabled_ && imu_data_valid_;
+    if (!imu_posing_active && auto_pose_enabled && auto_pose_config.enabled) {
         // Run phase update => populates each leg poser auto_pose_ (negated windows) and computes base amplitudes.
         updateAutoPose(gait_phase, legs);
         // Reconstruct a global base auto pose by averaging per‑leg auto poses of stance legs (OpenSHC analogue).
@@ -395,29 +417,33 @@ void BodyPoseController::updateTipAlignPose(Leg legs[NUM_LEGS]) {
 
         // Check if leg is in swing phase with valid progress
         double swing_progress = legs[i].getSwingProgress();
-        if (swing_progress < 0.0 || swing_progress > 1.0)
+        if (swing_progress < 0.0 || swing_progress > 1.0) {
+            // Leg not in swing — release capture flag for next swing period
+            tip_align_normal_captured_[i] = false;
             continue;
-
-        // Walk plane normal (default: vertical)
-        Point3D walk_plane_normal_pt = Point3D(0.0, 0.0, 1.0);
-        // If walk plane pose is enabled, extract normal from rotation
-        if (walk_plane_pose_enabled) {
-            Eigen::Vector3d unit_z(0.0, 0.0, 1.0);
-            Eigen::Vector3d normal = walk_plane_pose_.rotation * unit_z;
-            walk_plane_normal_pt = Point3D(normal.x(), normal.y(), normal.z());
         }
-        Eigen::Vector3d walk_plane_normal(walk_plane_normal_pt.x, walk_plane_normal_pt.y, walk_plane_normal_pt.z);
+
+        // Freeze walk plane normal at swing start (OpenSHC parity: per-leg snapshot
+        // prevents jitter from terrain estimate changes mid-swing)
+        if (!tip_align_normal_captured_[i]) {
+            if (walk_plane_pose_enabled) {
+                tip_align_walk_plane_normals_[i] = walk_plane_pose_.rotation * Eigen::Vector3d::UnitZ();
+            } else {
+                tip_align_walk_plane_normals_[i] = Eigen::Vector3d::UnitZ();
+            }
+            tip_align_normal_captured_[i] = true;
+        }
+
+        Eigen::Vector3d walk_plane_normal = tip_align_walk_plane_normals_[i];
         Eigen::Quaterniond walk_plane_rotation = Eigen::Quaterniond::FromTwoVectors(
             Eigen::Vector3d::UnitZ(), walk_plane_normal);
 
-        // Calculate vector from tip position to last joint position
-        // For 3DOF leg: last joint is tibia pivot, tip is foot
-        Point3D tip_pos = legs[i].getCurrentTipPositionGlobal();
-        // Approximate joint position using FK: tip position + tibia_length * up
+        // Calculate vector from tip position to last joint position (tibia pivot).
+        // Trigonometric computation equivalent to OpenSHC's full FK chain for 3DOF legs
+        // (valid when all DH link d-offsets are zero).
         double tibia_length = model.getParams().tibia_length;
         JointAngles angles = legs[i].getJointAngles();
         double base_theta = math_utils::radiansToDegrees(BASE_THETA_OFFSETS[i]);
-        // Simplified: compute tibia joint position from tip + tibia vector
         double femur_angle_rad = math_utils::degreesToRadians(angles.femur);
         double tibia_angle_rad = math_utils::degreesToRadians(angles.tibia);
         double leg_angle = math_utils::degreesToRadians(base_theta + angles.coxa);
@@ -443,7 +469,7 @@ void BodyPoseController::updateTipAlignPose(Leg legs[NUM_LEGS]) {
 
         Eigen::Vector3d target_translation = current_walk_plane_aligned + translation_to_alignment;
 
-        // Clamp within limits
+        // Clamp within limits (OpenSHC: clamped(target_translation, limit))
         if (body_pose_config.max_translation.x > 0.0) {
             target_translation[0] = math_utils::clamp(target_translation[0],
                                                       -body_pose_config.max_translation.x, body_pose_config.max_translation.x);
@@ -457,25 +483,16 @@ void BodyPoseController::updateTipAlignPose(Leg legs[NUM_LEGS]) {
                                                       -body_pose_config.max_translation.z, body_pose_config.max_translation.z);
         }
 
-        // Interpolate with smoothStep (OpenSHC algorithm: 1st half ramp down, 2nd half ramp up)
+        // Interpolate using Pose::interpolate (1:1 with OpenSHC)
         double c = math_utils::smoothStep(swing_progress);
         if (swing_progress < 0.5) {
-            double t = math_utils::smoothStep(c * 2.0);
-            // Interpolate from origin_tip_align_pose_ to identity
-            tip_align_pose_.position = Point3D(
-                origin_tip_align_pose_.position.x * (1.0 - t),
-                origin_tip_align_pose_.position.y * (1.0 - t),
-                origin_tip_align_pose_.position.z * (1.0 - t));
-            tip_align_pose_.rotation = Eigen::Quaterniond::Identity().slerp(
-                1.0 - t, origin_tip_align_pose_.rotation);
+            c = math_utils::smoothStep(c * 2.0);
+            tip_align_pose_ = origin_tip_align_pose_.interpolate(c, Pose::Identity());
         } else {
-            double t = math_utils::smoothStep((c - 0.5) * 2.0);
-            // Interpolate from identity to target
-            tip_align_pose_.position = Point3D(
-                target_translation[0] * t,
-                target_translation[1] * t,
-                target_translation[2] * t);
-            tip_align_pose_.rotation = Eigen::Quaterniond::Identity();
+            c = math_utils::smoothStep((c - 0.5) * 2.0);
+            tip_align_pose_ = Pose::Identity().interpolate(
+                c, Pose(Point3D(target_translation[0], target_translation[1], target_translation[2]),
+                        Eigen::Quaterniond::Identity()));
         }
 
         // Save origin for next swing period interpolation
