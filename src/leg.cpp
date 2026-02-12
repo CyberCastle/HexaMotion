@@ -262,12 +262,10 @@ void Leg::resetFSRHistory() {
 
 // ===== GAIT PHASE OFFSET METHODS =====
 
-void Leg::setPhaseOffset(double offset) {
-    // Normalize offset to 0.0-1.0 range
-    leg_phase_offset_ = fmod(offset, 1.0);
-    if (leg_phase_offset_ < 0.0) {
-        leg_phase_offset_ += 1.0;
-    }
+void Leg::setPhaseOffset(int offset) {
+    // OpenSHC: Store phase offset directly as iterations (no float conversion)
+    // This matches OpenSHC exactly and avoids floating-point rounding errors
+    leg_phase_offset_ = offset;
 }
 
 double Leg::calculateLegPhase(double global_gait_phase) const {

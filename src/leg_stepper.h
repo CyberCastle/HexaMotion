@@ -62,7 +62,7 @@ class LegStepper {
     Point3D getTargetTipPose() const { return target_tip_pose_; }
     StepState getStepState() const { return step_state_; }
     int getPhase() const { return phase_; }
-    double getPhaseOffset() const { return leg_.getPhaseOffset(); }
+    int getPhaseOffset() const { return leg_.getPhaseOffset(); }
     Point3D getStrideVector() const { return stride_vector_; }
     double getStepProgress() const { return step_progress_; }
 
@@ -139,7 +139,7 @@ class LegStepper {
         step_plane_valid_ = valid;
     }
     void setStepProgress(double progress) { step_progress_ = progress; }
-    void setPhaseOffset(double offset) { leg_.setPhaseOffset(offset); }
+    void setPhaseOffset(int offset) { leg_.setPhaseOffset(offset); }
     void setSwingOriginTipVelocity(const Point3D &velocity) { swing_origin_tip_velocity_ = velocity; }
     void setCompletedFirstStep(bool completed) { completed_first_step_ = completed; }
     void setAtCorrectPhase(bool at_correct) { at_correct_phase_ = at_correct; }
@@ -170,6 +170,10 @@ class LegStepper {
 
     // Update step state from current phase (STANCE/SWING determination) – mirrors OpenSHC style.
     void updateStepStateFromPhase();
+
+    // Iterate phase and update step state (OpenSHC LegStepper::iteratePhase exact equivalent)
+    // Increments phase by 1 (wrapping at period) then updates step state atomically
+    void iteratePhase();
 
     // Freeze stride & target (OpenSHC philosophical alignment) called on state transitions
     void beginSwingPhase();
@@ -263,6 +267,7 @@ class LegStepper {
     int phase_;
     double step_progress_;
     StepState step_state_;
+    StepState previous_step_state_;
 
     // OpenSHC timing parameters - use StepCycle instead of individual variables
     StepCycle step_cycle_; // Complete step cycle timing (OpenSHC exact)

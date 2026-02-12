@@ -963,7 +963,8 @@ class RobotModel {
     // WorkspaceAnalyzer for workspace analysis (OpenSHC-style)
     std::unique_ptr<WorkspaceAnalyzer> workspace_analyzer_;
 
-    JointAngles solveIK(int leg, const Point3D &global_target, JointAngles current) const;
+    JointAngles solveIK(int leg, const Point3D &global_target, JointAngles current,
+                        JointAngles current_velocity = JointAngles(0, 0, 0)) const;
 
     // Helper methods to reduce code duplication
     Point3D transformGlobalToLocalLegCoordinates(int leg, const Point3D &global_target) const;

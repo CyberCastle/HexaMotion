@@ -126,7 +126,7 @@ void BodyPoseController::setIMUData(const IMUData &imu_data) {
 // Rationale: Non-critical layers (IMU, manual commands, admittance) are centralised in LocomotionSystem or dedicated modules
 // to keep this controller focused on geometric walk plane maintenance plus auto pose synthesis. Items above remain TODOs for
 // future parity with full OpenSHC if required.
-void BodyPoseController::updateCurrentPose(double gait_phase, Leg legs[NUM_LEGS]) {
+void BodyPoseController::updateCurrentPose(int gait_phase, Leg legs[NUM_LEGS]) {
     // Keep walk plane pose coherent with current stance distribution.
     updateWalkPlanePose(legs);
 
@@ -1186,7 +1186,7 @@ bool BodyPoseController::executeShutdownSequence(Leg legs[NUM_LEGS]) {
 }
 
 // Update auto-pose during gait execution (OpenSHC equivalent)
-bool BodyPoseController::updateAutoPose(double gait_phase, Leg legs[NUM_LEGS]) {
+bool BodyPoseController::updateAutoPose(int gait_phase, Leg legs[NUM_LEGS]) {
 
     if (!auto_pose_enabled || !auto_pose_config.enabled)
         return true; // nothing to do
@@ -1207,9 +1207,8 @@ bool BodyPoseController::updateAutoPose(double gait_phase, Leg legs[NUM_LEGS]) {
         base_period = std::max(4, max_idx + 1); // reasonable minimum
     }
 
-    // Convert gait_phase [0,1) to integer phase index in [0, base_period)
-    double wrapped = gait_phase - std::floor(gait_phase);
-    int current_phase_index = static_cast<int>(wrapped * base_period) % base_period;
+    // OpenSHC: gait_phase is already an integer index (no conversion needed)
+    int current_phase_index = gait_phase % base_period;
 
     // Per-leg delegation to the LegPoser (OpenSHC parity). Each LegPoser recalculates offsets and applies threshold.
     for (int leg_index = 0; leg_index < NUM_LEGS; ++leg_index) {

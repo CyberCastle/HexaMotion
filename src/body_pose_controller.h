@@ -188,11 +188,11 @@ class BodyPoseController {
 
     /**
      * @brief Update auto-pose during gait execution (OpenSHC equivalent)
-     * @param gait_phase Current gait phase (0.0 to 1.0)
+     * @param gait_phase Current gait phase as integer index (0 to period-1)
      * @param legs Array of Leg objects to update
      * @return true if successful, false otherwise
      */
-    bool updateAutoPose(double gait_phase, Leg legs[NUM_LEGS]);
+    bool updateAutoPose(int gait_phase, Leg legs[NUM_LEGS]);
 
     /**
      * @brief Check if legs are bearing load based on average tip height.
@@ -380,10 +380,10 @@ class BodyPoseController {
      *          It intentionally omits IMU fusion, manual pose input handling, reset logic and stiffness
      *          modulation present in the full OpenSHC implementation. Gait phase is propagated so that
      *          phase-synchronised auto pose patterns can be evaluated consistently.
-     * @param gait_phase Normalised gait phase in [0,1).
+     * @param gait_phase Current gait phase as integer index (0 to period-1) - used for auto-pose modulation.
      * @param legs Array of Leg objects (needed for walk plane estimation and per-leg auto pose updates).
      */
-    void updateCurrentPose(double gait_phase, Leg legs[NUM_LEGS]);
+    void updateCurrentPose(int gait_phase, Leg legs[NUM_LEGS]);
 
     /**
      * @brief Update IMU-based body pose using PID controller (OpenSHC equivalent).

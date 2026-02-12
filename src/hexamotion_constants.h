@@ -138,6 +138,7 @@
 // DLS (Damped Least Squares) IK parameters (OpenSHC-style)
 #define IK_DLS_COEFFICIENT 0.02        // Damping factor for numerical stability in DLS method
 #define IK_JOINT_LIMIT_COST_WEIGHT 0.1 // Gain used in determining cost weight for joints approaching limits (OpenSHC)
+#define IK_MAX_JOINT_ANGULAR_SPEED 3.0 // Maximum joint angular velocity for velocity cost gradient (rad/s, OpenSHC)
 #define IK_TOLERANCE 1.0               // Position tolerance for IK convergence (1mm)
 #define IK_DEFAULT_MAX_ITERATIONS 30   // Default maximum iterations for IK solver
 #define IK_MAX_ANGLE_STEP 5.0          // Maximum angle change per IK iteration (degrees)

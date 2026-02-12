@@ -337,15 +337,15 @@ class Leg {
 
     /**
      * @brief Set the phase offset for this leg in the gait cycle.
-     * @param offset Phase offset (0.0 to 1.0)
+     * @param offset Phase offset in iterations (0 to period-1).
      */
-    void setPhaseOffset(double offset);
+    void setPhaseOffset(int offset);
 
     /**
      * @brief Get the phase offset for this leg.
-     * @return Phase offset (0.0 to 1.0)
+     * @return Phase offset in iterations (0 to period-1).
      */
-    double getPhaseOffset() const { return leg_phase_offset_; }
+    int getPhaseOffset() const { return leg_phase_offset_; }
 
     /**
      * @brief Calculate the current phase for this leg given the global gait phase.
@@ -444,7 +444,7 @@ class Leg {
     int fsr_history_index_;         /**< Current index in the circular buffer. */
 
     /** Gait phase offset. */
-    double leg_phase_offset_; /**< Phase offset for this leg in gait cycle (0.0 to 1.0). */
+    int leg_phase_offset_; /**< Phase offset for this leg in gait cycle (iterations, 0 to period-1). */
 
     /** OpenSHC-style desired position. */
     Point3D desired_tip_position_; /**< Desired tip position from Bezier trajectory (OpenSHC-style). */

@@ -158,8 +158,8 @@ void WalkController::applyGaitConfigToLegSteppers(const GaitConfiguration &gait_
         int base_step_offset = gait_config.phase_config.phase_offset * normaliser;
         int multiplier = gait_config.offsets.getForLegIndex(i);
         int phase_offset_iterations = (base_step_offset * multiplier) % step_cycle.period_;
-        double phase_offset = static_cast<double>(phase_offset_iterations) / static_cast<double>(step_cycle.period_);
-        leg_stepper->setPhaseOffset(phase_offset);
+        // OpenSHC: Store phase offset directly as iterations (no float conversion)
+        leg_stepper->setPhaseOffset(phase_offset_iterations);
 
         // OpenSHC: Configure desired velocity for stride calculation
         leg_stepper->setDesiredVelocity(desired_linear_velocity_, desired_angular_velocity_);
@@ -461,15 +461,24 @@ void WalkController::updateWalk(const Point3D &linear_velocity_input, double ang
         if (has_velocity_command) {
             walk_state_ = WALK_STARTING;
             global_phase_ = 0;
-            for (auto &leg_stepper : leg_steppers_) {
+
+            // OpenSHC exact: calculate phase offsets using integer arithmetic to avoid floating-point rounding errors
+            StepCycle step_cycle = current_gait_config_.generateStepCycle();
+            int base_step_period = current_gait_config_.phase_config.stance_phase + current_gait_config_.phase_config.swing_phase;
+            int normaliser = step_cycle.period_ / base_step_period;
+            int base_step_offset = current_gait_config_.phase_config.phase_offset * normaliser;
+
+            for (size_t i = 0; i < leg_steppers_.size() && i < NUM_LEGS; ++i) {
+                auto &leg_stepper = leg_steppers_[i];
                 leg_stepper->setAtCorrectPhase(false);
                 leg_stepper->setCompletedFirstStep(false);
                 leg_stepper->setStepState(STEP_STANCE);
 
-                // Initialize per-leg phase using offset like OpenSHC (convert phase_offset fraction to iterations)
-                StepCycle tmp_cycle = current_gait_config_.generateStepCycle();
-                int offset_iters = static_cast<int>(std::round(leg_stepper->getPhaseOffset() * tmp_cycle.period_));
-                leg_stepper->setPhase(offset_iters % tmp_cycle.period_);
+                // OpenSHC exact: integer-only phase offset calculation (matches state_controller.cpp line 542)
+                int multiplier = current_gait_config_.offsets.getForLegIndex(static_cast<int>(i));
+                int phase_offset_iterations = (base_step_offset * multiplier) % step_cycle.period_;
+                leg_stepper->setPhase(phase_offset_iterations);
+
                 // OpenSHC: initialize step state from initial phase
                 leg_stepper->updateStepStateFromPhase();
             }
@@ -557,10 +566,13 @@ void WalkController::updateWalk(const Point3D &linear_velocity_input, double ang
         leg_stepper->setStepPlane(step_plane.position, step_plane.normal, step_plane.valid);
         leg_stepper->setTouchdownDetection(terrain_adaptation_.hasTouchdownDetection(static_cast<int>(i)));
 
+        // Update LegStepper's internal StepCycle before processing (fixes phase wrapping bug)
+        if (step_cycle_calculated) {
+            leg_stepper->setStepCycle(step_cycle);
+        }
+
         if (is_active_walking && step_cycle_calculated) {
-            int current_phase = leg_stepper->getPhase();
-            // Let leg stepper derive state from its current phase (pre-increment)
-            leg_stepper->updateStepStateFromPhase();
+            // NOTE: Do NOT call updateStepStateFromPhase() here - it will be called by iteratePhase() after position update
 
             // OpenSHC STARTING state: per-leg phase synchronization
             if (walk_state_ == WALK_STARTING) {
@@ -576,8 +588,8 @@ void WalkController::updateWalk(const Point3D &linear_velocity_input, double ang
 
                 // Check if this leg is at correct phase
                 if (!leg_stepper->isAtCorrectPhase()) {
-                    // Convert fractional offset to iteration count for comparison
-                    int offset_iters = static_cast<int>(std::round(leg_stepper->getPhaseOffset() * step_cycle.period_));
+                    // OpenSHC: phase offset is already in iterations (no conversion needed)
+                    int offset_iters = leg_stepper->getPhaseOffset();
                     bool offset_in_swing = (offset_iters > step_cycle.swing_start_ && offset_iters < step_cycle.swing_end_);
 
                     if (offset_in_swing && leg_stepper->getPhase() != swing_end_wrapped) {
@@ -612,14 +624,13 @@ void WalkController::updateWalk(const Point3D &linear_velocity_input, double ang
                 }
             }
 
+            // OpenSHC pattern: update tip position, then iterate phase (which updates state)
+            leg_stepper->updateTipPosition(time_delta_, rough_terrain_mode, force_normal_touchdown);
+            leg_stepper->iteratePhase(); // OpenSHC exact: increment phase + update state atomically
+
+            // Update Leg's StepPhase based on final state after iteration
             bool in_swing = (leg_stepper->getStepState() == STEP_SWING);
             legs_array_[i].setStepPhase(in_swing ? SWING_PHASE : STANCE_PHASE);
-            // Local phase-based tip update
-            leg_stepper->updateTipPosition(time_delta_, rough_terrain_mode, force_normal_touchdown);
-
-            // Advance per-leg phase for the next tick
-            current_phase = (current_phase + 1) % step_cycle.period_;
-            leg_stepper->setPhase(current_phase);
         } else {
             // Force stance for non-active states
             legs_array_[i].setStepPhase(STANCE_PHASE);

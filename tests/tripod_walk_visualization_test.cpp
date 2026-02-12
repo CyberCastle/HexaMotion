@@ -39,10 +39,100 @@ constexpr double TEST_ANGULAR_VELOCITY = 0.25; // rad/s, introduce rotational mo
 constexpr int REQUIRED_SWING_TRANSITIONS = 2;
 // Límite general; ya no depende de asumir 52 iteraciones por fase.
 constexpr int MAX_STEPS = 600;
+constexpr int EXPECTED_TRIPOD_HALF_PERIOD = 52;
+constexpr double SWING_TOUCHDOWN_TARGET_FEMUR_DEG = -35.0;
+constexpr double SWING_TOUCHDOWN_TARGET_TIBIA_DEG = 35.0;
+constexpr double SWING_TOUCHDOWN_ANGLE_TOLERANCE_DEG = 1.0;
 
 // Utility to convert radians to degrees
 static double toDegrees(double radians) {
     return math_utils::radiansToDegrees(radians);
+}
+
+/**
+ * @brief Validates tripod symmetry between legs in the same group
+ *
+ * Tripod groups based on gait_config_factory.cpp:
+ * - Group A (multiplier=0): Legs AR(0), CR(2), BL(4) - indices {0, 2, 4}
+ * - Group B (multiplier=1): Legs BR(1), CL(3), AL(5) - indices {1, 3, 5}
+ *
+ * @param sys LocomotionSystem instance
+ * @param leg_phase_values Array with absolute phase_ values (0-period) per leg
+ * @param step Current simulation step number
+ * @return true if symmetry is valid, false otherwise
+ */
+static bool validateTripodSymmetry(const LocomotionSystem &sys, const int leg_phase_values[NUM_LEGS], int step, int period) {
+    // Tripod group definitions (matching gait_config_factory.cpp tripod configuration)
+    const int GROUP_A[] = {0, 2, 4}; // AR, CR, BL
+    const int GROUP_B[] = {1, 3, 5}; // BR, CL, AL
+    const char *GROUP_A_NAMES[] = {"AR(Leg1)", "CR(Leg3)", "BL(Leg5)"};
+    const char *GROUP_B_NAMES[] = {"BR(Leg2)", "CL(Leg4)", "AL(Leg6)"};
+    const int GROUP_SIZE = 3;
+
+    auto validateGroup = [&](const int *group, const char **names, const char *group_name) -> bool {
+        // Get reference values from first leg in group
+        int ref_leg = group[0];
+        StepPhase ref_phase = sys.getLeg(ref_leg).getStepPhase();
+        int ref_phase_iter = leg_phase_values[ref_leg];
+
+        // Check all other legs in the group match the reference
+        for (int i = 1; i < GROUP_SIZE; ++i) {
+            int leg_idx = group[i];
+            StepPhase current_phase = sys.getLeg(leg_idx).getStepPhase();
+            int current_phase_iter = leg_phase_values[leg_idx];
+
+            // Check phase mismatch
+            if (current_phase != ref_phase) {
+                std::cerr << "\n❌ TRIPOD SYMMETRY VIOLATION DETECTED at step " << step << "!\n";
+                std::cerr << "Group: " << group_name << "\n";
+                std::cerr << "  Reference leg " << names[0] << ": Phase="
+                          << (ref_phase == STANCE_PHASE ? "STANCE" : "SWING") << "\n";
+                std::cerr << "  Mismatched leg " << names[i] << ": Phase="
+                          << (current_phase == STANCE_PHASE ? "STANCE" : "SWING") << "\n";
+                std::cerr << "\nERROR: Legs in the same tripod group MUST be in the same phase!\n";
+                std::cerr << "This indicates a phase initialization or synchronization bug.\n";
+                return false;
+            }
+
+            // Check phase iteration mismatch
+            if (current_phase_iter != ref_phase_iter) {
+                std::cerr << "\n❌ TRIPOD SYMMETRY VIOLATION DETECTED at step " << step << "!\n";
+                std::cerr << "Group: " << group_name << "\n";
+                std::cerr << "  Reference leg " << names[0] << ": PhaseIter=" << ref_phase_iter << "\n";
+                std::cerr << "  Mismatched leg " << names[i] << ": PhaseIter=" << current_phase_iter << "\n";
+                std::cerr << "  Difference: " << abs(current_phase_iter - ref_phase_iter) << " iterations\n";
+                std::cerr << "\nERROR: Legs in the same tripod group MUST have synchronized phase iterations!\n";
+                std::cerr << "This lag causes lateral oscillation and instability in real robots.\n";
+                return false;
+            }
+        }
+        return true;
+    };
+
+    // Validate both tripod groups
+    if (!validateGroup(GROUP_A, GROUP_A_NAMES, "Group A (AR/CR/BL)")) {
+        return false;
+    }
+    if (!validateGroup(GROUP_B, GROUP_B_NAMES, "Group B (BR/CL/AL)")) {
+        return false;
+    }
+
+    // Validate fixed half-period offset between tripod groups (OpenSHC tripod parity)
+    int group_a_phase = leg_phase_values[GROUP_A[0]];
+    int group_b_phase = leg_phase_values[GROUP_B[0]];
+    int expected_offset = period / 2;
+    int measured_offset = (group_b_phase - group_a_phase + period) % period;
+    if (measured_offset != expected_offset) {
+        std::cerr << "\n❌ TRIPOD OFFSET VIOLATION at step " << step << "!\n";
+        std::cerr << "  Group A phase: " << group_a_phase << "/" << period << "\n";
+        std::cerr << "  Group B phase: " << group_b_phase << "/" << period << "\n";
+        std::cerr << "  Expected offset: " << expected_offset << " iterations\n";
+        std::cerr << "  Measured offset: " << measured_offset << " iterations\n";
+        std::cerr << "\nERROR: Tripod groups must remain exactly 180° out of phase.\n";
+        return false;
+    }
+
+    return true;
 }
 
 /**
@@ -73,13 +163,11 @@ static void printTestHeader() {
  * @param sys The LocomotionSystem instance.
  * @param step The current simulation step number.
  * @param transition_counts An array with the current transition counts for each leg.
- * @param leg_phase_iterations Array with current phase iteration counts for each leg.
- * @param swing_iterations_per_cycle Expected swing iterations per cycle for comparison.
- * @param stance_iterations_per_cycle Expected stance iterations per cycle for comparison.
+ * @param leg_phase_values Array with current phase_ values from LegStepper (0-period).
+ * @param period The StepCycle period (should be 104 for standard tripod).
  */
 static void printLegStates(const LocomotionSystem &sys, int step, const int transition_counts[NUM_LEGS],
-                           const int leg_phase_iterations[NUM_LEGS], int swing_iterations_per_cycle,
-                           int stance_iterations_per_cycle) {
+                           const int leg_phase_values[NUM_LEGS], int period) {
     for (int i = 0; i < NUM_LEGS; ++i) {
         const Leg &leg = sys.getLeg(i);
         Point3D tip_pos = leg.getCurrentTipPositionGlobal();
@@ -98,10 +186,9 @@ static void printLegStates(const LocomotionSystem &sys, int step, const int tran
                << ", " << std::setw(7) << toDegrees(angles.femur)
                << ", " << std::setw(7) << toDegrees(angles.tibia) << "]";
 
-        // Format phase iteration info
+        // Format phase value (absolute phase_ from LegStepper, 0-103 for period=104)
         std::stringstream phase_info_ss;
-        int expected_iterations = (phase == STANCE_PHASE) ? stance_iterations_per_cycle : swing_iterations_per_cycle;
-        phase_info_ss << leg_phase_iterations[i] << "/" << expected_iterations;
+        phase_info_ss << leg_phase_values[i] << "/" << period;
 
         std::cout << std::left << std::setw(8) << step
                   << std::setw(8) << ("Leg " + std::to_string(i + 1))
@@ -271,7 +358,13 @@ int main() {
     if (swing_iterations_per_cycle != stance_iterations_per_cycle) {
         std::cout << "ℹ️  INFO: Diferencia entre swing y stance (válida si la configuración lo define)." << std::endl;
     }
-    std::cout << "(Referencia fija de 52 eliminada; se usa StepCycle real)." << std::endl;
+    if (swing_iterations_per_cycle != EXPECTED_TRIPOD_HALF_PERIOD ||
+        stance_iterations_per_cycle != EXPECTED_TRIPOD_HALF_PERIOD) {
+        std::cerr << "ERROR: Tripod gait must run with exact half-period of " << EXPECTED_TRIPOD_HALF_PERIOD
+                  << " iterations per phase (swing/stance)." << std::endl;
+        return 1;
+    }
+    std::cout << "(Validación estricta: tripod exige 52 iteraciones por swing y 52 por stance)." << std::endl;
     int step = 0;
     int transition_counts[NUM_LEGS] = {0};
     StepPhase previous_phases[NUM_LEGS];
@@ -279,8 +372,8 @@ int main() {
         previous_phases[i] = sys.getLeg(i).getStepPhase();
     }
 
-    // Contador de iteraciones para cada fase por pata
-    int leg_phase_iterations[NUM_LEGS] = {0};
+    // Valores absolutos de phase_ (0-period) de cada pata desde LegStepper
+    int leg_phase_values[NUM_LEGS] = {0};
     StepPhase leg_current_phases[NUM_LEGS];
     for (int i = 0; i < NUM_LEGS; ++i) {
         leg_current_phases[i] = sys.getLeg(i).getStepPhase();
@@ -293,36 +386,65 @@ int main() {
             continue;
         }
 
-        // Check for STANCE -> SWING transitions y contar iteraciones por fase
+        // Check for STANCE -> SWING transitions y obtener la fase real de cada LegStepper
         for (int i = 0; i < NUM_LEGS; ++i) {
             StepPhase current_phase = sys.getLeg(i).getStepPhase();
 
-            // Detectar transiciones STANCE -> SWING
+            // Obtener el valor REAL de phase_ desde LegStepper (no contar manualmente)
+            auto leg_stepper = sys.getWalkController()->getLegStepper(i);
+            if (leg_stepper) {
+                leg_phase_values[i] = leg_stepper->getPhase();
+            }
+
+            // Detectar transiciones STANCE -> SWING solo para contar
             if (previous_phases[i] == STANCE_PHASE && current_phase == SWING_PHASE) {
                 transition_counts[i]++;
-                leg_phase_iterations[i] = 1; // Empezar conteo de nueva fase
-                leg_current_phases[i] = current_phase;
             }
-            // Detectar transiciones SWING -> STANCE
-            else if (previous_phases[i] == SWING_PHASE && current_phase == STANCE_PHASE) {
-                leg_phase_iterations[i] = 1; // Empezar conteo de nueva fase
-                leg_current_phases[i] = current_phase;
-            }
-            // Si estamos en la misma fase, incrementar contador
-            else if (leg_current_phases[i] == current_phase) {
-                leg_phase_iterations[i]++;
-            }
-            // Si hay cambio de fase sin ser transición detectada arriba
-            else {
-                leg_phase_iterations[i] = 1;
-                leg_current_phases[i] = current_phase;
+
+            // Validate end-of-swing touchdown posture near standing femur/tibia targets
+            if (previous_phases[i] == SWING_PHASE && current_phase == STANCE_PHASE) {
+                JointAngles touchdown_angles = sys.getLeg(i).getJointAngles();
+                double femur_deg = toDegrees(touchdown_angles.femur);
+                double tibia_deg = toDegrees(touchdown_angles.tibia);
+                double femur_error = std::abs(femur_deg - SWING_TOUCHDOWN_TARGET_FEMUR_DEG);
+                double tibia_error = std::abs(tibia_deg - SWING_TOUCHDOWN_TARGET_TIBIA_DEG);
+
+                if (femur_error > SWING_TOUCHDOWN_ANGLE_TOLERANCE_DEG ||
+                    tibia_error > SWING_TOUCHDOWN_ANGLE_TOLERANCE_DEG) {
+                    std::cerr << "\n❌ TOUCHDOWN ANGLE VIOLATION at step " << step
+                              << " (Leg " << (i + 1) << ")!\n";
+                    std::cerr << "  Expected (femur, tibia): ("
+                              << SWING_TOUCHDOWN_TARGET_FEMUR_DEG << ", "
+                              << SWING_TOUCHDOWN_TARGET_TIBIA_DEG << ") deg\n";
+                    std::cerr << "  Measured (femur, tibia): ("
+                              << femur_deg << ", " << tibia_deg << ") deg\n";
+                    std::cerr << "  Errors (femur, tibia): ("
+                              << femur_error << ", " << tibia_error << ") deg\n";
+                    std::cerr << "\nERROR: End-of-swing posture deviates from expected standing-like touchdown.\n";
+                    return 1;
+                }
             }
 
             previous_phases[i] = current_phase;
         }
 
-        // Print current state con información de iteraciones de fase
-        printLegStates(sys, step, transition_counts, leg_phase_iterations, swing_iterations_per_cycle, stance_iterations_per_cycle);
+        // CRITICAL: Validate tripod symmetry after every update
+        // This ensures legs in the same tripod group remain perfectly synchronized
+        if (!validateTripodSymmetry(sys, leg_phase_values, step, actual_step_cycle.period_)) {
+            std::cerr << "\n"
+                      << std::string(100, '=') << "\n";
+            std::cerr << "TEST FAILED: Tripod symmetry violation detected at step " << step << "\n";
+            std::cerr << "\nCurrent leg states:\n";
+            printLegStates(sys, step, transition_counts, leg_phase_values, actual_step_cycle.period_);
+            std::cerr << "\n"
+                      << std::string(100, '=') << "\n";
+            std::cerr << "\nAborting test due to symmetry violation.\n";
+            std::cerr << "This asymmetry would cause instability and oscillation in a real hexapod robot.\n";
+            return 1;
+        }
+
+        // Print current state con información de phase_ absoluto
+        printLegStates(sys, step, transition_counts, leg_phase_values, actual_step_cycle.period_);
 
         // Progress indicator every 20 steps for long 52-iteration phases
         if (step > 0 && step % 20 == 0) {
@@ -380,7 +502,7 @@ int main() {
     std::cout << "\nFinal Leg States (all should be STANCE):" << std::endl;
     int final_counts[NUM_LEGS] = {0};           // Dummy counts for final print
     int final_phase_iterations[NUM_LEGS] = {0}; // Dummy phase iterations for final print
-    printLegStates(sys, step, final_counts, final_phase_iterations, swing_iterations_per_cycle, stance_iterations_per_cycle);
+    printLegStates(sys, step, final_counts, final_phase_iterations, actual_step_cycle.period_);
 
     // Final validation
     bool final_all_in_stance = true;

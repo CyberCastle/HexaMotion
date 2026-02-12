@@ -770,13 +770,11 @@ bool LocomotionSystem::update() {
         /** We only update auto-pose modulation and walk plane pose estimation here. */
         if (body_pose_ctrl) {
 
-            /** Derive normalized gait phase [0,1) from first leg stepper (consistent across legs in synchronized gaits). */
-            double gait_phase = 0.0;
-            StepCycle sc = walk_ctrl->getStepCycle();
-            int period = sc.period_ > 0 ? sc.period_ : 1;
+            /** OpenSHC: master_phase is int directly from leg_stepper->getPhase() (no float conversion) */
+            int gait_phase = 0;
             auto leg0 = walk_ctrl->getLegStepper(0);
             if (leg0) {
-                gait_phase = static_cast<double>(leg0->getPhase() % period) / static_cast<double>(period);
+                gait_phase = leg0->getPhase();
             }
             body_pose_ctrl->updateCurrentPose(gait_phase, legs);
         }
@@ -1317,12 +1315,8 @@ void LocomotionSystem::applyInverseKinematicsToAllLegs() {
             params.time_delta);
 
         /** Update joint angles in Leg object. */
+        /** Keep FK-derived tip pose as runtime truth (OpenSHC parity). */
         legs[i].setJointAngles(new_angles);
-
-        /** Restore authoritative tip position after setJointAngles. */
-        /** setJointAngles triggers FK which can drift from the Bezier output. */
-        /** IK is approximate, so FK(IK(pos)) != pos; keep planned position as authoritative. */
-        legs[i].setCurrentTipPositionGlobal(desired_tip_position);
     }
 }
 

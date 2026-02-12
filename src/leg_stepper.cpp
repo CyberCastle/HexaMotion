@@ -46,6 +46,7 @@ LegStepper::LegStepper(int leg_index, const Point3D &identity_tip_pose, Leg &leg
     phase_ = 0;
     step_progress_ = 0.0;
     step_state_ = STEP_STANCE;
+    previous_step_state_ = STEP_STANCE;
 
     // Initialize OpenSHC timing parameters
     swing_delta_t_ = 0.0;
@@ -494,9 +495,10 @@ void LegStepper::updateTipPositionIterative(int iteration, double time_delta, bo
             updateDefaultTipPosition();
         }
     } else {
+        // OpenSHC: phase offset is already in iterations (no conversion needed)
         int modified_stance_start = completed_first_step_
                                         ? step_cycle_.stance_start_
-                                        : static_cast<int>(std::round(getPhaseOffset() * step_cycle_.period_));
+                                        : getPhaseOffset();
         stance_iteration = math_utils::mod(iteration + (step_cycle_.period_ - modified_stance_start), step_cycle_.period_) + 1;
         if (stance_iteration < 1)
             stance_iteration = 1;
@@ -624,7 +626,9 @@ void LegStepper::updateTipPositionIterative(int iteration, double time_delta, bo
     } else if (step_state_ == STEP_STANCE) {
 
         // Initialize stance origin if needed (hybrid anti-drift extension).
-        if (stance_iteration == 1) {
+        // Only reinitialize when truly entering stance from another state, not on cycle wrapping
+        bool just_entered_stance = (previous_step_state_ != STEP_STANCE);
+        if (stance_iteration == 1 && just_entered_stance) {
 
             // Reset external target after swing completion (OpenSHC behavior)
             if (external_target_.defined) {
@@ -720,7 +724,7 @@ void LegStepper::updateTipPositionIterative(int iteration, double time_delta, bo
         }
 
         // Initialize tangential stance mode state at first stance iteration
-        if (stance_iteration == 1) {
+        if (stance_iteration == 1 && just_entered_stance) {
             stance_tangent_initialized_ = false; // reset every new stance phase
         }
 
@@ -768,6 +772,9 @@ void LegStepper::updateTipPositionIterative(int iteration, double time_delta, bo
     debug_state_.step_state = step_state_;
     debug_state_.step_progress = step_progress_;
 #endif
+
+    // Track previous state for next iteration
+    previous_step_state_ = step_state_;
 
     // Update velocity tracking for comprehensive safety validation
     if (has_previous_position_) {
@@ -881,6 +888,30 @@ void LegStepper::updateStepStateFromPhase() {
         }
     }
     // When in_swing && STEP_FORCE_STANCE: neither branch fires → state preserved
+}
+
+/**
+ * @brief Iterate phase and update step state (OpenSHC LegStepper::iteratePhase exact equivalent).
+ *
+ * Atomic operation that:
+ * 1. Increments phase_ by 1 (wrapping at period)
+ * 2. Updates step_state_ based on new phase
+ * 3. Calculates step_progress_ from new phase
+ *
+ * This ensures step state (SWING/STANCE) changes happen in sync with phase transitions,
+ * preventing the 1-iteration lag that occurs when state is updated before phase increment.
+ */
+void LegStepper::iteratePhase() {
+    if (step_cycle_.period_ <= 0) {
+        return;
+    }
+
+    // OpenSHC exact: increment phase first, then update state based on new phase
+    phase_ = (phase_ + 1) % step_cycle_.period_;
+    updateStepStateFromPhase();
+
+    // Calculate step progress from new phase (OpenSHC parity)
+    step_progress_ = static_cast<double>(phase_) / static_cast<double>(step_cycle_.period_);
 }
 
 // ========================================================================

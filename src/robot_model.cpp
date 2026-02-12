@@ -119,9 +119,11 @@ void RobotModel::initializeDH() {
 }
 
 /** OpenSHC-style Damped Least Squares (DLS) iterative inverse kinematics. */
-JointAngles RobotModel::solveIK(int leg, const Point3D &global_target, JointAngles current) const {
+JointAngles RobotModel::solveIK(int leg, const Point3D &global_target, JointAngles current,
+                                JointAngles current_velocity) const {
     const double tolerance = IK_TOLERANCE;
     const double dls_coefficient = IK_DLS_COEFFICIENT;
+    const double max_joint_speed = IK_MAX_JOINT_ANGULAR_SPEED;
     /** Max angle change per iteration. */
     const double max_angle_change = math_utils::degreesToRadians(IK_MAX_ANGLE_STEP);
 
@@ -151,8 +153,58 @@ JointAngles RobotModel::solveIK(int leg, const Point3D &global_target, JointAngl
         Eigen::Matrix3d damped_inv3 = (JJT3 + dls_coefficient * dls_coefficient * identity3).inverse();
         Eigen::Matrix3d jacobian_inverse3 = jacobian_pos.transpose() * damped_inv3;
 
-        /** Calculate joint angle changes. */
-        Eigen::Vector3d angle_delta = jacobian_inverse3 * position_error3;
+        /** OpenSHC nullspace optimization: joint limit cost function (REF: Autonomous Robots, Fahimi 2008). */
+        /** This guides IK toward configurations that keep joints away from limits. */
+        double position_limit_cost = 0.0;
+        double velocity_limit_cost = 0.0;
+        Eigen::Vector3d position_cost_gradient = Eigen::Vector3d::Zero();
+        Eigen::Vector3d velocity_cost_gradient = Eigen::Vector3d::Zero();
+        const double cost_weight = IK_JOINT_LIMIT_COST_WEIGHT;
+
+        /** Calculate cost for each joint approaching limits. */
+        double joint_positions[3] = {current.coxa, current.femur, current.tibia};
+        double joint_velocities[3] = {current_velocity.coxa, current_velocity.femur, current_velocity.tibia};
+        double joint_limits[3][2] = {
+            {coxa_angle_limits_rad[0], coxa_angle_limits_rad[1]},
+            {femur_angle_limits_rad[0], femur_angle_limits_rad[1]},
+            {tibia_angle_limits_rad[0], tibia_angle_limits_rad[1]}};
+
+        for (int j = 0; j < 3; ++j) {
+            /** POSITION LIMITS (OpenSHC parity) */
+            double joint_range = joint_limits[j][1] - joint_limits[j][0];
+            double range_center = joint_limits[j][0] + joint_range / 2.0;
+            if (joint_range > 0.0) {
+                double normalized_pos = (joint_positions[j] - range_center) / joint_range;
+                position_limit_cost += (cost_weight * normalized_pos) * (cost_weight * normalized_pos);
+                position_cost_gradient(j) = -(cost_weight * cost_weight * (joint_positions[j] - range_center)) / (joint_range * joint_range);
+            }
+
+            /** VELOCITY LIMITS (OpenSHC parity) */
+            double joint_velocity_range = 2.0 * max_joint_speed;
+            double velocity_range_centre = 0.0;
+            double normalized_vel = (joint_velocities[j] - velocity_range_centre) / joint_velocity_range;
+            velocity_limit_cost += (cost_weight * normalized_vel) * (cost_weight * normalized_vel);
+            velocity_cost_gradient(j) = -(cost_weight * cost_weight * (joint_velocities[j] - velocity_range_centre)) / (joint_velocity_range * joint_velocity_range);
+        }
+
+        /** Normalize gradients (OpenSHC parity). */
+        if (position_limit_cost > 0.0) {
+            position_cost_gradient *= 1.0 / std::sqrt(position_limit_cost);
+        }
+        if (velocity_limit_cost > 0.0) {
+            velocity_cost_gradient *= 1.0 / std::sqrt(velocity_limit_cost);
+        }
+
+        /** OpenSHC exact interpolation: interpolate(position, velocity, 0.75). */
+        /** Equivalent to 0.25 * position + 0.75 * velocity. */
+        Eigen::Vector3d combined_cost_gradient = 0.25 * position_cost_gradient +
+                                                 0.75 * velocity_cost_gradient;
+
+        /** Calculate joint angle changes with nullspace projection. */
+        /** Primary term: jacobian_inverse * error (achieves target position). */
+        /** Nullspace term: (I - J# * J) * gradient (optimizes joint configuration without affecting position). */
+        Eigen::Matrix3d nullspace_projector = identity3 - jacobian_inverse3 * jacobian_pos;
+        Eigen::Vector3d angle_delta = jacobian_inverse3 * position_error3 + nullspace_projector * combined_cost_gradient;
 
         /** Apply step size limiting for stability. */
         double max_delta = std::max({std::abs(angle_delta(0)), std::abs(angle_delta(1)), std::abs(angle_delta(2))});
@@ -950,8 +1002,8 @@ Eigen::Vector3d RobotModel::calculateJointLimitCostGradient(const JointAngles &c
         velocity_cost_gradient /= std::sqrt(velocity_limit_cost);
     }
 
-    /** Blend: emphasize position limits (75%) while still considering velocity (25%). */
-    return 0.75 * position_cost_gradient + 0.25 * velocity_cost_gradient;
+    /** OpenSHC interpolation parity: 0.25 * position + 0.75 * velocity. */
+    return 0.25 * position_cost_gradient + 0.75 * velocity_cost_gradient;
 }
 
 std::string RobotModel::gaitTypeToString(GaitType gait_type) {
