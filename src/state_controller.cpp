@@ -184,6 +184,10 @@ StateController::~StateController() {
 bool StateController::initialize(const BodyPoseConfiguration &body_pose_config) {
     logDebug("Initializing StateController...");
 
+    // OpenSHC parity: startup sequence behavior is controlled by pose config.
+    config_.enable_startup_sequence = body_pose_config.start_up_sequence;
+    config_.enable_direct_startup = !body_pose_config.start_up_sequence;
+
     // Check if locomotion system is available
     if (!context_.isSystemEnabled()) {
         setError("Locomotion system not enabled");
@@ -784,24 +788,31 @@ void StateController::handleRobotStateTransition() {
     // Execute appropriate transition sequence
     switch (current_robot_state_) {
     case RobotState::ROBOT_UNKNOWN:
-        // Determine actual state and transition
+        // OpenSHC parity: detect initial state and reset desired state to detected state.
         if (isRobotPacked()) {
             current_robot_state_ = RobotState::ROBOT_PACKED;
+            if (!config_.enable_startup_sequence) {
+                logError("Robot is PACKED and direct startup mode is enabled; set start_up_sequence=true to unpack via startup sequence parity.");
+            }
             logDebug("Robot state determined: PACKED");
         } else if (isRobotReady()) {
-            current_robot_state_ = RobotState::ROBOT_READY;
-            logDebug("Robot state determined: READY");
+            if (!config_.enable_startup_sequence) {
+                // OpenSHC direct mode maps READY detection to PACKED state machine entry.
+                current_robot_state_ = RobotState::ROBOT_PACKED;
+                logDebug("Robot detected READY but direct mode enabled: remapping to PACKED (OpenSHC parity)");
+            } else {
+                current_robot_state_ = RobotState::ROBOT_READY;
+                logDebug("Robot state determined: READY");
+            }
         } else {
-            // Fallback to READY state if robot doesn't meet packed criteria
-            current_robot_state_ = RobotState::ROBOT_READY;
-            logDebug("Robot state defaulted to: READY");
+            // OpenSHC parity: unknown falls back to PACKED.
+            current_robot_state_ = RobotState::ROBOT_PACKED;
+            logDebug("Robot state unknown: defaulting to PACKED");
         }
 
-        // Continue with transition if we're now at desired state
-        if (current_robot_state_ == desired_robot_state_) {
-            is_transitioning_ = false;
-            logDebug("Robot state transition completed: " + toArduinoString(toString(current_robot_state_)));
-        }
+        desired_robot_state_ = current_robot_state_;
+        is_transitioning_ = false;
+        logDebug("Robot state transition completed: " + toArduinoString(toString(current_robot_state_)));
         break;
 
     case RobotState::ROBOT_PACKED:
@@ -823,7 +834,7 @@ void StateController::handleRobotStateTransition() {
             if (config_.enable_startup_sequence) {
                 progress = executeStartupSequence();
             } else {
-                // Direct startup
+                // OpenSHC direct mode: READY -> RUNNING immediate.
                 current_robot_state_ = RobotState::ROBOT_RUNNING;
                 current_walk_state_ = WalkState::WALK_STOPPED;
                 progress = PROGRESS_COMPLETE;
@@ -834,6 +845,13 @@ void StateController::handleRobotStateTransition() {
 
     case RobotState::ROBOT_RUNNING:
         if (desired_robot_state_ == RobotState::ROBOT_READY) {
+            if (!config_.enable_startup_sequence) {
+                // OpenSHC direct mode: disallow RUNNING -> non-RUNNING transitions.
+                is_transitioning_ = false;
+                logDebug("RUNNING -> READY is blocked while direct startup mode is active (OpenSHC parity)");
+                return;
+            }
+
             // Must stop walking first
             if (current_walk_state_ != WalkState::WALK_STOPPED) {
                 desired_linear_velocity_ = Eigen::Vector2d::Zero();
