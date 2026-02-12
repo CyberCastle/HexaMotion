@@ -29,7 +29,7 @@ Physical parameters and conventions:
 
 - Default robot dimensions: hexagon radius 200 mm; coxa 50 mm; femur 101 mm; tibia 208 mm; robot height 208 mm; standing height 150 mm.
 - All internal kinematics use mm, mm/s, mm/s^2.
-- Leg base orientation offsets are defined in `BASE_THETA_OFFSETS` (AR +30°, BR +90°, CR +150°, CL -150°, BL -90°, AL -30°).
+- Leg base orientation offsets are defined in `BASE_THETA_OFFSETS` (AR -30°, BR -90°, CR -150°, CL +150°, BL +90°, AL +30°).
 - Default height is configured through `default_height_offset` (0.0 uses `-tibia_length`, explicit `-208.0` recommended for physical robot).
 - Stance/walkspace radii are derived from standing pose horizontal reach (coxa + femur projection), not `coxa + femur + tibia`.
 - Symmetry requirement: standing pose and gait assumptions require opposing leg pairs to be symmetric.
@@ -474,7 +474,7 @@ Physical parameters and conventions:
 | `default_pose_`                                | `default_pose_`                                      | ✅                                                                                                             |
 | `ik_error_pose_`                               | `ik_error_pose_`                                     | ✅                                                                                                             |
 | `tip_align_pose_` / `origin_tip_align_pose_`   | `tip_align_pose_` / `origin_tip_align_pose_`         | ✅                                                                                                             |
-| `walk_plane_pose_` / `origin_walk_plane_pose_` | `walk_plane_pose_`                                   | **Partial**: `walk_plane_pose_` present; `origin_walk_plane_pose_` absent (Bézier interpolation used instead). |
+| `walk_plane_pose_` / `origin_walk_plane_pose_` | `walk_plane_pose_`                                   | **Partial**: `walk_plane_pose_` present; `origin_walk_plane_pose_` absent (Bezier interpolation used instead). |
 | `rotation_absement_error_`                     | `rotation_absement_error_`                           | ✅                                                                                                             |
 | `rotation_position_error_`                     | `rotation_position_error_`                           | ✅                                                                                                             |
 | `rotation_velocity_error_`                     | `rotation_velocity_error_`                           | ✅                                                                                                             |
@@ -490,7 +490,7 @@ Physical parameters and conventions:
 
 - Smooth body pose trajectory system (`setBodyPoseSmooth*`, `initializeTrajectoryFromCurrent`, `updateTrajectoryStep`).
 - Initial standing pose transition (`beginInitialStandingPoseTransition`, `stepInitialStandingPoseTransition`).
-- Walk plane Bézier curve interpolation.
+- Walk plane Bezier curve interpolation.
 - `ManualBodyPoseController` sub-class with presets and extended modes.
 - `IMUAutoPose` sub-class with multi-mode operation (level, inclination, adaptive, custom).
 - Progress reporting APIs (`getStartupProgressPercent()`).
@@ -585,7 +585,7 @@ HexaMotion substitutes: `CoxaTelemetry` struct in `LocomotionSystem` (compile-ti
 | 11  | **Auto-navigation mode**              | `auto_navigation_mode` input / syropod_auto_navigation integration                                                                                                                         | **Not implemented** | By design (no ROS navigation stack on MCU).                                                                |
 | 12  | **stringFormat\<Args\>()**            | Variadic `snprintf`-based string format utility                                                                                                                                            | **Not implemented** | Minor (Arduino environment uses `String()` and `sprintf` directly).                                        |
 
-**Resolved items (2026-02-10)**: Bézier through-control-point variants, `transitionStance()` parity, `origin_walk_plane_pose_`, and startup acquisition timeout are implemented (see Priority 4 section).
+**Resolved items (2026-02-10)**: Bezier through-control-point variants, `transitionStance()` parity, `origin_walk_plane_pose_`, and startup acquisition timeout are implemented (see Priority 4 section).
 
 **Resolved items (2026-02-11)**: Swing/stance iteration mapping inconsistency (see [ITERATION_MAPPING_INCONSISTENCY.md](ITERATION_MAPPING_INCONSISTENCY.md)) and quaternion convention divergence (see [QUATERNION_CONVENTION_DIVERGENCE.md](QUATERNION_CONVENTION_DIVERGENCE.md)) are fully fixed (see Priority 5 section).
 
@@ -681,7 +681,7 @@ HexaMotion substitutes: `CoxaTelemetry` struct in `LocomotionSystem` (compile-ti
 - [x] **Bezier through-control-point functions**: Implemented `quadraticBezierCurveThroughControlPoint`, `cubicBezierCurveThroughControlPoint`, `quarticBezierCurveThroughControlPoint` in `math_utils.h`. These adjust control nodes so the curve interpolates _through_ the specified point rather than merely being pulled toward it. Degenerate-case guards (`fabs(denom) < 1e-12`) replace OpenSHC's `ROS_WARN` fallback.
 - [x] **transitionStance() full logic**: Implemented `BodyPoseController::transitionStance(Leg[], double)` in `body_pose_controller.cpp`. Iterates all legs, composes target from `ExternalTarget.transform + ExternalTarget.pose`, calls `LegPoser::stepToPosition()` with body pose, applies IK, tracks minimum progress, and resets external targets on completion. Gravity-aligned tips omitted (not applicable to 3DOF MCU target).
 - [x] **Startup acquisition timeout**: Added `LocomotionSystem::attemptJointAcquisition()` which polls `IServoInterface::getJointAngle()` for all joints up to `ACQUISITION_TIMEOUT_S` (10 s), equivalent to OpenSHC's `ACQUISTION_TIME` spin loop. Called during `initialize()` with fallback to default positions on timeout. Added `jointPositionsInitialised()` public accessor.
-- [x] **origin*walk_plane_pose***: Added `origin_walk_plane_pose_` member to `BodyPoseController`. Bézier 5-node transitions now start from `origin_walk_plane_pose_` (not mid-transition `walk_plane_pose_`), matching OpenSHC's `origin.interpolate(c, new)` semantics. Updated on transition completion and direct assignment; included in `resetAllPosing()`.
+- [x] **origin*walk_plane_pose***: Added `origin_walk_plane_pose_` member to `BodyPoseController`. Bezier 5-node transitions now start from `origin_walk_plane_pose_` (not mid-transition `walk_plane_pose_`), matching OpenSHC's `origin.interpolate(c, new)` semantics. Updated on transition completion and direct assignment; included in `resetAllPosing()`.
 
 ### Priority 5: Fixes Verified in Validation Pass (2026-02-11)
 

@@ -10,25 +10,25 @@ The StateController implements all major OpenSHC state management capabilities:
 
 ### Hierarchical State Management
 
--   **System States**: SUSPENDED, OPERATIONAL
--   **Robot States**: PACKED, READY, RUNNING, UNKNOWN, OFF
--   **Walk States**: STARTING, MOVING, STOPPING, STOPPED
--   **Leg States**: WALKING, MANUAL, WALKING_TO_MANUAL, MANUAL_TO_WALKING
+- **System States**: SYSTEM_PACKED, SYSTEM_READY, SYSTEM_RUNNING
+- **Robot States**: PACKED, READY, RUNNING, UNKNOWN, OFF
+- **Walk States**: WALK_STARTING, WALK_MOVING, WALK_STOPPING, WALK_STOPPED
+- **Leg States**: WALKING, MANUAL, WALKING_TO_MANUAL, MANUAL_TO_WALKING
 
 ### Operational Modes
 
--   **Posing Modes**: X_Y, PITCH_ROLL, Z_YAW, EXTERNAL positioning
--   **Cruise Control**: Constant velocity with time limits
--   **Pose Reset**: Various axis combinations for pose reset
--   **Manual Leg Control**: Individual leg manipulation (up to 2 legs simultaneously)
+- **Posing Modes**: X_Y, PITCH_ROLL, Z_YAW, EXTERNAL positioning
+- **Cruise Control**: Constant velocity with time limits
+- **Pose Reset**: Various axis combinations for pose reset
+- **Manual Leg Control**: Individual leg manipulation (up to 2 legs simultaneously)
 
 ### Advanced Features
 
--   **Startup/Shutdown Sequences**: Multi-step state transitions
--   **Pack/Unpack Sequences**: Safe robot storage and deployment
--   **State Transition Validation**: Prevents invalid state changes
--   **Progress Tracking**: Real-time transition progress monitoring
--   **Error Handling**: Comprehensive error detection and recovery
+- **Startup/Shutdown Sequences**: Multi-step state transitions
+- **Pack/Unpack Sequences**: Safe robot storage and deployment
+- **State Transition Validation**: Prevents invalid state changes
+- **Progress Tracking**: Real-time transition progress monitoring
+- **Error Handling**: Comprehensive error detection and recovery
 
 ## Quick Start
 
@@ -37,6 +37,7 @@ The StateController implements all major OpenSHC state management capabilities:
 ```cpp
 #include <locomotion_system.h>
 #include <state_controller.h>
+#include <body_pose_config_factory.h>
 
 // Configure your robot parameters
 Parameters params;
@@ -56,7 +57,8 @@ params.tibia_angle_limits[1] = 90;
 
 // Initialize locomotion system
 LocomotionSystem locomotion(params);
-locomotion.initialize(&imu, &fsr, &servos);
+BodyPoseConfiguration body_pose_config = getDefaultBodyPoseConfig(params);
+locomotion.initialize(&imu, &fsr, &servos, body_pose_config);
 
 // Configure state machine
 StateMachineConfig config;
@@ -65,7 +67,7 @@ config.transition_timeout = 10.0f;
 
 // Create and initialize state controller
 StateController state_controller(locomotion, config);
-state_controller.initialize();
+state_controller.initialize(body_pose_config);
 ```
 
 ### 2. Main Control Loop
@@ -97,11 +99,9 @@ state_controller.requestRobotState(ROBOT_PACKED);   // Pack for storage
 
 ```cpp
 if (state_controller.isTransitioning()) {
-    TransitionProgress progress = state_controller.getTransitionProgress();
-    Serial.println("Progress: " + String(progress.completion_percentage) + "%");
-
-    if (progress.has_error) {
-        Serial.println("Error: " + progress.error_message);
+    Serial.println(state_controller.getDiagnosticInfo());
+    if (state_controller.hasErrors()) {
+        Serial.println("Error: " + state_controller.getLastErrorMessage());
     }
 }
 ```
@@ -113,8 +113,8 @@ if (state_controller.isTransitioning()) {
 ```cpp
 if (state_controller.isReadyForOperation()) {
     // Set linear and angular velocity
-    Eigen::Vector2f linear_vel(30.0f, 10.0f);  // x=30mm/s, y=10mm/s
-    float angular_vel = 15.0f;                  // 15°/s rotation
+    Eigen::Vector2d linear_vel(30.0, 10.0);  // x=30mm/s, y=10mm/s
+    double angular_vel = 15.0;                // 15°/s rotation
 
     state_controller.setDesiredVelocity(linear_vel, angular_vel);
 }
@@ -124,7 +124,7 @@ if (state_controller.isReadyForOperation()) {
 
 ```cpp
 // Enable cruise control with constant velocity
-Eigen::Vector3f cruise_velocity(25.0f, 0.0f, 10.0f); // linear_x, linear_y, angular_z
+Eigen::Vector3d cruise_velocity(25.0, 0.0, 10.0); // linear_x, linear_y, angular_z
 state_controller.setCruiseControlMode(CRUISE_CONTROL_ON, cruise_velocity);
 
 // Disable cruise control
@@ -151,8 +151,8 @@ state_controller.setPosingMode(POSING_PITCH_ROLL); // Pitch-roll rotation
 state_controller.setPosingMode(POSING_Z_YAW);      // Z translation + yaw
 
 // Set desired pose
-Eigen::Vector3f position(10.0f, 5.0f, -5.0f);      // mm
-Eigen::Vector3f orientation(5.0f, -3.0f, 15.0f);   // degrees
+Eigen::Vector3d position(10.0, 5.0, -5.0);      // mm
+Eigen::Vector3d orientation(5.0, -3.0, 15.0);   // degrees
 state_controller.setDesiredPose(position, orientation);
 
 // Reset pose
@@ -168,7 +168,7 @@ state_controller.setPosingMode(POSING_NONE);
 // Set individual leg to manual mode
 if (state_controller.setLegState(0, LEG_MANUAL)) {
     // Control leg tip velocity
-    Eigen::Vector3f tip_velocity(10.0f, 0.0f, 5.0f); // mm/s
+    Eigen::Vector3d tip_velocity(10.0, 0.0, 5.0); // mm/s
     state_controller.setLegTipVelocity(0, tip_velocity);
 
     // Return to walking mode
@@ -181,13 +181,13 @@ if (state_controller.setLegState(0, LEG_MANUAL)) {
 ```cpp
 // Check individual leg states
 for (int i = 0; i < 6; i++) {
-    AdvancedLegState leg_state = state_controller.getLegState(i);
+    LegState leg_state = state_controller.getLegState(i);
     Serial.println("Leg " + String(i) + " state: " + String(leg_state));
 }
 
 // Check manual leg count
 int manual_count = state_controller.getManualLegCount();
-Serial.println("Manual legs: " + String(manual_count) + "/" + String(MAX_MANUAL_LEGS));
+Serial.println("Manual legs: " + String(manual_count) + "/2");
 ```
 
 ## State Monitoring
@@ -211,7 +211,7 @@ void printSystemStatus() {
 
 ```cpp
 // Check for state controller errors
-if (state_controller.hasError()) {
+if (state_controller.hasErrors()) {
     String error_msg = state_controller.getLastErrorMessage();
     Serial.println("State Controller Error: " + error_msg);
 
@@ -292,40 +292,38 @@ void onStateTransition(RobotState from_state, RobotState to_state) {
 
 ### 1. State Machine Safety
 
--   Always check `isReadyForOperation()` before commanding movement
--   Use transition progress monitoring for time-critical operations
--   Implement proper error handling for all state changes
+- Always check `isReadyForOperation()` before commanding movement
+- Use transition progress monitoring for time-critical operations
+- Implement proper error handling for all state changes
 
 ### 2. Timing Considerations
 
--   Call `update()` at consistent intervals (recommended: 50Hz)
--   Allow sufficient time for state transitions to complete
--   Use transition timeouts to prevent hanging states
+- Call `update()` at consistent intervals (recommended: 50Hz)
+- Allow sufficient time for state transitions to complete
+- Use transition timeouts to prevent hanging states
 
 ### 3. Resource Management
 
--   Limit manual leg control to MAX_MANUAL_LEGS (default: 2)
--   Monitor system resources during complex operations
--   Implement graceful degradation for sensor failures
+- Limit manual leg control to `StateMachineConfig::max_manual_legs` (default: 2)
+- Monitor system resources during complex operations
+- Implement graceful degradation for sensor failures
 
 ### 4. Integration Testing
 
--   Test all state transitions systematically
--   Validate emergency stop functionality
--   Verify pose and velocity limits are respected
+- Test all state transitions systematically
+- Validate emergency stop functionality
+- Verify pose and velocity limits are respected
 
 ## Troubleshooting
 
 ### Common Issues
 
 1. **State Transitions Fail**
-
     - Check if transition is valid using `isValidStateTransition()`
     - Ensure locomotion system is initialized and enabled
     - Verify joint limits are properly configured
 
 2. **Manual Leg Control Not Working**
-
     - Confirm robot is in ROBOT_RUNNING state
     - Check if maximum manual leg count is exceeded
     - Verify leg index is valid (0-5)
@@ -340,14 +338,9 @@ void onStateTransition(RobotState from_state, RobotState to_state) {
 Enable debug logging for detailed state machine information:
 
 ```cpp
-// Debug state transitions
-state_controller.setDebugOutput(true);
-
-// Monitor transition progress
+// Monitor transition state
 if (state_controller.isTransitioning()) {
-    TransitionProgress progress = state_controller.getTransitionProgress();
-    Serial.println("Step " + String(progress.current_step) +
-                  "/" + String(progress.total_steps));
+    Serial.println(state_controller.getDiagnosticInfo());
 }
 ```
 
@@ -355,47 +348,47 @@ if (state_controller.isTransitioning()) {
 
 ### Custom State Sequences
 
--   Implement custom startup/shutdown sequences
--   Define application-specific state transitions
--   Create complex choreographed movements
+- Implement custom startup/shutdown sequences
+- Define application-specific state transitions
+- Create complex choreographed movements
 
 ### Sensor Integration
 
--   Use FSR data for ground contact detection
--   Integrate IMU feedback for stability control
--   Implement terrain adaptation algorithms
+- Use FSR data for ground contact detection
+- Integrate IMU feedback for stability control
+- Implement terrain adaptation algorithms
 
 ### Performance Optimization
 
--   Tune state machine timing parameters
--   Optimize transition sequences for speed
--   Balance safety checks with performance requirements
+- Tune state machine timing parameters
+- Optimize transition sequences for speed
+- Balance safety checks with performance requirements
 
 ## API Quick Reference
 
 ### Core State Control
 
--   `requestSystemState(SystemState)` - Request system state change
--   `requestRobotState(RobotState)` - Request robot state change
--   `isReadyForOperation()` - Check if robot ready for commands
+- `requestSystemState(SystemState)` - Request system state change
+- `requestRobotState(RobotState)` - Request robot state change
+- `isReadyForOperation()` - Check if robot ready for commands
 
 ### Motion Control
 
--   `setDesiredVelocity(linear, angular)` - Set movement velocity
--   `setDesiredPose(position, orientation)` - Set body pose
--   `setCruiseControlMode(mode, velocity)` - Configure cruise control
+- `setDesiredVelocity(linear, angular)` - Set movement velocity
+- `setDesiredPose(position, orientation)` - Set body pose
+- `setCruiseControlMode(mode, velocity)` - Configure cruise control
 
 ### Leg Control
 
--   `setLegState(leg_index, state)` - Set individual leg state
--   `setLegTipVelocity(leg_index, velocity)` - Control leg tip movement
--   `getManualLegCount()` - Get number of manual legs
+- `setLegState(leg_index, state)` - Set individual leg state
+- `setLegTipVelocity(leg_index, velocity)` - Control leg tip movement
+- `getManualLegCount()` - Get number of manual legs
 
 ### Status Monitoring
 
--   `getSystemState()`, `getRobotState()`, `getWalkState()` - Get current states
--   `isTransitioning()` - Check if state transition in progress
--   `getTransitionProgress()` - Get detailed transition information
--   `hasError()`, `getLastErrorMessage()` - Error status and messages
+- `getSystemState()`, `getRobotState()`, `getWalkState()` - Get current states
+- `isTransitioning()` - Check if state transition in progress
+- `getDiagnosticInfo()` - Get formatted diagnostic information
+- `hasErrors()`, `getLastErrorMessage()` - Error status and messages
 
 This comprehensive state machine provides all the functionality of OpenSHC's complex state management system while integrating seamlessly with the HexaMotion architecture.

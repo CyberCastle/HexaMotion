@@ -65,8 +65,8 @@ locomotion_system.resetSmoothMovement();
 
 ```cpp
 // Uses smooth trajectory automatically (recommended)
-Eigen::Vector3f position(0, 0, 120.0f);
-Eigen::Vector3f orientation(0, 10.0f, 0);
+Eigen::Vector3d position(0.0, 0.0, 120.0);
+Eigen::Vector3d orientation(0.0, 10.0, 0.0);
 locomotion_system.setBodyPose(position, orientation);
 ```
 
@@ -100,22 +100,22 @@ This implementation provides equivalent functionality to OpenSHC's pose interpol
 
 ### Interpolation Speed
 
--   **0.01-0.05**: Very slow, ultra-smooth movement
--   **0.05-0.15**: Smooth movement (recommended range)
--   **0.15-0.30**: Moderate speed
--   **0.30-1.00**: Fast movement, less smooth
+- **0.01-0.05**: Very slow, ultra-smooth movement
+- **0.05-0.15**: Smooth movement (recommended range)
+- **0.15-0.30**: Moderate speed
+- **0.30-1.00**: Fast movement, less smooth
 
 ### Maximum Steps
 
--   **5-10**: Fast but potentially jerky
--   **15-25**: Balanced (recommended range)
--   **25-50**: Very smooth but slower response
+- **5-10**: Fast but potentially jerky
+- **15-25**: Balanced (recommended range)
+- **25-50**: Very smooth but slower response
 
 ### Position Tolerance
 
--   **0.5-2.0mm**: Precise positioning
--   **2.0-5.0mm**: Normal use (recommended)
--   **5.0+mm**: Fast completion, less precise
+- **0.5-2.0mm**: Precise positioning
+- **2.0-5.0mm**: Normal use (recommended)
+- **5.0+mm**: Fast completion, less precise
 
 ## Example Usage Patterns
 
@@ -132,7 +132,8 @@ void setup() {
     params.smooth_trajectory.max_interpolation_steps = 20;
 
     locomotion_system.setParams(params);
-    locomotion_system.initialize(&imu, &fsr, &servos);
+    BodyPoseConfiguration body_pose_config = getDefaultBodyPoseConfig(params);
+    locomotion_system.initialize(&imu, &fsr, &servos, body_pose_config);
 }
 ```
 
@@ -144,7 +145,7 @@ void demonstrateSmoothMovement() {
     locomotion_system.configureSmoothMovement(true, 0.08f, 30);
 
     // Perform smooth pose changes
-    locomotion_system.setBodyPose(Eigen::Vector3f(0, 0, 120), Eigen::Vector3f(0, 0, 0));
+    locomotion_system.setBodyPose(Eigen::Vector3d(0.0, 0.0, 120.0), Eigen::Vector3d(0.0, 0.0, 0.0));
 
     // Wait for completion
     while (locomotion_system.isSmoothMovementInProgress()) {
@@ -153,7 +154,7 @@ void demonstrateSmoothMovement() {
     }
 
     // Next pose change will start from current servo positions
-    locomotion_system.setBodyPose(Eigen::Vector3f(0, 0, 80), Eigen::Vector3f(0, 15, 0));
+    locomotion_system.setBodyPose(Eigen::Vector3d(0.0, 0.0, 80.0), Eigen::Vector3d(0.0, 15.0, 0.0));
 }
 ```
 
@@ -207,23 +208,23 @@ locomotion_system.setBodyPoseImmediate(position, orientation);
 
 ### Movement Too Slow
 
--   Increase `interpolation_speed` (0.2-0.5)
--   Reduce `max_interpolation_steps` (10-15)
+- Increase `interpolation_speed` (0.2-0.5)
+- Reduce `max_interpolation_steps` (10-15)
 
 ### Movement Too Jerky
 
--   Decrease `interpolation_speed` (0.05-0.1)
--   Increase `max_interpolation_steps` (25-40)
+- Decrease `interpolation_speed` (0.05-0.1)
+- Increase `max_interpolation_steps` (25-40)
 
 ### Trajectory Not Starting
 
--   Verify `use_current_servo_positions = true`
--   Check that servo interface returns valid positions
--   Ensure `enable_pose_interpolation = true`
+- Verify `use_current_servo_positions = true`
+- Check that servo interface returns valid positions
+- Ensure `enable_pose_interpolation = true`
 
 ### Unexpected Behavior
 
--   Call `resetSmoothMovement()` to clear trajectory state
--   Use `setBodyPoseImmediate()` for troubleshooting
+- Call `resetSmoothMovement()` to clear trajectory state
+- Use `setBodyPoseImmediate()` for troubleshooting
 
 This feature represents a significant improvement in robot movement quality and brings HexaMotion's behavior closer to professional robotics platforms like OpenSHC.

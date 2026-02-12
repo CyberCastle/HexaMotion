@@ -10,15 +10,15 @@ The cruise control functionality in HexaMotion has been enhanced to be equivalen
 
 **Before:**
 
--   Only used `cruise_velocity_.x()` for forward movement
--   Ignored Y-axis and angular velocity components
--   Used separate method calls for different movement types
+- Only used `cruise_velocity_.x()` for forward movement
+- Ignored Y-axis and angular velocity components
+- Used separate method calls for different movement types
 
 **After:**
 
--   Uses all three velocity components (x, y, angular_z)
--   Employs `planGaitSequence(vx, vy, omega)` for combined movement
--   Equivalent to OpenSHC's `walker_->updateWalk(linear_velocity_input_, angular_velocity_input_)`
+- Uses all three velocity components (x, y, angular_z)
+- Employs `planGaitSequence(vx, vy, omega)` for combined movement
+- Equivalent to OpenSHC's `walker_->updateWalk(linear_velocity_input_, angular_velocity_input_)`
 
 ### 2. Automatic Velocity Capture
 
@@ -53,18 +53,18 @@ struct StateMachineConfig {
 
 **Automatic Expiration:**
 
--   Monitors cruise control duration
--   Automatically disables when time limit is reached
--   Equivalent to OpenSHC's `cruise_control_time_limit` parameter
+- Monitors cruise control duration
+- Automatically disables when time limit is reached
+- Equivalent to OpenSHC's `cruise_control_time_limit` parameter
 
 ### 4. Enhanced Status Monitoring
 
 **New Methods Added:**
 
--   `getCruiseVelocity()` - Get current cruise velocity
--   `getCruiseStartTime()` - Get start time
--   `getCruiseRemainingTime()` - Get remaining time before expiration
--   `isCruiseControlActive()` - Check if cruise control is active and valid
+- `getCruiseVelocity()` - Get current cruise velocity
+- `getCruiseStartTime()` - Get start time
+- `getCruiseRemainingTime()` - Get remaining time before expiration
+- `isCruiseControlActive()` - Check if cruise control is active and valid
 
 ## OpenSHC Equivalence Mapping
 
@@ -82,7 +82,7 @@ struct StateMachineConfig {
 
 ```cpp
 // Set specific cruise velocity
-Eigen::Vector3f velocity(100.0f, 50.0f, 15.0f); // x, y, angular_z
+Eigen::Vector3d velocity(100.0, 50.0, 15.0); // x, y, angular_z
 state_controller.setCruiseControlMode(CRUISE_CONTROL_ON, velocity);
 ```
 
@@ -90,7 +90,7 @@ state_controller.setCruiseControlMode(CRUISE_CONTROL_ON, velocity);
 
 ```cpp
 // Set current movement as cruise velocity
-state_controller.setDesiredVelocity(Eigen::Vector2f(80.0f, -30.0f), 10.0f);
+state_controller.setDesiredVelocity(Eigen::Vector2d(80.0, -30.0), 10.0);
 state_controller.setCruiseControlMode(CRUISE_CONTROL_ON); // Uses current velocity
 ```
 
@@ -128,9 +128,9 @@ The implementation maintains the same thread safety characteristics as the origi
 
 ### Performance Impact
 
--   **Minimal Overhead:** Time checks only performed when cruise control is active
--   **Improved Efficiency:** Single `planGaitSequence()` call instead of multiple separate movement commands
--   **Memory Efficient:** Reuses existing data structures with minimal additions
+- **Minimal Overhead:** Time checks only performed when cruise control is active
+- **Improved Efficiency:** Single `planGaitSequence()` call instead of multiple separate movement commands
+- **Memory Efficient:** Reuses existing data structures with minimal additions
 
 ## Compatibility
 
@@ -140,9 +140,9 @@ This implementation maintains backward compatibility with existing code while ad
 
 The enhanced cruise control functionality can be tested using:
 
--   `examples/cruise_control_example.ino` - Comprehensive example
--   Unit tests in `tests/` directory
--   Integration with existing state machine tests
+- Integration tests and project-specific application loops
+- Unit tests in `tests/` directory
+- Integration with existing state machine tests
 
 ## Future Enhancements
 

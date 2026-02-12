@@ -1,107 +1,107 @@
-# Aplicaciones Completas del BNO055 en HexaMotion
+# Complete BNO055 Applications in HexaMotion
 
-## Introducción
+## Introduction
 
-Los datos de posicionamiento absoluto del BNO055 **NO SE LIMITAN** solo al sistema de auto-pose. Este sensor avanzado proporciona información valiosa que se puede aprovechar en **múltiples componentes** de HexaMotion para mejorar significativamente el rendimiento del robot hexápodo.
+BNO055 absolute positioning data is **NOT LIMITED** to the auto-pose system. This advanced sensor provides valuable information that can be used in **multiple HexaMotion components** to significantly improve hexapod performance.
 
-## 🎯 **Aplicaciones Actuales Implementadas**
+## 🎯 **Currently Implemented Applications**
 
-### **1. Auto-Posing (Control de Postura Corporal)**
+### **1. Auto-Posing (Body Posture Control)**
 
-**Archivo:** `imu_auto_pose.h/cpp`
+**File:** `imu_auto_pose.h/cpp`
 
-**Datos BNO055 utilizados:**
+**BNO055 data used:**
 
--   **Orientación absoluta** (roll, pitch, yaw) con compensación magnética
--   **Aceleración lineal** (gravedad ya removida) para mejor estimación
--   **Estado de calibración** para confianza en los datos
--   **Cuaterniones** para cálculos de rotación sin gimbal lock
+- **Absolute orientation** (roll, pitch, yaw) with magnetic compensation
+- **Linear acceleration** (gravity removed) for better estimation
+- **Calibration status** for data confidence
+- **Quaternions** for rotation calculations without gimbal lock
 
-**Ventajas sobre IMUs básicos:**
+**Advantages over basic IMUs:**
 
--   Mayor precisión en orientación absoluta
--   Sin deriva a largo plazo gracias a referencia magnética
--   Respuesta más rápida con datos ya procesados
--   Menor carga computacional
+- Higher absolute-orientation precision
+- No long-term drift due to magnetic reference
+- Faster response with pre-processed data
+- Lower computational load
 
-### **2. Terrain Adaptation (Adaptación de Terreno)**
+### **2. Terrain Adaptation**
 
-**Archivo:** `terrain_adaptation.h/cpp`
+**File:** `terrain_adaptation.h/cpp`
 
-**Datos BNO055 utilizados:**
+**BNO055 data used:**
 
 ```cpp
 void TerrainAdaptation::update(IFSRInterface *fsr_interface, IIMUInterface *imu_interface) {
     IMUData imu_data = imu_interface->readIMU();
     if (imu_data.has_absolute_capability) {
-        // Usar orientación absoluta para estimación precisa del plano de caminata
+        // Use absolute orientation for precise walking-plane estimation
         updateWalkPlaneFromAbsoluteOrientation(imu_data);
-        // Usar aceleración lineal para detección de vibración/irregularidades
+        // Use linear acceleration to detect vibration/irregularities
         updateTerrainRoughnessFromLinearAccel(imu_data);
     }
 }
 ```
 
-**Aplicaciones específicas:**
+**Specific applications:**
 
--   **Estimación del plano de caminata** más precisa usando orientación absoluta
--   **Detección de inclinación del terreno** con referencia magnética
--   **Análisis de rugosidad del terreno** usando aceleración lineal
--   **Compensación gravitacional** automática en cálculos
+- More precise walking-plane estimation using absolute orientation
+- Terrain tilt detection with magnetic reference
+- Terrain roughness analysis using linear acceleration
+- Automatic gravity compensation in calculations
 
-### **3. Gait Pattern Selection (Selección de Patrones de Marcha)**
+### **3. Gait Pattern Selection**
 
-**Archivo:** `locomotion_system.cpp`
+**File:** `locomotion_system.cpp`
 
-**Implementación actual:**
+**Current implementation:**
 
 ```cpp
 void LocomotionSystem::calculateAdaptivePhaseOffsets() {
     IMUData imu_data = imu_interface->readIMU();
 
     if (imu_data.has_absolute_capability) {
-        // Usar orientación absoluta para cálculo más preciso
+        // Use absolute orientation for more accurate calculation
         float tilt_magnitude = sqrt(
             imu_data.absolute_data.absolute_roll * imu_data.absolute_data.absolute_roll +
             imu_data.absolute_data.absolute_pitch * imu_data.absolute_data.absolute_pitch
         );
     } else {
-        // Fallback a datos básicos
+        // Fallback to basic data
         float tilt_magnitude = sqrt(imu_data.roll * imu_data.roll + imu_data.pitch * imu_data.pitch);
     }
 
     if (tilt_magnitude > 10.0f) {
-        // Terreno empinado - usar patrón tripod para estabilidad
+        // Steep terrain: use tripod pattern for stability
         adaptToTripodPattern();
     } else {
-        // Terreno normal - usar patrón wave para eficiencia
+        // Normal terrain: use wave pattern for efficiency
         adaptToWavePattern();
     }
 }
 ```
 
-**Ventajas con BNO055:**
+**Advantages with BNO055:**
 
--   **Detección más precisa de inclinación** sin deriva
--   **Transición suave entre patrones** basada en datos confiables
--   **Adaptación proactiva** usando datos predictivos
+- More accurate tilt detection without drift
+- Smooth pattern transitions based on reliable data
+- Proactive adaptation using predictive signals
 
-### **4. Stability Assessment (Evaluación de Estabilidad)**
+### **4. Stability Assessment**
 
-**Archivo:** `locomotion_system.cpp`
+**File:** `locomotion_system.cpp`
 
-**Aplicación actual:**
+**Current application:**
 
 ```cpp
 bool LocomotionSystem::shouldAdaptGaitPattern() {
     IMUData imu_data = imu_interface->readIMU();
 
     if (imu_data.has_absolute_capability) {
-        // Análisis avanzado de estabilidad
+        // Advanced stability analysis
         float accel_variance = calculateLinearAccelVariance(imu_data.absolute_data);
         float orientation_confidence = imu_data.absolute_data.calibration_status / 3.0f;
 
-        // Índice de estabilidad mejorado
+        // Improved stability index
         stability_index = calculateStabilityWithAbsoluteData(imu_data);
     }
 
@@ -109,23 +109,23 @@ bool LocomotionSystem::shouldAdaptGaitPattern() {
 }
 ```
 
-**Métricas mejoradas:**
+**Improved metrics:**
 
--   **Varianza de aceleración lineal** para detectar vibración
--   **Confianza en orientación** basada en calibración
--   **Análisis de quaterniones** para rotaciones complejas
+- Linear-acceleration variance to detect vibration
+- Orientation confidence based on calibration
+- Quaternion-based analysis for complex rotations
 
-## 🚀 **Aplicaciones Potenciales Futuras**
+## 🚀 **Potential Future Applications**
 
-### **5. Navegación Inercial**
+### **5. Inertial Navigation**
 
-**Datos disponibles:**
+**Available data:**
 
--   Aceleración lineal (sin gravedad) para estimación de velocidad
--   Orientación absoluta para navegación dead-reckoning
--   Velocidad angular para predicción de trayectoria
+- Linear acceleration (gravity removed) for velocity estimation
+- Absolute orientation for dead-reckoning navigation
+- Angular velocity for trajectory prediction
 
-**Implementación sugerida:**
+**Suggested implementation:**
 
 ```cpp
 class InertialNavigation {
@@ -136,31 +136,31 @@ private:
 public:
     void update(const IMUData& imu_data) {
         if (imu_data.has_absolute_capability) {
-            // Integrar aceleración lineal para velocidad
+            // Integrate linear acceleration for velocity
             estimated_velocity_ += Point3D(
                 imu_data.absolute_data.linear_accel_x,
                 imu_data.absolute_data.linear_accel_y,
                 imu_data.absolute_data.linear_accel_z
             ) * dt;
 
-            // Integrar velocidad para posición
+            // Integrate velocity for position
             estimated_position_ += estimated_velocity_ * dt;
         }
     }
 };
 ```
 
-### **6. Motion Analysis (Análisis de Movimiento)**
+### **6. Motion Analysis**
 
-**Aplicaciones:**
+**Applications:**
 
--   **Análisis de eficiencia de marcha** usando aceleración lineal
--   **Detección de patrones de movimiento anómalos**
--   **Optimización de trayectorias** basada en datos reales
+- Gait-efficiency analysis using linear acceleration
+- Detection of anomalous motion patterns
+- Trajectory optimization based on real data
 
-### **7. Vibration Detection (Detección de Vibración)**
+### **7. Vibration Detection**
 
-**Implementación:**
+**Implementation:**
 
 ```cpp
 class VibrationDetector {
@@ -180,108 +180,108 @@ public:
 };
 ```
 
-### **8. Fall Detection (Detección de Caídas)**
+### **8. Fall Detection**
 
-**Características:**
+**Features:**
 
--   Detección de aceleración anormal
--   Orientación súbita inesperada
--   Activación de rutinas de emergencia
+- Abnormal-acceleration detection
+- Unexpected sudden orientation changes
+- Emergency routine activation
 
-### **9. Adaptive Control (Control Adaptativo)**
+### **9. Adaptive Control**
 
-**Aplicaciones:**
+**Applications:**
 
--   **Ajuste dinámico de PID** basado en condiciones del terreno
--   **Compensación predictiva** usando datos de orientación
--   **Control feedforward** usando aceleración lineal
+- Dynamic PID tuning based on terrain conditions
+- Predictive compensation using orientation data
+- Feedforward control using linear acceleration
 
-## 📊 **Comparación: IMU Básico vs BNO055**
+## 📊 **Comparison: Basic IMU vs BNO055**
 
-| Funcionalidad            | IMU Básico | BNO055 | Mejora                      |
-| ------------------------ | ---------- | ------ | --------------------------- |
-| **Auto-posing**          | ✓          | ✓✓✓    | Mayor precisión, sin deriva |
-| **Terrain Adaptation**   | ✓          | ✓✓✓    | Orientación absoluta        |
-| **Gait Selection**       | ✓          | ✓✓     | Detección más precisa       |
-| **Stability Assessment** | ✓          | ✓✓     | Métricas adicionales        |
-| **Navegación Inercial**  | ❌         | ✓✓✓    | Aceleración sin gravedad    |
-| **Motion Analysis**      | ❌         | ✓✓     | Datos de calidad superior   |
-| **Vibration Detection**  | ❌         | ✓✓     | Aceleración lineal          |
-| **Fall Detection**       | ❌         | ✓✓     | Orientación absoluta        |
+| Functionality            | Basic IMU | BNO055 | Improvement                |
+| ------------------------ | --------- | ------ | -------------------------- |
+| **Auto-posing**          | ✓         | ✓✓✓    | Higher precision, no drift |
+| **Terrain Adaptation**   | ✓         | ✓✓✓    | Absolute orientation       |
+| **Gait Selection**       | ✓         | ✓✓     | More precise detection     |
+| **Stability Assessment** | ✓         | ✓✓     | Additional metrics         |
+| **Inertial Navigation**  | ❌        | ✓✓✓    | Gravity-free acceleration  |
+| **Motion Analysis**      | ❌        | ✓✓     | Higher quality data        |
+| **Vibration Detection**  | ❌        | ✓✓     | Linear acceleration        |
+| **Fall Detection**       | ❌        | ✓✓     | Absolute orientation       |
 
-## 🔧 **Integración Práctica**
+## 🔧 **Practical Integration**
 
-### **Configuración Recomendada**
+### **Recommended Setup**
 
 ```cpp
 void setupBNO055Integration() {
-    // 1. Configurar BNO055 para máximo aprovechamiento
+    // 1. Configure BNO055 for maximum usage
     bno055.setIMUMode(IMU_MODE_ABSOLUTE_POS);
 
-    // 2. Configurar auto-pose para usar datos absolutos
+    // 2. Configure auto-pose to use absolute data
     auto_pose->configureIMUMode(true, true);
 
-    // 3. Habilitar terrain adaptation avanzado
+    // 3. Enable advanced terrain adaptation
     terrain_adaptation->enableAbsolutePositioning(true);
 
-    // 4. Configurar gait selection con datos absolutos
+    // 4. Configure gait selection with absolute data
     locomotion_system->enableAdvancedGaitSelection(true);
 
-    // 5. Activar análisis de estabilidad mejorado
+    // 5. Enable enhanced stability analysis
     locomotion_system->enableAdvancedStabilityAnalysis(true);
 }
 ```
 
-### **Monitoreo en Tiempo Real**
+### **Real-Time Monitoring**
 
 ```cpp
 void monitorBNO055Performance() {
     IMUData data = bno055.readIMU();
 
     if (data.has_absolute_capability) {
-        // Monitorear calibración
+        // Monitor calibration
         if (data.absolute_data.calibration_status < 3) {
             Serial.println("WARNING: BNO055 needs calibration");
         }
 
-        // Monitorear calidad de datos
+        // Monitor data quality
         if (!data.absolute_data.absolute_orientation_valid) {
             Serial.println("WARNING: Absolute orientation not valid");
         }
 
-        // Estadísticas de uso
+        // Usage statistics
         logUsageStatistics(data);
     }
 }
 ```
 
-## 📈 **Beneficios Cuantificables**
+## 📈 **Quantifiable Benefits**
 
-### **Rendimiento Mejorado:**
+### **Improved Performance:**
 
--   **30-50% mejor precisión** en estimación de orientación
--   **20-30% reducción** en carga computacional para cálculos de orientación
--   **40-60% mejor detección** de condiciones de terreno
--   **Eliminación completa** de deriva en orientación a largo plazo
+- **30-50% better accuracy** in orientation estimation
+- **20-30% reduction** in computational load for orientation calculations
+- **40-60% better detection** of terrain conditions
+- **Complete elimination** of long-term orientation drift
 
-### **Funcionalidades Nuevas:**
+### **New Functionalities:**
 
--   **Navegación inercial** para estimación de posición
--   **Detección avanzada de vibración** y anomalías
--   **Análisis predictivo** de estabilidad
--   **Control adaptativo** basado en condiciones reales
+- **Inertial navigation** for position estimation
+- **Advanced vibration and anomaly detection**
+- **Predictive stability analysis**
+- **Adaptive control** based on real operating conditions
 
-## 🎯 **Conclusión**
+## 🎯 **Conclusion**
 
-El BNO055 **NO es solo para auto-pose**. Sus datos de posicionamiento absoluto, aceleración lineal, cuaterniones y estado de calibración pueden ser aprovechados por **prácticamente todos los sistemas** de HexaMotion:
+The BNO055 is **not only for auto-pose**. Its absolute orientation, linear acceleration, quaternion data, and calibration status can be leveraged by **almost every HexaMotion subsystem**:
 
-1. ✅ **Auto-posing** - Mayor precisión y estabilidad
-2. ✅ **Terrain Adaptation** - Análisis más preciso del terreno
-3. ✅ **Gait Selection** - Decisiones basadas en datos confiables
-4. ✅ **Stability Assessment** - Métricas avanzadas de estabilidad
-5. 🚀 **Navegación Inercial** - Nueva funcionalidad habilitada
-6. 🚀 **Motion Analysis** - Optimización de movimientos
-7. 🚀 **Vibration Detection** - Diagnóstico de problemas mecánicos
-8. 🚀 **Fall Detection** - Seguridad mejorada
+1. ✅ **Auto-posing** - Better precision and stability
+2. ✅ **Terrain Adaptation** - More accurate terrain analysis
+3. ✅ **Gait Selection** - Decisions based on reliable data
+4. ✅ **Stability Assessment** - Advanced stability metrics
+5. 🚀 **Inertial Navigation** - New capability enabled
+6. 🚀 **Motion Analysis** - Movement optimization
+7. 🚀 **Vibration Detection** - Mechanical issue diagnostics
+8. 🚀 **Fall Detection** - Improved safety
 
-**La inversión en un BNO055 se amortiza rápidamente** por las múltiples mejoras y nuevas capacidades que habilita en todo el sistema HexaMotion.
+**Investing in a BNO055 pays off quickly** through multiple improvements and additional capabilities across the entire HexaMotion system.
