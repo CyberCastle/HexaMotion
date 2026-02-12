@@ -10,8 +10,8 @@ HexaMotion is a 1:1 port of OpenSHC without ROS support. The goal is to run Open
 
 Key differences from OpenSHC:
 
-- **Orchestration**: `LocomotionSystem` orchestrates control classes (`WalkController`, `BodyPoseController`, etc.), analogous to the ROS-side orchestration done by OpenSHC's `StateController`.
-- **State Machine**: HexaMotion's `StateController` focuses on FSM logic; OpenSHC's `StateController` handled FSM logic plus ROS orchestration, publishers/subscribers, and param dynamics.
+- **Orchestration (1:1 functional parity target)**: HexaMotion's `StateController` preserves OpenSHC's functional orchestration flow (state transitions, running loop sequencing, gait/pose/manual leg coordination), excluding ROS transport concerns.
+- **ROS replacement layer**: `LocomotionSystem` acts as a wrapper/facade around `StateController` and replaces the external ROS graph/script role by routing external inputs to controller APIs and executing low-level hardware/control pipeline steps (sensors, walk update, IK, servo output).
 - **Model Structure**: `RobotModel` in HexaMotion is primarily a kinematics/parameters provider and does not own `Leg` objects directly. `Leg` objects are owned by `LocomotionSystem`.
 - **Configuration**: No YAML; everything is configured through the `Parameters` structure and factories.
 - **ROS**: Completely removed. No `ros::Publisher`, `ros::Subscriber`, or `tf` dependencies. Debugging hooks (Visualiser) are stripped or replaced with telemetry.
@@ -229,33 +229,33 @@ Physical parameters and conventions:
 
 ### 5. StateController (OpenSHC) vs HexaMotion StateController / LocomotionSystem
 
-**Status**: Split into two classes — Logic Preserved
+**Status**: Wrapper + Context split — Functional orchestration aligned
 
 #### Method Mapping
 
-| OpenSHC StateController Method       | HexaMotion Equivalent                                           | Location                     | Status                                                       |
-| :----------------------------------- | :-------------------------------------------------------------- | :--------------------------- | :----------------------------------------------------------- |
-| `StateController()` (ctor)           | `StateController(LocomotionSystem&, const StateMachineConfig&)` | `state_controller.h`         | ✅                                                           |
-| `init()`                             | `StateController::initialize(const BodyPoseConfiguration&)`     | `state_controller.h`         | ✅                                                           |
-| `initParameters()`                   | —                                                               | —                            | **Removed** (no ROS param server). Factory pattern replaces. |
-| `initGaitParameters()`               | `GaitConfigFactory::create*Config()`                            | `gait_config_factory.h`      | ✅ (redesigned).                                             |
-| `initAutoPoseParameters()`           | `BodyPoseConfigFactory`                                         | `body_pose_config_factory.h` | ✅ (redesigned).                                             |
-| `loop()`                             | `StateController::update(double)`                               | `state_controller.h`         | ✅                                                           |
-| `transitionRobotState()`             | `StateController::handleRobotStateTransition()` (private)       | `state_controller.cpp`       | ✅                                                           |
-| `runningState()`                     | Split: `updateVelocityControl()` + `updatePoseControl()`        | `state_controller.cpp`       | ✅                                                           |
-| `adjustParameter()`                  | —                                                               | —                            | **Gap**: No dynamic parameter adjustment.                    |
-| `changeGait()`                       | `StateController::changeGait(GaitType)`                         | `state_controller.h`         | ✅                                                           |
-| `legStateToggle()`                   | `requestLegToggle(int)` + `handleLegStateTransitions()`         | `state_controller.h`         | ✅ (split).                                                  |
-| `executePlan()`                      | —                                                               | —                            | **Gap**: No external planner (by design).                    |
-| `publishDesiredJointState()`         | `LocomotionSystem::publishJointAnglesToServos()`                | `locomotion_system.cpp`      | ✅ (via IServoInterface).                                    |
-| `publishLegState()`                  | —                                                               | —                            | **Removed** (no ROS).                                        |
-| `publishVelocity()`                  | —                                                               | —                            | **Removed** (no ROS).                                        |
-| `publishPose()`                      | —                                                               | —                            | **Removed** (no ROS).                                        |
-| `publishWalkspace()`                 | —                                                               | —                            | **Removed** (no ROS).                                        |
-| `publishRotationPoseError()`         | —                                                               | —                            | **Removed** (no ROS).                                        |
-| `publishFrameTransforms()`           | —                                                               | —                            | **Removed** (no ROS / TF2).                                  |
-| `generateExternalTargetTransforms()` | —                                                               | —                            | **Removed** (no TF2).                                        |
-| `RVIZDebugging()`                    | —                                                               | —                            | **Removed** (no RViz).                                       |
+| OpenSHC StateController Method       | HexaMotion Equivalent                                                                  | Location                                           | Status                                                        |
+| :----------------------------------- | :------------------------------------------------------------------------------------- | :------------------------------------------------- | :------------------------------------------------------------ |
+| `StateController()` (ctor)           | `StateController(StateControllerContext&, const StateMachineConfig&)`                  | `state_controller.h`                               | ✅ (decoupled via context interface).                         |
+| `init()`                             | `StateController::initialize(const BodyPoseConfiguration&)`                            | `state_controller.h`                               | ✅                                                            |
+| `initParameters()`                   | —                                                                                      | —                                                  | **Removed** (no ROS param server). Factory pattern replaces.  |
+| `initGaitParameters()`               | `GaitConfigFactory::create*Config()`                                                   | `gait_config_factory.h`                            | ✅ (redesigned).                                              |
+| `initAutoPoseParameters()`           | `BodyPoseConfigFactory`                                                                | `body_pose_config_factory.h`                       | ✅ (redesigned).                                              |
+| `loop()`                             | `StateController::update(double)` + `StateControllerContext::runControlPipelineStep()` | `state_controller.h`, `state_controller_context.h` | ✅ (controller orchestrates, facade executes low-level step). |
+| `transitionRobotState()`             | `StateController::handleRobotStateTransition()` (private)                              | `state_controller.cpp`                             | ✅                                                            |
+| `runningState()`                     | Split: `updateVelocityControl()` + `updatePoseControl()`                               | `state_controller.cpp`                             | ✅                                                            |
+| `adjustParameter()`                  | —                                                                                      | —                                                  | **Gap**: No dynamic parameter adjustment.                     |
+| `changeGait()`                       | `StateController::changeGait(GaitType)`                                                | `state_controller.h`                               | ✅                                                            |
+| `legStateToggle()`                   | `requestLegToggle(int)` + `handleLegStateTransitions()`                                | `state_controller.h`                               | ✅ (split).                                                   |
+| `executePlan()`                      | `StateController::executePlan()`                                                       | `state_controller.cpp`                             | **Stub**: returns "not supported" on MCU target.              |
+| `publishDesiredJointState()`         | `LocomotionSystem::publishJointAnglesToServos()`                                       | `locomotion_system.cpp`                            | ✅ (via IServoInterface).                                     |
+| `publishLegState()`                  | —                                                                                      | —                                                  | **Removed** (no ROS).                                         |
+| `publishVelocity()`                  | —                                                                                      | —                                                  | **Removed** (no ROS).                                         |
+| `publishPose()`                      | —                                                                                      | —                                                  | **Removed** (no ROS).                                         |
+| `publishWalkspace()`                 | —                                                                                      | —                                                  | **Removed** (no ROS).                                         |
+| `publishRotationPoseError()`         | —                                                                                      | —                                                  | **Removed** (no ROS).                                         |
+| `publishFrameTransforms()`           | —                                                                                      | —                                                  | **Removed** (no ROS / TF2).                                   |
+| `generateExternalTargetTransforms()` | —                                                                                      | —                                                  | **Removed** (no TF2).                                         |
+| `RVIZDebugging()`                    | —                                                                                      | —                                                  | **Removed** (no RViz).                                        |
 
 #### Callback → Direct API Mapping
 
@@ -286,33 +286,33 @@ Physical parameters and conventions:
 
 #### StateController Member Variables
 
-| OpenSHC Variable                                      | HexaMotion Equivalent                                    | Status                               |
-| :---------------------------------------------------- | :------------------------------------------------------- | :----------------------------------- |
-| `model_` (shared_ptr)                                 | `locomotion_system_` (reference)                         | ✅ (different ownership model).      |
-| `walker_` / `poser_` / `admittance_`                  | Via `LocomotionSystem` accessors                         | ✅                                   |
-| `system_state_` / `new_system_state_`                 | `current_system_state_` / `desired_system_state_`        | ✅                                   |
-| `robot_state_` / `new_robot_state_`                   | `current_robot_state_` / `desired_robot_state_`          | ✅                                   |
-| `gait_selection_`                                     | Via `WalkController` gait config                         | ✅                                   |
-| `posing_mode_`                                        | `current_posing_mode_`                                   | ✅                                   |
-| `cruise_control_mode_`                                | `current_cruise_control_mode_`                           | ✅                                   |
-| `planner_mode_`                                       | `current_planner_mode_`                                  | ✅ (stubbed).                        |
-| `parameter_selection_` / `dynamic_parameter_`         | —                                                        | **Gap**.                             |
-| `primary_leg_selection_` / `secondary_leg_selection_` | `toggle_leg_index_`                                      | ✅ (simplified to single index).     |
-| `manual_leg_count_`                                   | `manual_leg_count_`                                      | ✅                                   |
-| `cruise_control_end_time_`                            | `cruise_end_time_`                                       | ✅                                   |
-| `gait_change_flag_`                                   | In `changeGait()` flow                                   | ✅ (integrated).                     |
-| `toggle_*_leg_state_`                                 | `toggle_leg_state_pending_`                              | ✅ (one flag, not two).              |
-| `parameter_adjust_flag_`                              | —                                                        | **Gap**.                             |
-| `joint_positions_initialised_`                        | `is_initialized_`                                        | ✅                                   |
-| `transition_state_flag_`                              | `is_transitioning_`                                      | ✅                                   |
-| `target_*_acquired_` / `plan_step_`                   | —                                                        | **Gap** (no planner).                |
-| `linear_velocity_input_` / `angular_velocity_input_`  | `desired_linear_velocity_` / `desired_angular_velocity_` | ✅                                   |
-| `primary/secondary_tip_velocity_input_`               | `leg_tip_velocities_[NUM_LEGS]`                          | ✅ (per-leg array).                  |
-| `linear/angular_cruise_velocity_`                     | `cruise_velocity_` (Vector3d)                            | ✅                                   |
-| `primary/secondary_pose_input_`                       | —                                                        | **Gap** (no per-leg Cartesian pose). |
-| ROS subscribers/publishers                            | —                                                        | **Removed**.                         |
-| TF2 buffer/listener/broadcaster                       | —                                                        | **Removed**.                         |
-| `dynamic_reconfigure_server_`                         | —                                                        | **Removed**.                         |
+| OpenSHC Variable                                      | HexaMotion Equivalent                                                                 | Status                                                           |
+| :---------------------------------------------------- | :------------------------------------------------------------------------------------ | :--------------------------------------------------------------- |
+| `model_` (shared_ptr)                                 | `context_` (`StateControllerContext&`)                                                | ✅ (controller decoupled from concrete facade).                  |
+| `walker_` / `poser_` / `admittance_`                  | Via `LocomotionSystem` accessors                                                      | ✅                                                               |
+| `system_state_` / `new_system_state_`                 | `current_system_state_` / `desired_system_state_`                                     | ✅                                                               |
+| `robot_state_` / `new_robot_state_`                   | `current_robot_state_` / `desired_robot_state_`                                       | ✅                                                               |
+| `gait_selection_`                                     | Via `WalkController` gait config                                                      | ✅                                                               |
+| `posing_mode_`                                        | `current_posing_mode_`                                                                | ✅                                                               |
+| `cruise_control_mode_`                                | `current_cruise_control_mode_`                                                        | ✅                                                               |
+| `planner_mode_`                                       | `current_planner_mode_`                                                               | ✅ (stubbed).                                                    |
+| `parameter_selection_` / `dynamic_parameter_`         | —                                                                                     | **Gap**.                                                         |
+| `primary_leg_selection_` / `secondary_leg_selection_` | `toggle_leg_index_`                                                                   | ✅ (simplified to single index).                                 |
+| `manual_leg_count_`                                   | `manual_leg_count_`                                                                   | ✅                                                               |
+| `cruise_control_end_time_`                            | `cruise_end_time_`                                                                    | ✅                                                               |
+| `gait_change_flag_`                                   | In `changeGait()` flow                                                                | ✅ (integrated).                                                 |
+| `toggle_*_leg_state_`                                 | `toggle_leg_state_pending_`                                                           | ✅ (one flag, not two).                                          |
+| `parameter_adjust_flag_`                              | —                                                                                     | **Gap**.                                                         |
+| `joint_positions_initialised_`                        | `LocomotionSystem::joint_positions_initialised_` + `StateController::is_initialized_` | ✅ (split between facade hardware init and controller FSM init). |
+| `transition_state_flag_`                              | `is_transitioning_`                                                                   | ✅                                                               |
+| `target_*_acquired_` / `plan_step_`                   | —                                                                                     | **Gap** (no planner).                                            |
+| `linear_velocity_input_` / `angular_velocity_input_`  | `desired_linear_velocity_` / `desired_angular_velocity_`                              | ✅                                                               |
+| `primary/secondary_tip_velocity_input_`               | `leg_tip_velocities_[NUM_LEGS]`                                                       | ✅ (per-leg array).                                              |
+| `linear/angular_cruise_velocity_`                     | `cruise_velocity_` (Vector3d)                                                         | ✅                                                               |
+| `primary/secondary_pose_input_`                       | —                                                                                     | **Gap** (no per-leg Cartesian pose).                             |
+| ROS subscribers/publishers                            | —                                                                                     | **Removed**.                                                     |
+| TF2 buffer/listener/broadcaster                       | —                                                                                     | **Removed**.                                                     |
+| `dynamic_reconfigure_server_`                         | —                                                                                     | **Removed**.                                                     |
 
 **HexaMotion-only StateController additions** (not in OpenSHC):
 
