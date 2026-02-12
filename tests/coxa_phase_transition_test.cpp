@@ -33,9 +33,11 @@
 // --------------------------------------------------------------------------------------
 // Parámetros por defecto (pueden sobre-escribirse por CLI)
 // --------------------------------------------------------------------------------------
-static double g_test_velocity = 300.0;            // mm/s
-static int g_required_swing_transitions = 20;     // Transiciones STANCE->SWING por pata
-static int g_max_steps = 1200;                    // Límite de seguridad
+static double g_test_velocity = 300.0;        // mm/s
+static int g_required_swing_transitions = 20; // Transiciones STANCE->SWING por pata
+// Default needs to accommodate the configured transitions.
+// With StepCycle period=104, 20 transitions need ~20*104=2080 steps.
+static int g_max_steps = 2600;                    // Límite de seguridad
 static bool g_show_only_phase_transitions = true; // Modo compacto por defecto
 static double g_sym_threshold_stance_deg = 3.0;   // |sum(delta)| máximo permitido en STANCE
 static double g_sym_threshold_swing_deg = 4.0;    // |sum(delta)| máximo permitido en SWING (más tolerancia)
@@ -48,10 +50,9 @@ static int g_sym_violations_swing = 0;
 
 static void printHelpAndExit() {
     std::cout << "Uso: ./coxa_phase_transition_test [opciones]\n"
-              << "  --transitions N    Nº transiciones STANCE->SWING por pata (default 5)\n"
-              << "  --velocity V       Velocidad lineal mm/s (default 100)\n"
-              << "  --ang-vel W        Velocidad angular rad/s (default 0.25)\n"
-              << "  --max-steps M      Máx pasos simulación (default 1200)\n"
+              << "  --transitions N    Nº transiciones STANCE->SWING por pata (default 20)\n"
+              << "  --velocity V       Velocidad lineal mm/s (default 300)\n"
+              << "  --max-steps M      Máx pasos simulación (default 2600)\n"
               << "  --full             Mostrar TODAS las iteraciones\n"
               << "  --phases-only      Solo transiciones de fase (default)\n"
               << "  --help             Esta ayuda\n";
