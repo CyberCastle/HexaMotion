@@ -288,23 +288,10 @@ int main() {
 
     // First loop: Execute startup sequence with its own update cycles
     int startup_sequence_attempts = 0;
-    // Dynamic expected iterations for two-phase startup (horizontal + vertical)
-    const Parameters &startup_params = sys.getParameters();
-    double time_delta_startup = startup_params.time_delta;
-    double step_frequency_startup = startup_params.step_frequency; // configurable
-    int horiz_iters = std::max(1, (int)std::round((1.0 / step_frequency_startup) / time_delta_startup));
-    int vert_iters = std::max(1, (int)std::round((3.0 / step_frequency_startup) / time_delta_startup));
-    int expected_total_iters = horiz_iters + vert_iters;
-    const int MAX_STARTUP_SEQUENCE_ATTEMPTS = expected_total_iters + 100; // margin
-    std::cout << "Estimated startup iterations (horizontal=" << horiz_iters << ", vertical=" << vert_iters
-              << ", total=" << expected_total_iters << ")  Max attempts=" << MAX_STARTUP_SEQUENCE_ATTEMPTS << std::endl;
+    const int MAX_STARTUP_SEQUENCE_ATTEMPTS = 500;
 
-    while (sys.isStartupInProgress() && startup_sequence_attempts < MAX_STARTUP_SEQUENCE_ATTEMPTS) {
-        if (sys.executeStartupSequence()) {
-            std::cout << "Startup sequence completed successfully after " << startup_sequence_attempts << " sequence attempts." << std::endl;
-            break;
-        }
-
+    while (sys.getSystemState() != SYSTEM_RUNNING && startup_sequence_attempts < MAX_STARTUP_SEQUENCE_ATTEMPTS) {
+        sys.update();
         startup_sequence_attempts++;
 
         if (startup_sequence_attempts % 25 == 0) {
@@ -313,11 +300,12 @@ int main() {
         }
     }
 
-    if (startup_sequence_attempts >= MAX_STARTUP_SEQUENCE_ATTEMPTS) {
+    if (sys.getSystemState() != SYSTEM_RUNNING) {
         std::cerr << "ERROR: Startup sequence failed to complete after " << startup_sequence_attempts << " attempts." << std::endl;
         std::cerr << "The tripod startup sequence may require more time to coordinate leg movements." << std::endl;
         return 1;
     }
+    std::cout << "Startup sequence completed successfully after " << startup_sequence_attempts << " sequence attempts." << std::endl;
 
     std::cout << "Beginning gait analysis..." << std::endl;
     printTestHeader();
@@ -482,25 +470,17 @@ int main() {
         std::cerr << "WARNING: Failed to initiate stop walking." << std::endl;
     }
 
-    // Execute shutdown sequence to transition from RUNNING to READY
-    int shutdown_sequence_attempts = 0;
-    const int MAX_SHUTDOWN_SEQUENCE_ATTEMPTS = 100;
-
-    while (sys.isShutdownInProgress() && shutdown_sequence_attempts < MAX_SHUTDOWN_SEQUENCE_ATTEMPTS) {
-        if (sys.executeShutdownSequence()) {
-            std::cout << "Shutdown sequence completed successfully after " << shutdown_sequence_attempts << " sequence attempts." << std::endl;
-            break;
-        }
-
-        shutdown_sequence_attempts++;
-
-        if (shutdown_sequence_attempts % 10 == 0) {
-            std::cout << "Shutdown sequence attempt " << shutdown_sequence_attempts << "..." << std::endl;
-        }
+    // Run update loop to let StateController orchestrate the shutdown
+    int shutdown_attempts = 0;
+    const int MAX_SHUTDOWN_ATTEMPTS = 500;
+    while (shutdown_attempts < MAX_SHUTDOWN_ATTEMPTS && sys.getSystemState() == SYSTEM_RUNNING) {
+        sys.update();
+        shutdown_attempts++;
     }
-
-    if (shutdown_sequence_attempts >= MAX_SHUTDOWN_SEQUENCE_ATTEMPTS) {
-        std::cerr << "WARNING: Shutdown sequence failed to complete after " << shutdown_sequence_attempts << " attempts." << std::endl;
+    if (sys.getSystemState() != SYSTEM_RUNNING) {
+        std::cout << "Shutdown completed after " << shutdown_attempts << " iterations." << std::endl;
+    } else {
+        std::cerr << "WARNING: Shutdown did not complete after " << shutdown_attempts << " iterations." << std::endl;
     }
 
     std::cout << "\nFinal Leg States (all should be STANCE):" << std::endl;

@@ -74,14 +74,13 @@ int main() {
         return 1;
     }
 
-    // Run startup sequence
+    // Run startup sequence (StateController handles internally via update())
     int startup_attempts = 0;
-    while (sys.isStartupInProgress() && startup_attempts < 500) {
-        if (sys.executeStartupSequence())
-            break;
+    while (sys.getSystemState() != SYSTEM_RUNNING && startup_attempts < 500) {
+        sys.update();
         startup_attempts++;
     }
-    if (startup_attempts >= 500) {
+    if (sys.getSystemState() != SYSTEM_RUNNING) {
         std::cerr << "ERROR: startup failed" << std::endl;
         return 1;
     }

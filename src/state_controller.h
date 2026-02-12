@@ -1,12 +1,10 @@
 #ifndef STATE_CONTROLLER_H
 #define STATE_CONTROLLER_H
 
-class LocomotionSystem;
-
 #include "admittance_controller.h"
 #include "body_pose_controller.h"
-#include "locomotion_system.h"
 #include "robot_model.h"
+#include "state_controller_context.h"
 #include "walk_controller.h"
 #include <Arduino.h>
 #include <ArduinoEigen.h>
@@ -122,10 +120,10 @@ class StateController {
   public:
     /**
      * @brief Constructor for the StateController.
-     * @param locomotion Reference to the main locomotion system
+     * @param context Reference to the locomotion orchestration context
      * @param config Configuration for the state machine
      */
-    StateController(LocomotionSystem &locomotion, const StateMachineConfig &config = StateMachineConfig());
+    StateController(StateControllerContext &context, const StateMachineConfig &config = StateMachineConfig());
 
     /**
      * @brief Destructor for the StateController.
@@ -470,7 +468,7 @@ class StateController {
   private:
     /** Private members. */
 
-    LocomotionSystem &locomotion_system_;
+    StateControllerContext &context_;
     StateMachineConfig config_;
 
     /** Current states. */

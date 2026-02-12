@@ -35,6 +35,8 @@ LocomotionSystem::LocomotionSystem(const Parameters &params)
 /** Destructor. */
 LocomotionSystem::~LocomotionSystem() {
     system_enabled = false;
+    /** Destroy state controller before its dependencies. */
+    state_controller_.reset();
     delete body_pose_ctrl;
     delete walk_ctrl;
     delete admittance_ctrl;
@@ -140,6 +142,15 @@ bool LocomotionSystem::initialize(IIMUInterface *imu, IFSRInterface *fsr, IServo
     }
 
     system_enabled = true;
+
+    /** Create and initialize the state controller (always present; no fallback mode).
+     *  This mirrors OpenSHC where StateController is always the orchestrator. */
+    state_controller_ = std::make_unique<StateController>(*this);
+    if (!state_controller_->initialize(pose_config)) {
+        last_error = STATE_ERROR;
+        return false;
+    }
+
     return true;
 }
 
@@ -351,24 +362,44 @@ bool LocomotionSystem::setParameter(const std::string &name, double value) {
 
 /** Forward locomotion control. */
 bool LocomotionSystem::walkForward(double velocity) {
-    return planGaitSequence(velocity, 0.0f, 0.0f);
+    if (!state_controller_ || !state_controller_->isInitialized()) {
+        last_error = STATE_ERROR;
+        return false;
+    }
+    state_controller_->setDesiredVelocity(Eigen::Vector2d(velocity, 0.0), 0.0);
+    return true;
 }
 
 /** Backward locomotion control. */
 bool LocomotionSystem::walkBackward(double velocity) {
-    return planGaitSequence(-velocity, 0.0f, 0.0f);
+    if (!state_controller_ || !state_controller_->isInitialized()) {
+        last_error = STATE_ERROR;
+        return false;
+    }
+    state_controller_->setDesiredVelocity(Eigen::Vector2d(-velocity, 0.0), 0.0);
+    return true;
 }
 
 /** In-place turning control. */
 bool LocomotionSystem::turnInPlace(double angular_velocity) {
-    return planGaitSequence(0.0f, 0.0f, angular_velocity);
+    if (!state_controller_ || !state_controller_->isInitialized()) {
+        last_error = STATE_ERROR;
+        return false;
+    }
+    state_controller_->setDesiredVelocity(Eigen::Vector2d::Zero(), angular_velocity);
+    return true;
 }
 
 /** Sideways locomotion control. */
 bool LocomotionSystem::walkSideways(double velocity, bool right_direction) {
     /** Framework convention: +Y = left, -Y = right. */
     double lateral_velocity = right_direction ? -velocity : velocity;
-    return planGaitSequence(0.0f, lateral_velocity, 0.0f);
+    if (!state_controller_ || !state_controller_->isInitialized()) {
+        last_error = STATE_ERROR;
+        return false;
+    }
+    state_controller_->setDesiredVelocity(Eigen::Vector2d(0.0, lateral_velocity), 0.0);
+    return true;
 }
 
 bool LocomotionSystem::executeStartupSequence() {
@@ -633,6 +664,34 @@ bool LocomotionSystem::setManualBodyPoseInput(const Eigen::Vector3d &position, c
     return true;
 }
 
+bool LocomotionSystem::applyManualLegInputs(int primary_leg_index,
+                                            const Eigen::Vector3d &primary_tip_velocity,
+                                            int secondary_leg_index,
+                                            const Eigen::Vector3d &secondary_tip_velocity,
+                                            bool primary_pose_valid,
+                                            const Point3D &primary_tip_pose,
+                                            bool secondary_pose_valid,
+                                            const Point3D &secondary_tip_pose) {
+    if (!walk_ctrl) {
+        last_error = PARAMETER_ERROR;
+        return false;
+    }
+
+    walk_ctrl->updateManual(primary_leg_index,
+                            primary_tip_velocity,
+                            secondary_leg_index,
+                            secondary_tip_velocity);
+
+    if (primary_pose_valid || secondary_pose_valid) {
+        walk_ctrl->updateManual(primary_leg_index,
+                                primary_tip_pose,
+                                secondary_leg_index,
+                                secondary_tip_pose);
+    }
+
+    return true;
+}
+
 bool LocomotionSystem::isSmoothMovementInProgress() const {
     return body_pose_ctrl->isTrajectoryInProgress();
 }
@@ -643,33 +702,23 @@ void LocomotionSystem::resetSmoothMovement() {
 }
 
 /**
- * @brief Main system update - only calculates leg trajectories based on current phase.
+ * @brief Main system update — delegates to StateController.
  *
- * Usage pattern:
- * @code
- * while (system_running) {
- *     // Handle startup/shutdown sequences separately
- *     if (locomotion_system.isStartupInProgress()) {
- *         if (locomotion_system.executeStartupSequence()) {
- *             locomotion_system.startup_in_progress = false;
- *         }
- *     } else if (locomotion_system.isShutdownInProgress()) {
- *         if (locomotion_system.executeShutdownSequence()) {
- *             locomotion_system.shutdown_in_progress = false;
- *         }
- *     } else {
- *         // Only update leg trajectories when system is in normal operation
- *         locomotion_system.update();
- *     }
- * }
- * @endcode
+ * StateController is the orchestrator (OpenSHC-equivalent role without ROS).
+ * It manages state transitions, velocity/pose control, and calls back into
+ * LocomotionSystem::runControlPipelineStep() through the context interface
+ * for sensor reading, walk update, IK and servo output.
  */
 bool LocomotionSystem::update() {
-
-    /** Update state machine first when attached (OpenSHC-style orchestration). */
-    if (state_controller_ && state_controller_->isInitialized()) {
-        state_controller_->update(params.time_delta);
+    if (!state_controller_ || !state_controller_->isInitialized()) {
+        last_error = STATE_ERROR;
+        return false;
     }
+    state_controller_->update(params.time_delta);
+    return true;
+}
+
+bool LocomotionSystem::runControlPipelineStep() {
 
     /** Update sensors in parallel for optimal performance. */
     if (!updateSensorsParallel()) {
@@ -725,31 +774,6 @@ bool LocomotionSystem::update() {
         walk_ctrl->updateWalk(applied_linear_velocity,
                               commanded_angular_velocity_,
                               body_position, body_orientation);
-
-        /** Step 1b: apply manual leg inputs (OpenSHC updateManual equivalents). */
-        if (state_controller_) {
-            int primary_leg = -1;
-            int secondary_leg = -1;
-            state_controller_->getManualLegIndices(primary_leg, secondary_leg);
-
-            Eigen::Vector3d primary_velocity = Eigen::Vector3d::Zero();
-            Eigen::Vector3d secondary_velocity = Eigen::Vector3d::Zero();
-            if (primary_leg >= 0) {
-                primary_velocity = state_controller_->getLegTipVelocity(primary_leg);
-            }
-            if (secondary_leg >= 0) {
-                secondary_velocity = state_controller_->getLegTipVelocity(secondary_leg);
-            }
-            walk_ctrl->updateManual(primary_leg, primary_velocity, secondary_leg, secondary_velocity);
-
-            Point3D primary_pose;
-            Point3D secondary_pose;
-            bool primary_pose_valid = state_controller_->getLegTipPose(primary_leg, primary_pose);
-            bool secondary_pose_valid = state_controller_->getLegTipPose(secondary_leg, secondary_pose);
-            if (primary_pose_valid || secondary_pose_valid) {
-                walk_ctrl->updateManual(primary_leg, primary_pose, secondary_leg, secondary_pose);
-            }
-        }
 
         /** Step 2: collect desired positions from Bezier trajectories (= OpenSHC::setDesiredTipPose). */
         for (int i = 0; i < NUM_LEGS; i++) {
@@ -1165,129 +1189,25 @@ double LocomotionSystem::getCurrentServoSpeed(int leg_index, int joint_index) co
 /** Execute startup sequence (READY -> RUNNING transition). */
 /** Start walking with specified gait type. */
 bool LocomotionSystem::startWalking() {
-    if (!system_enabled || !walk_ctrl) {
-        last_error = PARAMETER_ERROR;
-        return false;
-    }
-    if (system_state != SYSTEM_READY) {
+    if (!state_controller_ || !state_controller_->isInitialized()) {
         last_error = STATE_ERROR;
         return false;
     }
-    /** Assumes gait already selected via setGaitConfiguration() and velocities set via walkForward/back/sideways/turn methods. */
-    if (resume_from_stop_) {
-        /** Fast resume: skip body pose startup; re-init walk controller for current pose. */
-        walk_ctrl->init(body_position, body_orientation);
-        walk_ctrl->generateWalkspace();
-
-        /** Sync leg steppers and phases to current grounded foot poses to avoid pre-walk drop. */
-        for (int i = 0; i < NUM_LEGS; i++) {
-            auto leg_stepper = walk_ctrl->getLegStepper(i);
-            if (leg_stepper) {
-                Point3D current_pose = legs[i].getCurrentTipPositionGlobal();
-                leg_stepper->setCurrentTipPose(current_pose);
-                leg_stepper->setStepState(STEP_FORCE_STANCE);
-            }
-            legs[i].setStepPhase(STANCE_PHASE);
-        }
-
-        system_state = SYSTEM_RUNNING;
-        resume_from_stop_ = false;
-        startup_in_progress = false;
-        return true;
-    }
-
-    /** Normal path: run startup sequence next loop. */
-    startup_in_progress = true;
-    system_state = SYSTEM_READY;
-    return true;
+    return state_controller_->requestRobotState(RobotState::ROBOT_RUNNING);
 }
 
 /** Stop walking without shutdown; ensure all feet on ground. Mode controls stance behavior. */
 bool LocomotionSystem::stopWalking(StopMode mode) {
-    if (!walk_ctrl) {
-        last_error = PARAMETER_ERROR;
-        return false;
-    }
-    if (system_state != SYSTEM_RUNNING) {
+    if (!state_controller_ || !state_controller_->isInitialized()) {
         last_error = STATE_ERROR;
         return false;
     }
-
-    /** Zero velocities. */
-    commanded_linear_velocity_x_ = 0.0;
-    commanded_linear_velocity_y_ = 0.0;
-    commanded_angular_velocity_ = 0.0;
-
-    /** Notify planner that velocity is zero. */
-    walk_ctrl->updateWalk(Point3D(0.0, 0.0, 0.0), 0.0, body_position, body_orientation);
-
-    /** Place all feet on ground according to requested mode. */
-    for (int i = 0; i < NUM_LEGS; ++i) {
-        auto leg_stepper = walk_ctrl->getLegStepper(i);
-        if (leg_stepper) {
-            if (mode == STOP_UNIFORM) {
-                /** Uniform stop: identical stance for all legs. */
-                leg_stepper->setStepState(STEP_FORCE_STOP);
-                leg_stepper->setPhase(0.0);
-                leg_stepper->updateTipPositionIterative(0, params.time_delta, false, false);
-            } else {
-                /** Soft stop: preserve XY but ensure Z is on stance plane. */
-                leg_stepper->setStepState(STEP_FORCE_STANCE);
-
-                /** 1) Capture current (possibly airborne) tip pose. */
-                Point3D current_pose = leg_stepper->getCurrentTipPose();
-
-                /** 2) Query identity stance Z by temporarily sampling phase=0. */
-                double saved_phase = leg_stepper->getPhase();
-                int saved_iter = leg_stepper->getCurrentIteration();
-
-                leg_stepper->setPhase(0.0);
-                leg_stepper->updateTipPositionIterative(0, params.time_delta, false, false);
-                Point3D identity_pose = leg_stepper->getCurrentTipPose();
-
-                /** 3) Restore phase/iteration continuity for internal state. */
-                leg_stepper->setPhase(saved_phase);
-                leg_stepper->updateTipPositionIterative(saved_iter, params.time_delta, false, false);
-
-                /** 4) Build target stance pose: keep XY, drop to stance Z. */
-                Point3D projected_pose(current_pose.x, current_pose.y, identity_pose.z);
-
-                /** Write projected pose into the stepper's current tip pose so downstream reads are consistent. */
-                /** Note: LegStepper does not expose a direct setter; we push via the Leg object below. */
-                /** The READY state will freeze advancement until the next start. */
-
-                /** Use projected pose as the stance target for this leg. */
-                legs[i].setStepPhase(STANCE_PHASE);
-                legs[i].setCurrentTipPositionGlobal(projected_pose);
-
-                /** Apply IK and servo commands for the projected stance pose, then continue to next leg. */
-                if (legs[i].applyAdvancedIK(projected_pose)) {
-                    JointAngles target_angles = legs[i].getJointAngles();
-                    setLegJointAngles(i, target_angles);
-                }
-
-                /** Continue to next leg; skip default stance application below for STOP_SOFT. */
-                continue;
-            }
-
-            /** Apply stance to leg and servos. */
-            legs[i].setStepPhase(STANCE_PHASE);
-            Point3D stance_position = leg_stepper->getCurrentTipPose();
-            legs[i].setCurrentTipPositionGlobal(stance_position);
-            if (legs[i].applyAdvancedIK(stance_position)) {
-                JointAngles target_angles = legs[i].getJointAngles();
-                setLegJointAngles(i, target_angles);
-            }
-        } else {
-            legs[i].setStepPhase(STANCE_PHASE);
-        }
+    /** Zero velocity lets WalkController transition STOPPING → STOPPED naturally. */
+    state_controller_->setDesiredVelocity(Eigen::Vector2d::Zero(), 0.0);
+    if (mode == STOP_UNIFORM) {
+        /** Also request RUNNING → READY transition for a full stop. */
+        state_controller_->requestRobotState(RobotState::ROBOT_READY);
     }
-
-    /** Transition to READY so update() no longer advances walking. */
-    shutdown_in_progress = false;
-    system_state = SYSTEM_READY;
-    /** Mark for fast resume without dropping legs again. */
-    resume_from_stop_ = true;
     return true;
 }
 

@@ -89,11 +89,10 @@ int main() {
         return 1;
     }
 
-    // Run startup sequence until system enters RUNNING state (flag now auto-clears internally)
+    // Run update loop until system enters RUNNING state (StateController orchestrates startup)
     int startup_loops = 0;
     const int STARTUP_MAX_LOOPS = 600; // Allow ample iterations
     while (startup_loops < STARTUP_MAX_LOOPS && sys.getSystemState() != SYSTEM_RUNNING) {
-        sys.executeStartupSequence();
         sys.update();
         startup_loops++;
     }

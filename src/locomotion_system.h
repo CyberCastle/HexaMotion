@@ -6,11 +6,13 @@
 #include "cartesian_velocity_controller.h"
 #include "leg.h"
 #include "robot_model.h"
+#include "state_controller_context.h"
 #include "walk_controller.h"
 #include <Arduino.h>
 #include <ArduinoEigen.h>
 #include <math.h>
 
+#include <memory>
 #include <string>
 #include <vector>
 /** Forward declarations. */
@@ -18,7 +20,7 @@ class WalkController;
 class StateController;
 
 /** Main locomotion system class. */
-class LocomotionSystem {
+class LocomotionSystem : public StateControllerContext {
   public:
     /** Stop behavior options for stopWalking(). */
     enum StopMode {
@@ -72,8 +74,8 @@ class LocomotionSystem {
     WalkController *walk_ctrl;
     AdmittanceController *admittance_ctrl;
 
-    /** Optional state controller integration (non-owning). */
-    StateController *state_controller_ = nullptr;
+    /** State controller (owns the orchestration state machine; created in initialize()). */
+    std::unique_ptr<StateController> state_controller_;
 
     /** Debug/instrumentation helpers. */
     /**
@@ -104,9 +106,6 @@ class LocomotionSystem {
      * @return true if all joints responded with valid angles before the timeout.
      */
     bool attemptJointAcquisition();
-
-    /** Indicates we can resume walking without running the full body startup sequence. */
-    bool resume_from_stop_ = false;
 
     /** Last desired velocity command (OpenSHC-style persistent velocities). */
     double commanded_linear_velocity_x_ = 0.0; /**< X component. */
@@ -200,7 +199,7 @@ class LocomotionSystem {
      * @brief Check if the locomotion system is enabled.
      * @return True when the system is running.
      */
-    bool isSystemEnabled() const;
+    bool isSystemEnabled() const override;
 
     /** Inverse kinematics. */
     /** Compute joint angles for a desired leg tip position. */
@@ -215,9 +214,9 @@ class LocomotionSystem {
 
     /** Gait planner. */
     /** Select the active gait configuration. */
-    bool setGaitConfiguration(const GaitConfiguration &gait_config);
+    bool setGaitConfiguration(const GaitConfiguration &gait_config) override;
     /** Plan the next gait step from desired velocities. */
-    bool planGaitSequence(double velocity_x, double velocity_y, double angular_velocity);
+    bool planGaitSequence(double velocity_x, double velocity_y, double angular_velocity) override;
 
     /**
      * @brief Update a runtime-adjustable parameter by name (lightweight parity with OpenSHC).
@@ -239,28 +238,18 @@ class LocomotionSystem {
      */
     bool jointPositionsInitialised() const { return joint_positions_initialised_; }
     /**
-     * @brief Attach a StateController to be updated from LocomotionSystem (non-owning).
-     * @param controller Pointer to the state controller instance.
+     * @brief Get the internal StateController.
+     * @return Pointer to StateController (non-null after initialize()).
      */
-    void setStateController(StateController *controller) { state_controller_ = controller; }
-    /**
-     * @brief Get attached StateController (may be nullptr).
-     * @return Pointer to attached StateController or nullptr.
-     */
-    StateController *getStateController() const { return state_controller_; }
-    /**
-     * @brief Check if a StateController is attached.
-     * @return True if state controller pointer is set.
-     */
-    bool hasStateController() const { return state_controller_ != nullptr; }
+    StateController *getStateController() const { return state_controller_.get(); }
     /** Get current system state. */
-    SystemState getSystemState() const { return system_state; }
+    SystemState getSystemState() const override { return system_state; }
     /** Get current composed body pose (OpenSHC Model::getCurrentPose equivalent). */
     Pose getCurrentBodyPose() const;
     /** Check if legs are bearing load based on body pose controller estimate. */
     bool legsBearingLoad() const;
     /** Get startup progress percent (0-100). Returns 100 if startup is complete or controller missing. */
-    int getStartupProgressPercent() const {
+    int getStartupProgressPercent() const override {
         if (!body_pose_ctrl)
             return 100;
         if (!startup_in_progress)
@@ -282,13 +271,13 @@ class LocomotionSystem {
      * @brief Execute one iteration of the startup sequence.
      * Wraps BodyPoseController::executeStartupSequence and handles transition to RUNNING state.
      */
-    bool executeStartupSequence();
+    bool executeStartupSequence() override;
 
     /**
      * @brief Execute one iteration of the shutdown sequence.
      * Wraps BodyPoseController::executeShutdownSequence and handles transition to READY state.
      */
-    bool executeShutdownSequence();
+    bool executeShutdownSequence() override;
 
     /** OpenSHC-style walking control. */
     /** Start walking (startup sequence only). Gait and velocities must have been set beforehand. */
@@ -312,19 +301,19 @@ class LocomotionSystem {
 
     /** Body pose control. */
     /** Set robot to standing pose. */
-    bool setStandingPose();
+    bool setStandingPose() override;
 
     /**
      * @brief Begin non-blocking jerk-limited transition to standing pose (profiles created in BodyPoseController).
      * @return true if started or already complete.
      */
-    bool establishInitialStandingPose();
+    bool establishInitialStandingPose() override;
 
     /** Advance one iteration of the initial standing pose transition; sends servo commands for current S-curve sample. */
     bool stepInitialStandingPose();
 
     /** Query if initial standing pose transition is active. */
-    bool isInitialStandingPoseActive() const { return body_pose_ctrl && body_pose_ctrl->isInitialStandingPoseActive(); }
+    bool isInitialStandingPoseActive() const override { return body_pose_ctrl && body_pose_ctrl->isInitialStandingPoseActive(); }
 
     /** Set body pose with position and orientation (orientation in radians). */
     bool setBodyPose(const Eigen::Vector3d &position, const Eigen::Vector3d &orientation);
@@ -335,7 +324,16 @@ class LocomotionSystem {
      * @param orientation Body rotation (roll,pitch,yaw in radians)
      * @return True if accepted
      */
-    bool setManualBodyPoseInput(const Eigen::Vector3d &position, const Eigen::Vector3d &orientation);
+    bool setManualBodyPoseInput(const Eigen::Vector3d &position, const Eigen::Vector3d &orientation) override;
+
+    bool applyManualLegInputs(int primary_leg_index,
+                              const Eigen::Vector3d &primary_tip_velocity,
+                              int secondary_leg_index,
+                              const Eigen::Vector3d &secondary_tip_velocity,
+                              bool primary_pose_valid,
+                              const Point3D &primary_tip_pose,
+                              bool secondary_pose_valid,
+                              const Point3D &secondary_tip_pose) override;
 
     /** Check if smooth movement is in progress. */
     bool isSmoothMovementInProgress() const;
@@ -355,6 +353,9 @@ class LocomotionSystem {
     /** Update all controllers and state machines. */
     bool update();
 
+    /** Execute one low-level locomotion pipeline iteration (context hook for StateController). */
+    bool runControlPipelineStep() override;
+
     /** Update FSR and IMU sensors in parallel for optimal performance. */
     bool updateSensorsParallel();
 
@@ -366,13 +367,13 @@ class LocomotionSystem {
 
     /** Getters. */
     const Parameters &getParameters() const { return params; }
-    RobotModel &getRobotModel() { return model; }
+    RobotModel &getRobotModel() override { return model; }
     const RobotModel &getRobotModel() const { return model; }
     IServoInterface *getServoInterface() { return servo_interface; }
-    Eigen::Vector3d getBodyPosition() const { return body_position; }
-    Eigen::Vector3d getBodyOrientation() const { return body_orientation; }
+    Eigen::Vector3d getBodyPosition() const override { return body_position; }
+    Eigen::Vector3d getBodyOrientation() const override { return body_orientation; }
     StepPhase getLegState(int leg_index) const { return legs[leg_index].getStepPhase(); }
-    JointAngles getJointAngles(int leg_index) const { return legs[leg_index].getJointAngles(); }
+    JointAngles getJointAngles(int leg_index) const override { return legs[leg_index].getJointAngles(); }
     Point3D getLegPosition(int leg_index) const { return legs[leg_index].getCurrentTipPositionGlobal(); }
 
     /** Leg access methods. */
@@ -381,7 +382,7 @@ class LocomotionSystem {
     /** Get leg object by index (mutable). */
     Leg &getLeg(int leg_index) { return legs[leg_index]; }
     /** Get pointer to legs array (for batch operations like poseForLegManipulation). */
-    Leg *getLegsArray() { return legs; }
+    Leg *getLegsArray() override { return legs; }
 
     /** Setters. */
     /** Replace the current parameter set. */
@@ -404,13 +405,13 @@ class LocomotionSystem {
     double getCurrentServoSpeed(int leg_index, int joint_index) const;
 
     /** Get robot parameters. */
-    const Parameters &getParams() const { return params; }
+    const Parameters &getParams() const override { return params; }
 
     /** Getter for WalkController. */
-    WalkController *getWalkController() { return walk_ctrl; }
+    WalkController *getWalkController() override { return walk_ctrl; }
 
     /** Direct access to BodyPoseController (tests and advanced instrumentation). */
-    BodyPoseController *getBodyPoseController() { return body_pose_ctrl; }
+    BodyPoseController *getBodyPoseController() override { return body_pose_ctrl; }
     const BodyPoseController *getBodyPoseController() const { return body_pose_ctrl; }
 
   private:

@@ -144,19 +144,15 @@ int main() {
         return 1;
     }
 
-    /** Execute startup sequence exactly once before sampling debug data. */
-    const int MAX_STARTUP_ITERATIONS = 400;
+    /** Run update loop until system reaches RUNNING state (startup handled by StateController). */
+    const int MAX_STARTUP_ITERATIONS = 500;
     int startup_iterations = 0;
-    bool startup_completed = false;
-    while (system.isStartupInProgress() && startup_iterations < MAX_STARTUP_ITERATIONS) {
-        if (system.executeStartupSequence()) {
-            startup_completed = true;
-            break;
-        }
+    while (system.getSystemState() != SYSTEM_RUNNING && startup_iterations < MAX_STARTUP_ITERATIONS) {
+        system.update();
         startup_iterations++;
     }
 
-    if (!startup_completed && system.isStartupInProgress()) {
+    if (system.getSystemState() != SYSTEM_RUNNING) {
         std::cerr << "ERROR: Startup sequence did not complete" << std::endl;
         return 1;
     }

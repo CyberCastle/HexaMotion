@@ -680,36 +680,25 @@ int main(int argc, char **argv) {
         return 1;
     }
 
-    // 4. Execute startup sequence
+    // 4. Execute startup sequence (StateController handles internally via update())
     std::cout << "Executing startup sequence..." << std::endl;
     int startup_attempts = 0;
-    // Estimate iterations for two-phase startup matching BodyPoseController timing
-    const Parameters &startup_params = sys.getParameters();
-    double time_delta_startup = startup_params.time_delta;
-    double step_frequency_startup = startup_params.step_frequency;
-    int horiz_iters = std::max(1, (int)std::round((1.0 / step_frequency_startup) / time_delta_startup));
-    int vert_iters = std::max(1, (int)std::round((3.0 / step_frequency_startup) / time_delta_startup));
-    int expected_total_iters = horiz_iters + vert_iters;
-    const int MAX_STARTUP_ATTEMPTS = expected_total_iters + 80; // margin
-    std::cout << "Estimated startup iterations (horizontal=" << horiz_iters << ", vertical=" << vert_iters
-              << ", total=" << expected_total_iters << ")  Max attempts=" << MAX_STARTUP_ATTEMPTS << std::endl;
+    const int MAX_STARTUP_ATTEMPTS = 500;
 
-    while (sys.isStartupInProgress() && startup_attempts < MAX_STARTUP_ATTEMPTS) {
+    while (sys.getSystemState() != SYSTEM_RUNNING && startup_attempts < MAX_STARTUP_ATTEMPTS) {
         servos.updateStep(startup_attempts);
-        if (sys.executeStartupSequence()) {
-            std::cout << "✅ Startup sequence completed after " << startup_attempts << " attempts." << std::endl;
-            break;
-        }
+        sys.update();
         if (startup_attempts % 25 == 0) {
             std::cout << "Startup attempt " << startup_attempts << " Progress=" << sys.getStartupProgressPercent() << "%" << std::endl;
         }
         startup_attempts++;
     }
 
-    if (startup_attempts >= MAX_STARTUP_ATTEMPTS) {
+    if (sys.getSystemState() != SYSTEM_RUNNING) {
         std::cerr << "ERROR: Startup sequence failed to complete." << std::endl;
         return 1;
     }
+    std::cout << "✅ Startup sequence completed after " << startup_attempts << " attempts." << std::endl;
 
     // 5. Main visualization loop
     std::cout << "\n🔥 Starting servo angle visualization..." << std::endl;
@@ -771,17 +760,18 @@ int main(int argc, char **argv) {
         std::cerr << "Warning: Failed to stop walking." << std::endl;
     }
 
-    // Execute shutdown sequence
+    // Run update loop to let StateController orchestrate the shutdown
     int shutdown_attempts = 0;
-    const int MAX_SHUTDOWN_ATTEMPTS = 50;
-
-    while (sys.isShutdownInProgress() && shutdown_attempts < MAX_SHUTDOWN_ATTEMPTS) {
+    const int MAX_SHUTDOWN_ATTEMPTS = 500;
+    while (shutdown_attempts < MAX_SHUTDOWN_ATTEMPTS && sys.getSystemState() == SYSTEM_RUNNING) {
         servos.updateStep(VISUALIZATION_STEPS + shutdown_attempts);
-        if (sys.executeShutdownSequence()) {
-            std::cout << "✅ Shutdown sequence completed." << std::endl;
-            break;
-        }
+        sys.update();
         shutdown_attempts++;
+    }
+    if (sys.getSystemState() != SYSTEM_RUNNING) {
+        std::cout << "✅ Shutdown completed after " << shutdown_attempts << " iterations." << std::endl;
+    } else {
+        std::cerr << "WARNING: Shutdown did not complete after " << shutdown_attempts << " iterations." << std::endl;
     }
 
     // 8. Generate final report

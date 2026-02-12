@@ -1,8 +1,8 @@
 # OpenSHC Parity Gap Report (HexaMotion)
 
-> **Last updated**: 2026-02-11 — Updated with iteration mapping and quaternion convention fixes.
+> **Last updated**: 2026-02-13 — Removed fallback pattern; LocomotionSystem always owns StateController.
 > **Validation pass**: 2026-02-10 — Cross-verified all OpenSHC symbols (14 enums, 6 structs, 14 classes, ~290 public methods, ~200 member variables) against HexaMotion (24 classes, 3 interfaces, ~20 enums, ~50 structs, ~500+ public methods).
-> **Fix verification pass**: 2026-02-11 — Verified iteration mapping (ITERATION_MAPPING_INCONSISTENCY.md) and quaternion convention (QUATERNION_CONVENTION_DIVERGENCE.md) fixes against source.
+> **Fix verification pass**: 2026-02-13 — Removed fallback pattern from LocomotionSystem. StateController is now always created in initialize() (std::unique_ptr). All convenience methods, update(), startWalking(), and stopWalking() exclusively route through StateController. runControlPipelineStep() is a context-interface service only. 8/8 tests pass.
 
 ## Context (from AGENTS.md)
 
@@ -11,7 +11,8 @@ HexaMotion is a 1:1 port of OpenSHC without ROS support. The goal is to run Open
 Key differences from OpenSHC:
 
 - **Orchestration (1:1 functional parity target)**: HexaMotion's `StateController` preserves OpenSHC's functional orchestration flow (state transitions, running loop sequencing, gait/pose/manual leg coordination), excluding ROS transport concerns.
-- **ROS replacement layer**: `LocomotionSystem` acts as a wrapper/facade around `StateController` and replaces the external ROS graph/script role by routing external inputs to controller APIs and executing low-level hardware/control pipeline steps (sensors, walk update, IK, servo output).
+- **ROS replacement layer**: `LocomotionSystem` acts as a wrapper/facade around `StateController` and replaces the external ROS graph/script role by routing external inputs to controller APIs and executing low-level hardware/control pipeline steps (sensors, walk update, IK, servo output) as context-interface services. Conceptually, OpenSHC's external `main.cpp` loop (which reads ROS subscriptions and writes to publishers) is replaced by `LocomotionSystem::update()` + direct API calls. `runControlPipelineStep()` is strictly a context service called by `StateController` through `StateControllerContext` — it is never invoked directly from `update()`.
+- **Input routing**: All high-level convenience methods (`walkForward`, `walkBackward`, `turnInPlace`, `walkSideways`, `startWalking`, `stopWalking`) always route through `StateController`, matching the OpenSHC pattern where external commands flow through ROS subscribers into `StateController` callbacks. `LocomotionSystem` always owns a `StateController` (created in `initialize()`); there is no fallback mode. This matches OpenSHC's `main.cpp`, which always instantiates `StateController state;`.
 - **Model Structure**: `RobotModel` in HexaMotion is primarily a kinematics/parameters provider and does not own `Leg` objects directly. `Leg` objects are owned by `LocomotionSystem`.
 - **Configuration**: No YAML; everything is configured through the `Parameters` structure and factories.
 - **ROS**: Completely removed. No `ros::Publisher`, `ros::Subscriber`, or `tf` dependencies. Debugging hooks (Visualiser) are stripped or replaced with telemetry.
@@ -231,6 +232,25 @@ Physical parameters and conventions:
 
 **Status**: Wrapper + Context split — Functional orchestration aligned
 
+#### Architectural Relationship
+
+In OpenSHC, the external ROS graph/script reads sensor publications, writes velocity/state commands to subscribers, and calls `StateController::loop()` + `publishDesiredJointState()` in a timed loop. `StateController` owns the full orchestration: pose composition, admittance, state transitions, velocity control, walk update, manual legs, stance posing, and IK.
+
+In HexaMotion, this external role is replaced by `LocomotionSystem`:
+
+| OpenSHC Element                              | HexaMotion Equivalent                                                               | Role                                      |
+| -------------------------------------------- | ----------------------------------------------------------------------------------- | ----------------------------------------- |
+| `main.cpp` while loop                        | `LocomotionSystem::update()`                                                        | Timed loop entry point                    |
+| `ros::spinOnce()` → sensor callbacks         | `LocomotionSystem::updateSensorsParallel()`                                         | Sensor reading (IMU, FSR, servo feedback) |
+| `state.loop()`                               | `StateController::update()`                                                         | Full orchestration                        |
+| Velocity subscriber callback                 | `walkForward()` / `walkBackward()` / etc. → `StateController::setDesiredVelocity()` | Input routing                             |
+| Robot state subscriber callback              | `startWalking()` / `stopWalking()` → `StateController::requestRobotState()`         | State transition routing                  |
+| `state.publishDesiredJointState()`           | `LocomotionSystem::publishJointAnglesToServos()`                                    | Servo output                              |
+| Debug publishers (velocity, pose, walkspace) | Removed (no ROS)                                                                    | Debug                                     |
+| TF broadcasts                                | Removed (no TF2)                                                                    | Frame transforms                          |
+
+`StateController` delegates the actual execution of hardware I/O and kinematic pipeline steps to `LocomotionSystem` through the `StateControllerContext` interface. This keeps the state machine logic decoupled from concrete hardware implementations while preserving the orchestration order from OpenSHC.
+
 #### Method Mapping
 
 | OpenSHC StateController Method       | HexaMotion Equivalent                                                                  | Location                                           | Status                                                        |
@@ -259,30 +279,30 @@ Physical parameters and conventions:
 
 #### Callback → Direct API Mapping
 
-| OpenSHC Callback                                                            | HexaMotion Direct API                               | Status                                 |
-| :-------------------------------------------------------------------------- | :-------------------------------------------------- | :------------------------------------- |
-| `systemStateCallback()`                                                     | `requestSystemState(SystemState)`                   | ✅                                     |
-| `robotStateCallback()`                                                      | `requestRobotState(RobotState)`                     | ✅                                     |
-| `bodyVelocityInputCallback()`                                               | `setDesiredVelocity(Vector2d, double)`              | ✅                                     |
-| `bodyPoseInputCallback()`                                                   | `setDesiredPose(Vector3d, Vector3d)`                | ✅                                     |
-| `posingModeCallback()`                                                      | `setPosingMode(PosingMode)`                         | ✅                                     |
-| `poseResetCallback()`                                                       | `setPoseResetMode(PoseResetMode)`                   | ✅                                     |
-| `gaitSelectionCallback()`                                                   | `changeGait(GaitType)`                              | ✅                                     |
-| `cruiseControlCallback()`                                                   | `setCruiseControlMode(CruiseControlMode, Vector3d)` | ✅                                     |
-| `plannerModeCallback()`                                                     | —                                                   | **Gap** (no planner).                  |
-| `primaryLegSelectionCallback()`                                             | `requestLegToggle(int)`                             | ✅ (consolidated, any leg by index).   |
-| `secondaryLegSelectionCallback()`                                           | `requestLegToggle(int)`                             | ✅ (no primary/secondary distinction). |
-| `primaryLegStateCallback()` / `secondaryLegStateCallback()`                 | `requestLegToggle(int)`                             | ✅ (consolidated).                     |
-| `primaryTipVelocityInputCallback()` / `secondaryTipVelocityInputCallback()` | `setLegTipVelocity(int, Vector3d)`                  | ✅ (any-leg API).                      |
-| `primaryTipPoseInputCallback()` / `secondaryTipPoseInputCallback()`         | `setLegTipPose(int, Point3D)`                       | ✅ (per-leg Cartesian pose input).     |
-| `parameterSelectionCallback()` / `parameterAdjustCallback()`                | —                                                   | **Gap**: No dynamic params.            |
-| `dynamicParameterCallback()`                                                | —                                                   | **Gap**: No dynamic reconfigure.       |
-| `imuCallback()`                                                             | `IIMUInterface` + `LocomotionSystem`                | ✅ (via HAL interface).                |
-| `jointStatesCallback()`                                                     | `IServoInterface` + `LocomotionSystem`              | ✅ (via HAL interface).                |
-| `tipStatesCallback()`                                                       | `IFSRInterface` + `LocomotionSystem`                | ✅ (via HAL interface).                |
-| `targetConfigurationCallback()`                                             | —                                                   | **Gap** (no planner).                  |
-| `targetBodyPoseCallback()`                                                  | —                                                   | **Gap** (no planner).                  |
-| `targetTipPoseCallback()`                                                   | —                                                   | **Gap** (no planner).                  |
+| OpenSHC Callback                                                            | HexaMotion Direct API                                                                              | Status                                 |
+| :-------------------------------------------------------------------------- | :------------------------------------------------------------------------------------------------- | :------------------------------------- |
+| `systemStateCallback()`                                                     | `requestSystemState(SystemState)`                                                                  | ✅                                     |
+| `robotStateCallback()`                                                      | `requestRobotState(RobotState)` (routed from `LocomotionSystem::startWalking()` / `stopWalking()`) | ✅                                     |
+| `bodyVelocityInputCallback()`                                               | `setDesiredVelocity(Vector2d, double)` (routed from `LocomotionSystem::walkForward()` etc.)        | ✅                                     |
+| `bodyPoseInputCallback()`                                                   | `setDesiredPose(Vector3d, Vector3d)`                                                               | ✅                                     |
+| `posingModeCallback()`                                                      | `setPosingMode(PosingMode)`                                                                        | ✅                                     |
+| `poseResetCallback()`                                                       | `setPoseResetMode(PoseResetMode)`                                                                  | ✅                                     |
+| `gaitSelectionCallback()`                                                   | `changeGait(GaitType)`                                                                             | ✅                                     |
+| `cruiseControlCallback()`                                                   | `setCruiseControlMode(CruiseControlMode, Vector3d)`                                                | ✅                                     |
+| `plannerModeCallback()`                                                     | —                                                                                                  | **Gap** (no planner).                  |
+| `primaryLegSelectionCallback()`                                             | `requestLegToggle(int)`                                                                            | ✅ (consolidated, any leg by index).   |
+| `secondaryLegSelectionCallback()`                                           | `requestLegToggle(int)`                                                                            | ✅ (no primary/secondary distinction). |
+| `primaryLegStateCallback()` / `secondaryLegStateCallback()`                 | `requestLegToggle(int)`                                                                            | ✅ (consolidated).                     |
+| `primaryTipVelocityInputCallback()` / `secondaryTipVelocityInputCallback()` | `setLegTipVelocity(int, Vector3d)`                                                                 | ✅ (any-leg API).                      |
+| `primaryTipPoseInputCallback()` / `secondaryTipPoseInputCallback()`         | `setLegTipPose(int, Point3D)`                                                                      | ✅ (per-leg Cartesian pose input).     |
+| `parameterSelectionCallback()` / `parameterAdjustCallback()`                | —                                                                                                  | **Gap**: No dynamic params.            |
+| `dynamicParameterCallback()`                                                | —                                                                                                  | **Gap**: No dynamic reconfigure.       |
+| `imuCallback()`                                                             | `IIMUInterface` + `LocomotionSystem`                                                               | ✅ (via HAL interface).                |
+| `jointStatesCallback()`                                                     | `IServoInterface` + `LocomotionSystem`                                                             | ✅ (via HAL interface).                |
+| `tipStatesCallback()`                                                       | `IFSRInterface` + `LocomotionSystem`                                                               | ✅ (via HAL interface).                |
+| `targetConfigurationCallback()`                                             | —                                                                                                  | **Gap** (no planner).                  |
+| `targetBodyPoseCallback()`                                                  | —                                                                                                  | **Gap** (no planner).                  |
+| `targetTipPoseCallback()`                                                   | —                                                                                                  | **Gap** (no planner).                  |
 
 #### StateController Member Variables
 
@@ -309,7 +329,7 @@ Physical parameters and conventions:
 | `linear_velocity_input_` / `angular_velocity_input_`  | `desired_linear_velocity_` / `desired_angular_velocity_`                              | ✅                                                               |
 | `primary/secondary_tip_velocity_input_`               | `leg_tip_velocities_[NUM_LEGS]`                                                       | ✅ (per-leg array).                                              |
 | `linear/angular_cruise_velocity_`                     | `cruise_velocity_` (Vector3d)                                                         | ✅                                                               |
-| `primary/secondary_pose_input_`                       | —                                                                                     | **Gap** (no per-leg Cartesian pose).                             |
+| `primary/secondary_pose_input_`                       | `leg_tip_poses_[NUM_LEGS]` + `leg_tip_pose_valid_[NUM_LEGS]`                          | ✅ (per-leg array via `setLegTipPose()`).                        |
 | ROS subscribers/publishers                            | —                                                                                     | **Removed**.                                                     |
 | TF2 buffer/listener/broadcaster                       | —                                                                                     | **Removed**.                                                     |
 | `dynamic_reconfigure_server_`                         | —                                                                                     | **Removed**.                                                     |
@@ -322,6 +342,13 @@ Physical parameters and conventions:
 - `emergencyStop()` / `reset()` methods.
 - `getDiagnosticInfo()` — textual FSM state dump.
 - Explicit `executeStartupSequence`/`executeShutdownSequence`/`executePackSequence`/`executeUnpackSequence` private methods.
+
+**HexaMotion-only LocomotionSystem additions** (replaces external ROS script/graph):
+
+- `walkForward()` / `walkBackward()` / `turnInPlace()` / `walkSideways()` — high-level convenience APIs routing through `StateController::setDesiredVelocity()` when attached (equivalent to common ROS velocity command patterns).
+- `startWalking()` / `stopWalking()` — state transition convenience APIs routing through `StateController::requestRobotState()` when attached.
+- `StateControllerContext` interface — decouples `StateController` from `LocomotionSystem`; provides context for the state machine to orchestrate sensors, walk, IK, and servo output without direct coupling.
+- `setParameter()` — lightweight runtime parameter adjustment (subset of OpenSHC's `AdjustableParameter` system).
 
 ### 6. WalkController (OpenSHC) vs HexaMotion WalkController
 
@@ -589,24 +616,28 @@ HexaMotion substitutes: `CoxaTelemetry` struct in `LocomotionSystem` (compile-ti
 
 **Resolved items (2026-02-11)**: Swing/stance iteration mapping inconsistency (see [ITERATION_MAPPING_INCONSISTENCY.md](ITERATION_MAPPING_INCONSISTENCY.md)) and quaternion convention divergence (see [QUATERNION_CONVENTION_DIVERGENCE.md](QUATERNION_CONVENTION_DIVERGENCE.md)) are fully fixed (see Priority 5 section).
 
+**Resolved items (2026-02-13)**: Convenience method routing through StateController and zero-velocity handling in `updateVelocityControl()` are fully fixed (see Priority 6 section). Fallback pattern eliminated — `LocomotionSystem` always owns `StateController` (see Priority 7 section).
+
 ### Corrections to Previous Report
 
-| Previous Claim                                                  | Corrected Status                                                                                                                                                                                                                                                                                                                                                                            |
-| :-------------------------------------------------------------- | :------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| "`updateStance()` is missing"                                   | **Present** as `applyAutoPoseToDesiredTips()` (comment cites OpenSHC equivalence).                                                                                                                                                                                                                                                                                                          |
-| "`updateInclinationPose()` is not present as a discrete method" | **Present** inline in `updateCurrentPose()` when `inclination_pose_enabled_` is true.                                                                                                                                                                                                                                                                                                       |
-| "`legsBearingLoad()` has no 1:1 equivalent"                     | **Present** as public API `BodyPoseController::legsBearingLoad()` and wrapper `LocomotionSystem::legsBearingLoad()`.                                                                                                                                                                                                                                                                        |
-| "AutoPoser system not replicated"                               | **Present** split across `IMUAutoPose` (IMU-based) and `BodyPoseController` auto-pose subsystem (phase-based with `AutoPoseConfiguration`).                                                                                                                                                                                                                                                 |
-| "Workspace methods not present as per-leg methods"              | **Present** centralized in `WorkspaceAnalyzer` (all 4 OpenSHC equivalents: `generateWorkspace`, `getWorkplane`, `makeReachable`, workspace polyhedron).                                                                                                                                                                                                                                     |
-| "`updateManualPose()` equivalent is not present"                | **Present** via `ManualBodyPoseController::processInput()` → `BodyPoseController::setManualPoseInput()`.                                                                                                                                                                                                                                                                                    |
-| "Full OpenSHC pose composition pipeline is not replicated 1:1"  | **Replicated** in `updateCurrentPose()`: walk_plane → manual → inclination → IMU → tip_align → ik_error → default (auto pose applied per-leg). Only `admittance_pose*` is architectural different (per-leg delta vs body-level pose).                                                                                                                                                       |
-| "`Pose::Undefined()` / `Pose::isValid()` missing"               | **Present** in `Pose` (NaN sentinel + finite checks).                                                                                                                                                                                                                                                                                                                                       |
-| "Force/torque estimation missing"                               | **Force estimation present** (`calculateTipForce()`); **torque vectors still absent**.                                                                                                                                                                                                                                                                                                      |
-| "Per-leg cartesian pose input missing"                          | **Present** via `StateController::setLegTipPose()` and consumed in `LocomotionSystem::update()` manual path.                                                                                                                                                                                                                                                                                |
-| "Per-joint state tracking absent"                               | **Present** as per-joint velocity/effort fields in `Leg`; joint/link/tip object model still absent.                                                                                                                                                                                                                                                                                         |
-| "`UNDEFINED_POSITION`/`UNDEFINED_ROTATION` use zeros"           | **Incorrect**: `Pose::Undefined()` uses NaN sentinel for both position and rotation.                                                                                                                                                                                                                                                                                                        |
-| "`eulerAnglesToQuaternion` convention is 1:1"                   | **Now correct**: Prior to fix, `eulerAnglesToQuaterniond(euler, true)` produced Z\*Y\*X (dead code — identical to `false` branch). Fixed: `intrinsic=true` now produces X\*Y\*Z, `intrinsic=false` → Z\*Y\*X. Parameter name and semantics are 1:1 with OpenSHC. `setManualPoseInput()` passes `true` flag. See [QUATERNION_CONVENTION_DIVERGENCE.md](QUATERNION_CONVENTION_DIVERGENCE.md). |
-| "Phase iteration order is equivalent"                           | **Now correct**: Prior to fix, HexaMotion incremented `phase_` before calling `updateTipPosition()` (OpenSHC does it after). Swing iteration used broken `iteration % N` formula instead of `phase_ - swing_start_ + 1`. Both fixed. See [ITERATION_MAPPING_INCONSISTENCY.md](ITERATION_MAPPING_INCONSISTENCY.md).                                                                          |
+| Previous Claim                                                  | Corrected Status                                                                                                                                                                                                                                                                                                                                                                                                                                  |
+| :-------------------------------------------------------------- | :------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| "`updateStance()` is missing"                                   | **Present** as `applyAutoPoseToDesiredTips()` (comment cites OpenSHC equivalence).                                                                                                                                                                                                                                                                                                                                                                |
+| "`updateInclinationPose()` is not present as a discrete method" | **Present** inline in `updateCurrentPose()` when `inclination_pose_enabled_` is true.                                                                                                                                                                                                                                                                                                                                                             |
+| "`legsBearingLoad()` has no 1:1 equivalent"                     | **Present** as public API `BodyPoseController::legsBearingLoad()` and wrapper `LocomotionSystem::legsBearingLoad()`.                                                                                                                                                                                                                                                                                                                              |
+| "AutoPoser system not replicated"                               | **Present** split across `IMUAutoPose` (IMU-based) and `BodyPoseController` auto-pose subsystem (phase-based with `AutoPoseConfiguration`).                                                                                                                                                                                                                                                                                                       |
+| "Workspace methods not present as per-leg methods"              | **Present** centralized in `WorkspaceAnalyzer` (all 4 OpenSHC equivalents: `generateWorkspace`, `getWorkplane`, `makeReachable`, workspace polyhedron).                                                                                                                                                                                                                                                                                           |
+| "`updateManualPose()` equivalent is not present"                | **Present** via `ManualBodyPoseController::processInput()` → `BodyPoseController::setManualPoseInput()`.                                                                                                                                                                                                                                                                                                                                          |
+| "Full OpenSHC pose composition pipeline is not replicated 1:1"  | **Replicated** in `updateCurrentPose()`: walk_plane → manual → inclination → IMU → tip_align → ik_error → default (auto pose applied per-leg). Only `admittance_pose*` is architectural different (per-leg delta vs body-level pose).                                                                                                                                                                                                             |
+| "`Pose::Undefined()` / `Pose::isValid()` missing"               | **Present** in `Pose` (NaN sentinel + finite checks).                                                                                                                                                                                                                                                                                                                                                                                             |
+| "Force/torque estimation missing"                               | **Force estimation present** (`calculateTipForce()`); **torque vectors still absent**.                                                                                                                                                                                                                                                                                                                                                            |
+| "Per-leg cartesian pose input missing"                          | **Present** via `StateController::setLegTipPose()` and consumed in `LocomotionSystem::update()` manual path.                                                                                                                                                                                                                                                                                                                                      |
+| "Per-joint state tracking absent"                               | **Present** as per-joint velocity/effort fields in `Leg`; joint/link/tip object model still absent.                                                                                                                                                                                                                                                                                                                                               |
+| "`UNDEFINED_POSITION`/`UNDEFINED_ROTATION` use zeros"           | **Incorrect**: `Pose::Undefined()` uses NaN sentinel for both position and rotation.                                                                                                                                                                                                                                                                                                                                                              |
+| "`eulerAnglesToQuaternion` convention is 1:1"                   | **Now correct**: Prior to fix, `eulerAnglesToQuaterniond(euler, true)` produced Z\*Y\*X (dead code — identical to `false` branch). Fixed: `intrinsic=true` now produces X\*Y\*Z, `intrinsic=false` → Z\*Y\*X. Parameter name and semantics are 1:1 with OpenSHC. `setManualPoseInput()` passes `true` flag. See [QUATERNION_CONVENTION_DIVERGENCE.md](QUATERNION_CONVENTION_DIVERGENCE.md).                                                       |
+| "Phase iteration order is equivalent"                           | **Now correct**: Prior to fix, HexaMotion incremented `phase_` before calling `updateTipPosition()` (OpenSHC does it after). Swing iteration used broken `iteration % N` formula instead of `phase_ - swing_start_ + 1`. Both fixed. See [ITERATION_MAPPING_INCONSISTENCY.md](ITERATION_MAPPING_INCONSISTENCY.md).                                                                                                                                |
+| "Convenience methods route through StateController"             | **Now correct**: Prior to fix, `walkForward()`, `walkBackward()`, `turnInPlace()`, `walkSideways()` set velocities directly in `LocomotionSystem`, bypassing `StateController`. Fixed: all convenience methods now route through `StateController::setDesiredVelocity()` when a state controller is attached. `startWalking()` → `requestRobotState(ROBOT_RUNNING)`, `stopWalking()` → zero velocity + optional `requestRobotState(ROBOT_READY)`. |
+| "`updateVelocityControl()` zero-velocity handling"              | **Now correct**: Prior to fix, `StateController::updateVelocityControl()` called `context_.stopWalkingUniform()` when velocity was zero and system was RUNNING. This forced all legs to stance and transitioned to READY, breaking the OpenSHC pattern where the walker transitions through STOPPING → STOPPED naturally. Fixed: zero velocity now uses `planGaitSequence(0, 0, 0)`.                                                              |
 
 ### Minor Logic Deviations
 
@@ -697,6 +728,39 @@ HexaMotion substitutes: `CoxaTelemetry` struct in `LocomotionSystem` (compile-ti
     - **Source files**: [src/math_utils.h](src/math_utils.h), [src/body_pose_controller.cpp](src/body_pose_controller.cpp).
     - **No by-design divergence**: Parameter name `intrinsic` with default `false` is 1:1 with OpenSHC. The `updateIMUPosePID` correction path was never affected (both use default Z\*Y\*X). All call sites now produce convention-correct quaternions.
 
+### Priority 6: Fixes Verified in Validation Pass (2026-02-12)
+
+- [x] **Convenience method routing through StateController**: All six issues resolved:
+    1. **`walkForward()`**: Previously called `planGaitSequence()` directly on `LocomotionSystem`, bypassing `StateController::setDesiredVelocity()`. Fixed: routes through `StateController`.
+    2. **`walkBackward()`**: Same bypass. Fixed.
+    3. **`turnInPlace()`**: Same bypass. Fixed.
+    4. **`walkSideways()`**: Same bypass. Fixed.
+    5. **`startWalking()`**: Previously set `system_state = SYSTEM_READY` and `startup_in_progress = true` directly. Fixed: routes through `StateController::requestRobotState(ROBOT_RUNNING)`.
+    6. **`stopWalking()`**: Previously manipulated walk controller, legs, servos, and `system_state` directly. Fixed: routes through `StateController::setDesiredVelocity(zero)` for graceful stop, and `requestRobotState(ROBOT_READY)` for `STOP_UNIFORM` mode.
+    - **Source files**: [src/locomotion_system.cpp](src/locomotion_system.cpp).
+    - **Impact**: Without this fix, `StateController::updateVelocityControl()` used its own `desired_linear_velocity_` (zero by default) and overwrote the LocomotionSystem velocities set by convenience methods, effectively discarding user commands. The fix ensures the OpenSHC-equivalent data flow: external command → StateController callback equivalent → orchestration → pipeline.
+
+- [x] **`updateVelocityControl()` zero-velocity handling**: Resolved:
+    1. **Hard stop as normal zero-velocity handling**: Previously, when velocity was zero and system was RUNNING, `updateVelocityControl()` called `context_.stopWalkingUniform()`, which forced all legs to stance and transitioned to `SYSTEM_READY`. This broke the OpenSHC pattern where zero velocity simply causes `WalkController` to transition through `STOPPING → STOPPED` naturally while remaining in RUNNING state.
+    2. **Fix**: Zero velocity now uses `context_.planGaitSequence(0, 0, 0)` unconditionally, matching OpenSHC's behavior. The `WalkController` handles the gradual stop internally.
+    - **Source files**: [src/state_controller.cpp](src/state_controller.cpp).
+    - **Impact**: Before this fix, the system would jump to READY state every time velocity went to zero, requiring a full startup sequence to resume walking. After the fix, the walker stops gracefully and remains in RUNNING, ready for immediate velocity resumption.
+
+### Priority 7: Fallback Pattern Removal (2026-02-13)
+
+- [x] **Eliminated fallback/dual-path execution in LocomotionSystem**: `LocomotionSystem` now always owns a `StateController` (created as `std::unique_ptr` in `initialize()`), matching OpenSHC's `main.cpp` where `StateController` is always instantiated. Key changes:
+    1. **`state_controller_`**: Changed from raw `StateController*` (externally set via `setStateController()`) to `std::unique_ptr<StateController>` (created in `initialize()`). `setStateController()` / `hasStateController()` removed.
+    2. **`update()`**: Removed fallback to `runControlPipelineStep()`. Always delegates to `state_controller_->update()`.
+    3. **`startWalking()`**: Removed ~60-line fallback body (direct `startup_in_progress`, `system_state` manipulation). Now routes through `state_controller_->requestRobotState(ROBOT_RUNNING)`.
+    4. **`stopWalking()`**: Removed ~80-line fallback body (direct walk controller/leg/servo manipulation). Now routes through `setDesiredVelocity(zero)` + `requestRobotState(ROBOT_READY)`.
+    5. **Convenience methods** (`walkForward`, etc.): Removed fallback branches to `planGaitSequence()`. Now solely route through `StateController::setDesiredVelocity()`.
+    6. **`runControlPipelineStep()`**: Unchanged as implementation but role clarified — strictly a context-interface service called by `StateController` through `StateControllerContext`, never invoked directly from `update()`.
+    7. **`stopWalkingUniform()`**: Removed from `StateControllerContext` interface (was never called by `StateController` after the velocity control fix).
+    8. **`resume_from_stop_`**: Removed. Unnecessary with `StateController` — `STOP_SOFT` keeps robot in RUNNING with zero velocity, so `walkForward()` can resume immediately.
+    - **Source files**: [src/locomotion_system.h](src/locomotion_system.h), [src/locomotion_system.cpp](src/locomotion_system.cpp), [src/state_controller_context.h](src/state_controller_context.h).
+    - **Rationale**: The fallback pattern duplicated orchestration logic between `LocomotionSystem` and `StateController`, blurred architectural roles, and had no OpenSHC equivalent (OpenSHC always has a `StateController`).
+    - **Test impact**: All 8 test files updated to use `update()`-driven startup/shutdown loops instead of direct `executeStartupSequence()` / `executeShutdownSequence()` calls. All tests pass.
+
 ---
 
 ## Audit Summary (2026-02-10 Validation Pass)
@@ -719,15 +783,17 @@ All symbols cataloged from OpenSHC (16 source files: 9 headers + 7 implementatio
 
 ### Audit Results
 
-| Category                    | Count | Details                                                                                                                                                                                    |
-| :-------------------------- | :---- | :----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Existing gaps confirmed     | 11    | All 11 True Gaps from the original report validated against source.                                                                                                                        |
-| New gaps discovered         | 5     | Gaps #12–#16 added (Bezier through-point, stringFormat, acquisition timeout, transitionStance, origin*walk_plane_pose*).                                                                   |
-| Corrections applied         | 14    | All corrections from the original report validated; 2 new corrections added (2026-02-11: quaternion convention, phase iteration order).                                                    |
-| Report inaccuracies fixed   | 4     | `GaitDesignation` ordinal values noted; `UNASSIGNED_VALUE` description refined; `origin_walk_plane_pose_` downgraded from ✅ to Partial; Bezier function table added.                      |
-| Constants not in report     | 3     | `JOINT_LIMIT_COST_WEIGHT` → `IK_JOINT_LIMIT_COST_WEIGHT` ✅; `HALF_BODY_DEPTH` → `HALF_BODY_DEPTH_MM` ✅; `TRANSITION_STEP_THRESHOLD` ✅; `IMU_POSING_DEADBAND` ✅. All present, not gaps. |
-| TODO DONE items validated   | 10    | All items from `OpenSHC_GAP_TODO_DONE.md` confirmed implemented in source.                                                                                                                 |
-| Fixes verified (2026-02-11) | 2     | Iteration mapping (3 sub-issues) and quaternion convention (2 sub-issues) both fully resolved. No by-design divergences introduced. See Priority 5 section.                                |
+| Category                    | Count | Details                                                                                                                                                                                                                                   |
+| :-------------------------- | :---- | :---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Existing gaps confirmed     | 11    | All 11 True Gaps from the original report validated against source.                                                                                                                                                                       |
+| New gaps discovered         | 5     | Gaps #12–#16 added (Bezier through-point, stringFormat, acquisition timeout, transitionStance, origin*walk_plane_pose*).                                                                                                                  |
+| Corrections applied         | 16    | All corrections from the original report validated; 2 new corrections added (2026-02-11: quaternion convention, phase iteration order); 2 new corrections added (2026-02-12: convenience method routing, velocity control zero-handling). |
+| Report inaccuracies fixed   | 4     | `GaitDesignation` ordinal values noted; `UNASSIGNED_VALUE` description refined; `origin_walk_plane_pose_` downgraded from ✅ to Partial; Bezier function table added.                                                                     |
+| Constants not in report     | 3     | `JOINT_LIMIT_COST_WEIGHT` → `IK_JOINT_LIMIT_COST_WEIGHT` ✅; `HALF_BODY_DEPTH` → `HALF_BODY_DEPTH_MM` ✅; `TRANSITION_STEP_THRESHOLD` ✅; `IMU_POSING_DEADBAND` ✅. All present, not gaps.                                                |
+| TODO DONE items validated   | 10    | All items from `OpenSHC_GAP_TODO_DONE.md` confirmed implemented in source.                                                                                                                                                                |
+| Fixes verified (2026-02-11) | 2     | Iteration mapping (3 sub-issues) and quaternion convention (2 sub-issues) both fully resolved. No by-design divergences introduced. See Priority 5 section.                                                                               |
+| Fixes verified (2026-02-12) | 2     | Convenience method routing (4 velocity methods + startWalking + stopWalking) and velocity control zero-handling both fixed. All tests pass. See Priority 6 section.                                                                       |
+| Fixes verified (2026-02-13) | 1     | Fallback pattern removed. LocomotionSystem always owns StateController. ~200 lines of duplicated orchestration code eliminated. 8 test files updated. All 8 tests pass. See Priority 7 section.                                           |
 
 ### TODO DONE Cross-Reference
 

@@ -396,22 +396,10 @@ int main(int argc, char **argv) {
     std::cout << "Ejecutando secuencia de startup..." << std::endl;
 
     int startup_sequence_attempts = 0;
-    const Parameters &startup_params = sys.getParameters();
-    double time_delta_startup = startup_params.time_delta;
-    double step_frequency_startup = startup_params.step_frequency;
-    int horiz_iters = std::max(1, (int)std::round((1.0 / step_frequency_startup) / time_delta_startup));
-    int vert_iters = std::max(1, (int)std::round((3.0 / step_frequency_startup) / time_delta_startup));
-    int expected_total_iters = horiz_iters + vert_iters;
-    const int MAX_STARTUP_SEQUENCE_ATTEMPTS = expected_total_iters + 100;
+    const int MAX_STARTUP_SEQUENCE_ATTEMPTS = 500;
 
-    std::cout << "Iteraciones startup estimadas: total=" << expected_total_iters
-              << ", max attempts=" << MAX_STARTUP_SEQUENCE_ATTEMPTS << std::endl;
-
-    while (sys.isStartupInProgress() && startup_sequence_attempts < MAX_STARTUP_SEQUENCE_ATTEMPTS) {
-        if (sys.executeStartupSequence()) {
-            std::cout << "Secuencia de startup completada tras " << startup_sequence_attempts << " intentos." << std::endl;
-            break;
-        }
+    while (sys.getSystemState() != SYSTEM_RUNNING && startup_sequence_attempts < MAX_STARTUP_SEQUENCE_ATTEMPTS) {
+        sys.update();
         startup_sequence_attempts++;
 
         if (startup_sequence_attempts % 25 == 0) {
@@ -420,10 +408,11 @@ int main(int argc, char **argv) {
         }
     }
 
-    if (startup_sequence_attempts >= MAX_STARTUP_SEQUENCE_ATTEMPTS) {
+    if (sys.getSystemState() != SYSTEM_RUNNING) {
         std::cerr << "ERROR: Secuencia de startup falló tras " << startup_sequence_attempts << " intentos." << std::endl;
         return 1;
     }
+    std::cout << "Secuencia de startup completada tras " << startup_sequence_attempts << " intentos." << std::endl;
 
     std::cout << "Iniciando análisis de movimiento de coxas..." << std::endl;
     printTestHeader();
@@ -572,24 +561,17 @@ int main(int argc, char **argv) {
         std::cerr << "WARNING: Failed to initiate stop walking." << std::endl;
     }
 
-    // Ejecutar secuencia de shutdown para transición de RUNNING a READY
-    int shutdown_sequence_attempts = 0;
-    const int MAX_SHUTDOWN_SEQUENCE_ATTEMPTS = 100;
-
-    while (sys.isShutdownInProgress() && shutdown_sequence_attempts < MAX_SHUTDOWN_SEQUENCE_ATTEMPTS) {
-        if (sys.executeShutdownSequence()) {
-            std::cout << "Secuencia de shutdown completada tras " << shutdown_sequence_attempts << " intentos." << std::endl;
-            break;
-        }
-        shutdown_sequence_attempts++;
-
-        if (shutdown_sequence_attempts % 10 == 0) {
-            std::cout << "Intento shutdown " << shutdown_sequence_attempts << "..." << std::endl;
-        }
+    // Run update loop to let StateController orchestrate the shutdown
+    int shutdown_attempts = 0;
+    const int MAX_SHUTDOWN_ATTEMPTS = 500;
+    while (shutdown_attempts < MAX_SHUTDOWN_ATTEMPTS && sys.getSystemState() == SYSTEM_RUNNING) {
+        sys.update();
+        shutdown_attempts++;
     }
-
-    if (shutdown_sequence_attempts >= MAX_SHUTDOWN_SEQUENCE_ATTEMPTS) {
-        std::cerr << "WARNING: Secuencia de shutdown falló tras " << shutdown_sequence_attempts << " intentos." << std::endl;
+    if (sys.getSystemState() != SYSTEM_RUNNING) {
+        std::cout << "Shutdown completado tras " << shutdown_attempts << " iteraciones." << std::endl;
+    } else {
+        std::cerr << "WARNING: Shutdown no completó tras " << shutdown_attempts << " iteraciones." << std::endl;
     }
 
     // Resumen final
