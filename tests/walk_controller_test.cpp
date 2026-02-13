@@ -849,11 +849,14 @@ void testGaitConfigurationValidation(const Parameters &p, BodyPoseController &po
     std::cout << "  ✅ GaitConfiguration applied to WalkController" << std::endl;
 
     // Test tripod gait phase offsets
-    std::cout << "  Validating tripod gait phase offsets:" << std::endl;
+    // getPhaseOffset() returns iteration counts, not normalized fractions.
+    // Normalize by dividing by the step cycle period to get 0.0–1.0 range.
+    StepCycle step_cycle = gait_config.generateStepCycle();
+    std::cout << "  Validating tripod gait phase offsets (period=" << step_cycle.period_ << "):" << std::endl;
     for (int i = 0; i < NUM_LEGS; i++) {
         auto leg_stepper = wc.getLegStepper(i);
         if (leg_stepper != nullptr) {
-            double phase_offset = leg_stepper->getPhaseOffset();
+            double phase_offset = static_cast<double>(leg_stepper->getPhaseOffset()) / step_cycle.period_;
             std::cout << "    Leg " << i << " phase offset: " << phase_offset << std::endl;
 
             // Tripod gait: legs 0,2,4 should have offset 0.0, legs 1,3,5 should have offset 0.5

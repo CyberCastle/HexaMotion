@@ -44,9 +44,14 @@ static void validateCycle(const GaitConfiguration &cfg, const char *label) {
     double recomputed_freq = 1.0 / (sc.period_ * cfg.time_delta);
     double rel_err = std::fabs(recomputed_freq - sc.frequency_) / std::max(1e-9, sc.frequency_);
     assert(rel_err < 1e-9);
-    /** Effective realized frequency should be within 15% of configured step_frequency. */
+    /** Effective realized frequency should be within 15% of configured step_frequency.
+     *  OpenSHC convention: step_frequency is normalized assuming swing_ratio=1.0.
+     *  The actual (effective) stepping rate is step_frequency * swing_ratio.
+     *  See OpenSHC/config/readme.md "step_frequency" documentation. */
     double cfg_freq = cfg.step_frequency;
-    double realised_err = std::fabs(recomputed_freq - cfg_freq) / std::max(1e-9, cfg_freq);
+    double swing_ratio = double(cfg.phase_config.swing_phase) / double(base);
+    double effective_freq = cfg_freq * swing_ratio;
+    double realised_err = std::fabs(recomputed_freq - effective_freq) / std::max(1e-9, effective_freq);
     assert(realised_err <= 0.15);
     std::cout << label << ": configured=" << cfg_freq << "Hz realised=" << recomputed_freq
               << "Hz period_iters=" << sc.period_ << " normaliser=" << normaliser << "\n";
