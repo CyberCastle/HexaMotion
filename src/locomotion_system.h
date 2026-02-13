@@ -356,6 +356,12 @@ class LocomotionSystem : public StateControllerContext {
     /** Execute one low-level locomotion pipeline iteration (context hook for StateController). */
     bool runControlPipelineStep() override;
 
+    /**
+     * @brief Update admittance stiffness for a single leg during state transition.
+     * OpenSHC equivalent: admittance_->updateStiffness(leg, scale_reference) in legStateToggle().
+     */
+    void updateAdmittanceStiffness(int leg_index, double scale_reference) override;
+
     /** Update FSR and IMU sensors in parallel for optimal performance. */
     bool updateSensorsParallel();
 

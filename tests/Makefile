@@ -98,7 +98,7 @@ step_frequency_regeneration_test: step_frequency_regeneration_test.cpp ../src/ga
 ik_tracking_diagnostic_test: ik_tracking_diagnostic_test.cpp ../src/leg_stepper.cpp ../src/robot_model.cpp ../src/math_utils.cpp ../src/workspace_analyzer.cpp ../src/leg.cpp ../src/gait_config_factory.cpp ../src/body_pose_config_factory.cpp ../src/body_pose_controller.cpp ../src/leg_poser.cpp ../src/velocity_limits.cpp ../src/terrain_adaptation.cpp ../src/admittance_controller.cpp ../src/state_controller.cpp ../src/cartesian_velocity_controller.cpp ../src/locomotion_system.cpp ../src/walk_controller.cpp
 	$(CXX) $(CXXFLAGS) $^ -o $@
 
-runge_kutta_validation_test: runge_kutta_validation_test.cpp ../src/admittance_controller.cpp ../src/robot_model.cpp ../src/math_utils.cpp ../src/workspace_analyzer.cpp ../src/body_pose_config_factory.cpp
+runge_kutta_validation_test: runge_kutta_validation_test.cpp ../src/admittance_controller.cpp ../src/robot_model.cpp ../src/math_utils.cpp ../src/workspace_analyzer.cpp ../src/body_pose_config_factory.cpp ../src/leg.cpp ../src/walk_controller.cpp ../src/leg_stepper.cpp ../src/terrain_adaptation.cpp ../src/velocity_limits.cpp ../src/gait_config_factory.cpp ../src/body_pose_controller.cpp ../src/leg_poser.cpp ../src/cartesian_velocity_controller.cpp ../src/state_controller.cpp ../src/locomotion_system.cpp
 	$(CXX) $(CXXFLAGS) $^ -o $@
 
 clean:

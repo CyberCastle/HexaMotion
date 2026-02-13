@@ -7,6 +7,7 @@
  * @file state_controller.cpp
  * @brief Implements the high-level state machine.
  */
+#include <cmath>
 #include <sstream>
 
 // Helper functions to convert enums to strings for logging
@@ -924,6 +925,13 @@ void StateController::handleLegStateTransitions() {
         if (bpc) {
             progress = bpc->poseForLegManipulation(context_.getLegsArray());
         }
+
+        // Update admittance stiffness during transition (OpenSHC: scale 0->1)
+        {
+            double scale_reference = static_cast<double>(progress) / PROGRESS_COMPLETE;
+            context_.updateAdmittanceStiffness(toggle_leg_index_, scale_reference);
+        }
+
         if (progress >= 100) {
             state = LegState::LEG_MANUAL;
             manual_leg_count_++;
@@ -939,6 +947,13 @@ void StateController::handleLegStateTransitions() {
         if (bpc) {
             progress = bpc->poseForLegManipulation(context_.getLegsArray());
         }
+
+        // Update admittance stiffness during transition (OpenSHC: scale 1->0)
+        {
+            double scale_reference = std::abs(static_cast<double>(progress) / PROGRESS_COMPLETE - 1.0);
+            context_.updateAdmittanceStiffness(toggle_leg_index_, scale_reference);
+        }
+
         if (progress >= 100) {
             state = LegState::LEG_WALKING;
             manual_leg_count_--;

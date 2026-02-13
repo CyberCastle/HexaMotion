@@ -230,6 +230,26 @@ struct Parameters {
         double collision_adjust_step = 0.1;        //< Decrement step per attempt
         double safe_scale_ratio = 0.7;             //< Fallback ratio of leg_reach when iterative scaling fails
     } workspace_tuning;                            //< params.workspace_tuning
+
+    /**
+     * @brief Admittance controller parameters (OpenSHC 1:1 equivalent).
+     *
+     * Replaces OpenSHC YAML: admittance_control, dynamic_stiffness, use_joint_effort,
+     * integrator_step_time, virtual_mass, virtual_stiffness, virtual_damping_ratio,
+     * force_gain, swing_stiffness_scaler, load_stiffness_scaler.
+     */
+    struct AdmittanceConfig {
+        bool enable = false;                 //< Master toggle (OpenSHC: admittance_control)
+        bool dynamic_stiffness = true;       //< Enable per-phase stiffness scaling (OpenSHC: dynamic_stiffness)
+        bool use_joint_effort = false;       //< Use calculated (true) vs measured (false) tip force (OpenSHC: use_joint_effort)
+        double integrator_step_time = 0.5;   //< Integration step time in seconds (OpenSHC default: 0.5)
+        double virtual_mass = 10.0;          //< Virtual mass in kg (OpenSHC default: 10.0)
+        double virtual_stiffness = 12.0;     //< Virtual spring stiffness (OpenSHC default: 12.0)
+        double virtual_damping_ratio = 0.8;  //< Damping ratio ζ; actual damping = ζ·2·√(m·k) (OpenSHC default: 0.8)
+        double force_gain = 0.1;             //< Force scaling gain (OpenSHC default: 0.1)
+        double swing_stiffness_scaler = 0.1; //< Stiffness scaler for swing legs (OpenSHC default: 0.1)
+        double load_stiffness_scaler = 5.0;  //< Stiffness scaler for loaded adjacent legs (OpenSHC default: 5.0)
+    } admittance;                            //< params.admittance
 };
 
 // Centralized servo angle solution for standing height (previously in body_pose_config_factory)

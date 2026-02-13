@@ -70,6 +70,21 @@ class StateControllerContext {
      * @return True if the pipeline step completed successfully.
      */
     virtual bool runControlPipelineStep() = 0;
+
+    /**
+     * @brief Update admittance stiffness for a single leg during state transition.
+     *
+     * Called by StateController during WALKING_TO_MANUAL (scale 0->1) and
+     * MANUAL_TO_WALKING (scale 1->0) transitions. Delegates to
+     * AdmittanceController::updateStiffness(legs, leg_index, scale_reference).
+     *
+     * OpenSHC equivalent: admittance_->updateStiffness(leg, scale_reference)
+     * in StateController::legStateToggle().
+     *
+     * @param leg_index       Index of the transitioning leg
+     * @param scale_reference Transition progress (0.0 to 1.0)
+     */
+    virtual void updateAdmittanceStiffness(int leg_index, double scale_reference) = 0;
 };
 
 #endif /**< STATE_CONTROLLER_CONTEXT_H */

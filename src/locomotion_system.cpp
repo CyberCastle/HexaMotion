@@ -119,7 +119,7 @@ bool LocomotionSystem::initialize(IIMUInterface *imu, IFSRInterface *fsr, IServo
     /** Initialize controllers with proper architecture. */
     body_pose_ctrl = new BodyPoseController(model, pose_config);
     walk_ctrl = new WalkController(model, legs, pose_config);
-    admittance_ctrl = new AdmittanceController(model, imu_interface, fsr_interface);
+    admittance_ctrl = new AdmittanceController(params);
     velocity_controller = new CartesianVelocityController(model);
 
     /** Enable IMU pose compensation by default if configured. */
@@ -500,16 +500,19 @@ bool LocomotionSystem::executeShutdownSequence() {
 
 /** Check stability margin. */
 bool LocomotionSystem::checkStabilityMargin() {
-    /** Create temporary arrays for compatibility with admittance controller. */
-    Point3D temp_leg_positions[NUM_LEGS];
-    StepPhase temp_leg_states[NUM_LEGS];
+    /** Direct FSR-based stability check (formerly in AdmittanceController). */
+    if (!fsr_interface)
+        return true;
 
-    for (int i = 0; i < NUM_LEGS; i++) {
-        temp_leg_positions[i] = legs[i].getCurrentTipPositionGlobal();
-        temp_leg_states[i] = legs[i].getStepPhase();
+    int contacts = 0;
+    for (int i = 0; i < NUM_LEGS; ++i) {
+        if (legs[i].getStepPhase() == STANCE_PHASE) {
+            FSRData fsr_data = fsr_interface->readFSR(i);
+            if (fsr_data.in_contact)
+                contacts++;
+        }
     }
-
-    return admittance_ctrl->checkStability(temp_leg_positions, temp_leg_states);
+    return contacts >= 3;
 }
 
 /** Compute center of pressure. */
@@ -741,6 +744,23 @@ bool LocomotionSystem::runControlPipelineStep() {
     if (params.use_fsr_contact) {
         /** Early call: updates in_contact_ and histories; phase may be overwritten later. */
         updateLegStates();
+    }
+
+    /**
+     * @brief Admittance control (OpenSHC 1:1 pipeline position).
+     *
+     * In OpenSHC this runs in StateController::loop() before the state machine,
+     * as long as robot_state_ != UNKNOWN. Here it runs every tick in the pipeline,
+     * which is the equivalent position since runControlPipelineStep() is always called.
+     */
+    if (params.admittance.enable && admittance_ctrl) {
+        /** Dynamic stiffness: only when actively walking and dynamic_stiffness enabled. */
+        if (walk_ctrl && walk_ctrl->getWalkState() != WALK_STOPPED &&
+            params.admittance.dynamic_stiffness) {
+            admittance_ctrl->updateStiffness(legs, walk_ctrl);
+        }
+        /** Integrate admittance ODE for all legs. */
+        admittance_ctrl->updateAdmittance(legs, fsr_interface);
     }
 
     /** Handle initial standing pose transition (non-blocking) prior to normal running. */
@@ -1123,6 +1143,12 @@ double LocomotionSystem::calculateDynamicStabilityIndex() {
     return math_utils::clamp<double>(stability_index, 0.0, 1.0);
 }
 
+void LocomotionSystem::updateAdmittanceStiffness(int leg_index, double scale_reference) {
+    if (admittance_ctrl && params.admittance.enable && params.admittance.dynamic_stiffness) {
+        admittance_ctrl->updateStiffness(legs, leg_index, scale_reference);
+    }
+}
+
 /** Parallel sensor update implementation. */
 bool LocomotionSystem::updateSensorsParallel() {
     bool fsr_updated = false;
@@ -1220,6 +1246,17 @@ void LocomotionSystem::applyInverseKinematicsToAllLegs() {
     for (int i = 0; i < NUM_LEGS; i++) {
         /** Get desired position from Bezier trajectory (pure, no IK applied yet). */
         Point3D desired_tip_position = legs[i].getDesiredTipPosition();
+
+        /**
+         * Apply admittance delta (OpenSHC: done inside Leg::setDesiredTipPose).
+         * Skip legs in MANUAL state (OpenSHC pattern).
+         */
+        if (params.admittance.enable && legs[i].getLegState() != LEG_MANUAL) {
+            Eigen::Vector3d delta = legs[i].getAdmittanceDelta();
+            desired_tip_position.x += delta[0];
+            desired_tip_position.y += delta[1];
+            desired_tip_position.z += delta[2];
+        }
 
         /** Get current state for delta calculation. */
         JointAngles current_angles = legs[i].getJointAngles();

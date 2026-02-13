@@ -411,6 +411,59 @@ class Leg {
      */
     bool isInDefaultStance(double tolerance = 5.0) const;
 
+    /** Admittance controller state (OpenSHC 1:1 per-leg parity). */
+
+    /**
+     * @brief Get admittance position delta applied to tip.
+     * @return Admittance delta vector (mm)
+     */
+    Eigen::Vector3d getAdmittanceDelta() const { return admittance_delta_; }
+
+    /**
+     * @brief Set admittance delta (OpenSHC: projects onto tip direction).
+     *
+     * For 3DOF legs without explicit tip rotation, the delta is stored directly.
+     * @param delta Admittance compliance delta vector
+     */
+    void setAdmittanceDelta(const Eigen::Vector3d &delta) { admittance_delta_ = delta; }
+
+    /**
+     * @brief Get virtual stiffness for this leg (dynamically scaled).
+     * @return Current virtual stiffness
+     */
+    double getVirtualStiffness() const { return virtual_stiffness_; }
+
+    /**
+     * @brief Set virtual stiffness for this leg.
+     * @param stiffness New stiffness value
+     */
+    void setVirtualStiffness(double stiffness) { virtual_stiffness_ = stiffness; }
+
+    /**
+     * @brief Get pointer to persistent ODE state for axis.
+     *
+     * Each axis has a 2-element state: [position, velocity].
+     * OpenSHC equivalent: Leg::getAdmittanceState().
+     * @param axis Axis index (0=X, 1=Y, 2=Z)
+     * @return Pointer to the 2-element state array for in-place integration
+     */
+    double *getAdmittanceState(int axis) {
+        if (axis >= 0 && axis < 3)
+            return admittance_state_[axis];
+        return admittance_state_[0];
+    }
+
+    /**
+     * @brief Reset admittance ODE state to zero for all axes.
+     */
+    void resetAdmittanceState() {
+        for (int i = 0; i < 3; ++i) {
+            admittance_state_[i][0] = 0.0;
+            admittance_state_[i][1] = 0.0;
+        }
+        admittance_delta_ = Eigen::Vector3d::Zero();
+    }
+
   private:
     /** Robot model reference. */
     const RobotModel &model_; /**< Reference to robot model for all calculations. */
@@ -452,6 +505,11 @@ class Leg {
     /** Default configuration. */
     JointAngles default_angles_;   /**< Default joint angles. */
     Point3D default_tip_position_; /**< Default tip position. */
+
+    /** Admittance controller state (OpenSHC 1:1 per-leg parity). */
+    Eigen::Vector3d admittance_delta_ = Eigen::Vector3d::Zero(); /**< Position offset from admittance compliance (mm). */
+    double virtual_stiffness_ = 12.0;                            /**< Per-leg virtual stiffness (dynamically scaled). */
+    double admittance_state_[3][2] = {{0}};                      /**< Persistent ODE state per axis [X/Y/Z][position, velocity]. */
 };
 
 #endif /**< LEG_H */
