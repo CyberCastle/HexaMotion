@@ -275,6 +275,28 @@ typedef DummyFSR MockFSR;
 typedef DummyServo MockServo;
 typedef ProgressiveServo RealisticServo; // Alias for backward compatibility
 
+// Default configured packed/unpacked poses for tests (radians)
+static constexpr double TEST_UNPACKED_COXA_RAD = 0.0;
+static constexpr double TEST_UNPACKED_FEMUR_RAD = -0.6108652381980153; // -35 deg
+static constexpr double TEST_UNPACKED_TIBIA_RAD = 0.6108652381980153;  // +35 deg
+
+static constexpr double TEST_PACKED_COXA_RAD = 0.0;
+static constexpr double TEST_PACKED_FEMUR_RAD = 1.0471975511965976;  // +60 deg
+static constexpr double TEST_PACKED_TIBIA_RAD = -0.5235987755982988; // -30 deg
+
+inline void enableConfiguredPackedUnpackedPoses(Parameters &params) {
+    params.use_configured_packed_unpacked_poses = true;
+    for (int i = 0; i < NUM_LEGS; ++i) {
+        params.unpacked_pose_joints[i].coxa = TEST_UNPACKED_COXA_RAD;
+        params.unpacked_pose_joints[i].femur = TEST_UNPACKED_FEMUR_RAD;
+        params.unpacked_pose_joints[i].tibia = TEST_UNPACKED_TIBIA_RAD;
+
+        params.packed_pose_joints[i].coxa = TEST_PACKED_COXA_RAD;
+        params.packed_pose_joints[i].femur = TEST_PACKED_FEMUR_RAD;
+        params.packed_pose_joints[i].tibia = TEST_PACKED_TIBIA_RAD;
+    }
+}
+
 // Additional aliases for terrain adaptation tests
 typedef DummyIMU MockIMUInterface;
 typedef DummyFSR MockFSRInterface;
@@ -312,6 +334,7 @@ inline Parameters createDefaultParameters() {
     params.smooth_trajectory.enable_pose_interpolation = false;
 
     // Startup normalization defaults tuned for brisk but safe standing transitions
+    enableConfiguredPackedUnpackedPoses(params);
     return params;
 }
 

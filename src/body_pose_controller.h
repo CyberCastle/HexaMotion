@@ -152,24 +152,6 @@ class BodyPoseController {
     bool executeShutdownSequence(Leg legs[NUM_LEGS]);
 
     /**
-     * @brief Execute pack sequence (OpenSHC equivalent)
-     * Moves legs to packed configuration for storage/transport
-     * @param legs Array of Leg objects to update
-     * @param time_to_pack Time to complete packing sequence
-     * @return Progress percentage (0-100), 100 indicates completion
-     */
-    int packLegs(Leg legs[NUM_LEGS], double time_to_pack);
-
-    /**
-     * @brief Execute unpack sequence (OpenSHC equivalent)
-     * Moves legs from packed to ready configuration
-     * @param legs Array of Leg objects to update
-     * @param time_to_unpack Time to complete unpacking sequence
-     * @return Progress percentage (0-100), 100 indicates completion
-     */
-    int unpackLegs(Leg legs[NUM_LEGS], double time_to_unpack);
-
-    /**
      * @brief Pose for leg manipulation (OpenSHC equivalent)
      * Generates poses for manual leg manipulation while maintaining stability
      * @param legs Array of Leg objects to update
@@ -259,7 +241,6 @@ class BodyPoseController {
         proximity_alert_ = false;
         legs_completed_step_ = 0;
         current_group_ = 0;
-        pack_step_ = 0;
         reset_transition_sequence_ = true;
     }
 
@@ -525,8 +506,6 @@ class BodyPoseController {
     bool reset_transition_sequence_;      //< Flag if saved transition sequence needs regeneration
     int legs_completed_step_;             //< Number of legs having completed required step in sequence
     int current_group_;                   //< Current leg group executing stepping maneuver
-    int pack_step_;                       //< Current step in pack/unpack sequence
-
     // Last reported progress for startup/shutdown sequences (OpenSHC parity)
     int last_startup_progress_ = 0;
     int last_shutdown_progress_ = 0;

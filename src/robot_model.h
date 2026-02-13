@@ -17,9 +17,30 @@ class WorkspaceAnalyzer;
 struct ValidationConfig;
 
 /**
+ * @brief Joint pose angles for one leg in radians.
+ */
+struct JointPoseAngles {
+    double coxa = 0.0;
+    double femur = 0.0;
+    double tibia = 0.0;
+};
+
+/**
  * @brief Robot configuration parameters.
  */
 struct Parameters {
+    Parameters()
+        : hexagon_radius(0), coxa_length(0), femur_length(0), tibia_length(0),
+          robot_height(0), robot_weight(0), center_of_mass(Eigen::Vector3d::Zero()),
+          coxa_angle_limits{0, 0}, femur_angle_limits{0, 0}, tibia_angle_limits{0, 0},
+          dh_parameters{}, imu_calibration_offset(Eigen::Vector3d::Zero()),
+          max_velocity(0), max_angular_velocity(0), stability_margin(0) {
+        for (int i = 0; i < NUM_LEGS; ++i) {
+            packed_pose_joints[i] = {-1.571, 1.900, 1.200};
+            unpacked_pose_joints[i] = {0.000, 0.785, -1.138};
+        }
+    }
+
     double hexagon_radius;
     double coxa_length;
     double femur_length;
@@ -45,6 +66,13 @@ struct Parameters {
     bool use_fsr_contact = false;
 
     bool use_custom_dh_parameters = false; //< Use custom Denavit-Hartenberg parameters
+
+    // Configured packed/unpacked joint poses (OpenSHC YAML parity moved to Parameters).
+    // All values are in radians in the robot model frame.
+    bool use_configured_packed_unpacked_poses = true; //< Enable explicit packed/unpacked joint pose targets
+    JointPoseAngles packed_pose_joints[NUM_LEGS];     //< Packed target pose per leg
+    JointPoseAngles unpacked_pose_joints[NUM_LEGS];   //< Unpacked (ready) target pose per leg
+
     /**
      * @brief DH parameter table for each leg.
      * The first entry represents the fixed base transform.

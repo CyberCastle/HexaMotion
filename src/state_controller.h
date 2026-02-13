@@ -16,8 +16,8 @@
 #define PACK_TIME 2.0f
 /** Progress value indicating completion. */
 #define PROGRESS_COMPLETE 100
-/** Joint position tolerance for state detection. */
-#define JOINT_TOLERANCE 0.1f
+/** Joint position tolerance for state detection (radians, OpenSHC parity). */
+#define JOINT_TOLERANCE 0.01
 /** Throttle period for repeated messages. */
 #define THROTTLE_PERIOD 1.0f
 
@@ -535,6 +535,7 @@ class StateController {
     int shutdown_transition_step_count_;
     int pack_step_;
     int unpack_step_;
+    bool executing_pack_transition_;
 
     /** Initialization flag. */
     bool is_initialized_;

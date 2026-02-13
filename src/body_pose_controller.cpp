@@ -42,8 +42,7 @@ BodyPoseController::BodyPoseController(RobotModel &m, const BodyPoseConfiguratio
       executing_transition_(false), transition_step_(0), transition_step_count_(0),
       set_target_(true), proximity_alert_(false), horizontal_transition_complete_(false),
       vertical_transition_complete_(false), first_sequence_execution_(true),
-      reset_transition_sequence_(true), legs_completed_step_(0), current_group_(0),
-      pack_step_(0) {
+      reset_transition_sequence_(true), legs_completed_step_(0), current_group_(0) {
 
     // Initialize leg posers
     for (int i = 0; i < NUM_LEGS; i++) {
@@ -1458,87 +1457,6 @@ void BodyPoseController::setWalkPlanePoseEnabled(bool enabled) {
 
 bool BodyPoseController::isWalkPlanePoseEnabled() const {
     return walk_plane_pose_enabled;
-}
-
-int BodyPoseController::packLegs(Leg legs[NUM_LEGS], double time_to_pack) {
-    // OpenSHC packLegs implementation adapted for HexaMotion
-
-    // Get pack height from configuration
-    double pack_height = 150.0; // Default pack height in mm
-
-    // Get body position as pack position (use default center position)
-    Point3D pack_position;
-    pack_position.x = 0.0;         // Center position
-    pack_position.y = 0.0;         // Center position
-    pack_position.z = pack_height; // Raise to pack height
-
-    int completed_legs = 0;
-
-    // Step all legs to pack position
-    for (int leg_index = 0; leg_index < NUM_LEGS; ++leg_index) {
-        if (leg_posers_[leg_index]) {
-            bool success = leg_posers_[leg_index]->get()->stepToPosition(pack_position, 20.0, 1.0); // 20mm step height, 1s time
-            if (success) {
-                // Update leg state
-                legs[leg_index].setCurrentTipPositionGlobal(pack_position);
-                JointAngles current_angles = legs[leg_index].getJointAngles();
-                legs[leg_index].setJointAngles(model.inverseKinematicsCurrentGlobalCoordinates(leg_index, current_angles, pack_position));
-                legs[leg_index].setCurrentTipPositionGlobal(pack_position);
-                completed_legs++;
-            }
-        }
-    }
-
-    // Update pack step tracking
-    pack_step_++;
-    legs_completed_step_ = completed_legs;
-
-    // Return progress percentage
-    int progress = (completed_legs * 100) / NUM_LEGS;
-    return progress;
-}
-
-int BodyPoseController::unpackLegs(Leg legs[NUM_LEGS], double time_to_unpack) {
-    // OpenSHC unpackLegs implementation adapted for HexaMotion
-
-    // Get default stance height
-    double stance_height = 50.0; // Default stance height in mm
-
-    int completed_legs = 0;
-
-    // Calculate unpack positions for each leg
-    for (int leg_index = 0; leg_index < NUM_LEGS; ++leg_index) {
-        // Calculate default standing position for each leg based on robot geometry
-        Point3D default_position;
-
-        // Basic hexapod leg positioning (simplified)
-        double radius = 120.0;                   // Default radius from center in mm
-        double angle = leg_index * (M_PI / 3.0); // 60 degrees between legs
-
-        default_position.x = radius * cos(angle);
-        default_position.y = radius * sin(angle);
-        default_position.z = stance_height;
-
-        if (leg_posers_[leg_index]) {
-            bool success = leg_posers_[leg_index]->get()->stepToPosition(default_position, 20.0, 1.0); // 20mm step height, 1s time
-            if (success) {
-                // Update leg state
-                legs[leg_index].setCurrentTipPositionGlobal(default_position);
-                JointAngles current_angles = legs[leg_index].getJointAngles();
-                legs[leg_index].setJointAngles(model.inverseKinematicsCurrentGlobalCoordinates(leg_index, current_angles, default_position));
-                legs[leg_index].setCurrentTipPositionGlobal(default_position);
-                completed_legs++;
-            }
-        }
-    }
-
-    // Update tracking
-    pack_step_--;
-    legs_completed_step_ = completed_legs;
-
-    // Return progress percentage
-    int progress = (completed_legs * 100) / NUM_LEGS;
-    return progress;
 }
 
 int BodyPoseController::poseForLegManipulation(Leg legs[NUM_LEGS]) {

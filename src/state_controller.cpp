@@ -147,7 +147,7 @@ String toArduinoString(const std::string &str) {
 } // namespace
 
 StateController::StateController(StateControllerContext &context, const StateMachineConfig &config)
-    : context_(context), config_(config), current_system_state_(SystemState::SYSTEM_PACKED), current_robot_state_(RobotState::ROBOT_UNKNOWN), current_walk_state_(WalkState::WALK_STOPPED), current_posing_mode_(PosingMode::POSING_NONE), current_cruise_control_mode_(CruiseControlMode::CRUISE_CONTROL_OFF), current_planner_mode_(PlannerMode::PLANNER_MODE_OFF), current_pose_reset_mode_(PoseResetMode::POSE_RESET_NONE), desired_system_state_(SystemState::SYSTEM_PACKED), desired_robot_state_(RobotState::ROBOT_UNKNOWN), leg_states_{}, manual_leg_count_(0), toggle_leg_index_(-1), toggle_leg_state_pending_(false), is_transitioning_(false), transition_start_time_(0), desired_linear_velocity_(Eigen::Vector2d::Zero()), desired_angular_velocity_(0.0f), desired_body_position_(Eigen::Vector3d::Zero()), desired_body_orientation_(Eigen::Vector3d::Zero()), cruise_velocity_(Eigen::Vector3d::Zero()), cruise_start_time_(0), cruise_end_time_(0), last_update_time_(0), time_delta_(0.02f), has_error_(false), startup_step_(0), startup_transition_initialized_(false), startup_transition_step_count_(4), shutdown_step_(0), shutdown_transition_initialized_(false), shutdown_transition_step_count_(3), pack_step_(0), unpack_step_(0), is_initialized_(false) {
+    : context_(context), config_(config), current_system_state_(SystemState::SYSTEM_PACKED), current_robot_state_(RobotState::ROBOT_UNKNOWN), current_walk_state_(WalkState::WALK_STOPPED), current_posing_mode_(PosingMode::POSING_NONE), current_cruise_control_mode_(CruiseControlMode::CRUISE_CONTROL_OFF), current_planner_mode_(PlannerMode::PLANNER_MODE_OFF), current_pose_reset_mode_(PoseResetMode::POSE_RESET_NONE), desired_system_state_(SystemState::SYSTEM_PACKED), desired_robot_state_(RobotState::ROBOT_UNKNOWN), leg_states_{}, manual_leg_count_(0), toggle_leg_index_(-1), toggle_leg_state_pending_(false), is_transitioning_(false), transition_start_time_(0), desired_linear_velocity_(Eigen::Vector2d::Zero()), desired_angular_velocity_(0.0f), desired_body_position_(Eigen::Vector3d::Zero()), desired_body_orientation_(Eigen::Vector3d::Zero()), cruise_velocity_(Eigen::Vector3d::Zero()), cruise_start_time_(0), cruise_end_time_(0), last_update_time_(0), time_delta_(0.02f), has_error_(false), startup_step_(0), startup_transition_initialized_(false), startup_transition_step_count_(4), shutdown_step_(0), shutdown_transition_initialized_(false), shutdown_transition_step_count_(3), pack_step_(0), unpack_step_(0), executing_pack_transition_(false), is_initialized_(false) {
 
     // Initialize leg states
     for (int i = 0; i < NUM_LEGS; i++) {
@@ -188,6 +188,31 @@ bool StateController::initialize(const BodyPoseConfiguration &body_pose_config) 
     // OpenSHC parity: startup sequence behavior is controlled by pose config.
     config_.enable_startup_sequence = body_pose_config.start_up_sequence;
     config_.enable_direct_startup = !body_pose_config.start_up_sequence;
+
+    // Initialize packed/ready target angles from explicit Parameters configuration when enabled.
+    // Fallback keeps ready targets aligned with configured standing pose for deterministic detection.
+    const Parameters &params = context_.getParams();
+    for (int i = 0; i < NUM_LEGS; ++i) {
+        if (params.use_configured_packed_unpacked_poses) {
+            packed_target_angles_[i] = JointAngles(
+                params.packed_pose_joints[i].coxa,
+                params.packed_pose_joints[i].femur,
+                params.packed_pose_joints[i].tibia);
+            ready_target_angles_[i] = JointAngles(
+                params.unpacked_pose_joints[i].coxa,
+                params.unpacked_pose_joints[i].femur,
+                params.unpacked_pose_joints[i].tibia);
+        } else {
+            packed_target_angles_[i] = JointAngles(
+                body_pose_config.standing_pose_joints[i].coxa,
+                body_pose_config.standing_pose_joints[i].femur,
+                body_pose_config.standing_pose_joints[i].tibia);
+            ready_target_angles_[i] = JointAngles(
+                body_pose_config.standing_pose_joints[i].coxa,
+                body_pose_config.standing_pose_joints[i].femur,
+                body_pose_config.standing_pose_joints[i].tibia);
+        }
+    }
 
     // Check if locomotion system is available
     if (!context_.isSystemEnabled()) {
@@ -1282,40 +1307,105 @@ int StateController::executeShutdownSequence() {
 }
 
 int StateController::executePackSequence() {
-    // Simplified pack sequence using instance member
-    if (pack_step_ == 0) {
-        // Remove transition_progress_ updates in transition and reset methods
-        // transition_progress_.total_steps = 2;
-        pack_step_ = 1;
-        // Remove transition_progress_ updates in transition and reset methods
-        // transition_progress_.current_step = 1;
-        return 50;
-    } else if (pack_step_ == 1) {
-        // Move to packed position (standing pose as approximation)
-        if (context_.setStandingPose()) {
-            pack_step_ = 0; // Reset for next time
-            // Remove transition_progress_ updates in transition and reset methods
-            // transition_progress_.current_step = 2;
-            // transition_progress_.is_complete = true;
-            // Capture packed target joint angles
+    const Parameters &params = context_.getParams();
+    BodyPoseController *bpc = context_.getBodyPoseController();
+    double transition_time = PACK_TIME / params.step_frequency;
+
+    if (params.use_configured_packed_unpacked_poses && bpc) {
+        if (!executing_pack_transition_) {
             for (int i = 0; i < NUM_LEGS; ++i) {
-                packed_target_angles_[i] = context_.getJointAngles(i);
+                LegPoser *lp = bpc->getLegPoser(i);
+                if (lp) {
+                    lp->setDesiredConfiguration(
+                        packed_target_angles_[i].coxa,
+                        packed_target_angles_[i].femur,
+                        packed_target_angles_[i].tibia);
+                }
             }
-            return 100;
+            executing_pack_transition_ = true;
         }
+
+        int min_progress = PROGRESS_COMPLETE;
+        for (int i = 0; i < NUM_LEGS; ++i) {
+            LegPoser *lp = bpc->getLegPoser(i);
+            if (lp) {
+                int progress = lp->transitionConfiguration(transition_time);
+                if (progress < min_progress) {
+                    min_progress = progress;
+                }
+            }
+        }
+
+        if (min_progress >= PROGRESS_COMPLETE) {
+            executing_pack_transition_ = false;
+            pack_step_ = 0;
+            return PROGRESS_COMPLETE;
+        }
+        return min_progress;
     }
+
+    // Legacy fallback when no explicit packed/unpacked poses are configured.
+    if (pack_step_ == 0) {
+        pack_step_ = 1;
+        return 50;
+    }
+
+    if (context_.setStandingPose()) {
+        pack_step_ = 0;
+        for (int i = 0; i < NUM_LEGS; ++i) {
+            packed_target_angles_[i] = context_.getJointAngles(i);
+        }
+        return PROGRESS_COMPLETE;
+    }
+
     return 50;
 }
 
 int StateController::executeUnpackSequence() {
-    // Direct startup equivalent (OpenSHC: directStartup)
+    const Parameters &params = context_.getParams();
+    BodyPoseController *bpc = context_.getBodyPoseController();
+    double transition_time = PACK_TIME / params.step_frequency;
+
+    if (params.use_configured_packed_unpacked_poses && bpc) {
+        if (!executing_pack_transition_) {
+            for (int i = 0; i < NUM_LEGS; ++i) {
+                LegPoser *lp = bpc->getLegPoser(i);
+                if (lp) {
+                    lp->setDesiredConfiguration(
+                        ready_target_angles_[i].coxa,
+                        ready_target_angles_[i].femur,
+                        ready_target_angles_[i].tibia);
+                }
+            }
+            executing_pack_transition_ = true;
+        }
+
+        int min_progress = PROGRESS_COMPLETE;
+        for (int i = 0; i < NUM_LEGS; ++i) {
+            LegPoser *lp = bpc->getLegPoser(i);
+            if (lp) {
+                int progress = lp->transitionConfiguration(transition_time);
+                if (progress < min_progress) {
+                    min_progress = progress;
+                }
+            }
+        }
+
+        if (min_progress >= PROGRESS_COMPLETE) {
+            executing_pack_transition_ = false;
+            unpack_step_ = 0;
+            return PROGRESS_COMPLETE;
+        }
+        return min_progress;
+    }
+
+    // Legacy fallback when no explicit packed/unpacked poses are configured.
     bool ok = context_.establishInitialStandingPose();
     if (!ok) {
         return 0;
     }
 
     if (!context_.isInitialStandingPoseActive()) {
-        // Capture ready target joint angles when transition completes
         for (int i = 0; i < NUM_LEGS; ++i) {
             ready_target_angles_[i] = context_.getJointAngles(i);
         }
@@ -1332,7 +1422,26 @@ int StateController::executeUnpackSequence() {
 }
 
 bool StateController::isRobotPacked() const {
-    // Check if robot is in packed state based on body position and orientation
+    const Parameters &params = context_.getParams();
+
+    // Joint-based packed check
+    bool joints_ok = true;
+    for (int i = 0; i < NUM_LEGS; ++i) {
+        JointAngles cur = context_.getJointAngles(i);
+        JointAngles tgt = packed_target_angles_[i];
+        if (abs(cur.coxa - tgt.coxa) > JOINT_TOLERANCE ||
+            abs(cur.femur - tgt.femur) > JOINT_TOLERANCE ||
+            abs(cur.tibia - tgt.tibia) > JOINT_TOLERANCE) {
+            joints_ok = false;
+            break;
+        }
+    }
+
+    if (params.use_configured_packed_unpacked_poses) {
+        return joints_ok;
+    }
+
+    // Legacy heuristic path when no explicit packed configuration exists.
     Eigen::Vector3d current_position = context_.getBodyPosition();
 
     // Check for invalid/uninitialized position data
@@ -1354,11 +1463,17 @@ bool StateController::isRobotPacked() const {
     }
 
     bool body_low = current_position.z() < 50.0f;
-    // Joint-based packed check
+    return body_low && joints_ok;
+}
+
+bool StateController::isRobotReady() const {
+    const Parameters &params = context_.getParams();
+
+    // Joint-based ready check
     bool joints_ok = true;
     for (int i = 0; i < NUM_LEGS; ++i) {
         JointAngles cur = context_.getJointAngles(i);
-        JointAngles tgt = packed_target_angles_[i];
+        JointAngles tgt = ready_target_angles_[i];
         if (abs(cur.coxa - tgt.coxa) > JOINT_TOLERANCE ||
             abs(cur.femur - tgt.femur) > JOINT_TOLERANCE ||
             abs(cur.tibia - tgt.tibia) > JOINT_TOLERANCE) {
@@ -1366,11 +1481,12 @@ bool StateController::isRobotPacked() const {
             break;
         }
     }
-    return body_low && joints_ok;
-}
 
-bool StateController::isRobotReady() const {
-    // Check if robot is in ready state based on body position and orientation
+    if (params.use_configured_packed_unpacked_poses) {
+        return joints_ok;
+    }
+
+    // Legacy heuristic path when no explicit unpacked configuration exists.
     Eigen::Vector3d current_position = context_.getBodyPosition();
     Eigen::Vector3d current_orientation = context_.getBodyOrientation();
 
@@ -1386,18 +1502,6 @@ bool StateController::isRobotReady() const {
     bool height_ok = (z_abs > 80.0f && z_abs < 300.0f);
     bool orientation_ok = (abs(current_orientation.x()) < 10.0f && abs(current_orientation.y()) < 10.0f);
     bool body_ready = height_ok && orientation_ok;
-    // Joint-based ready check
-    bool joints_ok = true;
-    for (int i = 0; i < NUM_LEGS; ++i) {
-        JointAngles cur = context_.getJointAngles(i);
-        JointAngles tgt = ready_target_angles_[i];
-        if (abs(cur.coxa - tgt.coxa) > JOINT_TOLERANCE ||
-            abs(cur.femur - tgt.femur) > JOINT_TOLERANCE ||
-            abs(cur.tibia - tgt.tibia) > JOINT_TOLERANCE) {
-            joints_ok = false;
-            break;
-        }
-    }
     return body_ready && joints_ok;
 }
 

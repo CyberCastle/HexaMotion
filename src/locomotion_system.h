@@ -303,6 +303,9 @@ class LocomotionSystem : public StateControllerContext {
     /** Set robot to standing pose. */
     bool setStandingPose() override;
 
+    /** Apply full configured joint pose targets for all legs. */
+    bool setRobotJointAngles(const JointAngles target_angles[NUM_LEGS]) override;
+
     /**
      * @brief Begin non-blocking jerk-limited transition to standing pose (profiles created in BodyPoseController).
      * @return true if started or already complete.

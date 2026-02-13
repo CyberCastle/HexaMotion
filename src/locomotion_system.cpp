@@ -662,6 +662,33 @@ bool LocomotionSystem::setStandingPose() {
     }
 }
 
+bool LocomotionSystem::setRobotJointAngles(const JointAngles target_angles[NUM_LEGS]) {
+    if (!servo_interface) {
+        last_error = SERVO_ERROR;
+        return false;
+    }
+
+    for (int i = 0; i < NUM_LEGS; i++) {
+        const JointAngles &angles = target_angles[i];
+        if (!setLegJointAngles(i, angles)) {
+            last_error = KINEMATICS_ERROR;
+            return false;
+        }
+
+        legs[i].setJointAngles(angles);
+        Point3D tip_position = model.forwardKinematicsGlobalCoordinates(i, angles);
+        legs[i].setCurrentTipPositionGlobal(tip_position);
+        legs[i].setDesiredTipPosition(tip_position);
+        legs[i].setStepPhase(STANCE_PHASE);
+    }
+
+    if (body_pose_ctrl) {
+        body_position = body_pose_ctrl->calculateBodyPosition(legs);
+    }
+
+    return true;
+}
+
 bool LocomotionSystem::setBodyPose(const Eigen::Vector3d &position, const Eigen::Vector3d &orientation) {
     /** Orientation expected in radians (roll, pitch, yaw). */
 

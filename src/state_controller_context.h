@@ -56,6 +56,17 @@ class StateControllerContext {
     virtual int getStartupProgressPercent() const = 0;
     virtual bool executeShutdownSequence() = 0;
     virtual bool setStandingPose() = 0;
+    /**
+     * @brief Apply full per-leg joint angle targets to the robot.
+     *
+     * Angles are interpreted in robot model convention (radians).
+     * Implementations should propagate targets to hardware/actuators
+     * and update internal leg state accordingly.
+     *
+     * @param target_angles Joint targets for all legs
+     * @return True if all targets were applied successfully
+     */
+    virtual bool setRobotJointAngles(const JointAngles target_angles[NUM_LEGS]) = 0;
     virtual JointAngles getJointAngles(int leg_index) const = 0;
     virtual bool establishInitialStandingPose() = 0;
     virtual bool isInitialStandingPoseActive() const = 0;
