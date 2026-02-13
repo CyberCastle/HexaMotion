@@ -502,7 +502,6 @@ class StateController {
 
     /** Transition management. */
     bool is_transitioning_;
-    unsigned long transition_start_time_;
 
     /** Control inputs. */
     Eigen::Vector2d desired_linear_velocity_;
@@ -638,12 +637,6 @@ class StateController {
      * @param message Error message
      */
     void logError(const String &message);
-
-    /**
-     * @brief Calculate timeout for state transitions.
-     * @return Timeout in milliseconds
-     */
-    unsigned long calculateTransitionTimeout() const;
 
     /**
      * @brief Apply body position control for specific axes.

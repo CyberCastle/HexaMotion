@@ -30,6 +30,7 @@
 #include "../src/body_pose_config_factory.h"
 #include "../src/gait_config_factory.h"
 #include "../src/locomotion_system.h"
+#include "../src/state_controller.h"
 #include "robot_model.h"
 #include "test_stubs.h"
 #include <cassert>
@@ -558,6 +559,9 @@ int main(int argc, char **argv) {
                   << " debug_fsr=" << (params.debug_fsr_transitions ? "on" : "off")
                   << " (override with " << FLAG_PRESERVE_SWING << " or " << FLAG_NO_PRESERVE_SWING << ")" << std::endl;
     }
+    // Enable configured packed/unpacked poses for Bézier-based transitions
+    enableConfiguredPackedUnpackedPoses(params);
+
     LocomotionSystem sys(params);
 
     VisualizationIMU imu;
@@ -565,6 +569,7 @@ int main(int argc, char **argv) {
     AngleVisualizationServo servos;
 
     BodyPoseConfiguration pose_config = getDefaultBodyPoseConfig(params);
+    pose_config.start_up_sequence = true; // Enable Bézier-based startup/shutdown sequences
 
     std::cout << "Initializing HexaMotion system with visualization interfaces..." << std::endl;
     if (!sys.initialize(&imu, &fsr, &servos, pose_config)) {
@@ -618,6 +623,7 @@ int main(int argc, char **argv) {
     }
 
     std::cout << "Initial standing pose transition completed in " << standing_iter << " iterations." << std::endl;
+    std::cout << "  (Bézier type: quartic dual via LegPoser::stepToPosition)" << std::endl;
 
     // Validate that resulting standing pose matches configured default stance
     const auto &default_stance_positions = pose_config.leg_stance_positions;
@@ -681,17 +687,54 @@ int main(int argc, char **argv) {
     }
 
     // 4. Execute startup sequence (StateController handles internally via update())
-    std::cout << "Executing startup sequence..." << std::endl;
+    // Track Bézier iterations through state machine transitions
+    std::cout << "\n=== BÉZIER TRANSITION TRACKING (PACKED → READY → RUNNING) ===" << std::endl;
+
+    StateController *sc = sys.getStateController();
+    assert(sc != nullptr);
+
     int startup_attempts = 0;
+    int unpack_bezier_iters = 0;  // PACKED → READY (cubic Bézier per joint)
+    int startup_bezier_iters = 0; // READY → RUNNING (quartic Bézier tip position)
+    RobotState prev_robot_state = sc->getRobotState();
+    bool unpack_phase_complete = false;
     const int MAX_STARTUP_ATTEMPTS = 500;
 
     while (sys.getSystemState() != SYSTEM_RUNNING && startup_attempts < MAX_STARTUP_ATTEMPTS) {
         servos.updateStep(startup_attempts);
         sys.update();
+
+        RobotState cur_robot_state = sc->getRobotState();
+
+        // Count iterations per transition phase
+        if (!unpack_phase_complete) {
+            if (cur_robot_state == ROBOT_PACKED) {
+                unpack_bezier_iters++;
+            } else if (prev_robot_state == ROBOT_PACKED && cur_robot_state != ROBOT_PACKED) {
+                unpack_bezier_iters++;
+                unpack_phase_complete = true;
+                std::cout << "  Unpack (cubic Bézier via transitionConfiguration): " << unpack_bezier_iters << " iterations" << std::endl;
+            }
+        }
+        if (unpack_phase_complete && sys.getSystemState() != SYSTEM_RUNNING) {
+            startup_bezier_iters++;
+        }
+
+        prev_robot_state = cur_robot_state;
+
         if (startup_attempts % 25 == 0) {
             std::cout << "Startup attempt " << startup_attempts << " Progress=" << sys.getStartupProgressPercent() << "%" << std::endl;
         }
         startup_attempts++;
+    }
+
+    if (!unpack_phase_complete) {
+        std::cout << "  Unpack: skipped (direct mode / instant)" << std::endl;
+    }
+    if (startup_bezier_iters > 0) {
+        std::cout << "  Startup (quartic Bézier via stepToPosition): " << startup_bezier_iters << " iterations" << std::endl;
+    } else {
+        std::cout << "  Startup: direct mode (1 iteration)" << std::endl;
     }
 
     if (sys.getSystemState() != SYSTEM_RUNNING) {
@@ -754,24 +797,44 @@ int main(int argc, char **argv) {
     std::cout << "\n🎯 VISUALIZATION COMPLETE!" << std::endl;
     servos.printCurrentAngles();
 
-    // 7. Stop walking and return to standing
+    // 7. Stop walking and return to standing — track shutdown/pack Bézier iterations
     std::cout << "Stopping walk and returning to standing pose..." << std::endl;
     if (!sys.stopWalking()) {
         std::cerr << "Warning: Failed to stop walking." << std::endl;
     }
 
+    std::cout << "\n=== BÉZIER TRANSITION TRACKING (RUNNING → READY → PACKED) ===" << std::endl;
+
     // Run update loop to let StateController orchestrate the shutdown
     int shutdown_attempts = 0;
+    int shutdown_bezier_iters = 0;
     const int MAX_SHUTDOWN_ATTEMPTS = 500;
     while (shutdown_attempts < MAX_SHUTDOWN_ATTEMPTS && sys.getSystemState() == SYSTEM_RUNNING) {
         servos.updateStep(VISUALIZATION_STEPS + shutdown_attempts);
         sys.update();
         shutdown_attempts++;
+        shutdown_bezier_iters++;
     }
     if (sys.getSystemState() != SYSTEM_RUNNING) {
+        std::cout << "  Shutdown (quartic Bézier via stepToPosition): " << shutdown_bezier_iters << " iterations" << std::endl;
         std::cout << "✅ Shutdown completed after " << shutdown_attempts << " iterations." << std::endl;
     } else {
         std::cerr << "WARNING: Shutdown did not complete after " << shutdown_attempts << " iterations." << std::endl;
+    }
+
+    // Request pack to observe READY → PACKED transition (cubic Bézier)
+    int pack_bezier_iters = 0;
+    sc->requestRobotState(ROBOT_PACKED);
+    const int MAX_PACK_ATTEMPTS = 500;
+    while (pack_bezier_iters < MAX_PACK_ATTEMPTS && sc->getRobotState() != ROBOT_PACKED) {
+        servos.updateStep(VISUALIZATION_STEPS + shutdown_attempts + pack_bezier_iters);
+        sys.update();
+        pack_bezier_iters++;
+    }
+    if (sc->getRobotState() == ROBOT_PACKED) {
+        std::cout << "  Pack (cubic Bézier via transitionConfiguration): " << pack_bezier_iters << " iterations" << std::endl;
+    } else {
+        std::cout << "  Pack: did not complete" << std::endl;
     }
 
     // 8. Generate final report
@@ -785,6 +848,19 @@ int main(int argc, char **argv) {
     std::cout << "✅ Total servo commands captured: " << servos.getAngleHistorySize() << std::endl;
     std::cout << "✅ HexaMotion angle generation successfully visualized" << std::endl;
     std::cout << "✅ Report saved to: hexamotion_angle_report.txt" << std::endl;
+
+    // 9b. Bézier transition iteration summary
+    std::cout << "\n=== BÉZIER TRANSITION ITERATION SUMMARY ===" << std::endl;
+    std::cout << "  Phase                     | Bézier Type     | Iterations" << std::endl;
+    std::cout << "  --------------------------+-----------------+-----------" << std::endl;
+    std::cout << "  Standing pose (initial)   | Quartic dual    | " << standing_iter << std::endl;
+    std::cout << "  Unpack (PACKED→READY)     | Cubic per-joint | " << unpack_bezier_iters << std::endl;
+    std::cout << "  Startup (READY→RUNNING)   | Dual quartic    | " << startup_bezier_iters << std::endl;
+    std::cout << "  Shutdown (RUNNING→READY)  | Dual quartic    | " << shutdown_bezier_iters << std::endl;
+    std::cout << "  Pack (READY→PACKED)       | Cubic per-joint | " << pack_bezier_iters << std::endl;
+    std::cout << "  --------------------------+-----------------+-----------" << std::endl;
+    std::cout << "  Total transition iters    |                 | "
+              << (standing_iter + unpack_bezier_iters + startup_bezier_iters + shutdown_bezier_iters + pack_bezier_iters) << std::endl;
 
     // 10. SYNCHRONIZATION VERIFICATION WITH tripod_walk_visualization_test.cpp
     std::cout << "\n=== SYNCHRONIZATION VERIFICATION ===" << std::endl;

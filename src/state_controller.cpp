@@ -147,7 +147,7 @@ String toArduinoString(const std::string &str) {
 } // namespace
 
 StateController::StateController(StateControllerContext &context, const StateMachineConfig &config)
-    : context_(context), config_(config), current_system_state_(SystemState::SYSTEM_PACKED), current_robot_state_(RobotState::ROBOT_UNKNOWN), current_walk_state_(WalkState::WALK_STOPPED), current_posing_mode_(PosingMode::POSING_NONE), current_cruise_control_mode_(CruiseControlMode::CRUISE_CONTROL_OFF), current_planner_mode_(PlannerMode::PLANNER_MODE_OFF), current_pose_reset_mode_(PoseResetMode::POSE_RESET_NONE), desired_system_state_(SystemState::SYSTEM_PACKED), desired_robot_state_(RobotState::ROBOT_UNKNOWN), leg_states_{}, manual_leg_count_(0), toggle_leg_index_(-1), toggle_leg_state_pending_(false), is_transitioning_(false), transition_start_time_(0), desired_linear_velocity_(Eigen::Vector2d::Zero()), desired_angular_velocity_(0.0f), desired_body_position_(Eigen::Vector3d::Zero()), desired_body_orientation_(Eigen::Vector3d::Zero()), cruise_velocity_(Eigen::Vector3d::Zero()), cruise_start_time_(0), cruise_end_time_(0), last_update_time_(0), time_delta_(0.02f), has_error_(false), startup_step_(0), startup_transition_initialized_(false), startup_transition_step_count_(4), shutdown_step_(0), shutdown_transition_initialized_(false), shutdown_transition_step_count_(3), pack_step_(0), unpack_step_(0), executing_pack_transition_(false), is_initialized_(false) {
+    : context_(context), config_(config), current_system_state_(SystemState::SYSTEM_PACKED), current_robot_state_(RobotState::ROBOT_UNKNOWN), current_walk_state_(WalkState::WALK_STOPPED), current_posing_mode_(PosingMode::POSING_NONE), current_cruise_control_mode_(CruiseControlMode::CRUISE_CONTROL_OFF), current_planner_mode_(PlannerMode::PLANNER_MODE_OFF), current_pose_reset_mode_(PoseResetMode::POSE_RESET_NONE), desired_system_state_(SystemState::SYSTEM_PACKED), desired_robot_state_(RobotState::ROBOT_UNKNOWN), leg_states_{}, manual_leg_count_(0), toggle_leg_index_(-1), toggle_leg_state_pending_(false), is_transitioning_(false), desired_linear_velocity_(Eigen::Vector2d::Zero()), desired_angular_velocity_(0.0f), desired_body_position_(Eigen::Vector3d::Zero()), desired_body_orientation_(Eigen::Vector3d::Zero()), cruise_velocity_(Eigen::Vector3d::Zero()), cruise_start_time_(0), cruise_end_time_(0), last_update_time_(0), time_delta_(0.02f), has_error_(false), startup_step_(0), startup_transition_initialized_(false), startup_transition_step_count_(4), shutdown_step_(0), shutdown_transition_initialized_(false), shutdown_transition_step_count_(3), pack_step_(0), unpack_step_(0), executing_pack_transition_(false), is_initialized_(false) {
 
     // Initialize leg states
     for (int i = 0; i < NUM_LEGS; i++) {
@@ -363,7 +363,6 @@ bool StateController::requestRobotState(RobotState new_state) {
 
     desired_robot_state_ = new_state;
     is_transitioning_ = true;
-    transition_start_time_ = millis();
 
     logDebug("Robot state transition requested: " + toArduinoString(toString(current_robot_state_)) + " -> " + toArduinoString(toString(new_state)));
     return true;
@@ -756,20 +755,6 @@ bool StateController::executePlan() {
 void StateController::updateStateMachine() {
     // Handle system state transitions
     handleSystemStateTransition();
-
-    // Update transition timeouts
-    if (is_transitioning_) {
-        unsigned long elapsed_time = millis() - transition_start_time_;
-        unsigned long timeout = calculateTransitionTimeout();
-
-        if (elapsed_time > timeout) {
-            setError("State transition timeout");
-            is_transitioning_ = false;
-            // Remove transition_progress_ updates in transition and reset methods
-            // transition_progress_.has_error = true;
-            // transition_progress_.error_message = "Transition timeout";
-        }
-    }
 }
 
 void StateController::handleSystemStateTransition() {
@@ -1564,10 +1549,4 @@ void StateController::logError(const String &message) {
     // In a real implementation, this would use proper logging
     Serial.print("ERROR: ");
     Serial.println(message);
-}
-
-unsigned long StateController::calculateTransitionTimeout() const {
-    // Calculate timeout based on transition type
-    // For now, use a default timeout
-    return 10000; // 10 seconds
 }
