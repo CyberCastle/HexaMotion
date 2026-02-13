@@ -13,10 +13,9 @@
 #include <stdexcept>
 #include <vector>
 
-/** Remove BASE_THETA_OFFSETS definition from here and move it to hexamotion_constants.h. */
-
 RobotModel::RobotModel(const Parameters &params)
     : params(params), workspace_analyzer_(nullptr) {
+
     /** Convert configuration angles from degrees to radians for internal use. */
     /** Keep original parameters in degrees for configuration. */
     for (int i = 0; i < 2; ++i) {
@@ -256,6 +255,12 @@ void RobotModel::clampJointAngles(JointAngles &angles) const {
         angles.femur = constrainAngle(angles.femur, femur_angle_limits_rad[0], femur_angle_limits_rad[1]);
         angles.tibia = constrainAngle(angles.tibia, tibia_angle_limits_rad[0], tibia_angle_limits_rad[1]);
     }
+}
+
+void RobotModel::clampToJointLimits(JointAngles &angles) const {
+    angles.coxa = constrainAngle(angles.coxa, coxa_angle_limits_rad[0], coxa_angle_limits_rad[1]);
+    angles.femur = constrainAngle(angles.femur, femur_angle_limits_rad[0], femur_angle_limits_rad[1]);
+    angles.tibia = constrainAngle(angles.tibia, tibia_angle_limits_rad[0], tibia_angle_limits_rad[1]);
 }
 
 /**

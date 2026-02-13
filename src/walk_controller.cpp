@@ -744,14 +744,14 @@ void WalkController::updateManual(int primary_leg_index, const Eigen::Vector3d &
             double coxa_joint_velocity = tip_velocity_input[1] * params.manual_leg.max_rotation_velocity * time_delta_;
             double tibia_joint_velocity = tip_velocity_input[0] * params.manual_leg.max_rotation_velocity * time_delta_;
 
-            // Get current joint angles, modify, and set back
+            // Get current joint angles (radians), modify, and set back
             JointAngles angles = leg.getJointAngles();
-            angles.coxa += math_utils::radiansToDegrees(coxa_joint_velocity);
-            angles.tibia += math_utils::radiansToDegrees(tibia_joint_velocity);
+            angles.coxa += coxa_joint_velocity;
+            angles.tibia += tibia_joint_velocity;
 
-            // Clamp to joint limits
-            angles.coxa = std::max(params.coxa_angle_limits[0], std::min(params.coxa_angle_limits[1], angles.coxa));
-            angles.tibia = std::max(params.tibia_angle_limits[0], std::min(params.tibia_angle_limits[1], angles.tibia));
+            // Clamp to joint limits (radians, OpenSHC parity)
+            angles.coxa = std::max(model.getCoxaAngleLimitRad(0), std::min(model.getCoxaAngleLimitRad(1), angles.coxa));
+            angles.tibia = std::max(model.getTibiaAngleLimitRad(0), std::min(model.getTibiaAngleLimitRad(1), angles.tibia));
 
             leg.setJointAngles(angles);
             leg.updateTipPosition(); // FK update

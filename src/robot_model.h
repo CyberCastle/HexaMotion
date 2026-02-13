@@ -799,6 +799,14 @@ class RobotModel {
     const Parameters &getParams() const { return params; }
     double getTimeDelta() const { return params.time_delta; }
 
+    /** @brief Get joint angle limits in radians (precomputed from degree params). */
+    double getCoxaAngleLimitRad(int index) const { return coxa_angle_limits_rad[index]; }
+    double getFemurAngleLimitRad(int index) const { return femur_angle_limits_rad[index]; }
+    double getTibiaAngleLimitRad(int index) const { return tibia_angle_limits_rad[index]; }
+
+    /** @brief Clamp joint angles to radian limits (OpenSHC parity). */
+    void clampToJointLimits(JointAngles &angles) const;
+
     /**
      * @brief Update the global step frequency (Hz) at runtime.
      * @param step_frequency New step frequency in Hz

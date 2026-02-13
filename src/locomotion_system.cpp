@@ -219,15 +219,15 @@ Point3D LocomotionSystem::constrainToWorkspace(int leg_index, const Point3D &tar
 }
 
 double LocomotionSystem::getJointLimitProximity(int leg_index, const JointAngles &angles) {
-    /** OpenSHC-style joint limit proximity calculation. */
+    /** OpenSHC-style joint limit proximity calculation (radian limits). */
     double min_proximity = 1.0f;
 
-    /** Check each joint proximity to limits. */
+    /** Check each joint proximity to limits (radians). */
     double joints[3] = {angles.coxa, angles.femur, angles.tibia};
     double limits[3][2] = {
-        {params.coxa_angle_limits[0], params.coxa_angle_limits[1]},
-        {params.femur_angle_limits[0], params.femur_angle_limits[1]},
-        {params.tibia_angle_limits[0], params.tibia_angle_limits[1]}};
+        {model.getCoxaAngleLimitRad(0), model.getCoxaAngleLimitRad(1)},
+        {model.getFemurAngleLimitRad(0), model.getFemurAngleLimitRad(1)},
+        {model.getTibiaAngleLimitRad(0), model.getTibiaAngleLimitRad(1)}};
 
     for (int j = 0; j < 3; ++j) {
         double range = limits[j][1] - limits[j][0];
@@ -257,12 +257,11 @@ bool LocomotionSystem::setLegJointAngles(int leg, const JointAngles &q) {
         }
     }
 
-    /** Clamp angles to joint limits instead of rejecting them. */
-    /** This is the OpenSHC approach for handling workspace edge cases. */
+    /** Clamp angles to joint limits (radians, OpenSHC parity). */
     JointAngles clamped_angles = q;
-    clamped_angles.coxa = math_utils::clamp(q.coxa, params.coxa_angle_limits[0], params.coxa_angle_limits[1]);
-    clamped_angles.femur = math_utils::clamp(q.femur, params.femur_angle_limits[0], params.femur_angle_limits[1]);
-    clamped_angles.tibia = math_utils::clamp(q.tibia, params.tibia_angle_limits[0], params.tibia_angle_limits[1]);
+    clamped_angles.coxa = math_utils::clamp(q.coxa, model.getCoxaAngleLimitRad(0), model.getCoxaAngleLimitRad(1));
+    clamped_angles.femur = math_utils::clamp(q.femur, model.getFemurAngleLimitRad(0), model.getFemurAngleLimitRad(1));
+    clamped_angles.tibia = math_utils::clamp(q.tibia, model.getTibiaAngleLimitRad(0), model.getTibiaAngleLimitRad(1));
 
     /** Use velocity controller to get appropriate servo speeds. */
     double coxa_speed = velocity_controller ? velocity_controller->getServoSpeed(leg, 0) : params.default_servo_speed;

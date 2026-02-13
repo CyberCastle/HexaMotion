@@ -442,10 +442,10 @@ void BodyPoseController::updateTipAlignPose(Leg legs[NUM_LEGS]) {
         // (valid when all DH link d-offsets are zero).
         double tibia_length = model.getParams().tibia_length;
         JointAngles angles = legs[i].getJointAngles();
-        double base_theta = math_utils::radiansToDegrees(BASE_THETA_OFFSETS[i]);
-        double femur_angle_rad = math_utils::degreesToRadians(angles.femur);
-        double tibia_angle_rad = math_utils::degreesToRadians(angles.tibia);
-        double leg_angle = math_utils::degreesToRadians(base_theta + angles.coxa);
+        // OpenSHC parity: joint angles and BASE_THETA_OFFSETS are both in radians.
+        double femur_angle_rad = angles.femur;
+        double tibia_angle_rad = angles.tibia;
+        double leg_angle = BASE_THETA_OFFSETS[i] + angles.coxa;
         double z_component = tibia_length * std::cos(femur_angle_rad + tibia_angle_rad);
         double h_component = tibia_length * std::sin(femur_angle_rad + tibia_angle_rad);
         Eigen::Vector3d tip_to_joint(
@@ -599,12 +599,13 @@ bool BodyPoseController::setLegPosition(int leg_index, const Point3D &position, 
     JointAngles current_angles = legs[leg_index].getJointAngles();
     JointAngles angles = model.inverseKinematicsCurrentGlobalCoordinates(leg_index, current_angles, position);
 
-    angles.coxa = model.constrainAngle(angles.coxa, model.getParams().coxa_angle_limits[0],
-                                       model.getParams().coxa_angle_limits[1]);
-    angles.femur = model.constrainAngle(angles.femur, model.getParams().femur_angle_limits[0],
-                                        model.getParams().femur_angle_limits[1]);
-    angles.tibia = model.constrainAngle(angles.tibia, model.getParams().tibia_angle_limits[0],
-                                        model.getParams().tibia_angle_limits[1]);
+    // Clamp IK output to radian limits (OpenSHC parity: IK operates in radians)
+    angles.coxa = model.constrainAngle(angles.coxa, model.getCoxaAngleLimitRad(0),
+                                       model.getCoxaAngleLimitRad(1));
+    angles.femur = model.constrainAngle(angles.femur, model.getFemurAngleLimitRad(0),
+                                        model.getFemurAngleLimitRad(1));
+    angles.tibia = model.constrainAngle(angles.tibia, model.getTibiaAngleLimitRad(0),
+                                        model.getTibiaAngleLimitRad(1));
 
     // Update leg with new joint angles and calculated position
     legs[leg_index].setJointAngles(angles);
@@ -1562,10 +1563,11 @@ int BodyPoseController::executeSequenceInternal(const std::string &sequence_type
     auto compute_limit_proximity = [&](const JointAngles &angles) {
         double min_proximity = 1.0;
         double joints[3] = {angles.coxa, angles.femur, angles.tibia};
+        // Use radian limits (joint angles are in radians, OpenSHC parity)
         double limits[3][2] = {
-            {model.getParams().coxa_angle_limits[0], model.getParams().coxa_angle_limits[1]},
-            {model.getParams().femur_angle_limits[0], model.getParams().femur_angle_limits[1]},
-            {model.getParams().tibia_angle_limits[0], model.getParams().tibia_angle_limits[1]}};
+            {model.getCoxaAngleLimitRad(0), model.getCoxaAngleLimitRad(1)},
+            {model.getFemurAngleLimitRad(0), model.getFemurAngleLimitRad(1)},
+            {model.getTibiaAngleLimitRad(0), model.getTibiaAngleLimitRad(1)}};
         for (int j = 0; j < 3; ++j) {
             double range = limits[j][1] - limits[j][0];
             if (range > 0.0) {

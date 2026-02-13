@@ -91,14 +91,14 @@ class Leg {
     /**
      * @brief Get individual joint angle.
      * @param joint_index Joint index (0=coxa, 1=femur, 2=tibia)
-     * @return Joint angle in degrees
+     * @return Joint angle in radians
      */
     double getJointAngle(int joint_index) const;
 
     /**
      * @brief Set individual joint angle.
      * @param joint_index Joint index (0=coxa, 1=femur, 2=tibia)
-     * @param angle Joint angle in degrees
+     * @param angle Joint angle in radians
      */
     void setJointAngle(int joint_index, double angle);
 

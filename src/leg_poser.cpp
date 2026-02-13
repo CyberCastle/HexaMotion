@@ -248,10 +248,12 @@ int LegPoser::transitionConfiguration(double transition_time) {
 
     // Setup origin and target on first iteration
     if (config_first_iteration_) {
+        // OpenSHC parity: joint_angles_ are stored in radians (same unit as
+        // desired_config targets from Parameters). No conversion needed.
         JointAngles current_angles = leg_.getJointAngles();
-        origin_config_coxa_ = math_utils::degreesToRadians(current_angles.coxa);
-        origin_config_femur_ = math_utils::degreesToRadians(current_angles.femur);
-        origin_config_tibia_ = math_utils::degreesToRadians(current_angles.tibia);
+        origin_config_coxa_ = current_angles.coxa;
+        origin_config_femur_ = current_angles.femur;
+        origin_config_tibia_ = current_angles.tibia;
 
         // Check if already at target (joint tolerance check)
         constexpr double JOINT_TOLERANCE_RAD = 0.01;
@@ -290,11 +292,11 @@ int LegPoser::transitionConfiguration(double transition_time) {
     double new_tibia = cubicBezier(origin_config_tibia_, origin_config_tibia_,
                                    desired_config_tibia_, desired_config_tibia_, t);
 
-    // Apply joint angles (convert back to degrees for HexaMotion convention)
+    // Apply joint angles (radians throughout, matching OpenSHC convention)
     JointAngles new_angles;
-    new_angles.coxa = math_utils::radiansToDegrees(new_coxa);
-    new_angles.femur = math_utils::radiansToDegrees(new_femur);
-    new_angles.tibia = math_utils::radiansToDegrees(new_tibia);
+    new_angles.coxa = new_coxa;
+    new_angles.femur = new_femur;
+    new_angles.tibia = new_tibia;
     leg_.setJointAngles(new_angles);
 
     // Update tip position via FK
