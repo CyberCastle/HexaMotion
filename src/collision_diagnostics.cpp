@@ -13,6 +13,25 @@
 
 class CollisionDiagnostics {
   public:
+    static double getDistance2D(const Point3D &p1, const Point3D &p2) {
+        double dx = p1.x - p2.x;
+        double dy = p1.y - p2.y;
+        return std::sqrt(dx * dx + dy * dy);
+    }
+
+    static bool checkWorkspaceOverlap(const Point3D &leg1_base, double leg1_reach,
+                                      const Point3D &leg2_base, double leg2_reach,
+                                      double safety_margin) {
+        double distance = getDistance2D(leg1_base, leg2_base);
+        double combined_reach = leg1_reach + leg2_reach + safety_margin;
+        return distance < combined_reach;
+    }
+
+    static double calculateSafeHexagonRadius(double leg_reach, double safety_margin) {
+        double min_separation = 2.0f * leg_reach + safety_margin;
+        return min_separation - leg_reach;
+    }
+
     /**
      * @brief Analyze the current robot configuration for potential leg collisions
      * @param model Reference to the robot model
@@ -29,7 +48,7 @@ class CollisionDiagnostics {
         std::cout << "Safe reach (65%): " << safe_reach << " mm" << std::endl;
 
         // Calculate minimum safe radius
-        double min_safe_radius = WorkspaceAnalyzer::calculateSafeHexagonRadius(safe_reach, 30.0f);
+        double min_safe_radius = calculateSafeHexagonRadius(safe_reach, 30.0f);
         std::cout << "Minimum safe radius: " << min_safe_radius << " mm" << std::endl;
 
         if (p.hexagon_radius < min_safe_radius) {
@@ -68,10 +87,10 @@ class CollisionDiagnostics {
             Point3D base2(p.hexagon_radius * cos(math_utils::degreesToRadians(angle2)),
                           p.hexagon_radius * sin(math_utils::degreesToRadians(angle2)), 0);
 
-            bool overlap = WorkspaceAnalyzer::checkWorkspaceOverlap(
+            bool overlap = checkWorkspaceOverlap(
                 base1, safe_reach, base2, safe_reach, 20.0f);
 
-            double distance = WorkspaceAnalyzer::getDistance2D(base1, base2);
+            double distance = getDistance2D(base1, base2);
             double workspace_separation = distance - (2 * safe_reach);
 
             std::cout << "Legs " << leg << "-" << next_leg << ": ";
@@ -94,9 +113,9 @@ class CollisionDiagnostics {
         double safe_reach = leg_reach * 0.65f;
 
         // Calculate minimum safe radius with different safety margins
-        double conservative_radius = WorkspaceAnalyzer::calculateSafeHexagonRadius(safe_reach, 50.0f);
-        double standard_radius = WorkspaceAnalyzer::calculateSafeHexagonRadius(safe_reach, 30.0f);
-        double minimum_radius = WorkspaceAnalyzer::calculateSafeHexagonRadius(safe_reach, 20.0f);
+        double conservative_radius = calculateSafeHexagonRadius(safe_reach, 50.0f);
+        double standard_radius = calculateSafeHexagonRadius(safe_reach, 30.0f);
+        double minimum_radius = calculateSafeHexagonRadius(safe_reach, 20.0f);
 
         std::cout << "\n=== Radius Recommendations ===" << std::endl;
         std::cout << "Conservative (50mm margin): " << conservative_radius << " mm" << std::endl;

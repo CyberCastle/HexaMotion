@@ -232,17 +232,18 @@ int main() {
 
     bool coordination_works = true;
     for (int leg = 0; leg < NUM_LEGS; leg++) {
-        Point3D leg_base = model.getLegBasePosition(leg);
+        JointAngles zero_angles(0, 0, 0);
+        Point3D identity_tip = model.forwardKinematicsGlobalCoordinates(leg, zero_angles);
 
-        /** Get workplane for the reference height. */
-        auto workplane = analyzer.getWorkplane(leg, -208.0);
+        /** OpenSHC parity: workplane height is relative to identity tip (0 at identity). */
+        auto workplane = analyzer.getWorkplane(leg, 0.0);
 
         if (!workplane.empty()) {
             /** Find the maximum radius at a specific direction (0 degrees). */
             auto it = workplane.find(0);
             if (it != workplane.end() && it->second > 0) {
                 /** Create a target right at the workspace limit. */
-                Point3D target_at_limit(leg_base.x + it->second, leg_base.y, -208.0);
+                Point3D target_at_limit(identity_tip.x + it->second, identity_tip.y, identity_tip.z);
                 Point3D reachable = model.makeReachable(leg, target_at_limit);
 
                 /** Position should be reachable without significant changes. */

@@ -297,7 +297,7 @@ double CartesianVelocityController::calculateLegSpeedCompensation(int leg_index,
 }
 
 double CartesianVelocityController::applyWorkspaceConstraints(int leg_index, int joint_index, double base_speed) const {
-    // Use WorkspaceValidator for workspace constraints instead of hardcoded factors
+    // Use conservative fixed joint scaling without analyzer-specific helper factors.
 
     if (!workspace_analyzer_) {
         return base_speed; // Safety fallback
@@ -305,22 +305,17 @@ double CartesianVelocityController::applyWorkspaceConstraints(int leg_index, int
 
     double constrained_speed = base_speed;
 
-    // Get scaling factors instead of hardcoded constants
-    auto scaling_factors = workspace_analyzer_->getScalingFactors();
-
     // Apply joint-specific constraints using scaling
     switch (joint_index) {
     case 0: // Coxa joint
         // Coxa typically has lower speed requirements
-        constrained_speed *= scaling_factors.workspace_scale; // Use workspace scaling
+        constrained_speed *= 1.0;
         break;
     case 1: // Femur joint
-        // Femur carries most of the leg motion load - use velocity scaling
-        constrained_speed *= scaling_factors.velocity_scale;
+        constrained_speed *= 1.0;
         break;
-    case 2: // Tibia joint
-        // Tibia provides fine positioning - use full scaling
-        constrained_speed *= scaling_factors.velocity_scale * 1.1; // 10% boost for precision
+    case 2:                       // Tibia joint
+        constrained_speed *= 1.1; // 10% boost for precision
         break;
     }
 
@@ -328,10 +323,6 @@ double CartesianVelocityController::applyWorkspaceConstraints(int leg_index, int
     const Parameters &params = model_.getParams();
     double min_speed = velocity_scaling_.minimum_speed_ratio * params.default_servo_speed;
     double max_speed = velocity_scaling_.maximum_speed_ratio * params.default_servo_speed;
-
-    // Apply safety margin
-    min_speed *= scaling_factors.safety_margin;
-    max_speed *= scaling_factors.safety_margin;
 
     constrained_speed = math_utils::clamp<double>(constrained_speed, min_speed, max_speed);
 

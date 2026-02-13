@@ -816,6 +816,23 @@ void WalkController::generateWalkspace() {
 
     try {
         WorkspaceAnalyzer &analyzer = model.getWorkspaceAnalyzer();
+
+        // OpenSHC parity: pass identity and default tip positions from leg steppers
+        // so that Phase 1 uses correct default positions and Phase 2 computes proper default shift.
+        Point3D identity_tips[NUM_LEGS];
+        Point3D default_tips[NUM_LEGS];
+        for (int i = 0; i < NUM_LEGS; i++) {
+            if (i < static_cast<int>(leg_steppers_.size()) && leg_steppers_[i]) {
+                identity_tips[i] = leg_steppers_[i]->getIdentityTipPose();
+                default_tips[i] = leg_steppers_[i]->getDefaultTipPose();
+            } else {
+                JointAngles zero(0, 0, 0);
+                identity_tips[i] = model.forwardKinematicsGlobalCoordinates(i, zero);
+                default_tips[i] = identity_tips[i];
+            }
+        }
+        analyzer.setTipPositions(identity_tips, default_tips);
+
         analyzer.generateWorkspace();
         const auto &analyzer_map = analyzer.getWalkspaceMap();
 

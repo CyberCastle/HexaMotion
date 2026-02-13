@@ -75,9 +75,10 @@ void testStepCyclePhaseUpdates(LegStepper &stepper, const StepCycle &step_cycle)
     }
 
     // Test phase offset integration
-    double original_offset = stepper.getPhaseOffset();
-    stepper.setPhaseOffset(0.25);
-    assert(stepper.getPhaseOffset() == 0.25);
+    int original_offset = stepper.getPhaseOffset();
+    int quarter_cycle_offset = std::max(1, step_cycle.period_ / 4);
+    stepper.setPhaseOffset(quarter_cycle_offset);
+    assert(stepper.getPhaseOffset() == quarter_cycle_offset);
     stepper.setPhaseOffset(original_offset); // Restore original
 
     std::cout << "  ✅ Step cycle phase updates passed" << std::endl;

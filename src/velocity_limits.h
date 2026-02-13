@@ -119,7 +119,7 @@ class VelocityLimits {
     static double calculateBearing(double vx, double vy);
 
   private:
-    // PIMPL idiom to hide WorkspaceValidator dependency
+    // PIMPL idiom to hide implementation details
     class Impl;
     std::unique_ptr<Impl> pimpl_;
 
@@ -127,7 +127,7 @@ class VelocityLimits {
     double interpolateValue(double value1, double value2, double factor) const;
     int getBearingIndex(double bearing_degrees) const;
 
-    // Internal calculation methods (now implemented via WorkspaceValidator)
+    // Internal calculation methods
     // Use gait_config.step_length directly (already derived from standing horizontal reach)
     double calculateMaxLinearSpeed(double walkspace_radius, const GaitConfiguration &gait_config) const;
     double calculateMaxAngularSpeed(double max_linear_speed, double stance_radius) const;

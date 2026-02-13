@@ -787,95 +787,9 @@ JointAngles RobotModel::estimateInitialAngles(int leg, const Point3D &target_pos
 }
 
 Point3D RobotModel::makeReachable(int leg_index, const Point3D &reference_tip_position) const {
-
-    /** Ensure that the workspace is generated (equivalent to OpenSHC's generateWorkspace()). */
-    /** Use const_cast because the method is const but needs to modify workspace_analyzer. */
-    const_cast<RobotModel *>(this)->getWorkspaceAnalyzer().generateWorkspace();
-
-    /** The height used to query the workplane must consider the physical offset. */
-    double workspace_query_height = reference_tip_position.z;
-
-    /** Get the workplane for the target position's adjusted height. */
-    auto workplane = getWorkspaceAnalyzer().getWorkplane(leg_index, workspace_query_height);
-
-    if (!workplane.empty()) {
-        /** Convert the position to polar coordinates relative to the leg base. */
-        Point3D leg_base = getLegBasePosition(leg_index);
-        Point3D relative_pos = reference_tip_position - leg_base;
-
-        /** Calculate bearing (angle) and radius. */
-        double bearing_rad = atan2(relative_pos.y, relative_pos.x);
-        double bearing_deg = math_utils::radiansToDegrees(bearing_rad);
-
-        /** Normalize bearing to [0, 360). */
-        if (bearing_deg < 0)
-            bearing_deg += 360.0;
-
-        double requested_radius = sqrt(relative_pos.x * relative_pos.x + relative_pos.y * relative_pos.y);
-
-        /** Find the maximum allowed radius in the workplane for this bearing. */
-        double max_radius = 0.0;
-
-        /** Interpolation between adjacent bearings in the workplane. */
-        int bearing_int = static_cast<int>(bearing_deg);
-        auto it_current = workplane.find(bearing_int);
-        auto it_next = workplane.find((bearing_int + 1) % 360);
-
-        if (it_current != workplane.end()) {
-            max_radius = it_current->second;
-
-            /** Linear interpolation if we have the next bearing. */
-            if (it_next != workplane.end()) {
-                double fraction = bearing_deg - bearing_int;
-                max_radius = it_current->second * (1.0 - fraction) + it_next->second * fraction;
-            }
-        } else {
-            /** If we do not have exact data, search for nearby bearings. */
-            double min_bearing_diff = 360.0;
-            for (const auto &bearing_pair : workplane) {
-                double diff = std::min(std::abs(bearing_deg - bearing_pair.first),
-                                       360.0 - std::abs(bearing_deg - bearing_pair.first));
-                if (diff < min_bearing_diff) {
-                    min_bearing_diff = diff;
-                    max_radius = bearing_pair.second;
-                }
-            }
-        }
-
-        /** If the requested position is outside the workspace, constrain it. */
-        if (requested_radius > max_radius && max_radius > 0.0) {
-            double scale_factor = max_radius / requested_radius;
-            Point3D constrained_relative = relative_pos * scale_factor;
-
-            /** Keep the original height considering the physical reference. */
-            constrained_relative.z = relative_pos.z;
-
-            return leg_base + constrained_relative;
-        }
-
-        /** The position is already within the workspace. */
-        return reference_tip_position;
-    }
-
-    /** If the workplane is empty, use basic geometric constraint. */
-    /** This should only occur in exceptional cases. */
-    Point3D leg_base = getLegBasePosition(leg_index);
-    Point3D target_vector = reference_tip_position - leg_base;
-    double distance_to_target = target_vector.norm();
-
-    double max_reach = params.femur_length + params.tibia_length;
-    /** 95% of the maximum reach. */
-    double safe_max_reach = max_reach * 0.95;
-
-    if (distance_to_target > safe_max_reach) {
-        Point3D safe_direction = target_vector / distance_to_target;
-        Point3D safe_position = leg_base + safe_direction * safe_max_reach;
-        /** Keep the original height considering that the workspace already includes the physical offset. */
-        safe_position.z = reference_tip_position.z;
-        return safe_position;
-    }
-
-    return reference_tip_position;
+    /** Lazy-initialize the workspace analyzer if needed (uses non-const accessor). */
+    WorkspaceAnalyzer &analyzer = const_cast<RobotModel *>(this)->getWorkspaceAnalyzer();
+    return analyzer.makeReachable(leg_index, reference_tip_position);
 }
 
 /** Advanced IK implementation. */

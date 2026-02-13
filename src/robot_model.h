@@ -213,9 +213,9 @@ struct Parameters {
     double walk_plane_z_tolerance_mm = WALK_PLANE_Z_TOLERANCE_MM;
 
     /**
-     * @brief Global motion and workspace scaling factors (moved from hardcoded implementation in WorkspaceAnalyzer::getScalingFactors()).
+     * @brief Global motion and workspace scaling factors used by higher-level controllers.
      *
-     * These values previously lived as literal constants (e.g. 0.65, 0.9, 1.0) inside the analyzer. Exposing them here
+     * These values previously lived as literal constants (e.g. 0.65, 0.9, 1.0) in controller logic. Exposing them here
      * allows runtime / configuration level tuning (same style as StartupNormalizationConfig) without touching core code.
      *
      * Usage notes:
@@ -952,9 +952,6 @@ class RobotModel {
      * @brief Make a position reachable by constraining it to leg workspace (OpenSHC-style)
      * This function follows OpenSHC's approach to automatically adjust positions that are
      * outside the leg's workspace to be within reachable bounds.
-     *
-     * REFACTORED: Now uses WorkspaceAnalyzer::generateWorkspace() and
-     * WorkspaceAnalyzer::getWorkplane() following the OpenSHC pattern.
      *
      * @param leg_index Index of the leg (0-5)
      * @param reference_tip_position Target position that may be outside workspace

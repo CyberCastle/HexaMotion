@@ -4,7 +4,6 @@
 #include "math_utils.h"
 #include "state_controller.h"
 #include "walk_controller.h"
-/** Add unified analyzer. */
 #include "workspace_analyzer.h"
 #include <algorithm>
 #include <cmath>
@@ -209,13 +208,8 @@ bool LocomotionSystem::isTargetReachable(int leg_index, const Point3D &target) {
 }
 
 Point3D LocomotionSystem::constrainToWorkspace(int leg_index, const Point3D &target) {
-    /** Use the WorkspaceAnalyzer from RobotModel for consistency and performance. */
-    /** Empty positions for basic geometric constraint. */
-    Point3D dummy_positions[6];
-    for (int i = 0; i < 6; i++) {
-        dummy_positions[i] = Point3D(0, 0, 0);
-    }
-    return model.getWorkspaceAnalyzer().constrainToValidWorkspace(leg_index, target, dummy_positions);
+    /** Use geometric workspace constraint (OpenSHC-style makeReachable path). */
+    return model.getWorkspaceAnalyzer().constrainToGeometricWorkspace(leg_index, target);
 }
 
 double LocomotionSystem::getJointLimitProximity(int leg_index, const JointAngles &angles) {

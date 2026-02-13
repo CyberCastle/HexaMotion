@@ -287,8 +287,8 @@ int main() {
     std::cout << "  Min height: " << bounds.min_height << " mm" << std::endl;
     std::cout << "  Max height: " << bounds.max_height << " mm" << std::endl;
 
-    /** Test analysis functions. */
-    std::cout << "Testing analysis functions..." << std::endl;
+    /** Test leg position generation used by workspace checks. */
+    std::cout << "Testing leg position generation..." << std::endl;
     Point3D leg_positions[NUM_LEGS];
 
     /** Get realistic leg positions from robot model using forward kinematics. */
@@ -310,9 +310,7 @@ int main() {
                   << leg_positions[i].z << ") mm" << std::endl;
     }
 
-    auto analysis_result = analyzer.analyzeWalkspace(leg_positions);
-    std::cout << "Walkspace analysis result: " << (analysis_result.is_stable ? "STABLE" : "UNSTABLE") << std::endl;
-    std::cout << "Stability margin: " << analysis_result.stability_margin << " mm" << std::endl;
+    std::cout << "Leg positions generated successfully for all legs." << std::endl;
 
     /** Test OpenSHC compatibility validation. */
     std::cout << "\n=== OpenSHC Compatibility Validation ===" << std::endl;

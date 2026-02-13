@@ -190,15 +190,14 @@ bool TerrainAdaptation::isTargetReachableOnTerrain(int leg_index, const Point3D 
         return false;
     }
 
-    // Additional terrain-specific checks using workspace bounds
+    // Additional terrain-specific checks using geometric walk-plane consistency
     if (current_walk_plane_.valid) {
         // Check if target is reasonable relative to walk plane
         Point3D projected = projectOntoWalkPlane(target);
         double walk_plane_deviation = abs(target.z - projected.z);
 
-        // Use workspace bounds for step height validation
-        auto bounds = workspace_analyzer_->getWorkspaceBounds(leg_index);
-        double max_step_height = bounds.max_height - bounds.min_height;
+        const Parameters &params = model_.getParams();
+        double max_step_height = std::max(1.0, params.femur_length + params.tibia_length);
 
         // Allow deviation up to 50% of workspace height range
         if (walk_plane_deviation > max_step_height * 0.5) {
@@ -253,19 +252,15 @@ void TerrainAdaptation::detectTouchdownEvents(int leg_index, const FSRData &fsr_
             return; // Safety fallback
         }
 
-        // Get workspace bounds instead of manual calculation
-        auto bounds = workspace_analyzer_->getWorkspaceBounds(leg_index);
-        auto scaling_factors = workspace_analyzer_->getScalingFactors();
-
-        // Calculate foot position using workspace scaling
+        // Calculate foot position using default stance geometry
         const Parameters &p = model_.getParams();
         Point3D base_pos = model_.getLegBasePosition(leg_index);
+        Point3D default_pos = model_.getLegDefaultPosition(leg_index);
         double base_x = base_pos.x;
         double base_y = base_pos.y;
         double base_angle = model_.getLegBaseAngleOffset(leg_index);
 
-        // Use scaling instead of hardcoded 65%
-        double safe_reach = bounds.max_reach * scaling_factors.workspace_scale;
+        double safe_reach = std::hypot(default_pos.x - base_x, default_pos.y - base_y);
 
         Point3D foot_position;
         foot_position.x = base_x + safe_reach * cos(base_angle);
