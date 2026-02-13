@@ -231,8 +231,7 @@ if (emergency_condition) {
 
 ```cpp
 StateMachineConfig config;
-config.enable_startup_sequence = true;      // Multi-step startup
-config.enable_direct_startup = false;       // Skip startup sequence
+config.enable_startup_sequence = true;      // Multi-step startup (false = direct mode)
 config.transition_timeout = 10.0f;          // Max transition time (seconds)
 config.pack_unpack_time = 2.0f;             // Pack/unpack duration
 config.enable_auto_posing = false;          // Automatic posing

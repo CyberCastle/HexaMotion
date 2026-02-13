@@ -98,8 +98,7 @@ enum SequenceType {
 
 /** State machine configuration parameters. */
 struct StateMachineConfig {
-    bool enable_startup_sequence = true;     /**< Enable multi-step startup sequence. */
-    bool enable_direct_startup = false;      /**< Allow direct startup without sequences. */
+    bool enable_startup_sequence = true;     /**< Enable multi-step startup sequence (OpenSHC start_up_sequence). */
     double transition_timeout = 10.0f;       /**< Maximum time for state transitions (seconds). */
     double pack_unpack_time = 2.0f;          /**< Time for pack/unpack sequences (seconds). */
     bool enable_auto_posing = false;         /**< Enable automatic body posing. */

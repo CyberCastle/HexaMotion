@@ -186,8 +186,8 @@ bool StateController::initialize(const BodyPoseConfiguration &body_pose_config) 
     logDebug("Initializing StateController...");
 
     // OpenSHC parity: startup sequence behavior is controlled by pose config.
+    // When false, direct startup mode is used (READY -> RUNNING immediate).
     config_.enable_startup_sequence = body_pose_config.start_up_sequence;
-    config_.enable_direct_startup = !body_pose_config.start_up_sequence;
 
     // Initialize packed/ready target angles from explicit Parameters configuration when enabled.
     // Fallback keeps ready targets aligned with configured standing pose for deterministic detection.
