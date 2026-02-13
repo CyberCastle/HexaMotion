@@ -443,6 +443,34 @@ bool LocomotionSystem::executeStartupSequence() {
     return startup_complete;
 }
 
+bool LocomotionSystem::activateRunningState() {
+    if (!walk_ctrl || !body_pose_ctrl) {
+        last_error = STATE_ERROR;
+        return false;
+    }
+
+    /** Initialize walk controller for RUNNING state (same as executeStartupSequence completion). */
+    walk_ctrl->init(body_position, body_orientation);
+    walk_ctrl->generateWalkspace();
+
+    /** Initialize leg phases based on gait pattern. */
+    for (int i = 0; i < NUM_LEGS; i++) {
+        auto leg_stepper = walk_ctrl->getLegStepper(i);
+        if (leg_stepper) {
+            auto step_state = leg_stepper->getStepState();
+            if (step_state == STEP_STANCE || step_state == STEP_FORCE_STANCE) {
+                legs[i].setStepPhase(STANCE_PHASE);
+            } else {
+                legs[i].setStepPhase(SWING_PHASE);
+            }
+        }
+    }
+
+    system_state = SYSTEM_RUNNING;
+    startup_in_progress = false;
+    return true;
+}
+
 bool LocomotionSystem::executeShutdownSequence() {
 
     if (!body_pose_ctrl || !walk_ctrl) {
@@ -620,6 +648,12 @@ bool LocomotionSystem::setStandingPose() {
         system_state = SYSTEM_READY;
         startup_in_progress = false;
         shutdown_in_progress = false;
+
+        /** Notify state controller that robot is in READY state so that
+         *  ROBOT_UNKNOWN detection resolves correctly without heuristics. */
+        if (state_controller_) {
+            state_controller_->notifyRobotReady();
+        }
 
         return true;
     } else {

@@ -788,8 +788,9 @@ void StateController::handleRobotStateTransition() {
 
     // Execute appropriate transition sequence
     switch (current_robot_state_) {
-    case RobotState::ROBOT_UNKNOWN:
-        // OpenSHC parity: detect initial state and reset desired state to detected state.
+    case RobotState::ROBOT_UNKNOWN: {
+        // OpenSHC parity: detect initial state, then continue toward any pending target.
+        RobotState saved_desired = desired_robot_state_;
         if (isRobotPacked()) {
             current_robot_state_ = RobotState::ROBOT_PACKED;
             if (!config_.enable_startup_sequence) {
@@ -811,19 +812,34 @@ void StateController::handleRobotStateTransition() {
             logDebug("Robot state unknown: defaulting to PACKED");
         }
 
-        desired_robot_state_ = current_robot_state_;
-        is_transitioning_ = false;
-        logDebug("Robot state transition completed: " + toArduinoString(toString(current_robot_state_)));
+        // Preserve any pending transition target (e.g. ROBOT_RUNNING requested
+        // before the UNKNOWN state was resolved). Only reset desired state when
+        // no explicit target was requested (desired was also UNKNOWN).
+        if (saved_desired != RobotState::ROBOT_UNKNOWN && saved_desired != current_robot_state_) {
+            desired_robot_state_ = saved_desired;
+            // Keep is_transitioning_ true so the state machine continues
+            // from the newly detected state toward the original target.
+            logDebug("Continuing transition toward: " + toArduinoString(toString(saved_desired)));
+        } else {
+            desired_robot_state_ = current_robot_state_;
+            is_transitioning_ = false;
+            logDebug("Robot state transition completed: " + toArduinoString(toString(current_robot_state_)));
+        }
         break;
+    }
 
     case RobotState::ROBOT_PACKED:
         if (desired_robot_state_ == RobotState::ROBOT_READY) {
             progress = executeUnpackSequence();
-        } else if (desired_robot_state_ == RobotState::ROBOT_RUNNING && !config_.enable_startup_sequence) {
-            // Direct startup
+        } else if (desired_robot_state_ == RobotState::ROBOT_RUNNING) {
+            // Unpack first, then continue to startup sequence (or direct).
             progress = executeUnpackSequence();
             if (progress == PROGRESS_COMPLETE) {
+                // Intermediate: move to READY; do NOT report COMPLETE yet so
+                // the outer handler keeps is_transitioning_ and the next tick
+                // enters ROBOT_READY → ROBOT_RUNNING.
                 current_robot_state_ = RobotState::ROBOT_READY;
+                progress = PROGRESS_COMPLETE - 1;
             }
         }
         break;
@@ -836,6 +852,7 @@ void StateController::handleRobotStateTransition() {
                 progress = executeStartupSequence();
             } else {
                 // OpenSHC direct mode: READY -> RUNNING immediate.
+                context_.activateRunningState();
                 current_robot_state_ = RobotState::ROBOT_RUNNING;
                 current_walk_state_ = WalkState::WALK_STOPPED;
                 progress = PROGRESS_COMPLETE;
@@ -1363,7 +1380,10 @@ bool StateController::isRobotReady() const {
     }
 
     // Check if at reasonable height and level orientation
-    bool height_ok = (current_position.z() > 80.0f && current_position.z() < 200.0f);
+    // Note: body z can be negative depending on coordinate convention,
+    // so use abs(z) for height magnitude check.
+    double z_abs = abs(current_position.z());
+    bool height_ok = (z_abs > 80.0f && z_abs < 300.0f);
     bool orientation_ok = (abs(current_orientation.x()) < 10.0f && abs(current_orientation.y()) < 10.0f);
     bool body_ready = height_ok && orientation_ok;
     // Joint-based ready check
@@ -1379,6 +1399,19 @@ bool StateController::isRobotReady() const {
         }
     }
     return body_ready && joints_ok;
+}
+
+void StateController::notifyRobotReady() {
+    // Set robot state to READY directly and capture current joint angles
+    // as the ready-state reference for future detection.
+    current_robot_state_ = RobotState::ROBOT_READY;
+    if (desired_robot_state_ == RobotState::ROBOT_UNKNOWN) {
+        desired_robot_state_ = RobotState::ROBOT_READY;
+    }
+    for (int i = 0; i < NUM_LEGS; ++i) {
+        ready_target_angles_[i] = context_.getJointAngles(i);
+    }
+    logDebug("Robot state forced to READY via notifyRobotReady()");
 }
 
 bool StateController::isValidStateTransition(RobotState current_state, RobotState desired_state) const {

@@ -85,6 +85,16 @@ class StateControllerContext {
      * @param scale_reference Transition progress (0.0 to 1.0)
      */
     virtual void updateAdmittanceStiffness(int leg_index, double scale_reference) = 0;
+
+    /**
+     * @brief Activate the RUNNING system state directly (for direct startup without sequence).
+     *
+     * Initializes walk controller, sets leg phases, and sets system_state to RUNNING.
+     * Called by StateController when direct startup completes (enable_startup_sequence = false).
+     *
+     * @return True if activation succeeded.
+     */
+    virtual bool activateRunningState() = 0;
 };
 
 #endif /**< STATE_CONTROLLER_CONTEXT_H */

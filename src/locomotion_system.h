@@ -362,6 +362,12 @@ class LocomotionSystem : public StateControllerContext {
      */
     void updateAdmittanceStiffness(int leg_index, double scale_reference) override;
 
+    /**
+     * @brief Activate RUNNING state directly (no startup sequence).
+     * Initializes walk controller, leg phases, and sets system_state = SYSTEM_RUNNING.
+     */
+    bool activateRunningState() override;
+
     /** Update FSR and IMU sensors in parallel for optimal performance. */
     bool updateSensorsParallel();
 

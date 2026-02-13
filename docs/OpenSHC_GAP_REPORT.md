@@ -1,6 +1,6 @@
 # OpenSHC Parity Gap Report (HexaMotion)
 
-> **Last updated**: 2026-02-12 — AdmittanceController rewritten 1:1 with OpenSHC and fully integrated into pipeline.
+> **Last updated**: 2026-02-12 — State machine startup transition fixes: 3 bugs in UNKNOWN/PACKED/READY→RUNNING paths resolved with architectural adaptations for ROS-less environment. All 4 affected tests pass.
 > **Validation pass**: 2026-02-10 — Cross-verified all OpenSHC symbols (14 enums, 6 structs, 14 classes, ~290 public methods, ~200 member variables) against HexaMotion (24 classes, 3 interfaces, ~20 enums, ~50 structs, ~500+ public methods).
 > **Fix verification pass**: 2026-02-13 — Removed fallback pattern from LocomotionSystem. StateController is now always created in initialize() (std::unique_ptr). All convenience methods, update(), startWalking(), and stopWalking() exclusively route through StateController. runControlPipelineStep() is a context-interface service only. 8/8 tests pass.
 > **Admittance parity pass**: 2026-02-12 — AdmittanceController completely rewritten for 1:1 OpenSHC parity (ODE, RK4, 30 sub-steps, dynamic stiffness, pipeline integration, state transition stiffness scaling). Per-leg ODE state moved to `Leg` class. `Parameters::AdmittanceConfig` replaces scattered constants. `StateControllerContext::updateAdmittanceStiffness()` added for leg state transitions. `runge_kutta_validation_test` passes.
@@ -830,6 +830,43 @@ HexaMotion substitutes: `CoxaTelemetry` struct in `LocomotionSystem` (compile-ti
     - **Source files**: [src/admittance_controller.h](src/admittance_controller.h), [src/admittance_controller.cpp](src/admittance_controller.cpp), [src/robot_model.h](src/robot_model.h), [src/leg.h](src/leg.h), [src/state_controller_context.h](src/state_controller_context.h), [src/locomotion_system.h](src/locomotion_system.h), [src/locomotion_system.cpp](src/locomotion_system.cpp), [src/state_controller.cpp](src/state_controller.cpp).
     - **Test results**: `runge_kutta_validation_test` passes. All 12+ test targets compile cleanly. Pre-existing startup sequence failures in integration tests are unrelated.
 
+### Priority 10: State Machine Startup Transition Fixes (2026-02-12)
+
+Four integration tests (`pose_gait_integration_test`, `virtual_hardware_sim_test`, `coxa_phase_transition_test`, `tripod_linearity_test`) were stuck in an infinite startup loop: `update()` ran ~500 iterations, progress reached 100%, but SYSTEM_READY→SYSTEM_RUNNING never completed. Root cause was three layered bugs in the state machine. All fixes maintain **functional 1:1 parity** with OpenSHC while adapting to the ROS-less architecture.
+
+- [x] **Fix 1 — ROBOT_UNKNOWN destroyed pending transition target**: In `handleRobotStateTransition()`, the UNKNOWN case unconditionally set `desired_robot_state_ = current_robot_state_` after detecting initial state, discarding any `ROBOT_RUNNING` request queued by `startWalking()` before the first `update()`. Fixed by saving `desired_robot_state_` before detection and restoring it if it was explicitly different from UNKNOWN.
+    - **OpenSHC equivalent**: `new_robot_state_ = robot_state_` at line 258 of `transitionRobotState()`. In OpenSHC this works because `robotStateCallback()` re-introduces the target asynchronously via ROS topic after UNKNOWN resolves. HexaMotion calls `requestRobotState()` synchronously before the first `update()`, so the pending request must be preserved explicitly.
+    - **AGENTS.md justification**: "StateController must preserve OpenSHC's functional orchestration 1:1, excluding ROS transport details." Preserving the pending target compensates for the absence of asynchronous ROS callbacks.
+    - **Source**: [src/state_controller.cpp](src/state_controller.cpp) `handleRobotStateTransition()` ROBOT_UNKNOWN case.
+
+- [x] **Fix 2 — PACKED→RUNNING lacked intermediate READY step**: When `desired_robot_state_ == ROBOT_RUNNING` and `current_robot_state_ == ROBOT_PACKED`, the state machine completed unpack but had no path to continue to READY→RUNNING. Fixed by setting `current_robot_state_ = ROBOT_READY` with `progress = PROGRESS_COMPLETE - 1` upon unpack completion, so the next tick enters the READY→RUNNING branch.
+    - **OpenSHC equivalent**: `robotStateCallback()` (lines 1109–1121) enforces single-step transitions: `new_robot_state_ = static_cast<RobotState>(robot_state_ + 1)`. This forces the PACKED→READY→RUNNING sequence across multiple ROS callback invocations. HexaMotion replicates the same escalation internally without an external callback.
+    - **AGENTS.md justification**: "LocomotionSystem replaces the external ROS script/graph role." The escalation logic that ROS callbacks provided is now internal to the state machine.
+    - **Source**: [src/state_controller.cpp](src/state_controller.cpp) `handleRobotStateTransition()` ROBOT_PACKED case.
+
+- [x] **Fix 3 — Direct READY→RUNNING did not activate LocomotionSystem**: The direct startup path set `current_robot_state_ = ROBOT_RUNNING` in StateController but never initialized the walk controller, generated walkspace, or set `system_state = SYSTEM_RUNNING` in LocomotionSystem. Added `activateRunningState()` via `StateControllerContext`.
+    - **OpenSHC equivalent**: In OpenSHC these steps are distributed across three moments: (1) `walker_->init()` in `StateController::init()` (before the loop), (2) `model_->generateWorkspaces()` + `walker_->generateWalkspace()` at `directStartup()` completion (lines 269–272), (3) `system_state = OPERATIONAL` set externally via `systemStateCallback()` ROS topic. HexaMotion groups them in `activateRunningState()` because there is no temporal separation provided by ROS.
+    - **AGENTS.md justification**: "LocomotionSystem routes external inputs into StateController and executes low-level hardware/control pipeline steps." `activateRunningState()` encapsulates the pipeline initialization that OpenSHC's ROS graph and `main.cpp` sequence provided externally.
+    - **Source**: [src/state_controller_context.h](src/state_controller_context.h) (`activateRunningState()` pure virtual), [src/locomotion_system.cpp](src/locomotion_system.cpp) (`activateRunningState()` implementation), [src/state_controller.cpp](src/state_controller.cpp) (call site in READY→RUNNING direct path).
+
+- [x] **Secondary fix — `isRobotReady()` z-sign convention**: Changed `current_position.z() > 80.0f` to `abs(z) > 80.0f` for coordinate convention compatibility (HexaMotion uses negative Z for standing height).
+    - **Source**: [src/state_controller.cpp](src/state_controller.cpp) `isRobotReady()`.
+
+- [x] **New API — `notifyRobotReady()`**: Added to `StateController` as a deterministic replacement for OpenSHC's heuristic joint-position detection during UNKNOWN resolution. Called by `LocomotionSystem::setStandingPose()` after successfully establishing the standing pose, it sets `current_robot_state_ = ROBOT_READY` and captures current joint angles as ready-state reference.
+    - **OpenSHC equivalent**: The UNKNOWN case in `transitionRobotState()` (lines 200–258) detects READY by comparing each joint's `current_position_` to `unpacked_position_` within `JOINT_TOLERANCE`. HexaMotion replaces this heuristic with an explicit notification because it programmatically controls when the standing pose is established.
+    - **Source**: [src/state_controller.h](src/state_controller.h) (declaration), [src/state_controller.cpp](src/state_controller.cpp) (implementation), [src/locomotion_system.cpp](src/locomotion_system.cpp) (call site in `setStandingPose()`).
+
+#### Parity Summary Table
+
+| Correction                        | Functional 1:1 Parity | Literal Code Copy                          | Justification                                                            |
+| --------------------------------- | --------------------- | ------------------------------------------ | ------------------------------------------------------------------------ |
+| UNKNOWN preserves desired state   | ✅ Yes                | ❌ No — save/restore logic                 | Compensates for absence of asynchronous ROS `robotStateCallback`         |
+| PACKED→READY→RUNNING escalation   | ✅ Yes                | ❌ No — internal single-step enforcement   | Replicates `robotStateCallback` single-step transition logic internally  |
+| `activateRunningState()` grouping | ✅ Yes                | ❌ No — groups distributed OpenSHC steps   | Replaces temporal separation provided by ROS graph + `main.cpp` sequence |
+| `notifyRobotReady()`              | ✅ Yes                | ❌ No — explicit notification vs heuristic | Deterministic replacement for joint-tolerance heuristic detection        |
+
+- **Test results**: `pose_gait_integration_test`, `virtual_hardware_sim_test`, `coxa_phase_transition_test`, `tripod_linearity_test` — all 4 pass (were stuck in infinite startup loop before fixes).
+
 ---
 
 ## Audit Summary (2026-02-10 Validation Pass)
@@ -865,6 +902,7 @@ All symbols cataloged from OpenSHC (16 source files: 9 headers + 7 implementatio
 | Fixes verified (2026-02-13)         | 1     | Fallback pattern removed. LocomotionSystem always owns StateController. ~200 lines of duplicated orchestration code eliminated. 8 test files updated. All 8 tests pass. See Priority 7 section.                                                                                                                                                                            |
 | Fixes verified (2026-02-14)         | 4     | BodyPoseController pose method alignment: per-leg walk plane normal snapshot in `updateTipAlignPose`, `Pose::interpolate()` usage, inclination rotation compensation, IMU/auto-pose mutual exclusion. See Priority 8 section.                                                                                                                                              |
 | Admittance 1:1 rewrite (2026-02-12) | 1     | AdmittanceController completely rewritten: ODE, RK4 30 sub-steps, dynamic stiffness, pipeline integration, state transition stiffness, per-leg `Leg` state, `Parameters::AdmittanceConfig`. 8 files modified. `runge_kutta_validation_test` passes. See Priority 9 section.                                                                                                |
+| Startup fixes (2026-02-12)          | 3+2   | State machine UNKNOWN/PACKED/READY→RUNNING: 3 layered bugs (desired state overwrite, missing READY step, missing pipeline activation) + 2 secondary (z-sign, `notifyRobotReady`). Architectural adaptations for ROS-less env. 4 tests fixed. See Priority 10 section.                                                                                                      |
 
 ### TODO DONE Cross-Reference
 

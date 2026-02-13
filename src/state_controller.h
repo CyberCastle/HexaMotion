@@ -261,6 +261,15 @@ class StateController {
     bool requestRobotState(RobotState new_state);
 
     /**
+     * @brief Notify the state controller that the robot has been placed in READY state externally.
+     *
+     * Called when LocomotionSystem::setStandingPose() succeeds so that the state machine
+     * resolves ROBOT_UNKNOWN correctly without relying on heuristic body-position detection.
+     * Also captures current joint angles as the ready-state reference.
+     */
+    void notifyRobotReady();
+
+    /**
      * @brief Set the posing mode.
      * @param mode Desired posing mode
      * @return True if mode change successful
