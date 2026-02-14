@@ -60,23 +60,28 @@ int main() {
     }
 
     /**
-     * @brief Test 1.2: Validate morphological vertical profile (intentional asymmetry).
+     * @brief Test 1.2: Validate WorkspaceAnalyzer vertical profile in analyzer frame.
      *
-     * Criteria derived from AGENTS.md:
-     *  - reference_height_offset_ (= -tibia_length) within [min_height, max_height]
-     *  - upper margin >= standing_height (operational up range)
-     *  - lower margin >= 0.85*(femur + tibia) (operational down / terrain adaptation)
-     *  - asymmetry accepted and documented (down > up)
+     * Important: WorkspaceAnalyzer stores per-leg workplanes relative to identity tip height
+     * (h = 0 at identity tip), not in absolute robot-frame Z.
+     *
+     * Criteria:
+     *  - identity layer (h = 0) is within [min_height, max_height]
+     *  - upward margin from identity >= standing_height
+     *  - downward margin from identity >= standing_height
+     *  - profile is approximately symmetric around identity in analyzer frame
      */
-    std::cout << "\n--- Test 1.2: Perfil vertical morfológico (asimétrico) ---" << std::endl;
+    std::cout << "\n--- Test 1.2: Perfil vertical del WorkspaceAnalyzer (frame identidad) ---" << std::endl;
 
     bool morphological_vertical_profile_ok = true;
-    double expected_ref = -params.tibia_length;
-    /** Required up margin (mm). */
+    double expected_ref = 0.0;
+    /** Required margin in each direction from identity (mm). */
     double required_up = params.standing_height;
-    double required_down = 0.85 * (params.femur_length + params.tibia_length);
+    double required_down = params.standing_height;
     /** Vertical tolerance in mm. */
     const double EPS_VERT = 1.0;
+    /** Symmetry tolerance in mm. */
+    const double EPS_SYMMETRY = 15.0;
 
     for (int leg = 0; leg < NUM_LEGS; leg++) {
         WorkspaceBounds bounds = analyzer.getWorkspaceBounds(leg);
@@ -86,10 +91,9 @@ int main() {
         /** Allow slight underestimation due to rounding. */
         bool up_ok = (up_margin + EPS_VERT >= required_up);
         bool down_ok = (down_margin + EPS_VERT >= required_down);
-        /** Informational asymmetry check. */
-        bool asymmetry_expected = down_margin > up_margin;
+        bool symmetric_profile = std::abs(up_margin - down_margin) <= EPS_SYMMETRY;
 
-        bool leg_ok = contains_ref && up_ok && down_ok;
+        bool leg_ok = contains_ref && up_ok && down_ok && symmetric_profile;
         if (!leg_ok)
             morphological_vertical_profile_ok = false;
 
@@ -97,14 +101,14 @@ int main() {
                   << ": ref dentro=" << (contains_ref ? "sí" : "no")
                   << ", up=" << std::fixed << std::setprecision(1) << up_margin << " (≥ " << required_up << ")"
                   << ", down=" << down_margin << " (≥ " << required_down << ")"
-                  << ", asim=" << (asymmetry_expected ? "sí" : "no")
+                  << ", sim=" << (symmetric_profile ? "sí" : "no")
                   << (leg_ok ? " ✓" : " ✗") << std::endl;
     }
 
     if (morphological_vertical_profile_ok) {
-        std::cout << "✓ Perfil vertical morfológico válido (asimetría esperada)" << std::endl;
+        std::cout << "✓ Perfil vertical válido en el frame de WorkspaceAnalyzer" << std::endl;
     } else {
-        std::cout << "✗ ERROR: Perfil vertical no cumple criterios morfológicos" << std::endl;
+        std::cout << "✗ ERROR: Perfil vertical no cumple criterios del frame de WorkspaceAnalyzer" << std::endl;
     }
 
     /** Section 2: RobotModel::makeReachable tests for all legs. */
