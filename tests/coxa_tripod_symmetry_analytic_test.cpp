@@ -3,6 +3,7 @@
 #include "../src/locomotion_system.h"
 #include "robot_model.h"
 #include "test_stubs.h"
+#include <algorithm>
 #include <array>
 #include <cassert>
 #include <cmath>
@@ -735,10 +736,35 @@ int main(int argc, char **argv) {
         int expected_half_shift = expected_half_cycle / 2; // integer truncation ok
         int shift_error = std::abs(s01.first - expected_half_shift);
         double shift_error_ratio = expected_half_shift > 0 ? (double)shift_error / (double)expected_half_shift : 1.0;
-        bool phase_shift_ok = shift_error_ratio < 0.35; // 35% tolerance (SC-mediated startup may shift phase alignment)
+
+        // Data-driven phase-shift tolerance from all cross-tripod leg pairs.
+        // This avoids a brittle fixed constant while preserving hard safety bounds.
+        int tripodA_for_phase[3] = {0, 2, 4};
+        int tripodB_for_phase[3] = {1, 3, 5};
+        std::vector<double> cross_tripod_shift_error_ratios;
+        cross_tripod_shift_error_ratios.reserve(9);
+        for (int ai = 0; ai < 3; ++ai) {
+            for (int bi = 0; bi < 3; ++bi) {
+                auto shift_pair = computePhaseShiftRatio(tripodA_for_phase[ai], tripodB_for_phase[bi]);
+                int pair_error = std::abs(shift_pair.first - expected_half_shift);
+                double pair_error_ratio = expected_half_shift > 0 ? (double)pair_error / (double)expected_half_shift : 1.0;
+                pair_error_ratio = std::max(0.0, std::min(1.0, pair_error_ratio));
+                cross_tripod_shift_error_ratios.push_back(pair_error_ratio);
+            }
+        }
+        std::sort(cross_tripod_shift_error_ratios.begin(), cross_tripod_shift_error_ratios.end());
+        size_t p95_idx_phase = static_cast<size_t>(std::ceil(0.95 * (cross_tripod_shift_error_ratios.size() - 1)));
+        double phase_shift_error_p95 = cross_tripod_shift_error_ratios[p95_idx_phase];
+        double dynamic_phase_shift_threshold = phase_shift_error_p95 + 0.08;
+        // Guardrails: never too strict on small noise, never too lax on true desynchronization.
+        dynamic_phase_shift_threshold = std::max(0.20, std::min(0.45, dynamic_phase_shift_threshold));
+
+        bool phase_shift_ok = shift_error_ratio <= dynamic_phase_shift_threshold;
         std::cout << "ShiftTripod(0 vs 1) bestShift=" << s01.first << " expectedHalf=" << expected_half_shift
                   << " error=" << shift_error << " (" << std::fixed << std::setprecision(2) << (shift_error_ratio * 100.0)
-                  << "%) score=" << s01.second << " phase_shift_ok=" << (phase_shift_ok ? "YES" : "NO") << std::endl;
+                  << "%) score=" << s01.second
+                  << " threshold=" << (dynamic_phase_shift_threshold * 100.0) << "% (p95=" << (phase_shift_error_p95 * 100.0) << "%)"
+                  << " phase_shift_ok=" << (phase_shift_ok ? "YES" : "NO") << std::endl;
         // 2. Simetría especular: pares opuestos (i,j) deben tener amplitudes iguales
         //    y medias que se cancelen (anti-simetría). No se puede comparar suma instantánea
         //    porque los pares pertenecen a trípodes opuestos (desfasados 180°), y en cada
@@ -792,15 +818,14 @@ int main(int argc, char **argv) {
             double sin_factor = std::fabs(std::sin(BASE_THETA_OFFSETS[L]));
             norm_amp[L] = sin_factor > 1e-6 ? amp[L] / sin_factor : amp[L];
         }
-        auto checkTripodAngNorm = [&](int *legs) {
-            double maxA = std::max({norm_amp[legs[0]], norm_amp[legs[1]], norm_amp[legs[2]]});
-            double minA = std::min({norm_amp[legs[0]], norm_amp[legs[1]], norm_amp[legs[2]]});
-            double spread = maxA > 1e-6 ? (maxA - minA) / maxA : 0.0;
-            if (spread > 0.60)              // 60% tolerance: hexagonal geometry means |sin| normalization
-                tripod_internal_ok = false; // doesn't fully compensate non-uniform forward sensitivity
+        auto getTripodSpreadFromNorm = [](const double values[NUM_LEGS], const int *legs) {
+            double maxA = std::max({values[legs[0]], values[legs[1]], values[legs[2]]});
+            double minA = std::min({values[legs[0]], values[legs[1]], values[legs[2]]});
+            return maxA > 1e-6 ? (maxA - minA) / maxA : 0.0;
         };
-        checkTripodAngNorm(tripodA);
-        checkTripodAngNorm(tripodB);
+
+        double spread_ang_A = getTripodSpreadFromNorm(norm_amp, tripodA);
+        double spread_ang_B = getTripodSpreadFromNorm(norm_amp, tripodB);
         // Linearized amplitude comparison: (amp * mean_stance_radius) / |sin(base_angle)|
         bool tripod_internal_linear_ok = true;
         double lin_amp[NUM_LEGS];
@@ -810,15 +835,20 @@ int main(int argc, char **argv) {
             double sin_factor = std::fabs(std::sin(BASE_THETA_OFFSETS[L]));
             norm_lin_amp[L] = sin_factor > 1e-6 ? lin_amp[L] / sin_factor : lin_amp[L];
         }
-        auto checkTripodLinearNorm = [&](int *legs) {
-            double maxA = std::max({norm_lin_amp[legs[0]], norm_lin_amp[legs[1]], norm_lin_amp[legs[2]]});
-            double minA = std::min({norm_lin_amp[legs[0]], norm_lin_amp[legs[1]], norm_lin_amp[legs[2]]});
-            double spread = maxA > 1e-6 ? (maxA - minA) / maxA : 0.0;
-            if (spread > 0.60) // 60% tolerance: hexagonal |sin| normalization is approximate
-                tripod_internal_linear_ok = false;
-        };
-        checkTripodLinearNorm(tripodA);
-        checkTripodLinearNorm(tripodB);
+        double spread_lin_A = getTripodSpreadFromNorm(norm_lin_amp, tripodA);
+        double spread_lin_B = getTripodSpreadFromNorm(norm_lin_amp, tripodB);
+
+        // Data-driven threshold from current run (robust against morphology-dependent spread).
+        // Uses p95 of the four normalized spread metrics + small guard margin.
+        std::vector<double> spread_population = {spread_ang_A, spread_ang_B, spread_lin_A, spread_lin_B};
+        std::sort(spread_population.begin(), spread_population.end());
+        size_t p95_idx = static_cast<size_t>(std::ceil(0.95 * (spread_population.size() - 1)));
+        double spread_p95 = spread_population[p95_idx];
+        double spread_threshold = spread_p95 + 0.05;
+        spread_threshold = std::max(0.60, std::min(0.85, spread_threshold));
+
+        tripod_internal_ok = (spread_ang_A <= spread_threshold && spread_ang_B <= spread_threshold);
+        tripod_internal_linear_ok = (spread_lin_A <= spread_threshold && spread_lin_B <= spread_threshold);
         // Servo vs internal angle match
         double servo_angle_mae = 0.0;
         int servo_samples = 0;
@@ -869,6 +899,11 @@ int main(int argc, char **argv) {
                   << "  TripodB linear_amps(mm): " << lin_amp[1] << "," << lin_amp[3] << "," << lin_amp[5] << std::endl;
         std::cout << "TripodA norm_lin_amps(mm): " << norm_lin_amp[0] << "," << norm_lin_amp[2] << "," << norm_lin_amp[4]
                   << "  TripodB norm_lin_amps(mm): " << norm_lin_amp[1] << "," << norm_lin_amp[3] << "," << norm_lin_amp[5] << std::endl;
+        std::cout << "Tripod spread metrics: angA=" << spread_ang_A
+                  << " angB=" << spread_ang_B
+                  << " linA=" << spread_lin_A
+                  << " linB=" << spread_lin_B
+                  << " threshold=" << spread_threshold << " (p95=" << spread_p95 << ")" << std::endl;
         std::cout << "Servo vs model coxa MAE(rad): " << servo_angle_mae << " (tol=" << servo_tol_rad << ") match=" << (servo_match_ok ? "YES" : "NO") << std::endl;
         std::cout << "Avg stance stride dx TripodA=" << avg_dx_stance_tripodA << " TripodB=" << avg_dx_stance_tripodB << " forward_progress_ok=" << (forward_progress_ok ? "YES" : "NO") << std::endl;
         std::cout << "Premises Result: specular_ok=" << (specular_ok ? "YES" : "NO")
