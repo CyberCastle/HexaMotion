@@ -366,7 +366,7 @@ In HexaMotion, this external role is replaced by `LocomotionSystem`:
 | `generateLimits(StepCycle, 4×LimitMap*)`                | `generateLimits(StepCycle)` → `VelocityLimits`                     | ✅ (output mechanism changed).                                      |
 | `generateLimits(4×LimitMap*)` (overload)                | —                                                                  | **Removed**: `VelocityLimits::generateLimits(GaitConfig)` replaces. |
 | `generateStepCycle(bool)`                               | `GaitConfiguration::generateStepCycle()`                           | ✅ (moved to config object).                                        |
-| `getLimit(Vector2d, double, LimitMap)`                  | `VelocityLimits::getLimit(Vector2d, double, LimitMap, Point3D[])` | ✅ **Relocated** (see §6.1).                                |
+| `getLimit(Vector2d, double, LimitMap)`                  | `VelocityLimits::getLimit(Vector2d, double, LimitMap, Point3D[])`  | ✅ **Relocated** (see §6.1).                                        |
 | `updateWalk(Vector2d, double)`                          | `updateWalk(Point3D, double, Vector3d, Vector3d)`                  | ✅ (takes body pose explicitly).                                    |
 | `updateManual(int, Vector3d, int, Vector3d)` (velocity) | `updateManual(int, Vector3d, int, Vector3d)`                       | ✅                                                                  |
 | `updateManual(int, Pose, int, Pose)` (pose)             | `updateManual(int, Point3D, int, Point3D)`                         | ✅ (Pose→Point3D: no rotation for 3DOF).                            |
@@ -376,24 +376,24 @@ In HexaMotion, this external role is replaced by `LocomotionSystem`:
 
 #### Member Variables
 
-| OpenSHC Variable                        | HexaMotion Equivalent                          | Status                                                |
-| :-------------------------------------- | :--------------------------------------------- | :---------------------------------------------------- |
-| `model_` (shared_ptr)                   | `model` (reference)                            | ✅                                                    |
-| `params_`                               | Via `model.getParams()`                        | ✅                                                    |
-| `walk_state_`                           | `walk_state_`                                  | ✅                                                    |
-| `pose_state_` (PosingState enum)        | `pose_state_` (int)                            | ✅ (type simplified).                                 |
-| `step_` (StepCycle)                     | Via `current_gait_config_.generateStepCycle()` | ✅ (computed on demand).                              |
-| `walkspace_` (LimitMap)                 | `walkspace_` (map)                             | ✅                                                    |
-| `walk_plane_` / `walk_plane_normal_`    | Via `BodyPoseController`                       | ✅ (delegated).                                       |
-| `regenerate_walkspace_`                 | `regenerate_walkspace_`                        | ✅                                                    |
-| `desired_linear_velocity_` (Vector2d)   | `desired_linear_velocity_` (Point3D)           | ✅ (2D→3D).                                           |
-| `desired_angular_velocity_`             | `desired_angular_velocity_`                    | ✅                                                    |
-| `odometry_ideal_`                       | `odometry_ideal_`                              | ✅                                                    |
+| OpenSHC Variable                        | HexaMotion Equivalent                            | Status                                                       |
+| :-------------------------------------- | :----------------------------------------------- | :----------------------------------------------------------- |
+| `model_` (shared_ptr)                   | `model` (reference)                              | ✅                                                           |
+| `params_`                               | Via `model.getParams()`                          | ✅                                                           |
+| `walk_state_`                           | `walk_state_`                                    | ✅                                                           |
+| `pose_state_` (PosingState enum)        | `pose_state_` (int)                              | ✅ (type simplified).                                        |
+| `step_` (StepCycle)                     | Via `current_gait_config_.generateStepCycle()`   | ✅ (computed on demand).                                     |
+| `walkspace_` (LimitMap)                 | `walkspace_` (map)                               | ✅                                                           |
+| `walk_plane_` / `walk_plane_normal_`    | Via `BodyPoseController`                         | ✅ (delegated).                                              |
+| `regenerate_walkspace_`                 | `regenerate_walkspace_`                          | ✅                                                           |
+| `desired_linear_velocity_` (Vector2d)   | `desired_linear_velocity_` (Point3D)             | ✅ (2D→3D).                                                  |
+| `desired_angular_velocity_`             | `desired_angular_velocity_`                      | ✅                                                           |
+| `odometry_ideal_`                       | `odometry_ideal_`                                | ✅                                                           |
 | `max_linear_speed_` + 3 other LimitMaps | `VelocityLimits` class + `WalkController` copies | ✅ (generation in VelocityLimits, copies in WalkController). |
-| `legs_at_correct_phase_`                | `legs_at_correct_phase_`                       | ✅                                                    |
-| `legs_completed_first_step_`            | `legs_completed_first_step_`                   | ✅                                                    |
-| `return_to_default_attempted_`          | `return_to_default_attempted_`                 | ✅                                                    |
-| `leg_it_` / `joint_it_` / `link_it_`    | —                                              | **Removed** (no iterator pattern; index-based loops). |
+| `legs_at_correct_phase_`                | `legs_at_correct_phase_`                         | ✅                                                           |
+| `legs_completed_first_step_`            | `legs_completed_first_step_`                     | ✅                                                           |
+| `return_to_default_attempted_`          | `return_to_default_attempted_`                   | ✅                                                           |
+| `leg_it_` / `joint_it_` / `link_it_`    | —                                                | **Removed** (no iterator pattern; index-based loops).        |
 
 **HexaMotion WalkController additions** (not in OpenSHC):
 
@@ -410,7 +410,7 @@ In HexaMotion, this external role is replaced by `LocomotionSystem`:
 
 **OpenSHC**: `WalkController::getLimit(Vector2d, double, LimitMap)` — lives on `WalkController`, accesses `leg_stepper->getCurrentTipPose().position_` by iterating the leg container directly.
 
-**HexaMotion**: `VelocityLimits::getLimit(Vector2d, double, LimitMap, Point3D[])` — moved to `VelocityLimits` for architectural coherence.  All velocity-limit logic (generation and interpolation) is co-located in a single class.  Because `VelocityLimits` has no access to leg steppers, tip positions are passed as an explicit `Point3D[NUM_LEGS]` parameter by the caller (`WalkController::updateWalk`).
+**HexaMotion**: `VelocityLimits::getLimit(Vector2d, double, LimitMap, Point3D[])` — moved to `VelocityLimits` for architectural coherence. All velocity-limit logic (generation and interpolation) is co-located in a single class. Because `VelocityLimits` has no access to leg steppers, tip positions are passed as an explicit `Point3D[NUM_LEGS]` parameter by the caller (`WalkController::updateWalk`).
 
 Rationale:
 
@@ -418,7 +418,7 @@ Rationale:
 - `WalkController` becomes a thinner orchestrator that collects tip positions and delegates.
 - The core interpolation algorithm is 1:1 with OpenSHC (`UNASSIGNED_VALUE` sentinel, `BEARING_STEP` wrap-around, `math_utils::interpolate`).
 
-Minor logic fix vs OpenSHC: the division `(bearing - lower_bound) / (upper_bound - lower_bound)` in OpenSHC performs integer division (always yielding 0 or 1).  HexaMotion applies `static_cast<double>` to produce proper fractional interpolation within each bearing segment.
+Minor logic fix vs OpenSHC: the division `(bearing - lower_bound) / (upper_bound - lower_bound)` in OpenSHC performs integer division (always yielding 0 or 1). HexaMotion applies `static_cast<double>` to produce proper fractional interpolation within each bearing segment.
 
 ### 7. LegStepper (OpenSHC) vs HexaMotion LegStepper
 
@@ -631,18 +631,18 @@ HexaMotion substitutes: `CoxaTelemetry` struct in `LocomotionSystem` (compile-ti
 
 ### 12. HexaMotion-Specific Modules (no OpenSHC equivalent)
 
-| Module                                        | Description                                                                                                                                                                                                              |
-| :-------------------------------------------- | :----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `LocomotionSystem`                            | Top-level orchestrator replacing ROS node. Owns legs, coordinates controllers, manages HAL interfaces (IMU/FSR/Servo), error handling, sensor batch updates.                                                             |
-| `CartesianVelocityController`                 | Maps Cartesian body velocity commands → per-joint servo speeds. Includes `VelocityScaling`, `GaitSpeedModifiers`, adaptive workspace-based scaling.                                                                      |
-| `CollisionDiagnostics`                        | Static utility for analyzing workspace overlap between adjacent legs and recommending hexagon radius.                                                                                                                    |
-| `TerrainAdaptation`                           | Consolidates terrain logic (step plane detection, touchdown events, gravity estimation, walk plane estimation, proactive/reactive adaptation) that in OpenSHC was scattered across `Leg`, `Model`, and `PoseController`. |
-| `IMUAutoPose`                                 | Dedicated IMU-based auto-posing with multiple modes (level, inclination, adaptive, custom), separate from the phase-based auto-pose system.                                                                              |
-| `ManualBodyPoseController`                    | Dedicated class for manual body pose with extended modes (translation, rotation, individual leg, body height, combined, custom), presets, and quaternion support.                                                        |
-| `AnalyticRobotModel`                          | Supplementary kinematics class providing purely analytic FK/Jacobian calculations (no iterative solver).                                                                                                                 |
-| `WorkspaceAnalyzer`                           | Dedicated workspace management (generation, validation, walkspace computation, scaling) consolidating OpenSHC's scattered workspace logic from `Model` and `Leg`.                                                        |
-| `VelocityLimits`                              | Unified velocity/acceleration limit class consolidating OpenSHC's `generateLimits()` and `getLimit()` from `WalkController` with bearing-keyed `LimitMap` objects, overshoot compensation, and `UNASSIGNED_VALUE` sentinel semantics.  See §6.1 for `getLimit` relocation details. |
-| `GaitConfigFactory` / `BodyPoseConfigFactory` | Factory pattern for gait and body pose configuration, replacing YAML parameter loading.                                                                                                                                  |
+| Module                                        | Description                                                                                                                                                                                                                                                                       |
+| :-------------------------------------------- | :-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `LocomotionSystem`                            | Top-level orchestrator replacing ROS node. Owns legs, coordinates controllers, manages HAL interfaces (IMU/FSR/Servo), error handling, sensor batch updates.                                                                                                                      |
+| `CartesianVelocityController`                 | Maps Cartesian body velocity commands → per-joint servo speeds. Includes `VelocityScaling`, `GaitSpeedModifiers`, adaptive workspace-based scaling.                                                                                                                               |
+| `CollisionDiagnostics`                        | Static utility for analyzing workspace overlap between adjacent legs and recommending hexagon radius.                                                                                                                                                                             |
+| `TerrainAdaptation`                           | Consolidates terrain logic (step plane detection, touchdown events, gravity estimation, walk plane estimation, proactive/reactive adaptation) that in OpenSHC was scattered across `Leg`, `Model`, and `PoseController`.                                                          |
+| `IMUAutoPose`                                 | Dedicated IMU-based auto-posing with multiple modes (level, inclination, adaptive, custom), separate from the phase-based auto-pose system.                                                                                                                                       |
+| `ManualBodyPoseController`                    | Dedicated class for manual body pose with extended modes (translation, rotation, individual leg, body height, combined, custom), presets, and quaternion support.                                                                                                                 |
+| `AnalyticRobotModel`                          | Supplementary kinematics class providing purely analytic FK/Jacobian calculations (no iterative solver).                                                                                                                                                                          |
+| `WorkspaceAnalyzer`                           | Dedicated workspace management (generation, validation, walkspace computation, scaling) consolidating OpenSHC's scattered workspace logic from `Model` and `Leg`.                                                                                                                 |
+| `VelocityLimits`                              | Unified velocity/acceleration limit class consolidating OpenSHC's `generateLimits()` and `getLimit()` from `WalkController` with bearing-keyed `LimitMap` objects, overshoot compensation, and `UNASSIGNED_VALUE` sentinel semantics. See §6.1 for `getLimit` relocation details. |
+| `GaitConfigFactory` / `BodyPoseConfigFactory` | Factory pattern for gait and body pose configuration, replacing YAML parameter loading.                                                                                                                                                                                           |
 
 ---
 
