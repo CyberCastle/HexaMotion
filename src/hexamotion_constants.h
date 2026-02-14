@@ -19,6 +19,10 @@
 #define JACOBIAN_DELTA 0.001f
 
 #include "math_utils.h"
+#include <climits>
+
+// Sentinel for unassigned/unlimited values (OpenSHC equivalent)
+#define UNASSIGNED_VALUE double(INT_MAX)
 
 // ========================================================================
 // VELOCITY CONTROL CONSTANTS

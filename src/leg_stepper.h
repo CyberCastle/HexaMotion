@@ -4,7 +4,6 @@
 #include "gait_config.h" // For StepCycle definition
 #include "leg.h"
 #include "robot_model.h"
-#include "velocity_limits.h"
 #include "workspace_analyzer.h"
 
 enum StepState {
@@ -186,9 +185,6 @@ class LegStepper {
 
     Point3D calculateSafeStride(const Point3D &desired_stride) const;
 
-    // VelocityLimits integration for enhanced safety
-    void setVelocityLimits(const VelocityLimits *velocity_limits) { velocity_limits_ = velocity_limits; }
-
     // Comprehensive safety validation (combines all 4 steps)
     bool validateCurrentTrajectory() const;
 
@@ -313,9 +309,6 @@ class LegStepper {
     Point3D swing_1_nodes_[5];
     Point3D swing_2_nodes_[5];
     Point3D stance_nodes_[5];
-
-    // Safety and validation systems
-    const VelocityLimits *velocity_limits_; // Optional velocity limits for enhanced validation
 
     // Variables for velocity tracking
     Point3D previous_tip_pose_;

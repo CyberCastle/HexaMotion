@@ -328,8 +328,7 @@ int main(int argc, char **argv) {
     // produces observable coxa motion. Without these overrides the default velocity limiter
     // clamps the commanded stride to near zero and the analytic premises appear to fail even
     // though the controllers are functioning correctly.
-    p.max_velocity = 1000.0;          // Allow generous forward velocity for analysis
-    p.enable_velocity_limits = false; // Disable dynamic limiter (focus on tripod symmetry)
+    p.max_velocity = 1000.0; // Allow generous forward velocity for analysis
 
     LocomotionSystem sys(p);
     DummyIMU imu;

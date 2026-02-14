@@ -1,6 +1,5 @@
 #include "../src/body_pose_config_factory.h"
 #include "../src/robot_model.h"
-#include "../src/velocity_limits.h"
 #include "../src/workspace_analyzer.h"
 #include <iomanip>
 #include <iostream>
@@ -46,21 +45,16 @@ int main() {
     WorkspaceAnalyzer analyzer(model, ComputeConfig::medium(), validation_config);
     analyzer.initialize();
 
-    VelocityLimits velocity_limits(model);
-
     /** Test 1.1: Verify physical height offset. */
-    double analyzer_reference_height = analyzer.getPhysicalReferenceHeight();
-    double velocity_reference_height = velocity_limits.getPhysicalReferenceHeight();
+    double analyzer_reference_height = model.getDefaultHeightOffset();
 
     std::cout << "\n--- Test 1.1: Offset de altura física ---" << std::endl;
     std::cout << "WorkspaceAnalyzer - Altura de referencia: " << analyzer_reference_height << " mm" << std::endl;
-    std::cout << "VelocityLimits - Altura de referencia: " << velocity_reference_height << " mm" << std::endl;
 
     bool analyzer_offset_ok = std::abs(analyzer_reference_height - (-params.tibia_length)) < 0.001;
-    bool velocity_offset_ok = std::abs(velocity_reference_height - (-params.tibia_length)) < 0.001;
 
-    if (analyzer_offset_ok && velocity_offset_ok) {
-        std::cout << "✓ Ambos componentes consideran correctamente el offset físico" << std::endl;
+    if (analyzer_offset_ok) {
+        std::cout << "✓ Offset físico correcto" << std::endl;
     } else {
         std::cout << "✗ ERROR: Offset físico incorrecto" << std::endl;
     }
@@ -447,7 +441,7 @@ int main() {
     /** Total tests (+1 for standing_horizontal_reach coherence). */
     int total_tests = 11;
 
-    if (analyzer_offset_ok && velocity_offset_ok)
+    if (analyzer_offset_ok)
         passed_tests++;
     if (morphological_vertical_profile_ok)
         passed_tests++;

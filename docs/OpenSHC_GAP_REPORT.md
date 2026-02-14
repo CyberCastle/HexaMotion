@@ -1,6 +1,7 @@
 # OpenSHC Parity Gap Report (HexaMotion)
 
 > **Last updated**: 2026-02-13 — Packed/unpacked parity audit: `BodyPoseController::packLegs()`/`unpackLegs()` identified as dead code, `executePackSequence()`/`executeUnpackSequence()` use instant `setRobotJointAngles()` instead of OpenSHC's smooth Bezier via `transitionConfiguration()`. Report updated with detailed comparison table, recommended fix, and `JOINT_TOLERANCE` unit ambiguity analysis.
+> **VelocityLimits parity pass**: `VelocityLimits::generateLimits` aligned 1:1 with OpenSHC `WalkController::generateLimits`. `WalkController::getLimit` relocated to `VelocityLimits::getLimit` for architectural coherence (§6.1). Non-OpenSHC code removed (`getPhysicalReferenceHeight`, `reference_height_`, `enable_velocity_limits`). `UNASSIGNED_VALUE` sentinel adopted for zero-walkspace accelerations. Integer-division interpolation bug in OpenSHC fixed with `static_cast<double>`.
 > **Validation pass**: 2026-02-10 — Cross-verified all OpenSHC symbols (14 enums, 6 structs, 14 classes, ~290 public methods, ~200 member variables) against HexaMotion (24 classes, 3 interfaces, ~20 enums, ~50 structs, ~500+ public methods).
 > **Fix verification pass**: 2026-02-13 — Removed fallback pattern from LocomotionSystem. StateController is now always created in initialize() (std::unique_ptr). All convenience methods, update(), startWalking(), and stopWalking() exclusively route through StateController. runControlPipelineStep() is a context-interface service only. 8/8 tests pass.
 > **Admittance parity pass**: 2026-02-12 — AdmittanceController completely rewritten for 1:1 OpenSHC parity (ODE, RK4, 30 sub-steps, dynamic stiffness, pipeline integration, state transition stiffness scaling). Per-leg ODE state moved to `Leg` class. `Parameters::AdmittanceConfig` replaces scattered constants. `StateControllerContext::updateAdmittanceStiffness()` added for leg state transitions. `runge_kutta_validation_test` passes.
@@ -365,7 +366,7 @@ In HexaMotion, this external role is replaced by `LocomotionSystem`:
 | `generateLimits(StepCycle, 4×LimitMap*)`                | `generateLimits(StepCycle)` → `VelocityLimits`                     | ✅ (output mechanism changed).                                      |
 | `generateLimits(4×LimitMap*)` (overload)                | —                                                                  | **Removed**: `VelocityLimits::generateLimits(GaitConfig)` replaces. |
 | `generateStepCycle(bool)`                               | `GaitConfiguration::generateStepCycle()`                           | ✅ (moved to config object).                                        |
-| `getLimit(Vector2d, double, LimitMap)`                  | `getLimit(Vector2d, double, map<int,double>)`                      | ✅                                                                  |
+| `getLimit(Vector2d, double, LimitMap)`                  | `VelocityLimits::getLimit(Vector2d, double, LimitMap, Point3D[])` | ✅ **Relocated** (see §6.1).                                |
 | `updateWalk(Vector2d, double)`                          | `updateWalk(Point3D, double, Vector3d, Vector3d)`                  | ✅ (takes body pose explicitly).                                    |
 | `updateManual(int, Vector3d, int, Vector3d)` (velocity) | `updateManual(int, Vector3d, int, Vector3d)`                       | ✅                                                                  |
 | `updateManual(int, Pose, int, Pose)` (pose)             | `updateManual(int, Point3D, int, Point3D)`                         | ✅ (Pose→Point3D: no rotation for 3DOF).                            |
@@ -388,7 +389,7 @@ In HexaMotion, this external role is replaced by `LocomotionSystem`:
 | `desired_linear_velocity_` (Vector2d)   | `desired_linear_velocity_` (Point3D)           | ✅ (2D→3D).                                           |
 | `desired_angular_velocity_`             | `desired_angular_velocity_`                    | ✅                                                    |
 | `odometry_ideal_`                       | `odometry_ideal_`                              | ✅                                                    |
-| `max_linear_speed_` + 3 other LimitMaps | `VelocityLimits` class                         | ✅ (consolidated).                                    |
+| `max_linear_speed_` + 3 other LimitMaps | `VelocityLimits` class + `WalkController` copies | ✅ (generation in VelocityLimits, copies in WalkController). |
 | `legs_at_correct_phase_`                | `legs_at_correct_phase_`                       | ✅                                                    |
 | `legs_completed_first_step_`            | `legs_completed_first_step_`                   | ✅                                                    |
 | `return_to_default_attempted_`          | `return_to_default_attempted_`                 | ✅                                                    |
@@ -396,15 +397,28 @@ In HexaMotion, this external role is replaced by `LocomotionSystem`:
 
 **HexaMotion WalkController additions** (not in OpenSHC):
 
-- `VelocityLimits` class with 360-bearing `LimitValues` array (replaces 4 separate `LimitMap` objects).
+- `VelocityLimits` class with bearing-keyed `LimitMap` objects (replaces 4 separate `LimitMap` objects + `getLimit()` on WalkController).
 - `TerrainAdaptation` integration (`updateTerrainAdaptation(IFSR*, IIMU*)`).
 - Per-leg `StepCycle` storage (instead of single global `step_` on WalkController).
 - `GaitConfiguration` factory system replacing YAML parsing.
-- Velocity validation/clamping API (`applyVelocityLimits`, `validateVelocityCommand`).
 - Rough terrain mode toggle (`enableRoughTerrainMode`).
 - `LegTrajectoryInfo` struct for diagnostics.
 - `setGait(GaitType)` / `setGait(GaitConfiguration)` — runtime gait switching.
 - `CartesianVelocityController` integration for servo speed mapping.
+
+#### 6.1 VelocityLimits::getLimit relocation
+
+**OpenSHC**: `WalkController::getLimit(Vector2d, double, LimitMap)` — lives on `WalkController`, accesses `leg_stepper->getCurrentTipPose().position_` by iterating the leg container directly.
+
+**HexaMotion**: `VelocityLimits::getLimit(Vector2d, double, LimitMap, Point3D[])` — moved to `VelocityLimits` for architectural coherence.  All velocity-limit logic (generation and interpolation) is co-located in a single class.  Because `VelocityLimits` has no access to leg steppers, tip positions are passed as an explicit `Point3D[NUM_LEGS]` parameter by the caller (`WalkController::updateWalk`).
+
+Rationale:
+
+- Keeps the `VelocityLimits` class self-contained: it owns the limit maps **and** the interpolation function that reads them.
+- `WalkController` becomes a thinner orchestrator that collects tip positions and delegates.
+- The core interpolation algorithm is 1:1 with OpenSHC (`UNASSIGNED_VALUE` sentinel, `BEARING_STEP` wrap-around, `math_utils::interpolate`).
+
+Minor logic fix vs OpenSHC: the division `(bearing - lower_bound) / (upper_bound - lower_bound)` in OpenSHC performs integer division (always yielding 0 or 1).  HexaMotion applies `static_cast<double>` to produce proper fractional interpolation within each bearing segment.
 
 ### 7. LegStepper (OpenSHC) vs HexaMotion LegStepper
 
@@ -627,7 +641,7 @@ HexaMotion substitutes: `CoxaTelemetry` struct in `LocomotionSystem` (compile-ti
 | `ManualBodyPoseController`                    | Dedicated class for manual body pose with extended modes (translation, rotation, individual leg, body height, combined, custom), presets, and quaternion support.                                                        |
 | `AnalyticRobotModel`                          | Supplementary kinematics class providing purely analytic FK/Jacobian calculations (no iterative solver).                                                                                                                 |
 | `WorkspaceAnalyzer`                           | Dedicated workspace management (generation, validation, walkspace computation, scaling) consolidating OpenSHC's scattered workspace logic from `Model` and `Leg`.                                                        |
-| `VelocityLimits`                              | 360-bearing velocity/acceleration limit system replacing OpenSHC's 4 separate `LimitMap` objects with a unified class including overshoot compensation and safety margins.                                               |
+| `VelocityLimits`                              | Unified velocity/acceleration limit class consolidating OpenSHC's `generateLimits()` and `getLimit()` from `WalkController` with bearing-keyed `LimitMap` objects, overshoot compensation, and `UNASSIGNED_VALUE` sentinel semantics.  See §6.1 for `getLimit` relocation details. |
 | `GaitConfigFactory` / `BodyPoseConfigFactory` | Factory pattern for gait and body pose configuration, replacing YAML parameter loading.                                                                                                                                  |
 
 ---

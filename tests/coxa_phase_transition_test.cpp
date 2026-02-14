@@ -336,9 +336,6 @@ int main(int argc, char **argv) {
     // 1. Inicialización básica
     Parameters p = createDefaultParameters();
     p.max_velocity = 1000.0; // mm/s (límite alto para no interferir)
-    // p.enable_velocity_limits = false;     // Desactivar limitación dinámica (test de coxas)
-    // p.enable_phase_end_snap = false;      // Desactivar snap de fin de fase (test de coxas)
-    // p.enable_workspace_constrain = false; // Desactivar workspace constraint (test de coxas)
     LocomotionSystem sys(p);
     DummyIMU imu;
     DummyFSR fsr;

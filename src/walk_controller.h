@@ -52,7 +52,20 @@ class WalkController {
     void generateLimits(StepCycle step);
 
     /**
-     * @brief Update walking with velocity commands and current robot pose (OpenSHC equivalent)
+     * @brief Generate velocity limits for current gait step cycle
+     */
+    void generateLimits();
+
+    /**
+     * @brief Update walking with velocity commands and current robot pose (OpenSHC equivalent).
+     *
+     * Applies velocity limiting (via VelocityLimits::getLimit), acceleration
+     * ramping, gait state machine transitions and per-leg stepper updates.
+     *
+     * @param linear_velocity_input   Desired linear velocity (mm/s).
+     * @param angular_velocity_input   Desired angular velocity (rad/s).
+     * @param current_body_position    Current robot body position.
+     * @param current_body_orientation Current robot body orientation (roll, pitch, yaw).
      */
     void updateWalk(const Point3D &linear_velocity_input, double angular_velocity_input,
                     const Eigen::Vector3d &current_body_position, const Eigen::Vector3d &current_body_orientation);
@@ -88,19 +101,11 @@ class WalkController {
     void updateManual(int primary_leg_index, const Point3D &primary_tip_position,
                       int secondary_leg_index, const Point3D &secondary_tip_position);
 
-    /**
-     * @brief Get interpolated limit for a given velocity command from a bearing-based limit map (OpenSHC equivalent).
-     *
-     * Calculates per-leg stride bearing from combined linear + angular velocity,
-     * interpolates the limit map bounding that bearing, and returns the minimum across all legs.
-     *
-     * @param linear_velocity_input Desired linear body velocity
-     * @param angular_velocity_input Desired angular body velocity
-     * @param limit The bearing-based limit map (e.g., walkspace_, max_linear_speed_)
-     * @return Smallest interpolated limit across all legs
-     */
-    double getLimit(const Eigen::Vector2d &linear_velocity_input, double angular_velocity_input,
-                    const std::map<int, double> &limit) const;
+    /** Modifiers for velocity/acceleration limit maps (OpenSHC equivalent). */
+    void setLinearSpeedLimitMap(const std::map<int, double> &limit_map) { max_linear_speed_ = limit_map; }
+    void setAngularSpeedLimitMap(const std::map<int, double> &limit_map) { max_angular_speed_ = limit_map; }
+    void setLinearAccelerationLimitMap(const std::map<int, double> &limit_map) { max_linear_acceleration_ = limit_map; }
+    void setAngularAccelerationLimitMap(const std::map<int, double> &limit_map) { max_angular_acceleration_ = limit_map; }
 
     /**
      * @brief Set body pose controller reference for walk plane functionality
@@ -139,15 +144,6 @@ class WalkController {
     void setPoseState(int state) { pose_state_ = state; }
     void setRegenerateWalkspace() { regenerate_walkspace_ = true; }
 
-    /** Velocity limiting methods. */
-    VelocityLimits::LimitValues getVelocityLimits(double bearing_degrees = 0.0f) const;
-    VelocityLimits::LimitValues applyVelocityLimits(double vx, double vy, double omega) const;
-    bool validateVelocityCommand(double vx, double vy, double omega) const;
-    void updateVelocityLimits(double frequency, double stance_ratio, double time_to_max_stride = 2.0f);
-    void setVelocitySafetyMargin(double margin);
-    void setAngularVelocityScaling(double scaling);
-    VelocityLimits::WorkspaceConfig getWorkspaceConfig() const;
-
     /** Terrain adaptation methods. */
     void enableRoughTerrainMode(bool enabled, bool force_normal_touchdown = true, bool proactive_adaptation = true);
     void enableForceNormalTouchdown(bool enabled);
@@ -159,8 +155,6 @@ class WalkController {
     const TerrainAdaptation::ExternalTarget &getExternalDefault(int leg_index) const;
     const TerrainAdaptation::StepPlane &getStepPlane(int leg_index) const;
     bool hasTouchdownDetection(int leg_index) const;
-    const VelocityLimits::LimitValues &getCurrentVelocities() const;
-
     /** Terrain adaptation accessors for LegStepper. */
     const TerrainAdaptation &getTerrainAdaptation() const { return terrain_adaptation_; }
     RobotModel &getModel() { return model; }
@@ -299,10 +293,12 @@ class WalkController {
     /** Body pose controller reference for walk plane functionality. */
     BodyPoseController *body_pose_controller_;
 
-    /** Velocity limits system. */
+    /** Velocity/acceleration limits (OpenSHC equivalent maps keyed by bearing). */
     VelocityLimits velocity_limits_;
-    VelocityLimits::LimitValues current_velocity_limits_;
-    VelocityLimits::LimitValues current_velocities_;
+    std::map<int, double> max_linear_speed_;
+    std::map<int, double> max_angular_speed_;
+    std::map<int, double> max_linear_acceleration_;
+    std::map<int, double> max_angular_acceleration_;
 
     /** Collision avoidance: track current leg positions. */
     Point3D current_leg_positions_[NUM_LEGS];

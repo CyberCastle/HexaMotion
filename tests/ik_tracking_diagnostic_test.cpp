@@ -35,7 +35,6 @@ int main() {
     // 1. Setup (same as coxa_tripod_symmetry_analytic_test)
     Parameters p = createDefaultParameters();
     p.max_velocity = 1000.0;
-    p.enable_velocity_limits = false;
 
     LocomotionSystem sys(p);
     DummyIMU imu;

@@ -1,7 +1,6 @@
 #include "leg_stepper.h"
 #include "hexamotion_constants.h"
 #include "math_utils.h"
-#include "velocity_limits.h"
 #include "workspace_analyzer.h"
 #include <algorithm>
 #include <cmath>
@@ -92,9 +91,6 @@ LegStepper::LegStepper(int leg_index, const Point3D &identity_tip_pose, Leg &leg
         stance_nodes_[i] = identity_tip_pose_;
     }
 
-    // Initialize safety systems
-    velocity_limits_ = nullptr;
-
     // Initialize velocity tracking
     previous_tip_pose_ = identity_tip_pose_;
     has_previous_position_ = false;
@@ -124,44 +120,21 @@ void LegStepper::setDesiredVelocity(const Point3D &linear_velocity, double angul
     desired_angular_velocity_ = angular_velocity;
 
 #ifdef TESTING_ENABLED
-    // Debug: validate whether velocities exceed expected limits (no modification, report only)
-    // 1) Check against VelocityLimits if available
-    if (velocity_limits_) {
-        double bearing_deg = 0.0;
-        if (std::abs(linear_velocity.x) > 1e-6 || std::abs(linear_velocity.y) > 1e-6) {
-            bearing_deg = math_utils::radiansToDegrees(std::atan2(linear_velocity.y, linear_velocity.x));
-            if (bearing_deg < 0.0)
-                bearing_deg += 360.0;
-        }
-        auto lim = velocity_limits_->getLimit(bearing_deg);
-        bool viol_lin_x = std::abs(linear_velocity.x) > lim.linear_x + 1e-6;
-        bool viol_lin_y = std::abs(linear_velocity.y) > lim.linear_y + 1e-6;
-        bool viol_ang = std::abs(angular_velocity) > lim.angular_z + 1e-6;
-        if (viol_lin_x || viol_lin_y || viol_ang) {
-            fprintf(stderr,
-                    "[TEST][LegStepper] Velocity limit violation (leg %d, bearing %.1f): vx=%.3f (max %.3f) vy=%.3f (max %.3f) w=%.3f (max %.3f)\n",
-                    leg_index_, bearing_deg, linear_velocity.x, lim.linear_x, linear_velocity.y, lim.linear_y,
-                    angular_velocity, lim.angular_z);
-        }
-    } else {
-        // 2) Basic fallback verification using workspace constraints (approx) — no clamping, diagnostics only
-        double bearing_deg = 0.0;
-        if (std::abs(linear_velocity.x) > 1e-6 || std::abs(linear_velocity.y) > 1e-6) {
-            bearing_deg = math_utils::radiansToDegrees(std::atan2(linear_velocity.y, linear_velocity.x));
-            if (bearing_deg < 0.0)
-                bearing_deg += 360.0;
-        }
-        // Use local StepCycle for stance/swing ratios
-        double stance_ratio = (step_cycle_.period_ > 0) ? double(step_cycle_.stance_period_) / double(step_cycle_.period_) : 0.6;
-        auto constraints = robot_model_.getWorkspaceAnalyzer().calculateVelocityConstraints(
-            leg_index_, bearing_deg, step_cycle_.frequency_, stance_ratio);
-        double max_lin = constraints.max_linear_velocity;
-        double max_ang = constraints.max_angular_velocity;
-        if (std::abs(linear_velocity.x) > max_lin + 1e-6 || std::abs(linear_velocity.y) > max_lin + 1e-6 || std::abs(angular_velocity) > max_ang + 1e-6) {
-            fprintf(stderr,
-                    "[TEST][LegStepper] Workspace constraint velocity exceedance (leg %d, bearing %.1f): vx=%.3f vy=%.3f w=%.3f | max_lin=%.3f max_ang=%.3f\n",
-                    leg_index_, bearing_deg, linear_velocity.x, linear_velocity.y, angular_velocity, max_lin, max_ang);
-        }
+    double bearing_deg = 0.0;
+    if (std::abs(linear_velocity.x) > 1e-6 || std::abs(linear_velocity.y) > 1e-6) {
+        bearing_deg = math_utils::radiansToDegrees(std::atan2(linear_velocity.y, linear_velocity.x));
+        if (bearing_deg < 0.0)
+            bearing_deg += 360.0;
+    }
+    double stance_ratio = (step_cycle_.period_ > 0) ? double(step_cycle_.stance_period_) / double(step_cycle_.period_) : 0.6;
+    auto constraints = robot_model_.getWorkspaceAnalyzer().calculateVelocityConstraints(
+        leg_index_, bearing_deg, step_cycle_.frequency_, stance_ratio);
+    double max_lin = constraints.max_linear_velocity;
+    double max_ang = constraints.max_angular_velocity;
+    if (std::abs(linear_velocity.x) > max_lin + 1e-6 || std::abs(linear_velocity.y) > max_lin + 1e-6 || std::abs(angular_velocity) > max_ang + 1e-6) {
+        fprintf(stderr,
+                "[TEST][LegStepper] Workspace constraint velocity exceedance (leg %d, bearing %.1f): vx=%.3f vy=%.3f w=%.3f | max_lin=%.3f max_ang=%.3f\n",
+                leg_index_, bearing_deg, linear_velocity.x, linear_velocity.y, angular_velocity, max_lin, max_ang);
     }
 #endif
 }
@@ -993,15 +966,7 @@ bool LegStepper::validateCurrentTrajectory() const {
         return false;
     }
 
-    // Step 2: Check velocity constraints if available
-    if (velocity_limits_ && params_.enable_velocity_limits) {
-        Point3D current_velocity = calculateCurrentTipVelocity();
-        if (!velocity_limits_->validateVelocityInputs(current_velocity.x, current_velocity.y, 0.0)) {
-            return false;
-        }
-    }
-
-    // Step 3: Validate current control nodes are within workspace
+    // Step 2: Validate current control nodes are within workspace
     // Check all 5 control nodes for each trajectory type
     for (size_t i = 0; i < 5; ++i) {
         if (!robot_model_.getWorkspaceAnalyzer().isPositionReachable(leg_index_, swing_1_nodes_[i])) {

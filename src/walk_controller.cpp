@@ -22,7 +22,7 @@ WalkController::WalkController(RobotModel &m, Leg legs[NUM_LEGS], const BodyPose
       current_body_position_(Eigen::Vector3d::Zero()), current_body_orientation_(Eigen::Vector3d::Zero()),
       regenerate_walkspace_(false), legs_at_correct_phase_(0), legs_completed_first_step_(0), return_to_default_attempted_(false),
       leg_steppers_(), current_gait_config_(), gait_selection_config_(), terrain_adaptation_(m), body_pose_controller_(nullptr),
-      velocity_limits_(m), current_velocity_limits_(), current_velocities_(), current_leg_positions_{Point3D(), Point3D(), Point3D(), Point3D(), Point3D(), Point3D()}, legs_array_(legs), global_phase_(0) {
+      velocity_limits_(m), current_leg_positions_{Point3D(), Point3D(), Point3D(), Point3D(), Point3D(), Point3D()}, legs_array_(legs), global_phase_(0) {
 
     standing_horizontal_reach_ = pose_config.standing_horizontal_reach; // cache from configuration
 
@@ -114,9 +114,7 @@ bool WalkController::setGaitConfiguration(const GaitConfiguration &gait_config) 
     // Update gait selection config
     gait_selection_config_.current_gait = gait_config.gait_name;
 
-    // Regenerate velocity limits so stride/acceleration envelopes reflect the active gait parameters.
-    // This keeps bearing-based clamps in sync with caller-provided overrides (e.g., custom step_length).
-    velocity_limits_.generateLimits(current_gait_config_);
+    generateLimits();
 
     return true;
 }
@@ -227,81 +225,6 @@ Point3D WalkController::estimateGravity() const {
     return Point3D(0.0, 0.0, -9.81);
 }
 
-// Velocity limiting methods
-VelocityLimits::LimitValues WalkController::getVelocityLimits(double bearing_degrees) const {
-    return velocity_limits_.getLimit(bearing_degrees);
-}
-
-VelocityLimits::LimitValues WalkController::applyVelocityLimits(double vx, double vy, double omega) const {
-    // If velocity limiting disabled, pass through raw command
-    if (!model.getParams().enable_velocity_limits) {
-        return VelocityLimits::LimitValues(std::abs(vx), std::abs(vy), std::abs(omega), 0.0); // magnitude container (angular_accel unused)
-    }
-    // Calculate bearing from velocity components
-    double bearing = VelocityLimits::calculateBearing(vx, vy);
-
-    // Get limits for this bearing
-    VelocityLimits::LimitValues limits = velocity_limits_.getLimit(bearing);
-
-    // First, clamp to absolute per-axis limits
-    VelocityLimits::LimitValues clamped;
-    clamped.linear_x = std::max(-limits.linear_x, std::min(limits.linear_x, vx));
-    clamped.linear_y = std::max(-limits.linear_y, std::min(limits.linear_y, vy));
-    clamped.angular_z = std::max(-limits.angular_z, std::min(limits.angular_z, omega));
-    clamped.acceleration = limits.acceleration;
-
-    // Then, apply coupling/scaling due to angular demand using VelocityLimits policy
-    // Scale factor is the fraction of angular demand w.r.t available limit (0..1)
-    double angular_demand_pct = 0.0;
-    if (limits.angular_z > 1e-9) {
-        angular_demand_pct = std::abs(clamped.angular_z) / limits.angular_z;
-        angular_demand_pct = std::min(1.0, std::max(0.0, angular_demand_pct));
-    }
-
-    VelocityLimits::LimitValues scaled = velocity_limits_.scaleVelocityLimits(limits, angular_demand_pct);
-
-    // Finally, ensure clamped values respect the scaled limits (coupled reduction of linear speed)
-    VelocityLimits::LimitValues final_vel;
-    final_vel.linear_x = std::max(-scaled.linear_x, std::min(scaled.linear_x, clamped.linear_x));
-    final_vel.linear_y = std::max(-scaled.linear_y, std::min(scaled.linear_y, clamped.linear_y));
-    final_vel.angular_z = clamped.angular_z; // already clamped to base angular limit; scaling adjusts linear components
-    final_vel.acceleration = scaled.acceleration;
-
-    return final_vel;
-}
-
-bool WalkController::validateVelocityCommand(double vx, double vy, double omega) const {
-    if (!model.getParams().enable_velocity_limits) {
-        return true; // Always accept when disabling limits
-    }
-    return velocity_limits_.validateVelocityInputs(vx, vy, omega);
-}
-
-void WalkController::updateVelocityLimits(double frequency, double stance_ratio, double time_to_max_stride) {
-    // Update time_to_max_stride if provided
-    current_gait_config_.time_to_max_stride = time_to_max_stride;
-
-    // For now, we don't dynamically update phase ratios as they are intrinsic to each gait type
-    // Use unified interface
-    velocity_limits_.updateGaitParameters(current_gait_config_);
-}
-
-void WalkController::setVelocitySafetyMargin(double margin) {
-    velocity_limits_.setSafetyMargin(margin);
-}
-
-void WalkController::setAngularVelocityScaling(double scaling) {
-    velocity_limits_.setAngularVelocityScaling(scaling);
-}
-
-const VelocityLimits::LimitValues &WalkController::getCurrentVelocities() const {
-    return current_velocities_;
-}
-
-VelocityLimits::WorkspaceConfig WalkController::getWorkspaceConfig() const {
-    return velocity_limits_.getWorkspaceConfig();
-}
-
 // --- WalkController Methods Implementation ---
 void WalkController::init(const Eigen::Vector3d &current_body_position, const Eigen::Vector3d &current_body_orientation) {
 
@@ -356,23 +279,6 @@ void WalkController::init(const Eigen::Vector3d &current_body_position, const Ei
     global_phase_ = 0;
 }
 
-/**
- * @brief Optimized WalkController::updateWalk method following OpenSHC design principles
- *
- * Key optimizations implemented:
- * 1. Early exit for STOPPED state without velocity commands
- * 2. Single-pass calculation of step cycle to avoid redundant computations
- * 3. Combined loops for leg state checking and processing
- * 4. Efficient velocity limiting using magnitude-based scaling
- * 5. Switch-case state machine for better branch prediction
- * 6. Reduced function calls by caching frequently used values
- * 7. Conditional processing to avoid unnecessary calculations
- *
- * @param linear_velocity_input Desired linear velocity (m/s)
- * @param angular_velocity_input Desired angular velocity (rad/s)
- * @param current_body_position Current robot body position
- * @param current_body_orientation Current robot body orientation
- */
 void WalkController::updateWalk(const Point3D &linear_velocity_input, double angular_velocity_input,
                                 const Eigen::Vector3d &current_body_position, const Eigen::Vector3d &current_body_orientation) {
 
@@ -393,53 +299,45 @@ void WalkController::updateWalk(const Point3D &linear_velocity_input, double ang
         return;
     }
 
-    // OpenSHC: Optimized velocity limiting calculation
-    Point3D new_linear_velocity, limited_linear_velocity;
-    double limited_angular_velocity;
+    Eigen::Vector2d linear_input_xy(linear_velocity_input.x, linear_velocity_input.y);
+    Eigen::Vector2d new_linear_velocity = Eigen::Vector2d::Zero();
+    double new_angular_velocity = 0.0;
 
-    if (walk_state_ != WALK_STOPPING && has_velocity_command) {
-        // Centralized velocity limiting: reuse applyVelocityLimits (single source of truth)
-        VelocityLimits::LimitValues base_limits = applyVelocityLimits(
-            linear_velocity_input.x, linear_velocity_input.y, angular_velocity_input);
-
-        // Target velocities after directional & coupling limits
-        Point3D target_linear_velocity(base_limits.linear_x, base_limits.linear_y, 0.0);
-        double target_angular_velocity = base_limits.angular_z;
-
-        // Acceleration (rate) limiting: only apply if acceleration constraint > 0
-        double accel_limit = base_limits.acceleration; // already scaled if angular coupling applied
-        if (accel_limit > 0.0) {
-            // Linear rate limiting
-            Point3D diff = target_linear_velocity - desired_linear_velocity_;
-            double diff_mag = std::sqrt(diff.x * diff.x + diff.y * diff.y);
-            double max_step = accel_limit * time_delta_;
-            if (diff_mag > max_step && diff_mag > 1e-9) {
-                double scale = max_step / diff_mag;
-                limited_linear_velocity = desired_linear_velocity_ + diff * scale;
-            } else {
-                limited_linear_velocity = target_linear_velocity;
-            }
-
-            // Angular rate limiting (reuse same accel limit; separate angular limit could be added later)
-            double angular_diff = target_angular_velocity - desired_angular_velocity_;
-            double max_ang_step = accel_limit * time_delta_;
-            if (std::abs(angular_diff) > max_ang_step) {
-                angular_diff = (angular_diff > 0 ? max_ang_step : -max_ang_step);
-            }
-            limited_angular_velocity = desired_angular_velocity_ + angular_diff;
-        } else {
-            // No acceleration constraint configured: take target directly
-            limited_linear_velocity = target_linear_velocity;
-            limited_angular_velocity = target_angular_velocity;
-        }
-    } else {
-        // Zero velocities for stopping/stopped
-        limited_linear_velocity = Point3D(0, 0, 0);
-        limited_angular_velocity = 0.0;
+    // Collect current tip positions for limit interpolation
+    Point3D tip_positions[NUM_LEGS];
+    for (int i = 0; i < NUM_LEGS; ++i) {
+        tip_positions[i] = leg_steppers_[i]->getCurrentTipPose();
     }
 
-    desired_linear_velocity_ = limited_linear_velocity;
-    desired_angular_velocity_ = limited_angular_velocity;
+    double max_linear_speed = velocity_limits_.getLimit(linear_input_xy, angular_velocity_input, max_linear_speed_, tip_positions);
+    double max_angular_speed = velocity_limits_.getLimit(linear_input_xy, angular_velocity_input, max_angular_speed_, tip_positions);
+    double max_linear_acceleration = velocity_limits_.getLimit(linear_input_xy, angular_velocity_input, max_linear_acceleration_, tip_positions);
+    double max_angular_acceleration = velocity_limits_.getLimit(linear_input_xy, angular_velocity_input, max_angular_acceleration_, tip_positions);
+
+    if (walk_state_ != WALK_STOPPING) {
+        new_linear_velocity = math_utils::clampedVector2d(linear_input_xy, max_linear_speed);
+        new_angular_velocity = math_utils::clamped(angular_velocity_input, -max_angular_speed, max_angular_speed);
+        new_linear_velocity *= (max_angular_speed != 0.0 ? (1.0 - std::abs(new_angular_velocity / max_angular_speed)) : 0.0);
+    }
+
+    Eigen::Vector2d current_linear_velocity(desired_linear_velocity_.x, desired_linear_velocity_.y);
+    Eigen::Vector2d linear_acceleration = new_linear_velocity - current_linear_velocity;
+    if (linear_acceleration.norm() < max_linear_acceleration * time_delta_) {
+        current_linear_velocity += linear_acceleration;
+    } else if (linear_acceleration.norm() > 0.0) {
+        current_linear_velocity += linear_acceleration.normalized() * max_linear_acceleration * time_delta_;
+    }
+
+    double angular_acceleration = new_angular_velocity - desired_angular_velocity_;
+    if (std::abs(angular_acceleration) < max_angular_acceleration * time_delta_) {
+        desired_angular_velocity_ += angular_acceleration;
+    } else {
+        desired_angular_velocity_ += math_utils::sign(angular_acceleration) * max_angular_acceleration * time_delta_;
+    }
+
+    desired_linear_velocity_.x = current_linear_velocity.x();
+    desired_linear_velocity_.y = current_linear_velocity.y();
+    desired_linear_velocity_.z = 0.0;
 
     // OpenSHC: Optimized state machine with combined leg state checking
     legs_at_correct_phase_ = 0;
@@ -657,59 +555,15 @@ Pose WalkController::calculateOdometry(double time_period) {
     return Pose(position_delta, rotation_delta);
 }
 
-////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-// OpenSHC equivalent: WalkController::getLimit
-////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-double WalkController::getLimit(const Eigen::Vector2d &linear_velocity_input, double angular_velocity_input,
-                                const std::map<int, double> &limit) const {
-    if (limit.empty()) {
-        return 0.0;
-    }
+void WalkController::generateLimits(StepCycle step) {
+    velocity_limits_.setWalkspace(walkspace_);
+    velocity_limits_.generateLimits(step, current_gait_config_,
+                                    &max_linear_speed_, &max_angular_speed_,
+                                    &max_linear_acceleration_, &max_angular_acceleration_);
+}
 
-    double min_limit = 1e9; // Large sentinel (OpenSHC UNASSIGNED_VALUE equivalent)
-    for (size_t i = 0; i < leg_steppers_.size() && i < NUM_LEGS; ++i) {
-        const auto &leg_stepper = leg_steppers_[i];
-        Point3D tip_position = leg_stepper->getCurrentTipPose();
-        // Rotation normal perpendicular to tip radius on the z-plane
-        Eigen::Vector2d rotation_normal(-tip_position.y, tip_position.x);
-        Eigen::Vector2d stride_vector = linear_velocity_input + angular_velocity_input * rotation_normal;
-
-        int bearing = math_utils::mod(math_utils::roundToInt(math_utils::radiansToDegrees(
-                                          atan2(stride_vector[1], stride_vector[0]))),
-                                      360);
-
-        // Find bounding bearings in the limit map
-        auto upper_it = limit.lower_bound(bearing);
-        if (upper_it == limit.end()) {
-            upper_it = limit.begin();
-        }
-        int upper_bound = upper_it->first;
-
-        int lower_bound = math_utils::mod(upper_bound - BEARING_STEP, 360);
-        // Adjust for wrap-around
-        int adj_bearing = bearing + ((bearing < lower_bound) ? 360 : 0);
-        int adj_upper = upper_bound + ((upper_bound < lower_bound) ? 360 : 0);
-
-        double control_input = 0.0;
-        int range = adj_upper - lower_bound;
-        if (range > 0) {
-            control_input = static_cast<double>(adj_bearing - lower_bound) / range;
-        }
-
-        // Safe lookup with mod to handle wrap-around
-        double lower_val = 0.0;
-        double upper_val = 0.0;
-        auto lb_it = limit.find(lower_bound);
-        auto ub_it = limit.find(math_utils::mod(upper_bound, 360));
-        if (lb_it != limit.end())
-            lower_val = lb_it->second;
-        if (ub_it != limit.end())
-            upper_val = ub_it->second;
-
-        double limit_interpolation = math_utils::interpolate(lower_val, upper_val, control_input);
-        min_limit = std::min(min_limit, limit_interpolation);
-    }
-    return min_limit;
+void WalkController::generateLimits() {
+    generateLimits(current_gait_config_.generateStepCycle());
 }
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -846,8 +700,7 @@ void WalkController::generateWalkspace() {
 
     regenerate_walkspace_ = false;
 
-    // Regenerate velocity limits using the updated workspace information
-    velocity_limits_.generateLimits(current_gait_config_);
+    generateLimits();
 }
 
 // Accessor methods

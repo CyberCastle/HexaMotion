@@ -96,11 +96,6 @@ struct Parameters {
     double min_effective_stride_ratio = DEFAULT_MIN_EFFECTIVE_STRIDE_RATIO; //< Minimum stride fraction preserved after overshoot deduction
     double stability_margin;
 
-    // Toggle global velocity limiting system (HexaMotion extension).
-    // When false, VelocityLimits generation/validation is bypassed and commanded velocities
-    // are passed through (still subject to any downstream physical clamping).
-    bool enable_velocity_limits = true; //< Enable bearing-based dynamic velocity limiting
-
     // Global gait tempo (Hz). Used by GaitConfiguration::generateStepCycle() to derive the
     // nominal (pre‑normalization) cycle duration: raw_iterations ≈ (1 / step_frequency) / time_delta.
     // The final StepCycle period is then normalized to an even multiple of (stance_phase + swing_phase)
