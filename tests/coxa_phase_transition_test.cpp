@@ -336,11 +336,13 @@ int main(int argc, char **argv) {
     // 1. Inicialización básica
     Parameters p = createDefaultParameters();
     p.max_velocity = 1000.0; // mm/s (límite alto para no interferir)
+    enableConfiguredPackedUnpackedPoses(p);
     LocomotionSystem sys(p);
     DummyIMU imu;
     DummyFSR fsr;
     DummyServo servos;
     BodyPoseConfiguration pose_config = getDefaultBodyPoseConfig(p);
+    pose_config.start_up_sequence = true;
 
     if (!sys.initialize(&imu, &fsr, &servos, pose_config)) {
         std::cerr << "ERROR: Failed to initialize locomotion system." << std::endl;
@@ -392,7 +394,7 @@ int main(int argc, char **argv) {
     std::cout << "Ejecutando secuencia de startup..." << std::endl;
 
     int startup_sequence_attempts = 0;
-    const int MAX_STARTUP_SEQUENCE_ATTEMPTS = 500;
+    const int MAX_STARTUP_SEQUENCE_ATTEMPTS = 2000;
 
     while (sys.getSystemState() != SYSTEM_RUNNING && startup_sequence_attempts < MAX_STARTUP_SEQUENCE_ATTEMPTS) {
         sys.update();
@@ -444,7 +446,7 @@ int main(int argc, char **argv) {
 
     std::cout << "Iteraciones derivadas: swing=" << swing_iterations_per_cycle << ", stance=" << stance_iterations_per_cycle << std::endl;
     if (swing_iterations_per_cycle != stance_iterations_per_cycle) {
-        std::cout << "⚠️  NOTE: swing y stance difieren; validar coherencia de configuración (esto es permitido si las fases tienen distinta duración)." << std::endl;
+        std::cout << "INFO: swing y stance difieren; esto es permitido si las fases tienen distinta duración." << std::endl;
     }
     std::cout << "(Referencia previa de 52 eliminada; ahora se valida contra StepCycle real)." << std::endl;
 
@@ -491,8 +493,8 @@ int main(int argc, char **argv) {
     while (step < g_max_steps) {
         // Actualizar sistema
         if (!sys.update()) {
-            std::cerr << "WARNING: System update failed at step " << step << std::endl;
-            continue;
+            std::cerr << "ERROR: System update failed at step " << step << std::endl;
+            return 1;
         }
 
         // Verificar transiciones y detectar si hay algún cambio de fase
@@ -548,18 +550,20 @@ int main(int argc, char **argv) {
     }
 
     if (step == g_max_steps) {
-        std::cerr << "\nWARNING: Test alcanzó máximo de pasos (" << g_max_steps << ") antes de completarse." << std::endl;
+        std::cerr << "\nERROR: Test alcanzó máximo de pasos (" << g_max_steps << ") antes de completarse." << std::endl;
+        return 1;
     }
 
     // 5. Parar y volver a stance
     std::cout << "\nParando caminar y volviendo a pose de pie..." << std::endl;
     if (!sys.stopWalking()) {
-        std::cerr << "WARNING: Failed to initiate stop walking." << std::endl;
+        std::cerr << "ERROR: Failed to initiate stop walking." << std::endl;
+        return 1;
     }
 
     // Run update loop to let StateController orchestrate the shutdown
     int shutdown_attempts = 0;
-    const int MAX_SHUTDOWN_ATTEMPTS = 500;
+    const int MAX_SHUTDOWN_ATTEMPTS = 2000;
     while (shutdown_attempts < MAX_SHUTDOWN_ATTEMPTS && sys.getSystemState() == SYSTEM_RUNNING) {
         sys.update();
         shutdown_attempts++;
@@ -567,7 +571,8 @@ int main(int argc, char **argv) {
     if (sys.getSystemState() != SYSTEM_RUNNING) {
         std::cout << "Shutdown completado tras " << shutdown_attempts << " iteraciones." << std::endl;
     } else {
-        std::cerr << "WARNING: Shutdown no completó tras " << shutdown_attempts << " iteraciones." << std::endl;
+        std::cerr << "ERROR: Shutdown no completó tras " << shutdown_attempts << " iteraciones." << std::endl;
+        return 1;
     }
 
     // Resumen final

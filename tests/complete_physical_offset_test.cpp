@@ -3,10 +3,53 @@
 #include "../src/workspace_analyzer.h"
 #include <iomanip>
 #include <iostream>
+#include <limits>
+
+namespace {
+struct WorkspaceBoundsLocal {
+    double min_reach;
+    double max_reach;
+    double min_height;
+    double max_height;
+};
+
+WorkspaceBoundsLocal computeWorkspaceBounds(const Workspace &workspace) {
+    WorkspaceBoundsLocal bounds{};
+    bounds.min_reach = std::numeric_limits<double>::infinity();
+    bounds.max_reach = 0.0;
+    bounds.min_height = std::numeric_limits<double>::infinity();
+    bounds.max_height = -std::numeric_limits<double>::infinity();
+
+    for (const auto &height_layer : workspace) {
+        bounds.min_height = std::min(bounds.min_height, height_layer.first);
+        bounds.max_height = std::max(bounds.max_height, height_layer.first);
+        for (const auto &bearing_radius : height_layer.second) {
+            bounds.min_reach = std::min(bounds.min_reach, bearing_radius.second);
+            bounds.max_reach = std::max(bounds.max_reach, bearing_radius.second);
+        }
+    }
+
+    if (!std::isfinite(bounds.min_reach)) {
+        bounds.min_reach = 0.0;
+    }
+    if (!std::isfinite(bounds.min_height)) {
+        bounds.min_height = 0.0;
+        bounds.max_height = 0.0;
+    }
+
+    return bounds;
+}
+} // namespace
 
 /**
  * @brief Comprehensive test to verify WorkspaceAnalyzer, VelocityLimits, and RobotModel::makeReachable
  *        respect the robot physical reference where z = -208 mm.
+ *
+ * Distinct scope vs workspace_analyzer_fusion_test:
+ * - This test focuses on physical morphology invariants (real robot peculiarity)
+ *   and cross-component consistency around default_height_offset.
+ * - It validates all six legs against physical reference height and opposite-pair
+ *   symmetry expectations, beyond generic workspace/walkspace fusion parity.
  */
 int main() {
     std::cout << "=== TEST COMPLETO: Offset físico z = -208 mm para TODAS las patas ===" << std::endl;
@@ -41,11 +84,13 @@ int main() {
 
     std::cout << "\n=== SECCIÓN 1: WorkspaceAnalyzer y VelocityLimits ===" << std::endl;
 
-    ValidationConfig validation_config;
-    WorkspaceAnalyzer analyzer(model, ComputeConfig::medium(), validation_config);
+    WorkspaceAnalyzer analyzer(model, ComputeConfig::medium());
     analyzer.initialize();
 
-    /** Test 1.1: Verify physical height offset. */
+    /** Test 1.1: Verify physical height offset.
+     * Acceptance criteria:
+     *  AC1.1 model.getDefaultHeightOffset() == -tibia_length
+     */
     double analyzer_reference_height = model.getDefaultHeightOffset();
 
     std::cout << "\n--- Test 1.1: Offset de altura física ---" << std::endl;
@@ -57,6 +102,55 @@ int main() {
         std::cout << "✓ Offset físico correcto" << std::endl;
     } else {
         std::cout << "✗ ERROR: Offset físico incorrecto" << std::endl;
+    }
+
+    /** Test 1.1b: FK at zero angles must place all feet at physical reference height.
+     * Acceptance criteria:
+     *  AC1.2 for every leg i, fk(i, [0,0,0]).z == default_height_offset (within tolerance)
+     *  AC1.3 opposite leg pairs have equal planar radius at zero pose: (0,5), (1,4), (2,3)
+     */
+    std::cout << "\n--- Test 1.1b: FK(0°,0°,0°) y simetría de pares opuestos ---" << std::endl;
+    bool zero_fk_height_ok = true;
+    bool opposite_pair_symmetry_ok = true;
+    const double eps_z = 1e-6;
+    const double eps_radius = 1e-6;
+
+    double zero_pose_radius[NUM_LEGS] = {0.0};
+    for (int leg = 0; leg < NUM_LEGS; leg++) {
+        JointAngles zero_angles(0.0, 0.0, 0.0);
+        Point3D tip = model.forwardKinematicsGlobalCoordinates(leg, zero_angles);
+        zero_pose_radius[leg] = std::sqrt(tip.x * tip.x + tip.y * tip.y);
+
+        bool z_ok = std::abs(tip.z - params.default_height_offset) <= eps_z;
+        if (!z_ok)
+            zero_fk_height_ok = false;
+
+        std::cout << "Pata " << leg << ": tip.z=" << std::fixed << std::setprecision(6) << tip.z
+                  << " (expected " << params.default_height_offset << ")"
+                  << (z_ok ? " ✓" : " ✗") << std::endl;
+    }
+
+    const int opposite_pairs[3][2] = {{0, 5}, {1, 4}, {2, 3}};
+    for (int p = 0; p < 3; ++p) {
+        int a = opposite_pairs[p][0];
+        int b = opposite_pairs[p][1];
+        bool pair_ok = std::abs(zero_pose_radius[a] - zero_pose_radius[b]) <= eps_radius;
+        if (!pair_ok)
+            opposite_pair_symmetry_ok = false;
+        std::cout << "Par opuesto (" << a << ", " << b << "): r="
+                  << zero_pose_radius[a] << " vs " << zero_pose_radius[b]
+                  << (pair_ok ? " ✓" : " ✗") << std::endl;
+    }
+
+    if (zero_fk_height_ok) {
+        std::cout << "✓ FK en 0° respeta referencia física z=-208 para todas las patas" << std::endl;
+    } else {
+        std::cout << "✗ ERROR: FK en 0° no respeta referencia física en alguna pata" << std::endl;
+    }
+    if (opposite_pair_symmetry_ok) {
+        std::cout << "✓ Simetría de pares opuestos validada en pose cero" << std::endl;
+    } else {
+        std::cout << "✗ ERROR: Simetría de pares opuestos no válida en pose cero" << std::endl;
     }
 
     /**
@@ -84,7 +178,7 @@ int main() {
     const double EPS_SYMMETRY = 15.0;
 
     for (int leg = 0; leg < NUM_LEGS; leg++) {
-        WorkspaceBounds bounds = analyzer.getWorkspaceBounds(leg);
+        WorkspaceBoundsLocal bounds = computeWorkspaceBounds(analyzer.getLegWorkspace(leg));
         double up_margin = bounds.max_height - expected_ref;
         double down_margin = expected_ref - bounds.min_height;
         bool contains_ref = (expected_ref >= bounds.min_height - 1e-6 && expected_ref <= bounds.max_height + 1e-6);
@@ -115,7 +209,10 @@ int main() {
 
     std::cout << "\n=== SECCIÓN 2: RobotModel::makeReachable para todas las patas ===" << std::endl;
 
-    /** Test 2.1: makeReachable at physical reference height for all legs. */
+    /** Test 2.1: makeReachable at physical reference height for all legs.
+     * Acceptance criteria:
+     *  AC2.1 makeReachable devuelve punto resoluble por IK para todas las patas
+     */
     std::cout << "\n--- Test 2.1: makeReachable en altura de referencia física ---" << std::endl;
 
     bool all_legs_reachable = true;
@@ -155,7 +252,10 @@ int main() {
         std::cout << "✗ ERROR: makeReachable falla en algunas patas" << std::endl;
     }
 
-    /** Test 2.2: Constrain unreachable positions for all legs. */
+    /** Test 2.2: Constrain unreachable positions for all legs.
+     * Acceptance criteria:
+     *  AC2.2 punto inalcanzable debe contraerse (distancia final < distancia original)
+     */
     std::cout << "\n--- Test 2.2: Constrañimiento de posiciones inalcanzables ---" << std::endl;
 
     bool all_constraints_work = true;
@@ -191,7 +291,10 @@ int main() {
         std::cout << "✗ ERROR: Constrañimiento falla en algunas patas" << std::endl;
     }
 
-    /** Test 2.3: Maintain heights considering physical offset. */
+    /** Test 2.3: Maintain heights considering physical offset.
+     * Acceptance criteria:
+     *  AC2.3 alturas objetivo se preservan (o ajustan mínimamente) en torno al offset físico
+     */
     std::cout << "\n--- Test 2.3: Mantenimiento de alturas con offset físico ---" << std::endl;
 
     /** Test heights (mm). */
@@ -225,7 +328,10 @@ int main() {
 
     std::cout << "\n=== SECCIÓN 3: Coordinación entre componentes ===" << std::endl;
 
-    /** Test 3.1: Verify makeReachable uses the workspace correctly. */
+    /** Test 3.1: Verify makeReachable uses the workspace correctly.
+     * Acceptance criteria:
+     *  AC3.1 target en borde de workplane debe requerir ajuste pequeño (<10 mm XY)
+     */
     std::cout << "\n--- Test 3.1: Coordinación makeReachable y WorkspaceAnalyzer ---" << std::endl;
 
     bool coordination_works = true;
@@ -269,7 +375,10 @@ int main() {
 
     std::cout << "\n=== SECCIÓN 4: Verificación de correcciones implementadas ===" << std::endl;
 
-    /** Test 4.1: Verify LegStepper accounts for physical offset correctly. */
+    /** Test 4.1: Verify LegStepper accounts for physical offset correctly.
+     * Acceptance criteria:
+     *  AC4.1 rango Z válido centrado en default_height_offset
+     */
     std::cout << "\n--- Test 4.1: Validación de LegStepper ---" << std::endl;
 
     bool legstepper_validation_ok = true;
@@ -306,7 +415,10 @@ int main() {
         std::cout << "✗ ERROR: LegStepper no valida correctamente el rango Z" << std::endl;
     }
 
-    /** Test 4.2: Verify WalkController::init() correction. */
+    /** Test 4.2: Verify WalkController::init() correction.
+     * Acceptance criteria:
+     *  AC4.2 Z de stance inicial coincide con default_height_offset + standing_height
+     */
     std::cout << "\n--- Test 4.2: Corrección en WalkController ---" << std::endl;
 
     bool walkcontroller_correction_ok = true;
@@ -344,7 +456,10 @@ int main() {
         std::cout << "✗ ERROR: WalkController no usa la corrección de altura" << std::endl;
     }
 
-    /** Test 4.3: Verify LegPoser with physical reference. */
+    /** Test 4.3: Verify LegPoser with physical reference.
+     * Acceptance criteria:
+     *  AC4.3 compensaciones no rompen el rango físico esperado de altura base
+     */
     std::cout << "\n--- Test 4.3: LegPoser con referencia física ---" << std::endl;
 
     bool legposer_reference_ok = true;
@@ -385,7 +500,10 @@ int main() {
         std::cout << "✗ ERROR: LegPoser no usa correctamente la referencia física" << std::endl;
     }
 
-    /** Test 4.4: Verify coherence between all corrections. */
+    /** Test 4.4: Verify coherence between all corrections.
+     * Acceptance criteria:
+     *  AC4.4 referencias y alturas esperadas coherentes entre componentes
+     */
     std::cout << "\n--- Test 4.4: Coherencia entre correcciones ---" << std::endl;
 
     bool coherence_ok = true;
@@ -415,7 +533,10 @@ int main() {
         std::cout << "✗ ERROR: Falta de coherencia entre las correcciones" << std::endl;
     }
 
-    /** Test 4.5: Standing horizontal reach coherence (RobotModel vs BodyPoseConfiguration). */
+    /** Test 4.5: Standing horizontal reach coherence (RobotModel vs BodyPoseConfiguration).
+     * Acceptance criteria:
+     *  AC4.5 standing_horizontal_reach idéntico entre RobotModel y BodyPoseConfiguration
+     */
     std::cout << "\n--- Test 4.5: Coherencia standing_horizontal_reach ---" << std::endl;
     bool horizontal_reach_ok = true;
     {
@@ -442,10 +563,14 @@ int main() {
     std::cout << "\n=== RESUMEN FINAL ===" << std::endl;
 
     int passed_tests = 0;
-    /** Total tests (+1 for standing_horizontal_reach coherence). */
-    int total_tests = 11;
+    /** Total tests (+3 morphology invariants specific to physical reference). */
+    int total_tests = 13;
 
     if (analyzer_offset_ok)
+        passed_tests++;
+    if (zero_fk_height_ok)
+        passed_tests++;
+    if (opposite_pair_symmetry_ok)
         passed_tests++;
     if (morphological_vertical_profile_ok)
         passed_tests++;

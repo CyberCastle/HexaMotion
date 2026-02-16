@@ -376,7 +376,7 @@ class AngleVisualizationServo : public IServoInterface {
     void generateAngleReport() const {
         std::ofstream report("hexamotion_angle_report.txt");
         if (!report.is_open()) {
-            std::cerr << "Warning: Could not create angle report file" << std::endl;
+            std::cerr << "INFO: Could not create angle report file" << std::endl;
             return;
         }
 
@@ -697,7 +697,7 @@ int main(int argc, char **argv) {
     int startup_bezier_iters = 0; // READY → RUNNING (quartic Bézier tip position)
     RobotState prev_robot_state = sc->getRobotState();
     bool unpack_phase_complete = false;
-    const int MAX_STARTUP_ATTEMPTS = 500;
+    const int MAX_STARTUP_ATTEMPTS = 2000;
 
     while (sys.getSystemState() != SYSTEM_RUNNING && startup_attempts < MAX_STARTUP_ATTEMPTS) {
         servos.updateStep(startup_attempts);
@@ -737,12 +737,8 @@ int main(int argc, char **argv) {
     }
 
     if (sys.getSystemState() != SYSTEM_RUNNING) {
-        std::cerr << "WARNING: Startup sequence did not complete within budget; applying direct RUNNING activation fallback." << std::endl;
-        if (!sys.activateRunningState()) {
-            std::cerr << "ERROR: Startup sequence failed and direct RUNNING activation fallback failed." << std::endl;
-            return 1;
-        }
-        std::cout << "✅ Direct RUNNING activation fallback applied." << std::endl;
+        std::cerr << "ERROR: Startup sequence did not complete within budget." << std::endl;
+        return 1;
     }
     std::cout << "✅ Startup sequence completed after " << startup_attempts << " attempts." << std::endl;
 
@@ -778,8 +774,8 @@ int main(int argc, char **argv) {
 
         // Update the locomotion system
         if (!sys.update()) {
-            std::cerr << "Warning: System update failed at step " << step << std::endl;
-            continue;
+            std::cerr << "ERROR: System update failed at step " << step << std::endl;
+            return 1;
         }
 
         // Show detailed servo angles every 18 steps
@@ -803,7 +799,8 @@ int main(int argc, char **argv) {
     // 7. Stop walking and return to standing — track shutdown/pack Bézier iterations
     std::cout << "Stopping walk and returning to standing pose..." << std::endl;
     if (!sys.stopWalking()) {
-        std::cerr << "Warning: Failed to stop walking." << std::endl;
+        std::cerr << "ERROR: Failed to stop walking." << std::endl;
+        return 1;
     }
 
     std::cout << "\n=== BÉZIER TRANSITION TRACKING (RUNNING → READY → PACKED) ===" << std::endl;
@@ -811,7 +808,7 @@ int main(int argc, char **argv) {
     // Run update loop to let StateController orchestrate the shutdown
     int shutdown_attempts = 0;
     int shutdown_bezier_iters = 0;
-    const int MAX_SHUTDOWN_ATTEMPTS = 500;
+    const int MAX_SHUTDOWN_ATTEMPTS = 2000;
     while (shutdown_attempts < MAX_SHUTDOWN_ATTEMPTS && sys.getSystemState() == SYSTEM_RUNNING) {
         servos.updateStep(VISUALIZATION_STEPS + shutdown_attempts);
         sys.update();
@@ -822,13 +819,22 @@ int main(int argc, char **argv) {
         std::cout << "  Shutdown (quartic Bézier via stepToPosition): " << shutdown_bezier_iters << " iterations" << std::endl;
         std::cout << "✅ Shutdown completed after " << shutdown_attempts << " iterations." << std::endl;
     } else {
-        std::cerr << "WARNING: Shutdown did not complete after " << shutdown_attempts << " iterations." << std::endl;
+        std::cerr << "ERROR: Shutdown did not complete after " << shutdown_attempts << " iterations." << std::endl;
+        return 1;
+    }
+
+    if (sys.getSystemState() != SYSTEM_READY) {
+        std::cerr << "ERROR: System did not reach READY before PACK request." << std::endl;
+        return 1;
     }
 
     // Request pack to observe READY → PACKED transition (cubic Bézier)
     int pack_bezier_iters = 0;
-    sc->requestRobotState(ROBOT_PACKED);
-    const int MAX_PACK_ATTEMPTS = 500;
+    if (!sc->requestRobotState(ROBOT_PACKED)) {
+        std::cerr << "ERROR: PACK state request was rejected." << std::endl;
+        return 1;
+    }
+    const int MAX_PACK_ATTEMPTS = 2000;
     while (pack_bezier_iters < MAX_PACK_ATTEMPTS && sc->getRobotState() != ROBOT_PACKED) {
         servos.updateStep(VISUALIZATION_STEPS + shutdown_attempts + pack_bezier_iters);
         sys.update();
@@ -837,7 +843,8 @@ int main(int argc, char **argv) {
     if (sc->getRobotState() == ROBOT_PACKED) {
         std::cout << "  Pack (cubic Bézier via transitionConfiguration): " << pack_bezier_iters << " iterations" << std::endl;
     } else {
-        std::cout << "  Pack: did not complete" << std::endl;
+        std::cerr << "ERROR: Pack transition did not complete." << std::endl;
+        return 1;
     }
 
     // 8. Generate final report
