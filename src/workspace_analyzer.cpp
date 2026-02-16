@@ -2,11 +2,10 @@
 #include "hexamotion_constants.h"
 #include "math_utils.h"
 #include <cmath>
-#include <limits>
 #include <set>
 
-WorkspaceAnalyzer::WorkspaceAnalyzer(const RobotModel &model, ComputeConfig config, const ValidationConfig &validation_config)
-    : model_(model), config_(config), validation_config_(validation_config), walkspace_map_generated_(false) {
+WorkspaceAnalyzer::WorkspaceAnalyzer(const RobotModel &model, ComputeConfig config)
+    : model_(model), config_(config), walkspace_map_generated_(false) {
 
     // Initialize physical robot configuration offset
     // When all servo angles are 0°, robot body is positioned at getDefaultHeightOffset()
@@ -509,60 +508,6 @@ bool WorkspaceAnalyzer::detailedReachabilityCheck(int leg_index, const Point3D &
     }
 }
 
-bool WorkspaceAnalyzer::isPositionReachable(int leg_index, const Point3D &position, bool use_ik_validation) {
-    if (leg_index < 0 || leg_index >= NUM_LEGS) {
-        return false;
-    }
-
-    if (use_ik_validation) {
-        return detailedReachabilityCheck(leg_index, position);
-    }
-
-    JointAngles zero(0, 0, 0);
-    Point3D identity_tip_position = model_.forwardKinematicsGlobalCoordinates(leg_index, zero);
-    Point3D relative = position - identity_tip_position;
-    double planar_distance = std::hypot(relative.x, relative.y);
-
-    Workplane workplane = getWorkplane(leg_index, relative.z);
-    if (workplane.empty()) {
-        return false;
-    }
-
-    double raw_bearing = std::atan2(relative.y, relative.x);
-    int bearing = static_cast<int>(math_utils::radiansToDegrees(raw_bearing));
-    while (bearing < 0)
-        bearing += 360;
-    while (bearing >= 360)
-        bearing -= 360;
-
-    auto upper_it = workplane.lower_bound(bearing);
-    if (upper_it == workplane.end()) {
-        upper_it = workplane.begin();
-    }
-
-    int upper_bound = upper_it->first;
-    int lower_bound = (upper_bound - BEARING_STEP + 360) % 360;
-
-    int adjusted_bearing = bearing;
-    int adjusted_upper = upper_bound;
-    if (adjusted_bearing < lower_bound)
-        adjusted_bearing += 360;
-    if (adjusted_upper < lower_bound)
-        adjusted_upper += 360;
-
-    double interpolation_progress = 0.0;
-    double denominator = static_cast<double>(adjusted_upper - lower_bound);
-    if (std::abs(denominator) > 1e-9) {
-        interpolation_progress = static_cast<double>(adjusted_bearing - lower_bound) / denominator;
-    }
-
-    double lower_radius = workplane.at(lower_bound);
-    double upper_radius = workplane.at(upper_bound % 360);
-    double reachable_radius = lower_radius * (1.0 - interpolation_progress) + upper_radius * interpolation_progress;
-
-    return planar_distance <= (reachable_radius + 1e-6);
-}
-
 double WorkspaceAnalyzer::getWalkspaceRadius(double bearing_degrees) const {
     while (bearing_degrees < 0)
         bearing_degrees += 360;
@@ -584,100 +529,4 @@ double WorkspaceAnalyzer::getWalkspaceRadius(double bearing_degrees) const {
 
     double t = (bearing_degrees - lower_bearing) / BEARING_STEP;
     return lower_it->second * (1.0 - t) + upper_it->second * t;
-}
-
-WorkspaceBounds
-WorkspaceAnalyzer::getWorkspaceBounds(int leg_index) const {
-    WorkspaceBounds bounds;
-    if (leg_index < 0 || leg_index >= NUM_LEGS) {
-        return bounds;
-    }
-
-    const Workspace &workspace = leg_workspaces_[leg_index];
-    if (workspace.empty()) {
-        return bounds;
-    }
-
-    bounds.min_height = workspace.begin()->first;
-    bounds.max_height = workspace.rbegin()->first;
-    bounds.has_height_restrictions = true;
-    bounds.center_position = model_.getLegBasePosition(leg_index);
-
-    bounds.min_reach = std::numeric_limits<double>::max();
-    bounds.max_reach = 0.0;
-
-    for (const auto &layer : workspace) {
-        const Workplane &plane = layer.second;
-        for (const auto &entry : plane) {
-            bounds.min_reach = std::min(bounds.min_reach, entry.second);
-            bounds.max_reach = std::max(bounds.max_reach, entry.second);
-        }
-    }
-
-    if (!std::isfinite(bounds.min_reach)) {
-        bounds.min_reach = 0.0;
-    }
-
-    bounds.preferred_min_reach = bounds.min_reach;
-    bounds.preferred_max_reach = bounds.max_reach;
-    return bounds;
-}
-
-VelocityConstraints
-WorkspaceAnalyzer::calculateVelocityConstraints(int leg_index, double bearing_degrees,
-                                                double gait_frequency, double stance_ratio) const {
-    VelocityConstraints constraints;
-
-    if (leg_index < 0 || leg_index >= NUM_LEGS || gait_frequency <= 0.0 || stance_ratio <= 0.0) {
-        return constraints;
-    }
-
-    double walkspace_radius = getWalkspaceRadius(bearing_degrees);
-    if (walkspace_radius <= 0.0) {
-        walkspace_radius = getWorkspaceBounds(leg_index).max_reach;
-    }
-
-    constraints.workspace_radius = std::max(0.0, walkspace_radius);
-    constraints.stance_radius = std::hypot(default_tip_positions_[leg_index].x, default_tip_positions_[leg_index].y);
-    if (constraints.stance_radius <= 1e-6) {
-        constraints.stance_radius = std::max(1.0, model_.getParams().hexagon_radius);
-    }
-
-    double cycle_time = stance_ratio / gait_frequency;
-    if (cycle_time <= 0.0) {
-        return constraints;
-    }
-
-    constraints.max_linear_velocity = (2.0 * constraints.workspace_radius) / cycle_time;
-    constraints.max_angular_velocity = constraints.max_linear_velocity / constraints.stance_radius;
-    constraints.max_acceleration = constraints.max_linear_velocity / std::max(1e-6, cycle_time);
-
-    const Parameters &params = model_.getParams();
-    double linear_cap = (params.max_velocity > 0.0) ? params.max_velocity : DEFAULT_MAX_LINEAR_VELOCITY;
-    double angular_cap = (params.max_angular_velocity > 0.0)
-                             ? math_utils::degreesToRadians(params.max_angular_velocity)
-                             : math_utils::degreesToRadians(DEFAULT_MAX_ANGULAR_VELOCITY);
-
-    constraints.max_linear_velocity = math_utils::clamp<double>(constraints.max_linear_velocity, 0.0, linear_cap);
-    constraints.max_angular_velocity = math_utils::clamp<double>(constraints.max_angular_velocity, 0.0, angular_cap);
-    constraints.max_acceleration = std::max(0.0, constraints.max_acceleration);
-
-    return constraints;
-}
-
-Point3D WorkspaceAnalyzer::constrainToGeometricWorkspace(int leg_index, const Point3D &target) const {
-    return makeReachable(leg_index, target);
-}
-
-void WorkspaceAnalyzer::invalidateWorkspaceCache() {
-    for (int i = 0; i < NUM_LEGS; i++) {
-        leg_workspace_generated_[i] = false;
-    }
-    walkspace_map_generated_ = false;
-}
-
-void WorkspaceAnalyzer::invalidateWorkspaceCache(int leg_index) {
-    if (leg_index >= 0 && leg_index < NUM_LEGS) {
-        leg_workspace_generated_[leg_index] = false;
-    }
 }

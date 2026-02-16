@@ -118,25 +118,6 @@ void LegStepper::setDesiredVelocity(const Point3D &linear_velocity, double angul
 
     desired_linear_velocity_ = linear_velocity;
     desired_angular_velocity_ = angular_velocity;
-
-#ifdef TESTING_ENABLED
-    double bearing_deg = 0.0;
-    if (std::abs(linear_velocity.x) > 1e-6 || std::abs(linear_velocity.y) > 1e-6) {
-        bearing_deg = math_utils::radiansToDegrees(std::atan2(linear_velocity.y, linear_velocity.x));
-        if (bearing_deg < 0.0)
-            bearing_deg += 360.0;
-    }
-    double stance_ratio = (step_cycle_.period_ > 0) ? double(step_cycle_.stance_period_) / double(step_cycle_.period_) : 0.6;
-    auto constraints = robot_model_.getWorkspaceAnalyzer().calculateVelocityConstraints(
-        leg_index_, bearing_deg, step_cycle_.frequency_, stance_ratio);
-    double max_lin = constraints.max_linear_velocity;
-    double max_ang = constraints.max_angular_velocity;
-    if (std::abs(linear_velocity.x) > max_lin + 1e-6 || std::abs(linear_velocity.y) > max_lin + 1e-6 || std::abs(angular_velocity) > max_ang + 1e-6) {
-        fprintf(stderr,
-                "[TEST][LegStepper] Workspace constraint velocity exceedance (leg %d, bearing %.1f): vx=%.3f vy=%.3f w=%.3f | max_lin=%.3f max_ang=%.3f\n",
-                leg_index_, bearing_deg, linear_velocity.x, linear_velocity.y, angular_velocity, max_lin, max_ang);
-    }
-#endif
 }
 
 // OpenSHC-based implementation with philosophical alignment adjustments:
@@ -585,7 +566,7 @@ void LegStepper::updateTipPositionIterative(int iteration, double time_delta, bo
 #endif
         Point3D next_pose = current_tip_pose_ + delta_pos;
         if (params_.enable_workspace_constrain) {
-            current_tip_pose_ = robot_model_.getWorkspaceAnalyzer().constrainToGeometricWorkspace(leg_index_, next_pose);
+            current_tip_pose_ = robot_model_.getWorkspaceAnalyzer().makeReachable(leg_index_, next_pose);
         } else {
             current_tip_pose_ = next_pose;
         }
@@ -892,11 +873,12 @@ void LegStepper::iteratePhase() {
 // ========================================================================
 
 bool LegStepper::validateTargetTipPose(const Point3D &target_pose) const {
-    return robot_model_.getWorkspaceAnalyzer().isPositionReachable(leg_index_, target_pose);
+    Point3D reachable = robot_model_.getWorkspaceAnalyzer().makeReachable(leg_index_, target_pose);
+    return math_utils::distance(reachable, target_pose) <= IK_TOLERANCE;
 }
 
 Point3D LegStepper::constrainToWorkspace(const Point3D &target_pose) const {
-    return robot_model_.getWorkspaceAnalyzer().constrainToGeometricWorkspace(leg_index_, target_pose);
+    return robot_model_.getWorkspaceAnalyzer().makeReachable(leg_index_, target_pose);
 }
 
 Point3D LegStepper::calculateSafeTarget(const Point3D &desired_target) const {
@@ -929,7 +911,7 @@ Point3D LegStepper::calculateSafeStride(const Point3D &desired_stride) const {
 
     // Check if this target would be reachable
     if (!validateTargetTipPose(potential_target)) {
-        Point3D adjusted_target = robot_model_.getWorkspaceAnalyzer().constrainToGeometricWorkspace(
+        Point3D adjusted_target = robot_model_.getWorkspaceAnalyzer().makeReachable(
             leg_index_, potential_target);
         safe_stride = (adjusted_target - default_tip_pose_) * 2.0;
     }
@@ -946,7 +928,7 @@ void LegStepper::validateAndFixControlNodes(Point3D nodes[5]) const {
     for (int i = 0; i < 5; i++) {
         if (!validateTargetTipPose(nodes[i])) {
             // Node is not reachable, constrain it to workspace
-            Point3D safe_node = robot_model_.getWorkspaceAnalyzer().constrainToGeometricWorkspace(
+            Point3D safe_node = robot_model_.getWorkspaceAnalyzer().makeReachable(
                 leg_index_, nodes[i]);
 
             // If constraining still doesn't work, use default position as fallback
@@ -962,20 +944,20 @@ void LegStepper::validateAndFixControlNodes(Point3D nodes[5]) const {
 // Comprehensive safety validation (combines all 4 steps)
 bool LegStepper::validateCurrentTrajectory() const {
     // Step 1: Validate target tip pose is within workspace
-    if (!robot_model_.getWorkspaceAnalyzer().isPositionReachable(leg_index_, target_tip_pose_)) {
+    if (!validateTargetTipPose(target_tip_pose_)) {
         return false;
     }
 
     // Step 2: Validate current control nodes are within workspace
     // Check all 5 control nodes for each trajectory type
     for (size_t i = 0; i < 5; ++i) {
-        if (!robot_model_.getWorkspaceAnalyzer().isPositionReachable(leg_index_, swing_1_nodes_[i])) {
+        if (!validateTargetTipPose(swing_1_nodes_[i])) {
             return false;
         }
-        if (!robot_model_.getWorkspaceAnalyzer().isPositionReachable(leg_index_, swing_2_nodes_[i])) {
+        if (!validateTargetTipPose(swing_2_nodes_[i])) {
             return false;
         }
-        if (!robot_model_.getWorkspaceAnalyzer().isPositionReachable(leg_index_, stance_nodes_[i])) {
+        if (!validateTargetTipPose(stance_nodes_[i])) {
             return false;
         }
     }

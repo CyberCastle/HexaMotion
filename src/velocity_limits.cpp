@@ -5,7 +5,7 @@
 #include <cmath>
 
 VelocityLimits::VelocityLimits(const RobotModel &model)
-    : model_(model) {
+    : model_(model), reference_tip_position_(model.getLegDefaultPosition(0)) {
 }
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -30,7 +30,7 @@ double VelocityLimits::getLimit(const Eigen::Vector2d &linear_velocity_input,
         int lower_bound = math_utils::mod(upper_bound - BEARING_STEP, 360);
         bearing += (bearing < lower_bound) ? 360 : 0;
         upper_bound += (upper_bound < lower_bound) ? 360 : 0;
-        double control_input = static_cast<double>(bearing - lower_bound) / (upper_bound - lower_bound);
+        double control_input = (bearing - lower_bound) / (upper_bound - lower_bound);
         double limit_interpolation = math_utils::interpolate(limit.at(lower_bound),
                                                              limit.at(math_utils::mod(upper_bound, 360)),
                                                              control_input);
@@ -41,6 +41,10 @@ double VelocityLimits::getLimit(const Eigen::Vector2d &linear_velocity_input,
 
 void VelocityLimits::setWalkspace(const LimitMap &walkspace) {
     walkspace_ = walkspace;
+}
+
+void VelocityLimits::setReferenceTipPosition(const Point3D &reference_tip_position) {
+    reference_tip_position_ = reference_tip_position;
 }
 
 void VelocityLimits::generateLimits(const GaitConfiguration &gait_config,
@@ -118,8 +122,7 @@ void VelocityLimits::generateLimits(StepCycle step,
         double scaled_walkspace_radius =
             (walkspace_radius / (walkspace_radius + stance_overshoot + swing_overshoot)) * walkspace_radius;
 
-        Point3D reference_tip = model_.getLegDefaultPosition(0);
-        double stance_radius = Eigen::Vector2d(reference_tip.x, reference_tip.y).norm();
+        double stance_radius = Eigen::Vector2d(reference_tip_position_.x, reference_tip_position_.y).norm();
 
         double max_linear_speed = (scaled_walkspace_radius * 2.0) / (on_ground_ratio / step.frequency_);
         double max_linear_acceleration = max_linear_speed / time_to_max_stride;

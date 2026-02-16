@@ -8,12 +8,8 @@
 CartesianVelocityController::CartesianVelocityController(const RobotModel &model)
     : model_(model), velocity_control_enabled_(true) {
 
-    // Initialize workspace analyzer for velocity constraints
-    ValidationConfig config;
-    config.enable_collision_checking = false;  // Disable for performance in velocity control
-    config.enable_joint_limit_checking = true; // Enable for accurate servo speed calculation
     workspace_analyzer_ = std::make_unique<WorkspaceAnalyzer>(
-        const_cast<RobotModel &>(model), ComputeConfig::medium(), config);
+        const_cast<RobotModel &>(model), ComputeConfig::medium());
 
     // Initialize with default configurations
     resetToDefaults();

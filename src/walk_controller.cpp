@@ -681,6 +681,7 @@ void WalkController::generateWalkspace() {
             }
         }
         analyzer.setTipPositions(identity_tips, default_tips);
+        velocity_limits_.setReferenceTipPosition(default_tips[0]);
 
         analyzer.generateWorkspace();
         const auto &analyzer_map = analyzer.getWalkspaceMap();

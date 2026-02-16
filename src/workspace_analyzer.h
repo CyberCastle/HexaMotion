@@ -13,52 +13,6 @@ typedef std::map<int, double> Workplane;       // bearing -> radius
 typedef std::map<double, Workplane> Workspace; // height -> Workplane
 
 /**
- * @brief Configuration for workspace validation behavior
- */
-struct ValidationConfig {
-    bool enable_collision_checking = true;
-    bool enable_joint_limit_checking = true;
-    bool enable_terrain_adaptation = true;
-    double safety_margin = 20.0f;           // Safety margin for collision avoidance (mm)
-    double angular_velocity_scaling = 0.8f; // Scaling factor for angular velocities
-    double max_velocity_scale = 1.2f;       // Maximum velocity scaling factor
-    double workspace_margin_factor = 0.95f; // Factor for workspace boundary margins
-    double collision_safety_margin = 25.0f; // Specific margin for collision avoidance (mm)
-    double safety_margin_factor = 0.9f;     // Factor for total reach calculations
-    double minimum_reach_factor = 0.1f;     // Factor for minimum reach calculations
-};
-
-/**
- * @brief Workspace bounds information
- */
-struct WorkspaceBounds {
-    double min_reach;
-    double max_reach;
-    double preferred_min_reach;
-    double preferred_max_reach;
-    bool has_height_restrictions;
-    double min_height;
-    double max_height;
-    Point3D center_position;
-};
-
-/**
- * @brief Velocity constraints for a specific direction and configuration
- */
-struct VelocityConstraints {
-    double max_forward_velocity;
-    double max_backward_velocity;
-    double max_lateral_velocity;
-    double max_angular_velocity;
-    bool direction_blocked;
-    double scaling_factor;
-    double max_linear_velocity;
-    double max_acceleration;
-    double workspace_radius;
-    double stance_radius;
-};
-
-/**
  * @brief OpenSHC-style workspace generation and reachability system
  *
  * Equivalent to OpenSHC implementation with generateWorkspace() and getWorkplane() methods.
@@ -67,7 +21,6 @@ class WorkspaceAnalyzer {
   private:
     const RobotModel &model_;
     ComputeConfig config_;
-    ValidationConfig validation_config_;
 
     // Physical robot configuration offset
     double reference_height_offset_; // z = getDefaultHeightOffset() offset for physical robot configuration
@@ -95,11 +48,9 @@ class WorkspaceAnalyzer {
      * @brief Constructor
      * @param model Reference to robot model
      * @param config Computation configuration
-     * @param validation_config Configuration for validation behavior
      */
     explicit WorkspaceAnalyzer(const RobotModel &model,
-                               ComputeConfig config = ComputeConfig::medium(),
-                               const ValidationConfig &validation_config = ValidationConfig());
+                               ComputeConfig config = ComputeConfig::medium());
 
     /**
      * @brief Initialize workspace analyzer with robot geometry
@@ -157,54 +108,11 @@ class WorkspaceAnalyzer {
                          const Point3D default_tips[NUM_LEGS]);
 
     /**
-     * @brief Check if position is reachable by specific leg
-     * @param leg_index Leg index (0-5)
-     * @param position Target position in robot frame
-     * @param use_ik_validation If true, uses IK validation (slower but accurate)
-     * @return True if position is reachable
-     */
-    bool isPositionReachable(int leg_index, const Point3D &position, bool use_ik_validation = false);
-
-    /**
      * @brief Get walkspace radius for specific bearing
      * @param bearing_degrees Bearing in degrees (0-360)
      * @return Maximum walkspace radius at bearing
      */
     double getWalkspaceRadius(double bearing_degrees) const;
-
-    // ========================================================================
-    // WORKSPACE BOUNDS AND CONSTRAINTS
-    // ========================================================================
-
-    /**
-     * @brief Get comprehensive workspace bounds for a leg
-     * @param leg_index Index of the leg
-     * @return Complete workspace bounds information
-     */
-    WorkspaceBounds getWorkspaceBounds(int leg_index) const;
-
-    /**
-     * @brief Calculate velocity constraints for a specific leg and bearing
-     * @param leg_index Index of the leg
-     * @param bearing_degrees Direction of movement (0-360)
-     * @param gait_frequency Gait frequency in Hz
-     * @param stance_ratio Fraction of time leg is on ground
-     * @return Velocity constraints for this configuration
-     */
-    VelocityConstraints calculateVelocityConstraints(int leg_index, double bearing_degrees = 0.0f,
-                                                     double gait_frequency = 1.0f, double stance_ratio = 0.6f) const;
-
-    /**
-     * @brief Invalidate workspace cache for all legs (force regeneration)
-     * Similar to OpenSHC's approach when robot configuration changes
-     */
-    void invalidateWorkspaceCache();
-
-    /**
-     * @brief Invalidate workspace cache for specific leg
-     * @param leg_index Index of leg to invalidate (0-5)
-     */
-    void invalidateWorkspaceCache(int leg_index);
 
     // ========================================================================
     // CONFIGURATION
@@ -215,16 +123,6 @@ class WorkspaceAnalyzer {
      * @param config New configuration
      */
     void setPrecisionConfig(const ComputeConfig &config) { config_ = config; }
-
-    /**
-     * @brief Update configuration
-     */
-    void updateConfig(const ValidationConfig &new_config) { validation_config_ = new_config; }
-
-    /**
-     * @brief Get current configuration
-     */
-    const ValidationConfig &getConfig() const { return validation_config_; }
 
     // ========================================================================
     // UTILITY AND TESTING METHODS
@@ -241,11 +139,6 @@ class WorkspaceAnalyzer {
      * @return True if walkspace map is available
      */
     bool isWalkspaceMapGenerated() const { return walkspace_map_generated_; }
-
-    /**
-     * @brief Constrain position to geometric workspace bounds only
-     */
-    Point3D constrainToGeometricWorkspace(int leg_index, const Point3D &target) const;
 
   private:
     // ========================================================================

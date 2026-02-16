@@ -21,11 +21,7 @@ TerrainAdaptation::TerrainAdaptation(RobotModel &model)
       gravity_aligned_tips_(false), step_depth_(STEP_DEPTH_DEFAULT),
       gravity_estimate_(0, 0, -math_utils::GRAVITY_ACCELERATION) {
 
-    // Initialize workspace validator for reachability checking
-    ValidationConfig validator_config;
-    validator_config.enable_collision_checking = false;  // Disable for terrain adaptation
-    validator_config.enable_joint_limit_checking = true; // Enable for accuracy
-    workspace_analyzer_ = std::make_unique<WorkspaceAnalyzer>(model_, ComputeConfig::medium(), validator_config);
+    workspace_analyzer_ = std::make_unique<WorkspaceAnalyzer>(model_, ComputeConfig::medium());
 
     // Initialize FSR thresholds from model parameters or use defaults
     const Parameters &params = model_.getParams();
@@ -183,8 +179,8 @@ bool TerrainAdaptation::isTargetReachableOnTerrain(int leg_index, const Point3D 
         return false; // Safety fallback
     }
 
-    // Use high-precision IK validation for terrain adaptation
-    bool is_reachable = workspace_analyzer_->isPositionReachable(leg_index, target, true);
+    Point3D reachable = workspace_analyzer_->makeReachable(leg_index, target);
+    bool is_reachable = math_utils::distance(reachable, target) <= IK_TOLERANCE;
 
     if (!is_reachable) {
         return false;

@@ -34,16 +34,10 @@ RobotModel::~RobotModel() {
     /** The destructor must be in the .cpp where WorkspaceAnalyzer is fully defined. */
 }
 
-void RobotModel::workspaceAnalyzerInitializer(ComputeConfig config, const ValidationConfig *validation_config) {
+void RobotModel::workspaceAnalyzerInitializer(ComputeConfig config) {
     /** Create the WorkspaceAnalyzer only if it does not exist. */
     if (!workspace_analyzer_) {
-        if (validation_config) {
-            workspace_analyzer_ = std::make_unique<WorkspaceAnalyzer>(*this, config, *validation_config);
-        } else {
-            /** Use default configuration. */
-            ValidationConfig default_config;
-            workspace_analyzer_ = std::make_unique<WorkspaceAnalyzer>(*this, config, default_config);
-        }
+        workspace_analyzer_ = std::make_unique<WorkspaceAnalyzer>(*this, config);
         workspace_analyzer_->initialize();
     }
 }

@@ -34,6 +34,9 @@ class VelocityLimits {
     /** @brief Set the walkspace map used for limit generation. */
     void setWalkspace(const LimitMap &walkspace);
 
+    /** @brief Set default tip reference used for stance radius in angular limits. */
+    void setReferenceTipPosition(const Point3D &reference_tip_position);
+
     /**
      * @brief Generate velocity limits for a given step cycle and gait configuration.
      *
@@ -107,6 +110,7 @@ class VelocityLimits {
   private:
     const RobotModel &model_;
     LimitMap walkspace_;
+    Point3D reference_tip_position_;
     LimitMap max_linear_speed_;
     LimitMap max_angular_speed_;
     LimitMap max_linear_acceleration_;

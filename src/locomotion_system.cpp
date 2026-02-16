@@ -204,13 +204,14 @@ JointAngles LocomotionSystem::calculateInverseKinematics(int leg,
 }
 
 bool LocomotionSystem::isTargetReachable(int leg_index, const Point3D &target) {
-    /** Use the WorkspaceAnalyzer from RobotModel for consistency and performance. */
-    return model.getWorkspaceAnalyzer().isPositionReachable(leg_index, target);
+    /** OpenSHC parity: reachability inferred via makeReachable() geometric projection. */
+    Point3D reachable = model.getWorkspaceAnalyzer().makeReachable(leg_index, target);
+    return math_utils::distance(reachable, target) <= IK_TOLERANCE;
 }
 
 Point3D LocomotionSystem::constrainToWorkspace(int leg_index, const Point3D &target) {
     /** Use geometric workspace constraint (OpenSHC-style makeReachable path). */
-    return model.getWorkspaceAnalyzer().constrainToGeometricWorkspace(leg_index, target);
+    return model.getWorkspaceAnalyzer().makeReachable(leg_index, target);
 }
 
 double LocomotionSystem::getJointLimitProximity(int leg_index, const JointAngles &angles) {
@@ -887,7 +888,7 @@ bool LocomotionSystem::runControlPipelineStep() {
         if (body_pose_ctrl) {
             int robot_state = state_controller_ ? static_cast<int>(state_controller_->getRobotState()) : 0;
             body_pose_ctrl->updateCurrentPose(robot_state, legs);
-            body_pose_ctrl->applyBodyPoseToDesiredTips(legs);
+            body_pose_ctrl->updateStance(legs);
         }
 
         /** Step 2b: finalize leg phases (FSR or pure kinematic) after trajectories computed. */

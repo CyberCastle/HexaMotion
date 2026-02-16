@@ -103,7 +103,7 @@ int LegPoser::stepToPosition(const Pose &target_tip_pose, const Pose &target_pos
     }
 
     // Workspace constraint
-    new_tip_position = robot_model_.getWorkspaceAnalyzer().constrainToGeometricWorkspace(leg_index_, new_tip_position);
+    new_tip_position = robot_model_.getWorkspaceAnalyzer().makeReachable(leg_index_, new_tip_position);
     // Apply pose transform inverse (OpenSHC semantics) and admittance delta if requested
     Point3D transformed = desired_pose.inverseTransformVector(new_tip_position);
     if (apply_delta) {

@@ -14,7 +14,6 @@
 
 // Forward declaration para evitar dependencias circulares
 class WorkspaceAnalyzer;
-struct ValidationConfig;
 
 /**
  * @brief Joint pose angles for one leg in radians.
@@ -230,7 +229,7 @@ struct Parameters {
         double linear_scale = 0.65;      //< Legacy linear scaling (replaces scattered WORKSPACE / WALKSPACE constants)
         double angular_scale = 1.0;      //< Angular scaling (kept at 1.0 unless deliberate reduction required)
         double workspace_scale = 0.65;   //< Conservative workspace envelope scaling
-        double collision_scale = 0.0;    //< If <= 0 => derive from ValidationConfig::safety_margin_factor
+        double collision_scale = 0.0;    //< If <= 0 => derive from runtime collision safety factor
         double velocity_scale = 0.9;     //< 10% safety margin for derived velocity limits
         double acceleration_scale = 1.0; //< Acceleration scaling (placeholder for future tuning)
         double safety_margin = 0.9;      //< Unified safety margin for servo speed / other conservative clamps
@@ -730,8 +729,7 @@ class RobotModel {
      * @param config Compute configuration for the WorkspaceAnalyzer
      * @param validation_config Validation configuration (optional)
      */
-    void workspaceAnalyzerInitializer(ComputeConfig config = ComputeConfig::medium(),
-                                      const ValidationConfig *validation_config = nullptr);
+    void workspaceAnalyzerInitializer(ComputeConfig config = ComputeConfig::medium());
 
     /**
      * @brief Get reference to the internal WorkspaceAnalyzer

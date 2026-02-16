@@ -123,23 +123,6 @@ class BodyPoseController {
     /** @brief Update stance tip references per leg state (OpenSHC updateStance). */
     void updateStance(Leg legs[NUM_LEGS]);
 
-    /**
-     * @brief Apply composed body pose to desired tip positions for running pipeline.
-     *
-     * Adjusts desired tip positions with body pose (translation minus body_clearance
-     * baseline, rotation, per-leg auto-pose) so the delta between FK-derived current
-     * tip and posed desired tip reflects only walking-induced movement, not the static
-     * body clearance height offset. Only modifies desired tip, leaving the Leg's stored
-     * tip_position_ untouched for correct IK delta computation.
-     *
-     * This differs from updateStance() which uses inverseTransformVector (OpenSHC
-     * convention where FK includes body transforms). HexaMotion's FK returns positions
-     * in the body frame without body pose transforms, requiring this adapted version.
-     *
-     * @param legs Array of legs
-     */
-    void applyBodyPoseToDesiredTips(Leg legs[NUM_LEGS]);
-
     /** @brief Update manual pose integration from velocity inputs. */
     void updateManualPose();
 

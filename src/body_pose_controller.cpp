@@ -659,43 +659,6 @@ void BodyPoseController::updateStance(Leg legs[NUM_LEGS]) {
 }
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-// Adapted body-pose-to-desired-tips for HexaMotion's FK frame convention.
-// Unlike updateStance() (which uses inverseTransformVector for OpenSHC where FK includes body transforms),
-// this applies the body pose translation minus the body_clearance baseline and rotation to desired tips.
-// Only desired tip is modified; the Leg's stored tip_position_ stays at the FK result from the
-// previous setJointAngles() call so IK sees a correct delta.
-////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-void BodyPoseController::applyBodyPoseToDesiredTips(Leg legs[NUM_LEGS]) {
-    // Apply global body pose translation + rotation to desired tip positions.
-    // Z offset subtracts body_clearance because walk_plane_pose already includes it as
-    // a baseline, and the FK-derived current tip does not include body transforms.
-    Eigen::Vector3d translation(body_pose_current_.position.x,
-                                body_pose_current_.position.y,
-                                body_pose_current_.position.z - body_pose_config.body_clearance);
-    Eigen::Quaterniond rotation = body_pose_current_.rotation;
-
-    for (int i = 0; i < NUM_LEGS; ++i) {
-        Point3D p = legs[i].getDesiredTipPosition();
-        Eigen::Vector3d v(p.x, p.y, p.z);
-        Eigen::Vector3d transformed = rotation * v + translation;
-        legs[i].setDesiredTipPosition(Point3D(transformed.x(), transformed.y(), transformed.z()));
-    }
-
-    // Per-leg auto-pose adjustment: remove global auto-pose then add per-leg variant.
-    if (auto_pose_enabled && auto_pose_config.enabled) {
-        for (int i = 0; i < NUM_LEGS; ++i) {
-            Point3D raw = legs[i].getDesiredTipPosition();
-            Pose raw_pose(raw, Eigen::Quaterniond::Identity());
-            Pose posed = raw_pose.removePose(auto_pose_);
-            if (leg_posers_[i]) {
-                posed = posed.addPose(leg_posers_[i]->get()->getAutoPose());
-            }
-            legs[i].setDesiredTipPosition(posed.position);
-        }
-    }
-}
-
-////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 // OpenSHC PoseController::updateWalkPlanePose() equivalent
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 void BodyPoseController::updateWalkPlanePose(Leg legs[NUM_LEGS]) {
