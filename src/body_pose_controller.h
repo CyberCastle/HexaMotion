@@ -222,6 +222,11 @@ class BodyPoseController {
     }
 
     /**
+     * @brief Refresh auto-pose parameters after gait-related settings change.
+     */
+    void refreshAutoPoseParameters() { setAutoPoseParams(); }
+
+    /**
      * @brief Set current walk state for auto-pose lifecycle coordination.
      *
      * OpenSHC reads this from auto_pose_reference_leg_->getLegStepper()->getWalkState().

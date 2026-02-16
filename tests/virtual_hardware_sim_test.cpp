@@ -51,11 +51,8 @@ constexpr int ANGLE_HISTORY_SIZE = 200;        // Number of angle measurements t
 
 // CLI flags
 static const char *FLAG_ENABLE_FSR = "--fsr";                        // Enable FSR-based contact adaptation
-static const char *FLAG_CONTACT_THRESHOLD = "--contact-th=";         // (Deprecated) Override contact threshold (alias for fsr touchdown)
 static const char *FLAG_FSR_TOUCHDOWN_THRESHOLD = "--fsr-touch-th="; // Override fsr touchdown threshold (0-1)
-static const char *FLAG_RELEASE_THRESHOLD = "--release-th=";         // (Deprecated) Override release threshold (alias liftoff)
 static const char *FLAG_FSR_LIFTOFF_THRESHOLD = "--fsr-liftoff-th="; // Override FSR liftoff threshold (0-1)
-static const char *FLAG_MIN_PRESSURE = "--min-pressure=";            // (Deprecated) Override minimum pressure (alias)
 static const char *FLAG_FSR_MIN_PRESSURE = "--fsr-min-pressure=";    // Override minimum normalized FSR pressure (0-1)
 static const char *FLAG_PRESERVE_SWING = "--preserve-swing";         // Preserve swing end pose as stance origin
 static const char *FLAG_NO_PRESERVE_SWING = "--no-preserve-swing";   // Reset stance origin each stance
@@ -290,7 +287,7 @@ class AngleVisualizationServo : public IServoInterface {
             record.joint = joint;
             record.angle_degrees = angle; // Already in degrees
             record.speed = speed;
-            record.acceleration = 0.0;           // legacy call (no acceleration provided)
+            record.acceleration = 0.0;           // base call path (no acceleration provided)
             record.target_angle_degrees = angle; // Already in degrees
             record.timestamp = std::chrono::steady_clock::now();
 
@@ -485,11 +482,8 @@ static void printHelp() {
     std::cout << "Usage: virtual_hardware_sim_test [options]\n"
               << "Options:\n"
               << "  " << FLAG_ENABLE_FSR << "            Enable FSR contact adaptation logic\n"
-              << "  " << FLAG_CONTACT_THRESHOLD << "X   (Deprecated) Set contact threshold (alias, default 0.7)\n"
               << "  " << FLAG_FSR_TOUCHDOWN_THRESHOLD << "X   Set FSR touchdown threshold (0-1, default 0.7)\n"
-              << "  " << FLAG_RELEASE_THRESHOLD << "X   (Deprecated) Set release threshold (alias, default 0.3)\n"
               << "  " << FLAG_FSR_LIFTOFF_THRESHOLD << "X   Set FSR liftoff threshold (0-1, default 0.3)\n"
-              << "  " << FLAG_MIN_PRESSURE << "X       (Deprecated) Set min pressure (legacy raw, alias)\n"
               << "  " << FLAG_FSR_MIN_PRESSURE << "X   Set min normalized FSR pressure (0-1, default 0.05)\n"
               << "  " << FLAG_PRESERVE_SWING << "          Preserve swing touchdown as stance origin (continuous)\n"
               << "  " << FLAG_NO_PRESERVE_SWING << "      Reset stance origin each cycle (anti-drift)\n"
@@ -517,7 +511,6 @@ int main(int argc, char **argv) {
             return 0;
         } else if (arg == FLAG_ENABLE_FSR) {
             enable_fsr = true;
-        } else if (arg == "--debug-drift") { /* deprecated flag ignored */
         } else if (arg == FLAG_DEBUG_FSR) {
             debug_fsr = true;
         } else if (arg == FLAG_DRIFT_METRICS) {
@@ -529,11 +522,8 @@ int main(int argc, char **argv) {
             params.preserve_swing_end_pose = false;
             preserve_flag_set = true;
         } else if (!parseFlagValue(arg, FLAG_FSR_TOUCHDOWN_THRESHOLD, params.fsr_touchdown_threshold) &&
-                   !parseFlagValue(arg, FLAG_CONTACT_THRESHOLD, params.fsr_touchdown_threshold) &&
                    !parseFlagValue(arg, FLAG_FSR_LIFTOFF_THRESHOLD, params.fsr_liftoff_threshold) &&
-                   !parseFlagValue(arg, FLAG_RELEASE_THRESHOLD, params.fsr_liftoff_threshold) &&
-                   !parseFlagValue(arg, FLAG_FSR_MIN_PRESSURE, params.fsr_min_pressure) &&
-                   !parseFlagValue(arg, FLAG_MIN_PRESSURE, params.fsr_min_pressure)) {
+                   !parseFlagValue(arg, FLAG_FSR_MIN_PRESSURE, params.fsr_min_pressure)) {
             std::cout << "Unknown argument: " << arg << " (ignored)" << std::endl;
         }
     }
@@ -699,7 +689,7 @@ int main(int argc, char **argv) {
     bool unpack_phase_complete = false;
     const int MAX_STARTUP_ATTEMPTS = 2000;
 
-    while (sys.getSystemState() != SYSTEM_RUNNING && startup_attempts < MAX_STARTUP_ATTEMPTS) {
+    while (sc->getRobotState() != ROBOT_RUNNING && startup_attempts < MAX_STARTUP_ATTEMPTS) {
         servos.updateStep(startup_attempts);
         sys.update();
 
@@ -715,7 +705,7 @@ int main(int argc, char **argv) {
                 std::cout << "  Unpack (cubic Bézier via transitionConfiguration): " << unpack_bezier_iters << " iterations" << std::endl;
             }
         }
-        if (unpack_phase_complete && sys.getSystemState() != SYSTEM_RUNNING) {
+        if (unpack_phase_complete && cur_robot_state != ROBOT_RUNNING) {
             startup_bezier_iters++;
         }
 
@@ -736,7 +726,7 @@ int main(int argc, char **argv) {
         std::cout << "  Startup: direct mode (1 iteration)" << std::endl;
     }
 
-    if (sys.getSystemState() != SYSTEM_RUNNING) {
+    if (sc->getRobotState() != ROBOT_RUNNING) {
         std::cerr << "ERROR: Startup sequence did not complete within budget." << std::endl;
         return 1;
     }
@@ -809,13 +799,13 @@ int main(int argc, char **argv) {
     int shutdown_attempts = 0;
     int shutdown_bezier_iters = 0;
     const int MAX_SHUTDOWN_ATTEMPTS = 2000;
-    while (shutdown_attempts < MAX_SHUTDOWN_ATTEMPTS && sys.getSystemState() == SYSTEM_RUNNING) {
+    while (shutdown_attempts < MAX_SHUTDOWN_ATTEMPTS && sc->getRobotState() == ROBOT_RUNNING) {
         servos.updateStep(VISUALIZATION_STEPS + shutdown_attempts);
         sys.update();
         shutdown_attempts++;
         shutdown_bezier_iters++;
     }
-    if (sys.getSystemState() != SYSTEM_RUNNING) {
+    if (sc->getRobotState() == ROBOT_READY) {
         std::cout << "  Shutdown (quartic Bézier via stepToPosition): " << shutdown_bezier_iters << " iterations" << std::endl;
         std::cout << "✅ Shutdown completed after " << shutdown_attempts << " iterations." << std::endl;
     } else {
@@ -823,7 +813,7 @@ int main(int argc, char **argv) {
         return 1;
     }
 
-    if (sys.getSystemState() != SYSTEM_READY) {
+    if (sc->getRobotState() != ROBOT_READY) {
         std::cerr << "ERROR: System did not reach READY before PACK request." << std::endl;
         return 1;
     }

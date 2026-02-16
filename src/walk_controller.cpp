@@ -294,6 +294,13 @@ void WalkController::updateWalk(const Point3D &linear_velocity_input, double ang
         return;
     }
 
+    // OpenSHC parity: block walking while any leg is not in WALKING state.
+    for (int i = 0; i < NUM_LEGS; ++i) {
+        if (legs_array_[i].getLegState() != LegState::LEG_WALKING) {
+            return;
+        }
+    }
+
     Eigen::Vector2d linear_input_xy(linear_velocity_input.x, linear_velocity_input.y);
     Eigen::Vector2d new_linear_velocity = Eigen::Vector2d::Zero();
     double new_angular_velocity = 0.0;

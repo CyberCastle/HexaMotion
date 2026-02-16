@@ -74,11 +74,11 @@ int main() {
 
     // Run startup sequence (StateController handles internally via update())
     int startup_attempts = 0;
-    while (sys.getSystemState() != SYSTEM_RUNNING && startup_attempts < 500) {
+    while (sys.getRobotState() != ROBOT_RUNNING && startup_attempts < 500) {
         sys.update();
         startup_attempts++;
     }
-    if (sys.getSystemState() != SYSTEM_RUNNING) {
+    if (sys.getRobotState() != ROBOT_RUNNING) {
         std::cerr << "ERROR: startup failed" << std::endl;
         return 1;
     }

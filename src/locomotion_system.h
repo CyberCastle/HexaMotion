@@ -120,6 +120,16 @@ class LocomotionSystem : public StateControllerContext {
     double commanded_linear_velocity_y_ = 0.0; /**< Y component. */
     double commanded_angular_velocity_ = 0.0;
 
+    /** Cached manual leg inputs to enforce OpenSHC update order: walk first, manual second. */
+    int pending_primary_leg_index_ = -1;
+    int pending_secondary_leg_index_ = -1;
+    Eigen::Vector3d pending_primary_tip_velocity_ = Eigen::Vector3d::Zero();
+    Eigen::Vector3d pending_secondary_tip_velocity_ = Eigen::Vector3d::Zero();
+    bool pending_primary_pose_valid_ = false;
+    bool pending_secondary_pose_valid_ = false;
+    Point3D pending_primary_tip_pose_;
+    Point3D pending_secondary_tip_pose_;
+
     bool setLegJointAngles(int leg_index, const JointAngles &q);
 
     /** OpenSHC-style IK batch processing functions. */
@@ -252,6 +262,8 @@ class LocomotionSystem : public StateControllerContext {
     StateController *getStateController() const { return state_controller_.get(); }
     /** Get current system state. */
     SystemState getSystemState() const override { return system_state; }
+    /** Get current robot state from the internal StateController. */
+    RobotState getRobotState() const;
     /** Get current composed body pose (OpenSHC Model::getCurrentPose equivalent). */
     Pose getCurrentBodyPose() const;
     /** Check if legs are bearing load based on body pose controller estimate. */
@@ -375,7 +387,7 @@ class LocomotionSystem : public StateControllerContext {
 
     /**
      * @brief Activate RUNNING state directly (no startup sequence).
-     * Initializes walk controller, leg phases, and sets system_state = SYSTEM_RUNNING.
+     * Initializes walk controller, leg phases, and sets system_state = OPERATIONAL.
      */
     bool activateRunningState() override;
 

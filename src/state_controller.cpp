@@ -14,12 +14,10 @@
 namespace {
 std::string toString(SystemState state) {
     switch (state) {
-    case SystemState::SYSTEM_PACKED:
-        return "SYSTEM_PACKED";
-    case SystemState::SYSTEM_READY:
-        return "SYSTEM_READY";
-    case SystemState::SYSTEM_RUNNING:
-        return "SYSTEM_RUNNING";
+    case SystemState::SUSPENDED:
+        return "SUSPENDED";
+    case SystemState::OPERATIONAL:
+        return "OPERATIONAL";
     default:
         return "UNKNOWN";
     }
@@ -91,28 +89,6 @@ std::string toString(PoseResetMode mode) {
     }
 }
 
-std::string toString(CruiseControlMode mode) {
-    switch (mode) {
-    case CruiseControlMode::CRUISE_CONTROL_OFF:
-        return "CRUISE_CONTROL_OFF";
-    case CruiseControlMode::CRUISE_CONTROL_ON:
-        return "CRUISE_CONTROL_ON";
-    default:
-        return "UNKNOWN";
-    }
-}
-
-std::string toString(PlannerMode mode) {
-    switch (mode) {
-    case PlannerMode::PLANNER_MODE_OFF:
-        return "PLANNER_MODE_OFF";
-    case PlannerMode::PLANNER_MODE_ON:
-        return "PLANNER_MODE_ON";
-    default:
-        return "UNKNOWN";
-    }
-}
-
 std::string toString(LegState state) {
     switch (state) {
     case LegState::LEG_WALKING:
@@ -147,7 +123,7 @@ String toArduinoString(const std::string &str) {
 } // namespace
 
 StateController::StateController(StateControllerContext &context, const StateMachineConfig &config)
-    : context_(context), config_(config), current_system_state_(SystemState::SYSTEM_PACKED), current_robot_state_(RobotState::ROBOT_UNKNOWN), current_walk_state_(WalkState::WALK_STOPPED), current_posing_mode_(PosingMode::POSING_NONE), current_cruise_control_mode_(CruiseControlMode::CRUISE_CONTROL_OFF), current_planner_mode_(PlannerMode::PLANNER_MODE_OFF), current_pose_reset_mode_(PoseResetMode::NO_RESET), desired_system_state_(SystemState::SYSTEM_PACKED), desired_robot_state_(RobotState::ROBOT_UNKNOWN), leg_states_{}, manual_leg_count_(0), toggle_leg_index_(-1), toggle_leg_state_pending_(false), is_transitioning_(false), desired_linear_velocity_(Eigen::Vector2d::Zero()), desired_angular_velocity_(0.0f), desired_body_position_(Eigen::Vector3d::Zero()), desired_body_orientation_(Eigen::Vector3d::Zero()), cruise_velocity_(Eigen::Vector3d::Zero()), cruise_start_time_(0), cruise_end_time_(0), last_update_time_(0), time_delta_(0.02f), has_error_(false), startup_step_(0), startup_transition_initialized_(false), startup_transition_step_count_(4), shutdown_step_(0), shutdown_transition_initialized_(false), shutdown_transition_step_count_(3), executing_pack_transition_(false), is_initialized_(false) {
+    : context_(context), config_(config), current_system_state_(SystemState::SUSPENDED), current_robot_state_(RobotState::ROBOT_UNKNOWN), current_walk_state_(WalkState::WALK_STOPPED), current_posing_mode_(PosingMode::POSING_NONE), current_pose_reset_mode_(PoseResetMode::NO_RESET), desired_system_state_(SystemState::SUSPENDED), desired_robot_state_(RobotState::ROBOT_UNKNOWN), leg_states_{}, manual_leg_count_(0), toggle_leg_index_(-1), toggle_leg_state_pending_(false), is_transitioning_(false), desired_linear_velocity_(Eigen::Vector2d::Zero()), desired_angular_velocity_(0.0f), desired_body_position_(Eigen::Vector3d::Zero()), desired_body_orientation_(Eigen::Vector3d::Zero()), last_update_time_(0), time_delta_(0.02f), has_error_(false), startup_step_(0), startup_transition_initialized_(false), startup_transition_step_count_(4), shutdown_step_(0), shutdown_transition_initialized_(false), shutdown_transition_step_count_(3), executing_pack_transition_(false), is_initialized_(false) {
 
     // Initialize leg states
     for (int i = 0; i < NUM_LEGS; i++) {
@@ -241,9 +217,9 @@ bool StateController::initialize(const BodyPoseConfiguration &body_pose_config) 
 
     desired_robot_state_ = current_robot_state_;
 
-    // Initialize system state
-    current_system_state_ = SystemState::SYSTEM_RUNNING;
-    desired_system_state_ = SystemState::SYSTEM_RUNNING;
+    // Initialize top-level system state (OpenSHC equivalent)
+    current_system_state_ = SystemState::OPERATIONAL;
+    desired_system_state_ = SystemState::OPERATIONAL;
 
     // Initialize pose controller (equivalent to OpenSHC poser_)
     try {
@@ -376,63 +352,6 @@ bool StateController::setPosingMode(PosingMode mode) {
 
     current_posing_mode_ = mode;
     logDebug("Posing mode changed to: " + toArduinoString(toString(mode)));
-    return true;
-}
-
-bool StateController::setCruiseControlMode(CruiseControlMode mode, const Eigen::Vector3d &velocity) {
-    if (!config_.enable_cruise_control && mode != CruiseControlMode::CRUISE_CONTROL_OFF) {
-        setError("Cruise control is disabled in configuration");
-        return false;
-    }
-
-    current_cruise_control_mode_ = mode;
-
-    if (mode == CruiseControlMode::CRUISE_CONTROL_ON) {
-        // If velocity is provided (non-zero), use it as cruise velocity
-        if (velocity.norm() > 0.001f) {
-            cruise_velocity_ = velocity;
-            logDebug("Cruise control enabled with specified velocity: [" +
-                     toArduinoString(toString(velocity.x())) + ", " +
-                     toArduinoString(toString(velocity.y())) + ", " +
-                     toArduinoString(toString(velocity.z())) + "]");
-        } else {
-            // Save current velocity input as cruise velocity (equivalent to OpenSHC behavior)
-            cruise_velocity_.x() = desired_linear_velocity_.x();
-            cruise_velocity_.y() = desired_linear_velocity_.y();
-            cruise_velocity_.z() = desired_angular_velocity_;
-            logDebug("Cruise control enabled with current velocity: [" +
-                     toArduinoString(toString(cruise_velocity_.x())) + ", " +
-                     toArduinoString(toString(cruise_velocity_.y())) + ", " +
-                     toArduinoString(toString(cruise_velocity_.z())) + "]");
-        }
-        cruise_start_time_ = millis();
-
-        // Set end time if time limit is configured (equivalent to OpenSHC cruise_control_time_limit)
-        if (config_.cruise_control_time_limit > 0.0f) {
-            cruise_end_time_ = cruise_start_time_ + (unsigned long)(config_.cruise_control_time_limit * 1000.0f);
-            logDebug("Cruise control time limit set to " + toArduinoString(toString(config_.cruise_control_time_limit)) + " seconds");
-        } else {
-            cruise_end_time_ = 0; // No time limit
-        }
-    } else {
-        cruise_velocity_ = Eigen::Vector3d::Zero();
-        cruise_start_time_ = 0;
-        cruise_end_time_ = 0;
-        logDebug("Cruise control disabled");
-    }
-
-    return true;
-}
-
-bool StateController::setPlannerMode(PlannerMode mode) {
-    if (mode == PlannerMode::PLANNER_MODE_ON) {
-        setError("Planner mode is not supported on this target");
-        current_planner_mode_ = PlannerMode::PLANNER_MODE_OFF;
-        return false;
-    }
-
-    current_planner_mode_ = PlannerMode::PLANNER_MODE_OFF;
-    logDebug("Planner mode changed to: " + toArduinoString(toString(current_planner_mode_)));
     return true;
 }
 
@@ -632,7 +551,21 @@ bool StateController::changeGait(GaitType gait) {
 
     // Create gait configuration and set it
     GaitConfiguration gait_config = createGaitConfig(gait, context_.getParams());
-    return context_.setGaitConfiguration(gait_config);
+    bool changed = context_.setGaitConfiguration(gait_config);
+    if (!changed) {
+        return false;
+    }
+
+    // OpenSHC parity: refresh auto-pose parameters associated with the new gait.
+    if (body_pose_controller_) {
+        body_pose_controller_->setCurrentGaitType(gait_config.gait_type);
+        body_pose_controller_->setGaitPhaseParams(gait_config.phase_config.stance_phase,
+                                                  gait_config.phase_config.swing_phase,
+                                                  gait_config.phase_config.phase_offset);
+        body_pose_controller_->refreshAutoPoseParameters();
+    }
+
+    return true;
 }
 
 // Remove getTransitionProgress() method
@@ -654,8 +587,6 @@ String StateController::getDiagnosticInfo() const {
     info += "  Robot State: " + toArduinoString(toString(current_robot_state_)) + "\n";
     info += "  Walk State: " + toArduinoString(toString(current_walk_state_)) + "\n";
     info += "  Posing Mode: " + toArduinoString(toString(current_posing_mode_)) + "\n";
-    info += "  Cruise Control: " + toArduinoString(toString(current_cruise_control_mode_)) + "\n";
-    info += "  Planner Mode: " + toArduinoString(toString(current_planner_mode_)) + "\n";
     info += "  Manual Legs: " + toArduinoString(toString(manual_leg_count_)) + "/" + toArduinoString(toString(config_.max_manual_legs)) + "\n";
     info += "  Transitioning: " + String(is_transitioning_ ? "Yes" : "No") + "\n";
 
@@ -682,9 +613,6 @@ void StateController::emergencyStop() {
     desired_linear_velocity_ = Eigen::Vector2d::Zero();
     desired_angular_velocity_ = 0.0f;
 
-    // Disable cruise control
-    current_cruise_control_mode_ = CruiseControlMode::CRUISE_CONTROL_OFF;
-
     // Reset all leg tip velocities
     for (int i = 0; i < NUM_LEGS; i++) {
         leg_tip_velocities_[i] = Eigen::Vector3d::Zero();
@@ -707,15 +635,13 @@ void StateController::reset() {
     logDebug("Resetting StateController");
 
     // Reset to initial states
-    current_system_state_ = SystemState::SYSTEM_PACKED;
+    current_system_state_ = SystemState::SUSPENDED;
     current_robot_state_ = RobotState::ROBOT_UNKNOWN;
     current_walk_state_ = WalkState::WALK_STOPPED;
     current_posing_mode_ = PosingMode::POSING_NONE;
-    current_cruise_control_mode_ = CruiseControlMode::CRUISE_CONTROL_OFF;
-    current_planner_mode_ = PlannerMode::PLANNER_MODE_OFF;
     current_pose_reset_mode_ = PoseResetMode::NO_RESET;
 
-    desired_system_state_ = SystemState::SYSTEM_PACKED;
+    desired_system_state_ = SystemState::SUSPENDED;
     desired_robot_state_ = RobotState::ROBOT_UNKNOWN;
 
     // Reset leg states
@@ -747,11 +673,6 @@ void StateController::reset() {
     body_pose_controller_ = nullptr;
 }
 
-bool StateController::executePlan() {
-    setError("Planner execution is not supported on this target");
-    return false;
-}
-
 void StateController::updateStateMachine() {
     // Handle system state transitions
     handleSystemStateTransition();
@@ -763,23 +684,18 @@ void StateController::handleSystemStateTransition() {
     }
 
     switch (desired_system_state_) {
-    case SystemState::SYSTEM_PACKED:
-        // Stop all motion and pack operations
+    case SystemState::SUSPENDED:
+        // Stop top-level system activity while preserving robot-state machine ownership.
         emergencyStop();
-        current_system_state_ = SystemState::SYSTEM_PACKED;
-        logDebug("System packed");
+        current_system_state_ = SystemState::SUSPENDED;
+        logDebug("System suspended");
         break;
 
-    case SystemState::SYSTEM_READY:
-        // Resume normal operations
-        current_system_state_ = SystemState::SYSTEM_READY;
+    case SystemState::OPERATIONAL:
+        // Resume normal operations.
+        current_system_state_ = SystemState::OPERATIONAL;
         clearError();
-        logDebug("System ready");
-        break;
-
-    case SystemState::SYSTEM_RUNNING:
-        // System is running - full operation
-        current_system_state_ = SystemState::SYSTEM_RUNNING;
+        logDebug("System operational");
         break;
 
     default:
@@ -999,39 +915,9 @@ void StateController::handleLegStateTransitions() {
 }
 
 void StateController::updateVelocityControl() {
-    double linear_x, linear_y, angular_z;
-
-    // Check if cruise control should be used (equivalent to OpenSHC cruise control logic)
-    bool use_cruise_control = (current_cruise_control_mode_ == CruiseControlMode::CRUISE_CONTROL_ON);
-
-    // Check cruise control time limit (equivalent to OpenSHC cruise_control_time_limit check)
-    if (use_cruise_control && cruise_end_time_ > 0) {
-        unsigned long current_time = millis();
-        if (current_time >= cruise_end_time_) {
-            // Time limit exceeded, disable cruise control
-            logDebug("Cruise control time limit exceeded, disabling");
-            current_cruise_control_mode_ = CruiseControlMode::CRUISE_CONTROL_OFF;
-            cruise_velocity_ = Eigen::Vector3d::Zero();
-            use_cruise_control = false;
-        }
-    }
-
-    if (use_cruise_control) {
-        // Use cruise control velocity - equivalent to OpenSHC cruise control behavior
-        linear_x = cruise_velocity_.x();
-        linear_y = cruise_velocity_.y();
-        angular_z = cruise_velocity_.z();
-
-        logDebug("Using cruise velocity: [" +
-                 toArduinoString(toString(linear_x)) + ", " +
-                 toArduinoString(toString(linear_y)) + ", " +
-                 toArduinoString(toString(angular_z)) + "]");
-    } else {
-        // Use direct velocity input
-        linear_x = desired_linear_velocity_.x();
-        linear_y = desired_linear_velocity_.y();
-        angular_z = desired_angular_velocity_;
-    }
+    double linear_x = desired_linear_velocity_.x();
+    double linear_y = desired_linear_velocity_.y();
+    double angular_z = desired_angular_velocity_;
 
     // Apply velocity control using combined gait planning (equivalent to OpenSHC walker_->updateWalk())
     if (!context_.planGaitSequence(linear_x, linear_y, angular_z)) {
@@ -1047,120 +933,15 @@ void StateController::updateVelocityControl() {
 }
 
 void StateController::updatePoseControl() {
-    // Equivalent to OpenSHC poser_->updateCurrentPose() and pose control logic
-    if (current_posing_mode_ == PosingMode::POSING_NONE) {
-        return; // No pose control active
+    // OpenSHC parity: posing mode is primarily informative. Control gating is external.
+    // Always forward full manual pose input here; mode changes are kept for user diagnostics.
+    if (!context_.setManualBodyPoseInput(desired_body_position_, desired_body_orientation_)) {
+        logError("Failed to apply manual body pose input");
     }
 
-    // Update pose control based on current mode (equivalent to OpenSHC pose modes)
-    switch (current_posing_mode_) {
-    case PosingMode::POSING_X_Y: {
-        // Allow manual posing via X/Y axis translation (equivalent to OpenSHC X_Y mode)
-        logDebug("Applying X/Y pose control");
-        applyBodyPositionControl(true, true, false); // X, Y, not Z
-        break;
-    }
-
-    case PosingMode::POSING_PITCH_ROLL: {
-        // Allow manual posing via pitch/roll rotation (equivalent to OpenSHC PITCH_ROLL mode)
-        logDebug("Applying pitch/roll pose control");
-        applyBodyOrientationControl(true, true, false); // Roll, Pitch, not Yaw
-        break;
-    }
-
-    case PosingMode::POSING_Z_YAW: {
-        // Allow manual posing via Z axis translation and yaw rotation (equivalent to OpenSHC Z_YAW mode)
-        logDebug("Applying Z/yaw pose control");
-        applyBodyPositionControl(false, false, true);    // Not X, not Y, Z
-        applyBodyOrientationControl(false, false, true); // Not Roll, not Pitch, Yaw
-        break;
-    }
-
-    case PosingMode::POSING_EXTERNAL: {
-        // Allow posing input from external source (equivalent to OpenSHC EXTERNAL mode)
-        logDebug("Applying external pose control");
-        applyBodyPositionControl(true, true, true);    // All position axes
-        applyBodyOrientationControl(true, true, true); // All orientation axes
-        break;
-    }
-
-    default:
-        // Unknown mode
-        logError("Unknown posing mode: " + toArduinoString(toString(static_cast<int>(current_posing_mode_))));
-        break;
-    }
-
-    // Apply pose reset if needed (equivalent to OpenSHC pose reset logic)
+    // Apply pose reset if needed.
     if (current_pose_reset_mode_ != PoseResetMode::NO_RESET) {
         applyPoseReset();
-    }
-}
-
-void StateController::applyBodyPositionControl(bool enable_x, bool enable_y, bool enable_z) {
-    if (!body_pose_controller_) {
-        logError("BodyPoseController not initialized - cannot apply body position control");
-        return;
-    }
-
-    // Get current desired position
-    Eigen::Vector3d current_position = desired_body_position_;
-
-    // Apply control for enabled axes (equivalent to OpenSHC axis-specific control)
-    Eigen::Vector3d controlled_position = current_position;
-
-    if (!enable_x) {
-        controlled_position.x() = 0.0f; // Reset to default if not enabled
-    }
-    if (!enable_y) {
-        controlled_position.y() = 0.0f; // Reset to default if not enabled
-    }
-    if (!enable_z) {
-        controlled_position.z() = 0.0f; // Reset to default if not enabled
-    }
-
-    // Apply the position control via locomotion system
-    bool success = context_.setManualBodyPoseInput(controlled_position, desired_body_orientation_);
-
-    if (!success) {
-        logError("Failed to apply body position control");
-    } else {
-        logDebug("Applied body position control: X=" + toArduinoString(enable_x ? "ON" : "OFF") +
-                 " Y=" + toArduinoString(enable_y ? "ON" : "OFF") +
-                 " Z=" + toArduinoString(enable_z ? "ON" : "OFF"));
-    }
-}
-
-void StateController::applyBodyOrientationControl(bool enable_roll, bool enable_pitch, bool enable_yaw) {
-    if (!body_pose_controller_) {
-        logError("BodyPoseController not initialized - cannot apply body orientation control");
-        return;
-    }
-
-    // Get current desired orientation
-    Eigen::Vector3d current_orientation = desired_body_orientation_;
-
-    // Apply control for enabled axes (equivalent to OpenSHC axis-specific control)
-    Eigen::Vector3d controlled_orientation = current_orientation;
-
-    if (!enable_roll) {
-        controlled_orientation.x() = 0.0f; // Reset to default if not enabled
-    }
-    if (!enable_pitch) {
-        controlled_orientation.y() = 0.0f; // Reset to default if not enabled
-    }
-    if (!enable_yaw) {
-        controlled_orientation.z() = 0.0f; // Reset to default if not enabled
-    }
-
-    // Apply the orientation control via locomotion system
-    bool success = context_.setManualBodyPoseInput(desired_body_position_, controlled_orientation);
-
-    if (!success) {
-        logError("Failed to apply body orientation control");
-    } else {
-        logDebug("Applied body orientation control: Roll=" + toArduinoString(enable_roll ? "ON" : "OFF") +
-                 " Pitch=" + toArduinoString(enable_pitch ? "ON" : "OFF") +
-                 " Yaw=" + toArduinoString(enable_yaw ? "ON" : "OFF"));
     }
 }
 
@@ -1331,7 +1112,7 @@ bool StateController::isRobotPacked() const {
         return joints_ok;
     }
 
-    // Legacy heuristic path when no explicit packed configuration exists.
+    // Heuristic fallback path when no explicit packed configuration exists.
     Eigen::Vector3d current_position = context_.getBodyPosition();
 
     // Check for invalid/uninitialized position data
@@ -1376,7 +1157,7 @@ bool StateController::isRobotReady() const {
         return joints_ok;
     }
 
-    // Legacy heuristic path when no explicit unpacked configuration exists.
+    // Heuristic fallback path when no explicit unpacked configuration exists.
     Eigen::Vector3d current_position = context_.getBodyPosition();
     Eigen::Vector3d current_orientation = context_.getBodyOrientation();
 

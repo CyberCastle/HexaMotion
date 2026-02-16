@@ -21,16 +21,6 @@
 /** Throttle period for repeated messages. */
 #define THROTTLE_PERIOD 1.0f
 
-/** Designation for potential states of the robot. */
-enum RobotState {
-    ROBOT_PACKED,       /**< Robot is packed with all joints at defined packed positions. */
-    ROBOT_READY,        /**< Robot is ready with all joints at defined unpacked positions. */
-    ROBOT_RUNNING,      /**< Robot is running; posing and walking occur in this state. */
-    ROBOT_STATE_COUNT,  /**< Number of robot states. */
-    ROBOT_UNKNOWN = -1, /**< Robot is in an initial unknown state; controller will estimate it. */
-    ROBOT_OFF = -2,     /**< Robot is off; alternative to running for direct startup. */
-};
-
 /** Designation for potential manual body posing input modes. */
 enum PosingMode {
     POSING_NONE,       /**< No manual body posing. */
@@ -39,21 +29,6 @@ enum PosingMode {
     POSING_Z_YAW,      /**< Manual body posing via z translation and yaw rotation. */
     POSING_EXTERNAL,   /**< Manual body posing from an external source. */
     POSING_MODE_COUNT, /**< Number of posing modes. */
-};
-
-/** Designation for potential cruise control modes. */
-enum CruiseControlMode {
-    CRUISE_CONTROL_OFF,           /**< Cruise control is off. */
-    CRUISE_CONTROL_ON,            /**< Cruise control is on. */
-    CRUISE_CONTROL_MODE_COUNT,    /**< Number of cruise control modes. */
-    CRUISE_CONTROL_EXTERNAL = -1, /**< Cruise control mode is external. */
-};
-
-/** Designation for potential planner modes (stub parity with OpenSHC). */
-enum PlannerMode {
-    PLANNER_MODE_OFF,  /**< Planner disabled. */
-    PLANNER_MODE_ON,   /**< Planner enabled (not supported on MCU). */
-    PLANNER_MODE_COUNT /**< Number of planner modes. */
 };
 
 // PosingState, PoseResetMode, and SequenceSelection are defined in gait_types.h
@@ -73,14 +48,12 @@ enum LegDesignation {
 
 /** State machine configuration parameters. */
 struct StateMachineConfig {
-    bool enable_startup_sequence = true;     /**< Enable multi-step startup sequence (OpenSHC start_up_sequence). */
-    double transition_timeout = 10.0f;       /**< Maximum time for state transitions (seconds). */
-    double pack_unpack_time = 2.0f;          /**< Time for pack/unpack sequences (seconds). */
-    bool enable_auto_posing = false;         /**< Enable automatic body posing. */
-    bool enable_manual_posing = true;        /**< Enable manual body posing. */
-    bool enable_cruise_control = true;       /**< Enable cruise control mode. */
-    double cruise_control_time_limit = 0.0f; /**< Time limit for cruise control (0 = unlimited). */
-    int max_manual_legs = 2;                 /**< Maximum number of manually controlled legs. */
+    bool enable_startup_sequence = true; /**< Enable multi-step startup sequence (OpenSHC start_up_sequence). */
+    double transition_timeout = 10.0f;   /**< Maximum time for state transitions (seconds). */
+    double pack_unpack_time = 2.0f;      /**< Time for pack/unpack sequences (seconds). */
+    bool enable_auto_posing = false;     /**< Enable automatic body posing. */
+    bool enable_manual_posing = true;    /**< Enable manual body posing. */
+    int max_manual_legs = 2;             /**< Maximum number of manually controlled legs. */
 };
 
 /**
@@ -151,62 +124,6 @@ class StateController {
     inline PoseResetMode getPoseResetMode() const { return current_pose_reset_mode_; }
 
     /**
-     * @brief Get the current cruise control mode.
-     * @return Current cruise control mode
-     */
-    inline CruiseControlMode getCruiseControlMode() const { return current_cruise_control_mode_; }
-
-    /**
-     * @brief Get the current planner mode.
-     * @return Current planner mode
-     */
-    inline PlannerMode getPlannerMode() const { return current_planner_mode_; }
-
-    /**
-     * @brief Get the current cruise control velocity.
-     * @return Current cruise velocity vector (x, y, angular_z)
-     */
-    inline Eigen::Vector3d getCruiseVelocity() const { return cruise_velocity_; }
-
-    /**
-     * @brief Get the cruise control start time.
-     * @return Start time in milliseconds
-     */
-    inline unsigned long getCruiseStartTime() const { return cruise_start_time_; }
-
-    /**
-     * @brief Get the cruise control remaining time.
-     * @return Remaining time in seconds (0 if unlimited)
-     */
-    double getCruiseRemainingTime() const {
-        if (cruise_end_time_ == 0 || current_cruise_control_mode_ != CruiseControlMode::CRUISE_CONTROL_ON) {
-            /** Unlimited or not active. */
-            return 0.0f;
-        }
-        unsigned long current_time = millis();
-        if (current_time >= cruise_end_time_) {
-            /** Expired. */
-            return 0.0f;
-        }
-        return (cruise_end_time_ - current_time) / 1000.0f;
-    }
-
-    /**
-     * @brief Check if cruise control is active and within time limit.
-     * @return True if cruise control is currently active
-     */
-    bool isCruiseControlActive() const {
-        if (current_cruise_control_mode_ != CruiseControlMode::CRUISE_CONTROL_ON) {
-            return false;
-        }
-        if (cruise_end_time_ == 0) {
-            /** No time limit. */
-            return true;
-        }
-        return millis() < cruise_end_time_;
-    }
-
-    /**
      * @brief Check if the state machine is initialized.
      * @return True if initialized
      */
@@ -249,21 +166,6 @@ class StateController {
      * @return True if mode change successful
      */
     bool setPosingMode(PosingMode mode);
-
-    /**
-     * @brief Set the cruise control mode.
-     * @param mode Desired cruise control mode
-     * @param velocity Initial velocity for cruise control
-     * @return True if mode change successful
-     */
-    bool setCruiseControlMode(CruiseControlMode mode, const Eigen::Vector3d &velocity = Eigen::Vector3d::Zero());
-
-    /**
-     * @brief Set planner mode (stub parity with OpenSHC).
-     * @param mode Desired planner mode
-     * @return True if mode is accepted
-     */
-    bool setPlannerMode(PlannerMode mode);
 
     /**
      * @brief Set the pose reset mode.
@@ -442,12 +344,6 @@ class StateController {
      */
     void clearError();
 
-    /**
-     * @brief Execute planner (stub parity with OpenSHC).
-     * @return False if planner is not supported
-     */
-    bool executePlan();
-
   private:
     /** Private members. */
 
@@ -459,8 +355,6 @@ class StateController {
     RobotState current_robot_state_;
     WalkState current_walk_state_;
     PosingMode current_posing_mode_;
-    CruiseControlMode current_cruise_control_mode_;
-    PlannerMode current_planner_mode_;
     PoseResetMode current_pose_reset_mode_;
 
     /** Desired states for transitions. */
@@ -486,11 +380,6 @@ class StateController {
     Eigen::Vector3d leg_tip_velocities_[NUM_LEGS];
     Point3D leg_tip_poses_[NUM_LEGS];
     bool leg_tip_pose_valid_[NUM_LEGS];
-
-    /** Cruise control. */
-    Eigen::Vector3d cruise_velocity_;
-    unsigned long cruise_start_time_;
-    unsigned long cruise_end_time_; /**< End time for cruise control (when time limit is set). */
 
     /** Timing. */
     unsigned long last_update_time_;
@@ -610,22 +499,6 @@ class StateController {
      * @param message Error message
      */
     void logError(const String &message);
-
-    /**
-     * @brief Apply body position control for specific axes.
-     * @param enable_x Enable X-axis control
-     * @param enable_y Enable Y-axis control
-     * @param enable_z Enable Z-axis control
-     */
-    void applyBodyPositionControl(bool enable_x, bool enable_y, bool enable_z);
-
-    /**
-     * @brief Apply body orientation control for specific axes.
-     * @param enable_roll Enable roll control
-     * @param enable_pitch Enable pitch control
-     * @param enable_yaw Enable yaw control
-     */
-    void applyBodyOrientationControl(bool enable_roll, bool enable_pitch, bool enable_yaw);
 
     /**
      * @brief Apply pose reset based on current reset mode.

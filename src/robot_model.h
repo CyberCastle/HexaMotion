@@ -82,7 +82,7 @@ struct Parameters {
     // fsr_min_pressure: minimum normalized/raw pressure/average to validate physical contact and reject false positives
     double fsr_touchdown_threshold = 0.7; //< Average contact value (0-1) to switch to STANCE
     double fsr_liftoff_threshold = 0.3;   //< Average contact value (0-1) to switch to SWING
-    double fsr_min_pressure = 0.05;       //< Minimum normalized value (0-1) to trust reported contact (legacy raw=10 maps ≈0.05)
+    double fsr_min_pressure = 0.05;       //< Minimum normalized value (0-1) to trust reported contact
     double fsr_max_pressure = 0.9;        //< Maximum expected normalized pressure (0-1). 1.0 = saturated/full contact (used for clamping/validation)
 
     double max_velocity;
@@ -226,7 +226,7 @@ struct Parameters {
      *  - Keep values in a sane physical range (0.4 – 1.2) to avoid destabilizing stride / velocity estimations.
      */
     struct ScalingFactors {
-        double linear_scale = 0.65;      //< Legacy linear scaling (replaces scattered WORKSPACE / WALKSPACE constants)
+        double linear_scale = 0.65;      //< Baseline linear scaling (replaces scattered WORKSPACE / WALKSPACE constants)
         double angular_scale = 1.0;      //< Angular scaling (kept at 1.0 unless deliberate reduction required)
         double workspace_scale = 0.65;   //< Conservative workspace envelope scaling
         double collision_scale = 0.0;    //< If <= 0 => derive from runtime collision safety factor
@@ -622,7 +622,7 @@ class IServoInterface {
     /**
      * Extended joint motion command including acceleration.
      * Implementations that do not natively support acceleration can ignore the parameter and
-     * fallback to setJointAngleAndSpeed(). Default implementation delegates to that legacy method.
+     * fallback to setJointAngleAndSpeed(). Default implementation delegates to that base method.
      * @param leg_index Index of the leg (0-5)
      * @param joint_index Joint index within leg (0-2)
      * @param angle Target angular position in degrees

@@ -159,6 +159,13 @@ bool LocomotionSystem::isSystemEnabled() const {
     return system_enabled;
 }
 
+RobotState LocomotionSystem::getRobotState() const {
+    if (!state_controller_) {
+        return ROBOT_UNKNOWN;
+    }
+    return state_controller_->getRobotState();
+}
+
 Pose LocomotionSystem::getCurrentBodyPose() const {
     if (body_pose_ctrl) {
         return body_pose_ctrl->getCurrentBodyPose();
@@ -298,6 +305,10 @@ bool LocomotionSystem::setGaitConfiguration(const GaitConfiguration &gait_config
     /** Update BodyPoseController with current gait type for startup sequence selection. */
     if (result && body_pose_ctrl) {
         body_pose_ctrl->setCurrentGaitType(gait_config.gait_type);
+        body_pose_ctrl->setGaitPhaseParams(gait_config.phase_config.stance_phase,
+                                           gait_config.phase_config.swing_phase,
+                                           gait_config.phase_config.phase_offset);
+        body_pose_ctrl->refreshAutoPoseParameters();
     }
 
     return result;
@@ -431,7 +442,7 @@ bool LocomotionSystem::executeStartupSequence() {
             }
         }
 
-        system_state = SYSTEM_RUNNING;
+        system_state = OPERATIONAL;
 
         /** Clear flag here instead of requiring external code to modify private member. */
         startup_in_progress = false;
@@ -463,7 +474,7 @@ bool LocomotionSystem::activateRunningState() {
         }
     }
 
-    system_state = SYSTEM_RUNNING;
+    system_state = OPERATIONAL;
     startup_in_progress = false;
     return true;
 }
@@ -510,7 +521,7 @@ bool LocomotionSystem::executeShutdownSequence() {
     bool shutdown_complete = (sd_progress == PROGRESS_COMPLETE);
 
     if (shutdown_complete) {
-        system_state = SYSTEM_READY;
+        system_state = OPERATIONAL;
 
         /** Clear internal flag upon completion to simplify caller logic. */
         shutdown_in_progress = false;
@@ -659,7 +670,7 @@ bool LocomotionSystem::setStandingPose() {
         body_position = Eigen::Vector3d(0.0, 0.0, total_z / NUM_LEGS);
 
         /** Set system state to READY (OpenSHC equivalent). */
-        system_state = SYSTEM_READY;
+        system_state = OPERATIONAL;
         startup_in_progress = false;
         shutdown_in_progress = false;
 
@@ -762,17 +773,16 @@ bool LocomotionSystem::applyManualLegInputs(int primary_leg_index,
         return false;
     }
 
-    walk_ctrl->updateManual(primary_leg_index,
-                            primary_tip_velocity,
-                            secondary_leg_index,
-                            secondary_tip_velocity);
-
-    if (primary_pose_valid || secondary_pose_valid) {
-        walk_ctrl->updateManual(primary_leg_index,
-                                primary_tip_pose,
-                                secondary_leg_index,
-                                secondary_tip_pose);
-    }
+    // Cache inputs so manual update is applied after walk update in the same pipeline tick
+    // (OpenSHC parity: updateWalk() then updateManual()).
+    pending_primary_leg_index_ = primary_leg_index;
+    pending_secondary_leg_index_ = secondary_leg_index;
+    pending_primary_tip_velocity_ = primary_tip_velocity;
+    pending_secondary_tip_velocity_ = secondary_tip_velocity;
+    pending_primary_pose_valid_ = primary_pose_valid;
+    pending_secondary_pose_valid_ = secondary_pose_valid;
+    pending_primary_tip_pose_ = primary_tip_pose;
+    pending_secondary_tip_pose_ = secondary_tip_pose;
 
     return true;
 }
@@ -803,6 +813,9 @@ bool LocomotionSystem::update() {
 }
 
 bool LocomotionSystem::runControlPipelineStep() {
+
+    const bool robot_running = state_controller_ &&
+                               state_controller_->getRobotState() == RobotState::ROBOT_RUNNING;
 
     /** Update sensors in parallel for optimal performance. */
     if (!updateSensorsParallel()) {
@@ -852,8 +865,8 @@ bool LocomotionSystem::runControlPipelineStep() {
         }
     }
 
-    /** Only update leg trajectories if system is in RUNNING state. */
-    if (walk_ctrl && system_state == SYSTEM_RUNNING) {
+    /** Only update leg trajectories if robot state is RUNNING. */
+    if (walk_ctrl && robot_running) {
         /** Optional kinematic integration of body pose (test / simulation). */
         if (params.enable_body_translation) {
             /** Integrate translation (mm) and yaw (degrees) from commanded velocities. */
@@ -874,6 +887,18 @@ bool LocomotionSystem::runControlPipelineStep() {
         walk_ctrl->updateWalk(applied_linear_velocity,
                               commanded_angular_velocity_,
                               body_position, body_orientation);
+
+        /** Step 1b: apply manual-leg updates after walk (OpenSHC update order parity). */
+        walk_ctrl->updateManual(pending_primary_leg_index_,
+                                pending_primary_tip_velocity_,
+                                pending_secondary_leg_index_,
+                                pending_secondary_tip_velocity_);
+        if (pending_primary_pose_valid_ || pending_secondary_pose_valid_) {
+            walk_ctrl->updateManual(pending_primary_leg_index_,
+                                    pending_primary_tip_pose_,
+                                    pending_secondary_leg_index_,
+                                    pending_secondary_tip_pose_);
+        }
 
         /** Step 2: collect desired positions from Bezier trajectories (= OpenSHC::setDesiredTipPose). */
         for (int i = 0; i < NUM_LEGS; i++) {
@@ -907,8 +932,8 @@ bool LocomotionSystem::runControlPipelineStep() {
             recordCoxaTelemetrySample();
         }
 #endif
-    } else if (system_state == SYSTEM_READY) {
-        /** OpenSHC: when system is READY (after shutdown), maintain STANCE_PHASE for all legs. */
+    } else {
+        /** When robot is not RUNNING, keep all legs in stance phase. */
         /** This prevents update() calls from overriding the shutdown-forced STANCE states. */
         /** Do not read leg_stepper states; preserve the shutdown state. */
         for (int i = 0; i < NUM_LEGS; i++) {
@@ -1433,7 +1458,7 @@ bool LocomotionSystem::establishInitialStandingPose() {
     }
     initial_standing_active_ = true;
     startup_in_progress = true;
-    system_state = SYSTEM_READY;
+    system_state = OPERATIONAL;
     return stepInitialStandingPose();
 }
 
@@ -1463,7 +1488,7 @@ bool LocomotionSystem::stepInitialStandingPose() {
             total_z += legs[i].getCurrentTipPositionGlobal().z;
         }
         body_position = Eigen::Vector3d(0.0, 0.0, total_z / NUM_LEGS);
-        system_state = SYSTEM_READY;
+        system_state = OPERATIONAL;
         startup_in_progress = false;
         shutdown_in_progress = false;
     }

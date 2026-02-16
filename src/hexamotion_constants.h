@@ -197,11 +197,23 @@
 // ========================================================================
 
 // System states (OpenSHC equivalent)
+// Top-level system state is independent from RobotState.
+// OpenSHC uses SUSPENDED/OPERATIONAL only.
 enum SystemState {
-    SYSTEM_UNKNOWN = 0, // Unknown state
-    SYSTEM_PACKED = 1,  // Robot is packed/disabled
-    SYSTEM_READY = 2,   // Robot is ready but not walking
-    SYSTEM_RUNNING = 3  // Robot is running/walking
+    SUSPENDED = 0,          // Top-level suspended state (OpenSHC equivalent)
+    OPERATIONAL = 1,        // Top-level operational state (OpenSHC equivalent)
+    SYSTEM_STATE_COUNT = 2, // Number of top-level system states
+    SYSTEM_UNKNOWN = -1     // Unknown/uninitialized system state
+};
+
+// Robot states (OpenSHC equivalent, independent from SystemState)
+enum RobotState {
+    ROBOT_PACKED = 0,      // Robot packed/disabled (joints in packed configuration)
+    ROBOT_READY = 1,       // Robot unpacked and ready, not walking
+    ROBOT_RUNNING = 2,     // Robot actively operating/walking
+    ROBOT_STATE_COUNT = 3, // Number of robot operational states
+    ROBOT_UNKNOWN = -1,    // Unknown/uninitialized robot state
+    ROBOT_OFF = -2         // Robot explicitly off (direct-startup alternative)
 };
 
 // Progress constants

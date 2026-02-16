@@ -420,12 +420,20 @@ class Leg {
     Eigen::Vector3d getAdmittanceDelta() const { return admittance_delta_; }
 
     /**
-     * @brief Set admittance delta (OpenSHC: projects onto tip direction).
+     * @brief Set admittance delta projected onto the tip axis (OpenSHC equivalent).
      *
-     * For 3DOF legs without explicit tip rotation, the delta is stored directly.
+     * OpenSHC projects compliance delta onto the tip X-axis. In HexaMotion 3DOF
+     * we approximate that axis with the current base-to-tip direction.
      * @param delta Admittance compliance delta vector
      */
-    void setAdmittanceDelta(const Eigen::Vector3d &delta) { admittance_delta_ = delta; }
+    void setAdmittanceDelta(const Eigen::Vector3d &delta) {
+        Eigen::Vector3d tip_axis = getLegDirection();
+        if (tip_axis.norm() <= 1e-9) {
+            admittance_delta_ = Eigen::Vector3d::Zero();
+            return;
+        }
+        admittance_delta_ = delta.dot(tip_axis) * tip_axis;
+    }
 
     /**
      * @brief Get virtual stiffness for this leg (dynamically scaled).

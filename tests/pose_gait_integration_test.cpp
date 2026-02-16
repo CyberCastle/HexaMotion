@@ -319,13 +319,13 @@ int main() {
     int startup_iterations = 0;
     const int max_startup_iterations = 500;
 
-    printf("Startup: waiting for SYSTEM_RUNNING via StateController...\n");
+    printf("Startup: waiting for ROBOT_RUNNING via StateController...\n");
 
-    while (sys.getSystemState() != SYSTEM_RUNNING && startup_iterations < max_startup_iterations) {
+    while (sys.getRobotState() != ROBOT_RUNNING && startup_iterations < max_startup_iterations) {
         sys.update();
         startup_iterations++;
     }
-    bool startup_ok = (sys.getSystemState() == SYSTEM_RUNNING);
+    bool startup_ok = (sys.getRobotState() == ROBOT_RUNNING);
 
     printf("Startup sequence completed in %d iterations\n", startup_iterations);
     addResult(rep, startup_ok, "Startup sequence", sys);

@@ -419,7 +419,7 @@ int main(int argc, char **argv) {
     int startup_sequence_attempts = 0;
     const int MAX_STARTUP_SEQUENCE_ATTEMPTS = 500;
 
-    while (sys.getSystemState() != SYSTEM_RUNNING && startup_sequence_attempts < MAX_STARTUP_SEQUENCE_ATTEMPTS) {
+    while (sys.getRobotState() != ROBOT_RUNNING && startup_sequence_attempts < MAX_STARTUP_SEQUENCE_ATTEMPTS) {
         sys.update();
         startup_sequence_attempts++;
 
@@ -429,7 +429,7 @@ int main(int argc, char **argv) {
         }
     }
 
-    if (sys.getSystemState() != SYSTEM_RUNNING) {
+    if (sys.getRobotState() != ROBOT_RUNNING) {
         std::cerr << "ERROR: Secuencia de startup falló tras " << startup_sequence_attempts << " intentos." << std::endl;
         return 1;
     }
@@ -934,11 +934,11 @@ int main(int argc, char **argv) {
     // Run update loop to let StateController orchestrate the shutdown
     int shutdown_attempts = 0;
     const int MAX_SHUTDOWN_ATTEMPTS = 500;
-    while (shutdown_attempts < MAX_SHUTDOWN_ATTEMPTS && sys.getSystemState() == SYSTEM_RUNNING) {
+    while (shutdown_attempts < MAX_SHUTDOWN_ATTEMPTS && sys.getRobotState() == ROBOT_RUNNING) {
         sys.update();
         shutdown_attempts++;
     }
-    if (sys.getSystemState() != SYSTEM_RUNNING) {
+    if (sys.getRobotState() == ROBOT_READY) {
         std::cout << "Shutdown completado tras " << shutdown_attempts << " iteraciones." << std::endl;
     } else {
         std::cerr << "WARNING: Shutdown no completó tras " << shutdown_attempts << " iteraciones." << std::endl;

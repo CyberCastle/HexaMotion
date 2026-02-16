@@ -146,12 +146,12 @@ int main() {
     /** Run update loop until system reaches RUNNING state (startup handled by StateController). */
     const int MAX_STARTUP_ITERATIONS = 500;
     int startup_iterations = 0;
-    while (system.getSystemState() != SYSTEM_RUNNING && startup_iterations < MAX_STARTUP_ITERATIONS) {
+    while (system.getRobotState() != ROBOT_RUNNING && startup_iterations < MAX_STARTUP_ITERATIONS) {
         system.update();
         startup_iterations++;
     }
 
-    if (system.getSystemState() != SYSTEM_RUNNING) {
+    if (system.getRobotState() != ROBOT_RUNNING) {
         std::cerr << "ERROR: Startup sequence did not complete" << std::endl;
         return 1;
     }

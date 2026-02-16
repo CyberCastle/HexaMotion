@@ -810,7 +810,7 @@ void LegStepper::updateDefaultTipPosition() {
 
 // Update using internal phase_ (controller advances phase after this call).
 void LegStepper::updateTipPosition(double time_delta, bool rough_terrain_mode, bool force_normal_touchdown) {
-    // Derive iteration number for legacy code path from internal phase_.
+    // Derive iteration number for iterative update path from internal phase_.
     // NOTE: We reuse existing logic by calling updateTipPositionIterative with 'phase_' so we do not duplicate the long body.
     updateTipPositionIterative(phase_, time_delta, rough_terrain_mode, force_normal_touchdown);
 }

@@ -151,7 +151,7 @@ struct AutoPoseConfiguration {
      *
      * Prevents micro jitter from noise or phase edge blending.
      */
-    double apply_threshold_mm = 0.5; /**< Default matches legacy heuristic. */
+    double apply_threshold_mm = 0.5; /**< Default threshold for jitter suppression. */
 };
 
 #endif /**< BODY_POSE_CONFIG_H */

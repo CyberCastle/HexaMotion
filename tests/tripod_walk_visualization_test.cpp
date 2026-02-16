@@ -304,7 +304,7 @@ int main() {
     const int MAX_STARTUP_SEQUENCE_ATTEMPTS =
         std::max(500, static_cast<int>(std::ceil(startup_time_budget_s / p.time_delta)) + 100);
 
-    while (sys.getSystemState() != SYSTEM_RUNNING && startup_sequence_attempts < MAX_STARTUP_SEQUENCE_ATTEMPTS) {
+    while (sc->getRobotState() != ROBOT_RUNNING && startup_sequence_attempts < MAX_STARTUP_SEQUENCE_ATTEMPTS) {
         sys.update();
         startup_sequence_attempts++;
 
@@ -320,7 +320,7 @@ int main() {
                 std::cout << "  Unpack (cubic Bézier): " << unpack_bezier_iters << " iterations" << std::endl;
             }
         }
-        if (unpack_phase_complete && sys.getSystemState() != SYSTEM_RUNNING) {
+        if (unpack_phase_complete && cur_robot_state != ROBOT_RUNNING) {
             startup_bezier_iters++;
         }
 
@@ -344,7 +344,7 @@ int main() {
         std::cout << "  Startup: direct mode (1 iteration)" << std::endl;
     }
 
-    if (sys.getSystemState() != SYSTEM_RUNNING) {
+    if (sc->getRobotState() != ROBOT_RUNNING) {
         std::cerr << "ERROR: Startup sequence failed to complete after " << startup_sequence_attempts << " attempts." << std::endl;
         std::cerr << "The tripod startup sequence may require more time to coordinate leg movements." << std::endl;
         return 1;
@@ -528,12 +528,12 @@ int main() {
         std::max(1e-6, p.step_frequency);
     const int MAX_SHUTDOWN_ATTEMPTS =
         std::max(500, static_cast<int>(std::ceil(shutdown_time_budget_s / p.time_delta)) + 100);
-    while (shutdown_attempts < MAX_SHUTDOWN_ATTEMPTS && sys.getSystemState() == SYSTEM_RUNNING) {
+    while (shutdown_attempts < MAX_SHUTDOWN_ATTEMPTS && sc->getRobotState() == ROBOT_RUNNING) {
         sys.update();
         shutdown_attempts++;
         shutdown_bezier_iters++;
     }
-    if (sys.getSystemState() == SYSTEM_RUNNING) {
+    if (sc->getRobotState() == ROBOT_RUNNING) {
         std::cerr << "ERROR: Shutdown did not complete after " << shutdown_attempts << " iterations." << std::endl;
         return 1;
     }
