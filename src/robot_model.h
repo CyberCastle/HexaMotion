@@ -31,9 +31,9 @@ struct JointPoseAngles {
 struct Parameters {
     Parameters()
         : hexagon_radius(0), coxa_length(0), femur_length(0), tibia_length(0),
-          robot_height(0), robot_weight(0), center_of_mass(Eigen::Vector3d::Zero()),
+          robot_height(0),
           coxa_angle_limits{0, 0}, femur_angle_limits{0, 0}, tibia_angle_limits{0, 0},
-          dh_parameters{}, imu_calibration_offset(Eigen::Vector3d::Zero()),
+          dh_parameters{},
           max_velocity(0), max_angular_velocity(0), stability_margin(0) {
         for (int i = 0; i < NUM_LEGS; ++i) {
             packed_pose_joints[i] = {-1.571, 1.900, 1.200};
@@ -50,8 +50,6 @@ struct Parameters {
     double standing_height = 150;        //< Default standing height in mm
     double height_offset = 0.0f;         //< structural body height offset
     double default_height_offset = 0.0f; //< Default height offset when all joint angles are 0°
-    double robot_weight;
-    Eigen::Vector3d center_of_mass;
 
     double coxa_angle_limits[2];
     double femur_angle_limits[2];
@@ -78,8 +76,6 @@ struct Parameters {
      * The first entry represents the fixed base transform.
      */
     double dh_parameters[NUM_LEGS][DOF_PER_LEG + 1][4];
-
-    Eigen::Vector3d imu_calibration_offset;
 
     // FSR contact filtering thresholds (used in LocomotionSystem::updateLegStates)
     // fsr_touchdown_threshold: minimum historical rolling average to consider contact (hysteresis enter)

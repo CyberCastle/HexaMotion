@@ -51,14 +51,6 @@ struct GaitPhaseConfig {
 struct LegOffsetMultipliers {
     std::map<std::string, int> multipliers; //< Leg name to offset multiplier mapping
 
-    // Convenience accessors for each leg
-    int getAR() const { return multipliers.count("AR") ? multipliers.at("AR") : 0; }
-    int getBR() const { return multipliers.count("BR") ? multipliers.at("BR") : 0; }
-    int getCR() const { return multipliers.count("CR") ? multipliers.at("CR") : 0; }
-    int getCL() const { return multipliers.count("CL") ? multipliers.at("CL") : 0; }
-    int getBL() const { return multipliers.count("BL") ? multipliers.at("BL") : 0; }
-    int getAL() const { return multipliers.count("AL") ? multipliers.at("AL") : 0; }
-
     // Get multiplier for leg index (0-5)
     int getForLegIndex(int leg_index) const {
         const std::string leg_names[] = {"AR", "BR", "CR", "CL", "BL", "AL"};
@@ -91,14 +83,8 @@ struct GaitConfiguration {
     double time_delta;     //< Control loop timestep in seconds (copied from Parameters)
 
     // Gait performance parameters
-    double max_velocity;         //< Maximum walking velocity in mm/s
     double stability_factor;     //< Stability factor (0.0-1.0, higher = more stable)
     bool supports_rough_terrain; //< Whether gait supports rough terrain adaptation
-    double time_to_max_stride;   //< Time to reach maximum stride (s)
-
-    // Gait description
-    std::string description;             //< Human-readable description of the gait
-    std::vector<std::string> step_order; //< Order of leg movements in the gait
 
     // Generate StepCycle using stored configuration (OpenSHC-style normalization)
     StepCycle generateStepCycle() const {
@@ -151,73 +137,6 @@ struct GaitConfiguration {
     double getStepFrequency() const {
         return step_frequency; // Configurable OpenSHC step frequency
     }
-
-    double getStepCycleTime() const {
-        return 1.0 / getStepFrequency();
-    }
-
-    /**
-     * @brief Get gait type as string
-     * @return String representation of the gait type
-     */
-    std::string getGaitTypeString() const {
-        // Use the stored string name which matches the enum conversion
-        return gait_name;
-    }
-
-    /**
-     * @brief Check if gait supports rough terrain
-     * @return true if gait is suitable for rough terrain
-     */
-    bool isTerrainAdaptive() const {
-        return supports_rough_terrain;
-    }
-
-    /**
-     * @brief Check if gait is a tripod-style (two-group) gait
-     * @return true if gait uses two alternating groups
-     */
-    bool isTripodStyle() const {
-        return (gait_type == TRIPOD_GAIT ||
-                (phase_config.stance_phase + phase_config.swing_phase) <= 4);
-    }
-
-    /**
-     * @brief Get number of simultaneous support legs
-     * Estimates how many legs are typically in stance phase
-     * @return Number of legs providing support
-     */
-    int getTypicalSupportLegCount() const {
-        if (gait_type == TRIPOD_GAIT) {
-            return 3; // Tripod: 3 legs in stance
-        } else if (gait_type == WAVE_GAIT) {
-            return 5; // Wave: typically 5 legs in stance
-        } else if (gait_type == RIPPLE_GAIT) {
-            return 4; // Ripple: typically 4 legs in stance
-        } else {
-            // General estimation based on duty cycle
-            double stance_ratio = getStanceRatio();
-            return static_cast<int>(std::round(stance_ratio * NUM_LEGS));
-        }
-    }
-};
-
-/**
- * @brief Gait selection configuration
- * Contains all available gaits and selection parameters
- */
-struct GaitSelectionConfig {
-    std::map<std::string, GaitConfiguration> available_gaits; //< All available gait configurations
-    std::string default_gait;                                 //< Default gait to use
-    std::string current_gait;                                 //< Currently selected gait
-
-    // Gait transition parameters
-    double transition_time;  //< Time to transition between gaits in seconds
-    bool smooth_transitions; //< Whether to use smooth gait transitions
-
-    // Gait selection criteria
-    double min_stability_threshold; //< Minimum stability threshold for gait selection
-    double max_velocity_threshold;  //< Maximum velocity threshold for gait selection
 };
 
 /**

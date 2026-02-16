@@ -13,8 +13,6 @@ static Parameters makeParams(double step_freq) {
     p.tibia_length = 120;
     p.hexagon_radius = 120;
     p.robot_height = 200;
-    p.robot_weight = 1.0;
-    p.center_of_mass = Eigen::Vector3d(0, 0, 0);
     p.coxa_angle_limits[0] = -45;
     p.coxa_angle_limits[1] = 45;
     p.femur_angle_limits[0] = -60;

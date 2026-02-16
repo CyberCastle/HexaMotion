@@ -310,8 +310,6 @@ inline Parameters createDefaultParameters() {
     params.default_height_offset = -208.0; // Set to -tibia_length for explicit configuration
     params.robot_height = 208.0;
     params.standing_height = 150; // Initial standing height
-    params.robot_weight = 2.0;
-    params.center_of_mass = Eigen::Vector3d(0, 0, 0);
     params.coxa_angle_limits[0] = -65.0;
     params.coxa_angle_limits[1] = 65.0;
     params.femur_angle_limits[0] = -75.0;

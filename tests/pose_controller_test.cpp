@@ -27,7 +27,6 @@ int main() {
     p.default_height_offset = -208.0;
     p.robot_height = 208;
     p.standing_height = 150;
-    p.robot_weight = 6.5;
     p.height_offset = 0;
     p.time_delta = 1.0 / 50.0;
     p.coxa_angle_limits[0] = -65;

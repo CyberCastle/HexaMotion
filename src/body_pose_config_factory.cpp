@@ -126,7 +126,6 @@ std::array<StandingPoseJoints, NUM_LEGS> getDefaultStandingPoseJoints(const Para
 /**
  * @brief Create pose configuration with OpenSHC-equivalent parameters
  * @param params Robot parameters from HexaModel
- * @param config_type Type of configuration ("default", "conservative", "high_speed")
  * @return Complete pose configuration following OpenSHC structure
  *
  * Note: This creates the gait-independent body pose configuration.
@@ -136,7 +135,7 @@ std::array<StandingPoseJoints, NUM_LEGS> getDefaultStandingPoseJoints(const Para
  * - Gait parameters (gait.yaml): gait-specific stance/swing phases and offsets
  * - Auto-pose parameters (auto_pose.yaml): gait-specific compensation amplitudes
  */
-BodyPoseConfiguration createPoseConfiguration(const Parameters &params, const std::string &config_type) {
+BodyPoseConfiguration createPoseConfiguration(const Parameters &params) {
     BodyPoseConfiguration config(params);
     config.leg_stance_positions = getDefaultStandPositions(params);
     config.standing_pose_joints = getDefaultStandingPoseJoints(params);
@@ -145,8 +144,6 @@ BodyPoseConfiguration createPoseConfiguration(const Parameters &params, const st
     /** Use RobotModel analytical helper to ensure a single authoritative formula. */
     config.standing_horizontal_reach = RobotModel::computeStandingHorizontalReach(params);
 
-    /** OpenSHC equivalent pose controller parameters. */
-    config.auto_pose_type = "auto";
     /** Match OpenSHC default.yaml. */
     config.start_up_sequence = false;
     /** Match OpenSHC default.yaml. */
@@ -173,65 +170,12 @@ BodyPoseConfiguration createPoseConfiguration(const Parameters &params, const st
     config.imu_posing_enabled = params.imu_posing;
     config.auto_posing_enabled = params.auto_posing;
     config.gravity_aligned_tips_enabled = params.gravity_aligned_tips;
-    config.gravity_aligned_tips = params.gravity_aligned_tips;
-    /** Maintain hexagonal symmetry. */
-    config.force_symmetric_pose = true;
-    /** Match OpenSHC default.yaml. */
-    config.leg_manipulation_mode = "tip_control";
 
     for (int i = 0; i < NUM_LEGS; ++i) {
         config.offset_multiplier[i] = 0;
-        config.pose_negation_phase_starts[i] = 0;
-        config.pose_negation_phase_ends[i] = 0;
-        config.negation_transition_ratio[i] = 0.0;
-    }
-
-    /** Modify based on configuration type. */
-    if (config_type == "conservative") {
-        config.start_up_sequence = true;
-        /** Longer startup time. */
-        config.time_to_start = 8.0f;
-        /** Reduced limits for safety. */
-        config.max_translation.x *= 0.8f;
-        config.max_translation.y *= 0.8f;
-        config.max_translation.z *= 0.8f;
-        config.max_rotation.roll *= 0.8f;
-        config.max_rotation.pitch *= 0.8f;
-        config.max_rotation.yaw *= 0.8f;
-        config.max_translation_velocity *= 0.7f;
-        config.max_rotation_velocity *= 0.7f;
-        /** Lower swing height. */
-        config.swing_height *= 0.75f;
-    } else if (config_type == "high_speed") {
-        config.start_up_sequence = false;
-        /** Faster startup. */
-        config.time_to_start = 3.0f;
-        /** Increased limits for performance. */
-        config.max_translation.x *= 1.5f;
-        config.max_translation.y *= 1.5f;
-        config.max_translation.z *= 1.2f;
-        config.max_rotation.roll *= 1.2f;
-        config.max_rotation.pitch *= 1.2f;
-        config.max_rotation.yaw *= 1.5f;
-        config.max_translation_velocity *= 2.0f;
-        config.max_rotation_velocity *= 2.0f;
-        /** Higher swing height. */
-        config.swing_height *= 1.5f;
-        /** Disable for speed. */
-        config.gravity_aligned_tips = false;
-        config.gravity_aligned_tips_enabled = false;
     }
 
     return config;
-}
-
-/**
- * @brief Get default pose configuration using robot parameters
- * @param params Robot parameters from HexaModel
- * @return Default pose configuration calculated from robot specifications
- */
-BodyPoseConfiguration getDefaultPoseConfig(const Parameters &params) {
-    return createPoseConfiguration(params, "default");
 }
 
 /**
@@ -243,7 +187,7 @@ BodyPoseConfiguration getDefaultPoseConfig(const Parameters &params) {
 
 /** Implementation for the linker. */
 BodyPoseConfiguration getDefaultBodyPoseConfig(const Parameters &params) {
-    return createPoseConfiguration(params, "default");
+    return createPoseConfiguration(params);
 }
 
 /**

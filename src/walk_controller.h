@@ -285,7 +285,6 @@ class WalkController {
 
     /** Gait configuration system (OpenSHC equivalent). */
     GaitConfiguration current_gait_config_;
-    GaitSelectionConfig gait_selection_config_;
 
     /** Terrain adaptation system. */
     TerrainAdaptation terrain_adaptation_;

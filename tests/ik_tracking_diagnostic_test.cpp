@@ -55,7 +55,6 @@ int main() {
     GaitConfiguration tripod_gait = createGaitConfig(TRIPOD_GAIT, p);
     double leg_reach = RobotModel::computeStandingHorizontalReach(p);
     tripod_gait.step_length = leg_reach * GAIT_TRIPOD_LENGTH_FACTOR;
-    tripod_gait.time_to_max_stride = 0.75;
 
     if (!sys.setGaitConfiguration(tripod_gait)) {
         std::cerr << "ERROR: setGaitConfiguration failed" << std::endl;

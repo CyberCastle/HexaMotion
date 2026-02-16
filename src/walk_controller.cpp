@@ -21,7 +21,7 @@ WalkController::WalkController(RobotModel &m, Leg legs[NUM_LEGS], const BodyPose
       walk_state_(WALK_STOPPED), walkspace_(), odometry_ideal_(Point3D(0, 0, 0), Eigen::Quaterniond::Identity()), pose_state_(0),
       current_body_position_(Eigen::Vector3d::Zero()), current_body_orientation_(Eigen::Vector3d::Zero()),
       regenerate_walkspace_(false), legs_at_correct_phase_(0), legs_completed_first_step_(0), return_to_default_attempted_(false),
-      leg_steppers_(), current_gait_config_(), gait_selection_config_(), terrain_adaptation_(m), body_pose_controller_(nullptr),
+      leg_steppers_(), current_gait_config_(), terrain_adaptation_(m), body_pose_controller_(nullptr),
       velocity_limits_(m), current_leg_positions_{Point3D(), Point3D(), Point3D(), Point3D(), Point3D(), Point3D()}, legs_array_(legs), global_phase_(0) {
 
     standing_horizontal_reach_ = pose_config.standing_horizontal_reach; // cache from configuration
@@ -29,8 +29,6 @@ WalkController::WalkController(RobotModel &m, Leg legs[NUM_LEGS], const BodyPose
     // Initialize leg_steppers_ with references to actual legs from LocomotionSystem
     leg_steppers_.clear();
 
-    // Initialize gait configuration system (OpenSHC equivalent)
-    gait_selection_config_ = createGaitSelectionConfig(model.getParams());
     std::string default_gait_name = model.getParams().gait_type.empty() ? "tripod_gait" : model.getParams().gait_type;
     GaitType default_gait_type = RobotModel::stringToGaitType(default_gait_name);
     GaitConfiguration default_gait_config = createGaitConfig(default_gait_type, model.getParams());
@@ -110,9 +108,6 @@ bool WalkController::setGaitConfiguration(const GaitConfiguration &gait_config) 
 
     // Apply the configuration to all leg steppers
     applyGaitConfigToLegSteppers(gait_config);
-
-    // Update gait selection config
-    gait_selection_config_.current_gait = gait_config.gait_name;
 
     generateLimits();
 

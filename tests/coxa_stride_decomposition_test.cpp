@@ -131,7 +131,6 @@ int main() {
     double reach = RobotModel::computeStandingHorizontalReach(params);
     /** Replicate locomotion test configuration. */
     tripod.step_length = reach * 2.0;
-    tripod.time_to_max_stride = 0.2;
 
     if (!system.setGaitConfiguration(tripod)) {
         std::cerr << "ERROR: Unable to configure tripod gait" << std::endl;

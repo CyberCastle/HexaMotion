@@ -153,18 +153,12 @@ GaitConfiguration createWaveGaitConfig(const Parameters &params) {
     config.swing_width = 3.0;                      // mm - smaller lateral shift for wave gait (more conservative)
     config.step_frequency = params.step_frequency; // Hz - configurable global step frequency
 
-    // Use global parameters max_velocity (caps overall linear speed); factory no longer hardcodes
-    config.max_velocity = params.max_velocity; // Previously 50.0
     config.stability_factor = 0.95;
     config.supports_rough_terrain = true;
-    config.time_to_max_stride = 2.0;   // Default conservative value for wave gait
     config.stance_span_modifier = 0.1; // OpenSHC: valor por defecto para wave gait
-
-    config.description = "Wave gait: Most stable gait with sequential leg movement";
     // Propagate global control loop time delta into configuration for internal StepCycle generation
     config.time_delta = params.time_delta;
     ensureBalancedIfNeeded(config); // No-op (more than 2 groups)
-    config.step_order = {"AR", "CL", "BL", "AL", "CR", "BR"};
     return config;
 }
 
@@ -199,15 +193,9 @@ GaitConfiguration createTripodGaitConfig(const Parameters &params) {
     config.swing_width = 5.0;                      // mm - OpenSHC standard lateral shift at mid-swing
     config.step_frequency = params.step_frequency; // Hz - configurable global step frequency
 
-    // Use global parameters max_velocity instead of fixed 100.0
-    config.max_velocity = params.max_velocity;
     config.stability_factor = 0.75;
     config.supports_rough_terrain = false;
-    config.time_to_max_stride = 1.5;    // Faster than wave gait
     config.stance_span_modifier = 0.25; // OpenSHC: valor por defecto para tripod gait
-
-    config.description = "Tripod gait: Balanced speed and stability with alternating tripods";
-    config.step_order = {"AR/BL/CR", "AL/BR/CL"};
     // Set control loop resolution for generateStepCycle()
     config.time_delta = params.time_delta;
     return config;
@@ -243,16 +231,9 @@ GaitConfiguration createRippleGaitConfig(const Parameters &params) {
     config.swing_width = 7.0;                      // mm - larger lateral shift for ripple gait (more dynamic)
     config.step_frequency = params.step_frequency; // Hz - configurable global step frequency
 
-    // Use global parameters max_velocity instead of fixed 150.0 (ripple faster movement characteristic now driven by params)
-    config.max_velocity = params.max_velocity;
     config.stability_factor = 0.60;        // Moderate stability
     config.supports_rough_terrain = false; // Less suitable for rough terrain
     config.stance_span_modifier = 0.2;     // OpenSHC: valor por defecto para tripod gait
-    config.time_to_max_stride = 1.0;       // Fast acceleration
-
-    // Description
-    config.description = "Ripple gait: Faster gait with overlapping leg movements";
-    config.step_order = {"AR", "CL", "BR", "AL", "CR", "BL"};
     // Set control loop resolution for generateStepCycle()
     config.time_delta = params.time_delta;
     return config;
@@ -288,16 +269,9 @@ GaitConfiguration createMetachronalGaitConfig(const Parameters &params) {
     config.swing_width = 4.0;                      // mm - moderate lateral shift for metachronal gait (adaptive)
     config.step_frequency = params.step_frequency; // Hz - configurable global step frequency
 
-    // Use global parameters max_velocity instead of fixed 80.0 (adaptive gait shares the same global cap)
-    config.max_velocity = params.max_velocity;
     config.stability_factor = 0.85; // High stability with adaptation
     config.supports_rough_terrain = true;
     config.stance_span_modifier = 0.15; // OpenSHC: valor por defecto para ripple gait
-    config.time_to_max_stride = 1.8;    // Adaptive acceleration
-
-    // Description
-    config.description = "Metachronal gait: Adaptive gait that adjusts to terrain conditions";
-    config.step_order = {"AR", "CL", "BL", "AL", "CR", "BR"};
     // Set control loop resolution for generateStepCycle()
     config.time_delta = params.time_delta;
     return config;
@@ -327,34 +301,4 @@ GaitConfiguration createGaitConfig(GaitType gait_type, const Parameters &params)
         // Return default tripod gait for invalid types
         return createTripodGaitConfig(params);
     }
-}
-
-/**
- * @brief Create gait selection configuration with all available gaits
- * @param params Robot parameters to use for gait configuration
- * @return Complete gait selection configuration
- */
-GaitSelectionConfig createGaitSelectionConfig(const Parameters &params) {
-    GaitSelectionConfig config;
-
-    // Use the received parameters
-    // Add all available gaits
-    config.available_gaits["wave_gait"] = createWaveGaitConfig(params);
-    config.available_gaits["tripod_gait"] = createTripodGaitConfig(params);
-    config.available_gaits["ripple_gait"] = createRippleGaitConfig(params);
-    config.available_gaits["metachronal_gait"] = createMetachronalGaitConfig(params);
-
-    // Default configuration
-    config.default_gait = "tripod_gait";
-    config.current_gait = "tripod_gait";
-
-    // Transition parameters
-    config.transition_time = 1.0; // 1 second transition time
-    config.smooth_transitions = true;
-
-    // Selection criteria
-    config.min_stability_threshold = 0.5;
-    config.max_velocity_threshold = 150.0;
-
-    return config;
 }

@@ -30,7 +30,4 @@ GaitConfiguration createMetachronalGaitConfig(const Parameters &params);
  */
 GaitConfiguration createGaitConfig(GaitType gait_type, const Parameters &params);
 
-/** Gait selection configuration. */
-GaitSelectionConfig createGaitSelectionConfig(const Parameters &params);
-
 #endif /**< GAIT_CONFIG_FACTORY_H */

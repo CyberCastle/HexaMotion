@@ -372,7 +372,6 @@ int main(int argc, char **argv) {
     double leg_reach = RobotModel::computeStandingHorizontalReach(p);
     std::cout << "Leg reach (horizontal) = " << leg_reach << " mm" << std::endl;
     tripod_gait.step_length = leg_reach * GAIT_TRIPOD_LENGTH_FACTOR; // Use canonical stride to preserve gait symmetry
-    tripod_gait.time_to_max_stride = 0.75;                           // Moderate acceleration to reach steady gait without overshoot
 
     if (!sys.setGaitConfiguration(tripod_gait)) {
         std::cerr << "ERROR: Failed to set gait type." << std::endl;

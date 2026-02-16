@@ -41,15 +41,13 @@ struct StandingPoseJoints {
  * Equivalent to OpenSHC's stance positioning and body pose control system
  */
 struct BodyPoseConfiguration {
-    Parameters params;
-    BodyPoseConfiguration(const Parameters &p) : params(p) {
+    BodyPoseConfiguration(const Parameters &p) {
         /** Set defaults to silence static analysis uninitialized warnings. */
-        auto_pose_type = "none";
         start_up_sequence = false;
         time_to_start = 0.0;
         /** Default body clearance. */
-        body_clearance = params.standing_height;
-        swing_height = params.standing_height * BODY_POSE_DEFAULT_SWING_HEIGHT_FACTOR;
+        body_clearance = p.standing_height;
+        swing_height = p.standing_height * BODY_POSE_DEFAULT_SWING_HEIGHT_FACTOR;
         max_translation = {0.0, 0.0, 0.0};
         max_rotation = {0.0, 0.0, 0.0};
         max_translation_velocity = 0.0;
@@ -59,9 +57,6 @@ struct BodyPoseConfiguration {
         imu_posing_enabled = false;
         auto_posing_enabled = false;
         gravity_aligned_tips_enabled = false;
-        gravity_aligned_tips = false;
-        force_symmetric_pose = false;
-        leg_manipulation_mode = "none";
         /** Zero-initialize stance and pose arrays. */
         for (auto &ls : leg_stance_positions) {
             ls = {0.0, 0.0, 0.0};
@@ -86,10 +81,8 @@ struct BodyPoseConfiguration {
      */
     double standing_horizontal_reach;
 
-    /** OpenSHC-equivalent pose controller parameters. */
-    std::string auto_pose_type; /**< Default auto-pose cycle type. */
-    bool start_up_sequence;     /**< Allow startup and shutdown sequences. */
-    double time_to_start;       /**< Time to complete a direct startup. */
+    bool start_up_sequence; /**< Allow startup and shutdown sequences. */
+    double time_to_start;   /**< Time to complete a direct startup. */
 
     /** OpenSHC-equivalent body clearance and swing parameters. */
     double body_clearance; /**< Requested body height above ground (mm). */
@@ -118,15 +111,9 @@ struct BodyPoseConfiguration {
     bool imu_posing_enabled;           /**< Enable IMU PID pose correction. */
     bool auto_posing_enabled;          /**< Enable auto-pose contribution. */
     bool gravity_aligned_tips_enabled; /**< Enable tip gravity alignment contribution. */
-    bool gravity_aligned_tips;         /**< Align tips with gravity direction when true. */
-    bool force_symmetric_pose;         /**< Force hexagonal symmetry when true. */
-    std::string leg_manipulation_mode; /**< Leg manipulation mode identifier. */
 
-    /** OpenSHC-equivalent per-leg phase maps for auto-pose negation and offsetting. */
+    /** OpenSHC-equivalent per-leg phase map for auto-pose offsetting. */
     std::map<int, int> offset_multiplier;
-    std::map<int, int> pose_negation_phase_starts;
-    std::map<int, int> pose_negation_phase_ends;
-    std::map<int, double> negation_transition_ratio;
 };
 
 /**
