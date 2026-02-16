@@ -51,7 +51,56 @@ cd tests
 make
 ```
 
-Each test executable can be run individually.
+### Test execution policy
+
+- Run only the tests related to the components you changed.
+- Do not run the full suite for every small change; prefer focused validation first.
+- To run the complete suite, use only:
+
+```bash
+cd tests
+bash run_all_tests.sh
+```
+
+### Runtime expectations
+
+- Some integration/stress tests can take more than 7 minutes to finish, depending on machine performance.
+- Longer tests usually include: `walk_controller_test`, `tripod_walk_visualization_test`, `virtual_hardware_sim_test`, and `hexapod_trajectory_analysis_test`.
+
+### Test coverage matrix
+
+| Test                                 | What it covers                                        | Main software pieces                                                                                                                                        |
+| ------------------------------------ | ----------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `math_utils_test`                    | Math helpers and numeric primitives                   | `math_utils`                                                                                                                                                |
+| `quaternion_functions_test`          | Quaternion utility behavior                           | `math_utils`                                                                                                                                                |
+| `simple_dh_test`                     | Basic DH forward kinematics sanity                    | `robot_model`, `math_utils`, `workspace_analyzer`                                                                                                           |
+| `simple_ik_test`                     | Basic inverse kinematics sanity                       | `robot_model`, `math_utils`, `workspace_analyzer`                                                                                                           |
+| `simple_advanced_ik_test`            | Advanced IK scenarios with leg-level checks           | `robot_model`, `leg`, `math_utils`, `workspace_analyzer`                                                                                                    |
+| `kinematics_validation_test`         | FK/IK consistency and kinematic validation            | `robot_model`, `math_utils`, `workspace_analyzer`, `body_pose_config_factory`                                                                               |
+| `jacobian_validation_test`           | Jacobian validation and local differential behavior   | `robot_model`, `math_utils`, `workspace_analyzer`                                                                                                           |
+| `dh_vs_analytic_test`                | DH model equivalence against analytic model           | `robot_model`, `analytic_robot_model`, `math_utils`, `workspace_analyzer`                                                                                   |
+| `finetune_angles_test`               | Angle fine-tuning and kinematic calibration flow      | `robot_model`, `analytic_robot_model`, `math_utils`, `body_pose_config_factory`, `workspace_analyzer`                                                       |
+| `brute_force_workspace_test`         | Reachability/workspace brute-force validation         | `robot_model`, `math_utils`, `workspace_analyzer`                                                                                                           |
+| `workspace_analyzer_fusion_test`     | Workspace analysis integrated with locomotion stack   | `workspace_analyzer`, `walk_controller`, `locomotion_system`, `state_controller`, `velocity_limits`                                                         |
+| `pose_controller_test`               | Body pose control behavior and leg posing integration | `body_pose_controller`, `robot_model`, `body_pose_config_factory`, `leg`, `leg_poser`, `workspace_analyzer`                                                 |
+| `pose_gait_integration_test`         | Pose + gait end-to-end integration                    | `locomotion_system`, `state_controller`, `walk_controller`, `body_pose_controller`, `leg_stepper`, `cartesian_velocity_controller`, `admittance_controller` |
+| `walk_controller_test`               | Core gait update/orchestration logic                  | `walk_controller`, `leg_stepper`, `terrain_adaptation`, `velocity_limits`, `gait_config_factory`, `body_pose_controller`                                    |
+| `trajectory_tip_position_test`       | Single-foot tip trajectory correctness                | `walk_controller`, `leg_stepper`, `robot_model`, `velocity_limits`, `terrain_adaptation`                                                                    |
+| `trajectory_all_legs_test`           | Multi-leg synchronized trajectory generation          | `walk_controller`, `leg_stepper`, `robot_model`, `velocity_limits`, `terrain_adaptation`                                                                    |
+| `hexapod_trajectory_analysis_test`   | Global hexapod trajectory constraints and continuity  | `walk_controller`, `leg_stepper`, `robot_model`, `velocity_limits`, `gait_config_factory`                                                                   |
+| `tripod_walk_visualization_test`     | Tripod gait progression in full control stack         | `walk_controller`, `leg_stepper`, `state_controller`, `locomotion_system`, `cartesian_velocity_controller`, `admittance_controller`                         |
+| `tripod_linearity_test`              | Tripod gait linearity and path consistency            | `walk_controller`, `leg_stepper`, `state_controller`, `locomotion_system`                                                                                   |
+| `virtual_hardware_sim_test`          | Virtual hardware loop and full-stack integration      | `locomotion_system`, `state_controller`, `walk_controller`, `admittance_controller`, `cartesian_velocity_controller`, `velocity_limits`                     |
+| `bezier_validation_test`             | Bezier support checks and workspace compatibility     | `robot_model`, `math_utils`, `workspace_analyzer`                                                                                                           |
+| `bezier_transition_single_leg_test`  | Single-leg Bezier transition continuity               | `walk_controller`, `leg_stepper`, `robot_model`, `state_controller`, `locomotion_system`, `velocity_limits`                                                 |
+| `bezier_transition_all_legs_test`    | All-legs Bezier transition coherence                  | `walk_controller`, `leg_stepper`, `robot_model`, `state_controller`, `locomotion_system`, `velocity_limits`                                                 |
+| `coxa_phase_transition_test`         | Coxa phase transitions across gait cycle              | `walk_controller`, `leg_stepper`, `gait_config_factory`, `state_controller`, `locomotion_system`                                                            |
+| `coxa_stride_decomposition_test`     | Coxa stride decomposition and component isolation     | `walk_controller`, `leg_stepper`, `gait_config_factory`, `state_controller`, `locomotion_system`                                                            |
+| `stride_vector_validation_test`      | Stride vector generation and normalization            | `leg_stepper`, `velocity_limits`, `gait_config_factory`, `robot_model`, `body_pose_controller`                                                              |
+| `swing_coxa_orientation_test`        | Coxa orientation during swing phase                   | `leg_stepper`, `gait_config_factory`, `velocity_limits`, `robot_model`                                                                                      |
+| `coxa_tripod_symmetry_analytic_test` | Analytic symmetry of opposite tripod coxa behavior    | `leg_stepper`, `walk_controller`, `terrain_adaptation`, `state_controller`, `locomotion_system`, `cartesian_velocity_controller`                            |
+| `step_frequency_regeneration_test`   | Step frequency regeneration from gait parameters      | `gait_config_factory`, `robot_model`, `math_utils`, `workspace_analyzer`                                                                                    |
+| `ik_tracking_diagnostic_test`        | IK tracking diagnostics under gait progression        | `leg_stepper`, `walk_controller`, `robot_model`, `state_controller`, `locomotion_system`, `velocity_limits`                                                 |
 
 ## Physical characteristics of the robot
 
