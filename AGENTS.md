@@ -14,6 +14,7 @@ Key differences from OpenSHC:
 - `StateController` must preserve OpenSHC's functional orchestration 1:1 (state transitions, running loop sequencing, gait/pose/manual leg coordination), excluding ROS transport details.
 - `LocomotionSystem` acts as a ROS-less wrapper/facade around `StateController` for integration: it replaces the external ROS script/graph role, routes external inputs into `StateController`, and executes low-level hardware/control pipeline steps (sensors, walk update, IK, servo output).
 - `LocomotionSystem` should expose predefined high-level robot actions (e.g., forward, backward, turn left/right, stop) as convenience APIs; these are equivalent to common ROS command patterns but are provided directly as library methods.
+- Planner mode is intentionally not ported to HexaMotion; equivalent planning behavior should be implemented by an external software component using the API exposed by `LocomotionSystem`.
 - Conceptually, OpenSHC's external ROS graph/script that reads subscriptions and writes publishers is replaced by `LocomotionSystem` + direct API calls in HexaMotion.
 - No YAML configuration files; everything is configured through the `Parameters` structure.
 - OpenSHC logic is split into specific classes so the code is more readable and maintainable; the current HexaMotion organization follows this.
