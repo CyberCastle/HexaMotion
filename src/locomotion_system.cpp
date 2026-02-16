@@ -180,6 +180,32 @@ bool LocomotionSystem::legsBearingLoad() const {
     return false;
 }
 
+bool LocomotionSystem::updateDefaultConfiguration() {
+    /** OpenSHC parity: capture achieved leg joint configuration as new defaults. */
+    for (int i = 0; i < NUM_LEGS; ++i) {
+        legs[i].updateDefaultConfiguration();
+    }
+
+    /** Keep WalkController default tip references aligned with current achieved tips. */
+    if (walk_ctrl) {
+        for (int i = 0; i < NUM_LEGS; ++i) {
+            auto leg_stepper = walk_ctrl->getLegStepper(i);
+            if (leg_stepper) {
+                Pose current_tip_state = leg_stepper->getCurrentTipPoseState();
+                leg_stepper->setDefaultTipPose(current_tip_state);
+            }
+        }
+
+        /**
+         * Regenerate walkspace after default update so WorkspaceAnalyzer receives
+         * updated default/identity tip references via WalkController::generateWalkspace().
+         */
+        walk_ctrl->generateWalkspace();
+    }
+
+    return true;
+}
+
 /** System calibration. */
 bool LocomotionSystem::calibrateSystem() {
     /** Calibrate IMU. */
@@ -423,7 +449,12 @@ bool LocomotionSystem::executeStartupSequence() {
     if (startup_complete) {
         /** Initialize walk controller for RUNNING state (OpenSHC pattern). */
         walk_ctrl->init(body_position, body_orientation);
-        walk_ctrl->generateWalkspace();
+
+        /** OpenSHC parity: preserve achieved configuration as new default. */
+        if (!updateDefaultConfiguration()) {
+            last_error = KINEMATICS_ERROR;
+            return false;
+        }
 
         /** OpenSHC pattern: do not apply velocities during startup. */
         /** Velocities will be applied in update() after startup completes. */
@@ -459,7 +490,12 @@ bool LocomotionSystem::activateRunningState() {
 
     /** Initialize walk controller for RUNNING state (same as executeStartupSequence completion). */
     walk_ctrl->init(body_position, body_orientation);
-    walk_ctrl->generateWalkspace();
+
+    /** OpenSHC direct mode parity: preserve achieved configuration as new default. */
+    if (!updateDefaultConfiguration()) {
+        last_error = KINEMATICS_ERROR;
+        return false;
+    }
 
     /** Initialize leg phases based on gait pattern. */
     for (int i = 0; i < NUM_LEGS; i++) {

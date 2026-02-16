@@ -188,6 +188,11 @@ void Leg::reset() {
     resetFSRHistory();
 }
 
+void Leg::updateDefaultConfiguration() {
+    default_angles_ = joint_angles_;
+    default_tip_position_ = tip_position_;
+}
+
 double Leg::getDistanceToTarget(const Point3D &target) const {
     double dx = target.x - tip_position_.x;
     double dy = target.y - tip_position_.y;

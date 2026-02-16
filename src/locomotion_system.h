@@ -245,6 +245,17 @@ class LocomotionSystem : public StateControllerContext {
     bool setParameter(const std::string &name, double value);
 
     /** State management (OpenSHC equivalent). */
+    /**
+     * @brief Persist current achieved leg configuration as the new default reference.
+     *
+     * OpenSHC equivalent of Model::updateDefaultConfiguration(). This updates
+     * per-leg defaults and refreshes walkspace/workspace references so subsequent
+     * reachability constraints remain consistent with the new stance baseline.
+     *
+     * @return True if defaults were updated successfully.
+     */
+    bool updateDefaultConfiguration();
+
     /** Check if startup sequence is in progress. */
     bool isStartupInProgress() const { return startup_in_progress; }
     /** Check if shutdown sequence is in progress. */

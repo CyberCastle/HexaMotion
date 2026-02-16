@@ -384,6 +384,15 @@ class Leg {
     void reset();
 
     /**
+     * @brief Update default configuration from current achieved leg state.
+     *
+     * OpenSHC equivalent of Leg::updateDefaultConfiguration(): captures the
+     * current joint configuration and current tip position as the new default
+     * reference used by reset and stance-related workflows.
+     */
+    void updateDefaultConfiguration();
+
+    /**
      * @brief Get default tip position (stance position).
      * @return Default tip position in world coordinates
      */
