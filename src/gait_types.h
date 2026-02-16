@@ -50,11 +50,9 @@ enum PosingState {
 
 /** @brief Sequence execution types for pose controller transitions (OpenSHC equivalent). */
 enum SequenceSelection {
-    START_UP,        /**< Start-up sequence from ready to running. */
-    SHUT_DOWN,       /**< Shut-down sequence from running to ready. */
-    SEQUENCE_PACK,   /**< Pack sequence to packed state. */
-    SEQUENCE_UNPACK, /**< Unpack sequence from packed state. */
-    SEQUENCE_COUNT,  /**< Number of sequence types. */
+    START_UP,       /**< Start-up sequence from ready to running. */
+    SHUT_DOWN,      /**< Shut-down sequence from running to ready. */
+    SEQUENCE_COUNT, /**< Number of sequence types. */
 };
 
 /** @brief Manual pose reset modes (OpenSHC equivalent). */
