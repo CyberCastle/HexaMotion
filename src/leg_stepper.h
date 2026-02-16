@@ -53,12 +53,16 @@ class LegStepper {
 
     // Accessors
     int getLegIndex() const { return leg_index_; }
-    Point3D getCurrentTipPose() const { return current_tip_pose_; }
+    Point3D getCurrentTipPose() const { return current_tip_pose_pose_.position; }
+    Pose getCurrentTipPoseState() const { return current_tip_pose_pose_; }
     Point3D getCurrentTipVelocity() const { return current_tip_velocity_; }
     JointAngles getJointAngles() const { return leg_.getJointAngles(); }
-    Point3D getDefaultTipPose() const { return default_tip_pose_; }
-    Point3D getIdentityTipPose() const { return identity_tip_pose_; }
-    Point3D getTargetTipPose() const { return target_tip_pose_; }
+    Point3D getDefaultTipPose() const { return default_tip_pose_pose_.position; }
+    Pose getDefaultTipPoseState() const { return default_tip_pose_pose_; }
+    Point3D getIdentityTipPose() const { return identity_tip_pose_pose_.position; }
+    Pose getIdentityTipPoseState() const { return identity_tip_pose_pose_; }
+    Point3D getTargetTipPose() const { return target_tip_pose_pose_.position; }
+    Pose getTargetTipPoseState() const { return target_tip_pose_pose_; }
     StepState getStepState() const { return step_state_; }
     int getPhase() const { return phase_; }
     int getPhaseOffset() const { return leg_.getPhaseOffset(); }
@@ -125,8 +129,22 @@ class LegStepper {
         current_tip_pose_ = pose;
         leg_.setCurrentTipPositionGlobal(pose);
     }
-    void setDefaultTipPose(const Point3D &pose) { default_tip_pose_ = pose; }
-    void setTargetTipPose(const Point3D &pose) { target_tip_pose_ = pose; }
+    void setCurrentTipPose(const Pose &pose) {
+        current_tip_pose_pose_ = pose;
+        leg_.setCurrentTipPositionGlobal(pose.position);
+    }
+    void setDefaultTipPose(const Point3D &pose) {
+        default_tip_pose_ = pose;
+    }
+    void setDefaultTipPose(const Pose &pose) {
+        default_tip_pose_pose_ = pose;
+    }
+    void setTargetTipPose(const Point3D &pose) {
+        target_tip_pose_ = pose;
+    }
+    void setTargetTipPose(const Pose &pose) {
+        target_tip_pose_pose_ = pose;
+    }
     void setStepState(StepState state) { step_state_ = state; }
     void setPhase(int phase) { phase_ = phase; }
     void setExternalTarget(const LegStepperExternalTarget &target) { external_target_ = target; }
@@ -212,9 +230,7 @@ class LegStepper {
 
     // Helpers for leg-frame projections and rectilinear detection used by stance drift mitigation.
     bool isRectilinearCommand() const;
-    double computeForwardComponent(const Point3D &vec) const;
     double computeLateralComponent(const Point3D &vec) const;
-    Point3D removeLateralComponent(const Point3D &vec) const;
 
     // OpenSHC-style stride scaler calculation
     double calculateStanceStrideScaler();
@@ -232,14 +248,20 @@ class LegStepper {
     RobotModel &robot_model_;
     // Cached immutable reference to RobotModel parameters to avoid repeated lookups
     const Parameters &params_;
-    Point3D identity_tip_pose_;
-    Point3D default_tip_pose_;
+    // Pose-centric tip state (OpenSHC parity-oriented): position + orientation.
+    Pose identity_tip_pose_pose_;
+    Pose default_tip_pose_pose_;
+    Pose target_tip_pose_pose_;
+    Pose current_tip_pose_pose_;
+
+    // Legacy Point3D identifiers retained as references (aliases) to Pose.position for internal compatibility.
+    Point3D &identity_tip_pose_;
+    Point3D &default_tip_pose_;
+    Point3D &target_tip_pose_;
+    Point3D &current_tip_pose_; //< Current tip position alias to current_tip_pose_pose_.position
     Point3D origin_tip_pose_;
-    Point3D target_tip_pose_;
-    Point3D current_tip_pose_; //< Current tip pose calculated by stepper
-    double base_angle_rad_;    //< DH base orientation for this leg (radians)
-    Point3D forward_unit_;     //< Unit vector pointing along the leg's forward axis in world frame
-    Point3D lateral_unit_;     //< Unit vector orthogonal to forward axis within the walking plane
+    double base_angle_rad_; //< DH base orientation for this leg (radians)
+    Point3D lateral_unit_;  //< Unit vector orthogonal to forward axis within the walking plane
 
     // Walking state
     Point3D desired_linear_velocity_;

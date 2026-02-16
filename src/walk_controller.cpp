@@ -260,7 +260,7 @@ void WalkController::init(const Eigen::Vector3d &current_body_position, const Ei
             leg_stepper->setDefaultTipPose(stance_position);
         } // OpenSHC pattern: Initialize current tip pose to default stance position
         // This ensures LegStepper starts with proper stance coordinates
-        leg_stepper->setCurrentTipPose(leg_stepper->getDefaultTipPose());
+        leg_stepper->setCurrentTipPose(Pose(leg_stepper->getDefaultTipPose(), Eigen::Quaterniond::Identity()));
 
         // Initialize walk plane and normal so swing clearance is oriented correctly from the start
         leg_stepper->setWalkPlaneNormal(getWalkPlaneNormal());
@@ -611,7 +611,7 @@ void WalkController::updateManual(int primary_leg_index, const Eigen::Vector3d &
 
             leg.setJointAngles(angles);
             leg.updateTipPosition(); // FK update
-            leg_stepper->setCurrentTipPose(leg.getCurrentTipPositionGlobal());
+            leg_stepper->setCurrentTipPose(Pose(leg.getCurrentTipPositionGlobal(), Eigen::Quaterniond::Identity()));
         } else {
             // Tip control: move tip in cartesian space (OpenSHC tip_control path)
             Point3D desired_tip = leg.getDesiredTipPosition();
@@ -637,7 +637,7 @@ void WalkController::updateManual(int primary_leg_index, const Eigen::Vector3d &
             Point3D new_tip_position(current_pose.x + tip_position_change[0],
                                      current_pose.y + tip_position_change[1],
                                      current_pose.z + tip_position_change[2]);
-            leg_stepper->setCurrentTipPose(new_tip_position);
+            leg_stepper->setCurrentTipPose(Pose(new_tip_position, Eigen::Quaterniond::Identity()));
         }
     }
 }
@@ -662,7 +662,7 @@ void WalkController::updateManual(int primary_leg_index, const Point3D &primary_
         }
 
         if (tip_position_input.norm() > 1e-9) {
-            leg_stepper->setCurrentTipPose(tip_position_input);
+            leg_stepper->setCurrentTipPose(Pose(tip_position_input, Eigen::Quaterniond::Identity()));
         }
     }
 }
@@ -712,20 +712,6 @@ std::shared_ptr<LegStepper> WalkController::getLegStepper(int leg_index) const {
         return leg_steppers_[leg_index];
     }
     return nullptr;
-}
-
-double WalkController::calculateStabilityIndex() const {
-    // TODO: Simplified stability calculation
-    // In a real implementation, this would use IMU and FSR data
-    return 0.5f; // Default moderate stability
-}
-
-bool WalkController::checkTerrainConditions() const {
-    // TODO Simplified terrain condition check
-    // In a real implementation, this would use IMU and FSR data
-
-    // For now, return false (no challenging terrain)
-    return false;
 }
 
 WalkController::LegTrajectoryInfo WalkController::getLegTrajectoryInfo(int leg_index) const {

@@ -1,6 +1,6 @@
 #include "math_utils.h"
 #include "hexamotion_constants.h"
-#include "robot_model.h"
+#include "pose.h"
 #include <algorithm>
 #include <cmath>
 

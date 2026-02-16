@@ -10,7 +10,16 @@ LegStepper::LegStepper(int leg_index, const Point3D &identity_tip_pose, Leg &leg
       leg_(leg),
       robot_model_(robot_model),
       params_(robot_model.getParams()),
-      identity_tip_pose_(identity_tip_pose) {
+      identity_tip_pose_pose_(Pose(identity_tip_pose, Eigen::Quaterniond::Identity())),
+      default_tip_pose_pose_(identity_tip_pose_pose_),
+      target_tip_pose_pose_(identity_tip_pose_pose_),
+      current_tip_pose_pose_(identity_tip_pose_pose_),
+      identity_tip_pose_(identity_tip_pose_pose_.position),
+      default_tip_pose_(default_tip_pose_pose_.position),
+      target_tip_pose_(target_tip_pose_pose_.position),
+      current_tip_pose_(current_tip_pose_pose_.position),
+      origin_tip_pose_(identity_tip_pose),
+      frozen_target_tip_pose_(identity_tip_pose) {
 
     // Validate physical reference height (z = getDefaultHeightOffset() when all angles are 0°)
     const Parameters &params = params_; // alias for readability in constructor
@@ -25,18 +34,11 @@ LegStepper::LegStepper(int leg_index, const Point3D &identity_tip_pose, Leg &leg
         // For now, we accept the pose but note the physical reference
     }
 
-    // Initialize basic properties
-    default_tip_pose_ = identity_tip_pose_;
-    origin_tip_pose_ = identity_tip_pose_;
-    target_tip_pose_ = identity_tip_pose_;
-    current_tip_pose_ = identity_tip_pose_;
-
     // Pre-compute the leg-aligned basis once so that per-iteration projections can reuse it without
     // incurring additional trigonometric cost. This mirrors the fixed DH frame assigned to each leg.
     base_angle_rad_ = BASE_THETA_OFFSETS[leg_index_ % NUM_LEGS];
     double cos_base = std::cos(base_angle_rad_);
     double sin_base = std::sin(base_angle_rad_);
-    forward_unit_ = Point3D(cos_base, sin_base, 0.0);
     lateral_unit_ = Point3D(-sin_base, cos_base, 0.0);
 
     // Initialize state management
@@ -1004,21 +1006,6 @@ bool LegStepper::isRectilinearCommand() const {
 /**
  * @brief Project a world-frame vector onto the leg's forward axis.
  */
-double LegStepper::computeForwardComponent(const Point3D &vec) const {
-    return vec.x * forward_unit_.x + vec.y * forward_unit_.y;
-}
-
-/**
- * @brief Project a world-frame vector onto the leg's lateral axis.
- */
 double LegStepper::computeLateralComponent(const Point3D &vec) const {
     return vec.x * lateral_unit_.x + vec.y * lateral_unit_.y;
-}
-
-/**
- * @brief Remove the lateral component of a vector while preserving forward and vertical terms.
- */
-Point3D LegStepper::removeLateralComponent(const Point3D &vec) const {
-    double lateral_component = computeLateralComponent(vec);
-    return vec - (lateral_unit_ * lateral_component);
 }

@@ -6,12 +6,13 @@
  * @brief Enumeration of supported gait types.
  */
 enum GaitType {
-    NO_GAIT,
-    TRIPOD_GAIT,
-    WAVE_GAIT,
-    RIPPLE_GAIT,
+    WAVE_GAIT = 0,
+    RIPPLE_GAIT = 2,
+    TRIPOD_GAIT = 3,
     METACHRONAL_GAIT,
-    ADAPTIVE_GAIT
+    ADAPTIVE_GAIT,
+    GAIT_TYPE_COUNT,
+    NO_GAIT = -1
 };
 
 /**
