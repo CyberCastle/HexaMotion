@@ -23,6 +23,7 @@ Key differences from OpenSHC:
 - Includes tests to verify hexapod kinematics and dynamics logic.
 - Certain configurations are handled via factory patterns.
 - No dynamic configuration support.
+- `ParameterSelection` is intentionally not implemented in HexaMotion. Runtime/dynamic parameter adjustment (OpenSHC-style selector workflow) is out of scope; configuration must be provided through `LocomotionSystem` APIs and/or direct updates to the `Parameters` structure.
 
 ## Code Style
 
