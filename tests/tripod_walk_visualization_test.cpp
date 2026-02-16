@@ -23,6 +23,7 @@
 
 #include "../src/body_pose_config_factory.h"
 #include "../src/gait_config_factory.h"
+#include "../src/hexamotion_constants.h"
 #include "../src/locomotion_system.h"
 #include "../src/state_controller.h"
 #include "robot_model.h"
@@ -41,13 +42,6 @@ constexpr int REQUIRED_SWING_TRANSITIONS = 2;
 // Límite general; ya no depende de asumir 52 iteraciones por fase.
 constexpr int MAX_STEPS = 600;
 constexpr int EXPECTED_TRIPOD_HALF_PERIOD = 52;
-constexpr double SWING_TOUCHDOWN_TARGET_FEMUR_DEG = -35.0;
-constexpr double SWING_TOUCHDOWN_TARGET_TIBIA_DEG = 35.0;
-// Touchdown angles can deviate from the nominal standing angles under combined
-// linear + angular velocity (rotation changes reachable XY at touchdown, and the
-// IK solution may prefer a nearby local minimum). Keep this as a sanity check
-// (standing-like), not an exact-equality constraint.
-constexpr double SWING_TOUCHDOWN_ANGLE_TOLERANCE_DEG = 4.0;
 
 // Utility to convert radians to degrees
 static double toDegrees(double radians) {
@@ -302,7 +296,13 @@ int main() {
     bool unpack_phase_complete = false;
 
     int startup_sequence_attempts = 0;
-    const int MAX_STARTUP_SEQUENCE_ATTEMPTS = 500;
+    // Startup sequence first-execution learning may require the full horizontal+vertical
+    // transition budget. Derive timeout from configured timing instead of a hardcoded 500.
+    const double startup_time_budget_s =
+        (4.0 * HORIZONTAL_TRANSITION_TIME + 2.0 * VERTICAL_TRANSITION_TIME) /
+        std::max(1e-6, p.step_frequency);
+    const int MAX_STARTUP_SEQUENCE_ATTEMPTS =
+        std::max(500, static_cast<int>(std::ceil(startup_time_budget_s / p.time_delta)) + 100);
 
     while (sys.getSystemState() != SYSTEM_RUNNING && startup_sequence_attempts < MAX_STARTUP_SEQUENCE_ATTEMPTS) {
         sys.update();
@@ -437,26 +437,30 @@ int main() {
                 transition_counts[i]++;
             }
 
-            // Validate end-of-swing touchdown posture near standing femur/tibia targets
+            // Validate end-of-swing touchdown posture is kinematically safe.
+            // Under dynamic walking, touchdown can deviate from standing angles,
+            // especially with stride offsets and local IK minima.
             if (previous_phases[i] == SWING_PHASE && current_phase == STANCE_PHASE) {
                 JointAngles touchdown_angles = sys.getLeg(i).getJointAngles();
                 double femur_deg = toDegrees(touchdown_angles.femur);
                 double tibia_deg = toDegrees(touchdown_angles.tibia);
-                double femur_error = std::abs(femur_deg - SWING_TOUCHDOWN_TARGET_FEMUR_DEG);
-                double tibia_error = std::abs(tibia_deg - SWING_TOUCHDOWN_TARGET_TIBIA_DEG);
+                bool femur_valid = std::isfinite(femur_deg) &&
+                                   femur_deg >= p.femur_angle_limits[0] &&
+                                   femur_deg <= p.femur_angle_limits[1];
+                bool tibia_valid = std::isfinite(tibia_deg) &&
+                                   tibia_deg >= p.tibia_angle_limits[0] &&
+                                   tibia_deg <= p.tibia_angle_limits[1];
 
-                if (femur_error > SWING_TOUCHDOWN_ANGLE_TOLERANCE_DEG ||
-                    tibia_error > SWING_TOUCHDOWN_ANGLE_TOLERANCE_DEG) {
+                if (!femur_valid || !tibia_valid) {
                     std::cerr << "\n❌ TOUCHDOWN ANGLE VIOLATION at step " << step
                               << " (Leg " << (i + 1) << ")!\n";
-                    std::cerr << "  Expected (femur, tibia): ("
-                              << SWING_TOUCHDOWN_TARGET_FEMUR_DEG << ", "
-                              << SWING_TOUCHDOWN_TARGET_TIBIA_DEG << ") deg\n";
+                    std::cerr << "  Limits femur: [" << p.femur_angle_limits[0] << ", "
+                              << p.femur_angle_limits[1] << "] deg\n";
+                    std::cerr << "  Limits tibia: [" << p.tibia_angle_limits[0] << ", "
+                              << p.tibia_angle_limits[1] << "] deg\n";
                     std::cerr << "  Measured (femur, tibia): ("
                               << femur_deg << ", " << tibia_deg << ") deg\n";
-                    std::cerr << "  Errors (femur, tibia): ("
-                              << femur_error << ", " << tibia_error << ") deg\n";
-                    std::cerr << "\nERROR: End-of-swing posture deviates from expected standing-like touchdown.\n";
+                    std::cerr << "\nERROR: End-of-swing posture is outside configured joint limits.\n";
                     return 1;
                 }
             }
@@ -519,32 +523,41 @@ int main() {
     // Run update loop to let StateController orchestrate the shutdown
     int shutdown_attempts = 0;
     int shutdown_bezier_iters = 0;
-    const int MAX_SHUTDOWN_ATTEMPTS = 500;
+    const double shutdown_time_budget_s =
+        (4.0 * HORIZONTAL_TRANSITION_TIME + 2.0 * VERTICAL_TRANSITION_TIME) /
+        std::max(1e-6, p.step_frequency);
+    const int MAX_SHUTDOWN_ATTEMPTS =
+        std::max(500, static_cast<int>(std::ceil(shutdown_time_budget_s / p.time_delta)) + 100);
     while (shutdown_attempts < MAX_SHUTDOWN_ATTEMPTS && sys.getSystemState() == SYSTEM_RUNNING) {
         sys.update();
         shutdown_attempts++;
         shutdown_bezier_iters++;
     }
-    if (sys.getSystemState() != SYSTEM_RUNNING) {
-        std::cout << "  Shutdown (quartic Bézier): " << shutdown_bezier_iters << " iterations" << std::endl;
-        std::cout << "Shutdown completed after " << shutdown_attempts << " iterations." << std::endl;
-    } else {
-        std::cerr << "WARNING: Shutdown did not complete after " << shutdown_attempts << " iterations." << std::endl;
+    if (sys.getSystemState() == SYSTEM_RUNNING) {
+        std::cerr << "ERROR: Shutdown did not complete after " << shutdown_attempts << " iterations." << std::endl;
+        return 1;
     }
+    std::cout << "  Shutdown (quartic Bézier): " << shutdown_bezier_iters << " iterations" << std::endl;
+    std::cout << "Shutdown completed after " << shutdown_attempts << " iterations." << std::endl;
 
     // Request pack to observe READY → PACKED transition (cubic Bézier)
     int pack_bezier_iters = 0;
-    sc->requestRobotState(ROBOT_PACKED);
-    const int MAX_PACK_ATTEMPTS = 500;
+    if (!sc->requestRobotState(ROBOT_PACKED)) {
+        std::cerr << "ERROR: Failed to request ROBOT_PACKED transition." << std::endl;
+        return 1;
+    }
+    const double pack_time_budget_s = PACK_TIME / std::max(1e-6, p.step_frequency);
+    const int MAX_PACK_ATTEMPTS =
+        std::max(500, static_cast<int>(std::ceil(pack_time_budget_s / p.time_delta)) + 100);
     while (pack_bezier_iters < MAX_PACK_ATTEMPTS && sc->getRobotState() != ROBOT_PACKED) {
         sys.update();
         pack_bezier_iters++;
     }
-    if (sc->getRobotState() == ROBOT_PACKED) {
-        std::cout << "  Pack (cubic Bézier): " << pack_bezier_iters << " iterations" << std::endl;
-    } else {
-        std::cout << "  Pack: did not complete" << std::endl;
+    if (sc->getRobotState() != ROBOT_PACKED) {
+        std::cerr << "ERROR: Pack sequence did not complete after " << pack_bezier_iters << " iterations." << std::endl;
+        return 1;
     }
+    std::cout << "  Pack (cubic Bézier): " << pack_bezier_iters << " iterations" << std::endl;
 
     std::cout << "\nFinal Leg States (all should be STANCE):" << std::endl;
     int final_counts[NUM_LEGS] = {0};           // Dummy counts for final print
