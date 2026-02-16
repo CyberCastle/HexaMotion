@@ -98,7 +98,7 @@ class LocomotionSystem : public StateControllerContext {
     /** Joint acquisition state (OpenSHC ACQUISTION_TIME equivalent). */
     bool joint_positions_initialised_ = false;
 
-    /** Initial standing pose transition state (replaces BPC's removed S-curve mechanism). */
+    /** Initial standing pose transition state. */
     bool initial_standing_active_ = false;
 
     /** Last reported startup progress (tracked in LS, not BPC). */
@@ -315,12 +315,12 @@ class LocomotionSystem : public StateControllerContext {
     bool setRobotJointAngles(const JointAngles target_angles[NUM_LEGS]) override;
 
     /**
-     * @brief Begin non-blocking jerk-limited transition to standing pose (profiles created in BodyPoseController).
+     * @brief Begin non-blocking transition to standing pose (profiles created in BodyPoseController).
      * @return true if started or already complete.
      */
     bool establishInitialStandingPose() override;
 
-    /** Advance one iteration of the initial standing pose transition; sends servo commands for current S-curve sample. */
+    /** Advance one iteration of the initial standing pose transition; sends servo commands for the current transition sample. */
     bool stepInitialStandingPose();
 
     /** Query if initial standing pose transition is active. */
