@@ -58,7 +58,11 @@ class LocomotionSystem : public StateControllerContext {
     /** System states. */
     Eigen::Vector3d body_position;    /**< Body position [x,y,z]. */
     Eigen::Vector3d body_orientation; /**< Body orientation [roll,pitch,yaw]. */
-    Leg legs[NUM_LEGS];               /**< Leg objects containing all leg data. */
+    /** Robot kinematic model — must be declared before legs so that it is fully
+     *  constructed when the Leg initialisers reference it (C++ §15.6.2). */
+    RobotModel model;
+
+    Leg legs[NUM_LEGS]; /**< Leg objects containing all leg data. */
 
     /** Control variables. */
     bool system_enabled;
@@ -68,8 +72,6 @@ class LocomotionSystem : public StateControllerContext {
 
     /** Error variables. */
     ErrorCode last_error;
-
-    RobotModel model;
     BodyPoseController *body_pose_ctrl;
     WalkController *walk_ctrl;
     AdmittanceController *admittance_ctrl;
@@ -95,6 +97,12 @@ class LocomotionSystem : public StateControllerContext {
 
     /** Joint acquisition state (OpenSHC ACQUISTION_TIME equivalent). */
     bool joint_positions_initialised_ = false;
+
+    /** Initial standing pose transition state (replaces BPC's removed S-curve mechanism). */
+    bool initial_standing_active_ = false;
+
+    /** Last reported startup progress (tracked in LS, not BPC). */
+    int last_startup_progress_ = 0;
 
     /**
      * @brief Attempt to read initial joint positions from all servos within a timeout.
@@ -254,7 +262,7 @@ class LocomotionSystem : public StateControllerContext {
             return 100;
         if (!startup_in_progress)
             return 100;
-        return body_pose_ctrl->getStartupProgressPercent();
+        return last_startup_progress_;
     }
 
     /** Locomotion control. */
@@ -316,7 +324,7 @@ class LocomotionSystem : public StateControllerContext {
     bool stepInitialStandingPose();
 
     /** Query if initial standing pose transition is active. */
-    bool isInitialStandingPoseActive() const override { return body_pose_ctrl && body_pose_ctrl->isInitialStandingPoseActive(); }
+    bool isInitialStandingPoseActive() const override { return initial_standing_active_; }
 
     /** Set body pose with position and orientation (orientation in radians). */
     bool setBodyPose(const Eigen::Vector3d &position, const Eigen::Vector3d &orientation);

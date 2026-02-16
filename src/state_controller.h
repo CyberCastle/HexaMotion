@@ -56,24 +56,8 @@ enum PlannerMode {
     PLANNER_MODE_COUNT /**< Number of planner modes. */
 };
 
-/** Designation for potential posing states used in auto-posing. */
-enum PosingState {
-    POSE_POSING,             /**< Auto-poser objects should start their posing cycle. */
-    POSE_STOP_POSING,        /**< Auto-poser objects should end their posing cycle. */
-    POSE_POSING_COMPLETE,    /**< All auto-poser objects have completed their cycles. */
-    POSE_POSING_STATE_COUNT, /**< Number of posing states. */
-};
-
-/** Designation for potential manual pose reset input modes. */
-enum PoseResetMode {
-    POSE_RESET_NONE,           /**< No manual body pose reset requested. */
-    POSE_RESET_Z_AND_YAW,      /**< Reset z translation or yaw rotation to zero. */
-    POSE_RESET_X_AND_Y,        /**< Reset x or y translation to zero. */
-    POSE_RESET_PITCH_AND_ROLL, /**< Reset roll or pitch rotation to zero. */
-    POSE_RESET_ALL,            /**< Reset all manual body posing to zero. */
-    POSE_RESET_IMMEDIATE_ALL,  /**< Immediately reset all manual body posing to zero. */
-    POSE_RESET_MODE_COUNT,     /**< Number of pose reset modes. */
-};
+// PosingState, PoseResetMode, and SequenceSelection are defined in gait_types.h
+// (shared between BodyPoseController, StateController, and WalkController).
 
 /** Designations for potential legs within the robot model (up to 6 legs for hexapod). */
 enum LegDesignation {
@@ -85,15 +69,6 @@ enum LegDesignation {
     LEG_5,                 /**< 6th leg - middle left leg. */
     LEG_DESIGNATION_COUNT, /**< Number of leg designations. */
     LEG_UNDESIGNATED = -1, /**< Undesignated leg. */
-};
-
-/** Sequence execution types for pose controller transitions. */
-enum SequenceType {
-    SEQUENCE_START_UP,  /**< Start-up sequence from ready to running. */
-    SEQUENCE_SHUT_DOWN, /**< Shut-down sequence from running to ready. */
-    SEQUENCE_PACK,      /**< Pack sequence to packed state. */
-    SEQUENCE_UNPACK,    /**< Unpack sequence from packed state. */
-    SEQUENCE_COUNT,     /**< Number of sequence types. */
 };
 
 /** State machine configuration parameters. */
@@ -531,8 +506,6 @@ class StateController {
     int shutdown_step_;
     bool shutdown_transition_initialized_;
     int shutdown_transition_step_count_;
-    int pack_step_;
-    int unpack_step_;
     bool executing_pack_transition_;
 
     /** Initialization flag. */

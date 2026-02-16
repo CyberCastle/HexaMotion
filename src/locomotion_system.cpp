@@ -16,9 +16,10 @@
 LocomotionSystem::LocomotionSystem(const Parameters &params)
     : params(params), imu_interface(nullptr), fsr_interface(nullptr), servo_interface(nullptr),
       body_position(0.0f, 0.0f, params.standing_height), body_orientation(0.0f, 0.0f, 0.0f),
+      model(params),
       legs{Leg(0, model), Leg(1, model), Leg(2, model), Leg(3, model), Leg(4, model), Leg(5, model)},
       system_enabled(false), velocity_controller(nullptr), last_error(NO_ERROR),
-      model(params), body_pose_ctrl(nullptr), walk_ctrl(nullptr), admittance_ctrl(nullptr),
+      body_pose_ctrl(nullptr), walk_ctrl(nullptr), admittance_ctrl(nullptr),
       system_state(SYSTEM_UNKNOWN), startup_in_progress(false), shutdown_in_progress(false) {
 
     /** Initialize last logged phases for FSR debug debouncing (testing only). */
@@ -401,8 +402,10 @@ bool LocomotionSystem::executeStartupSequence() {
         return false;
     }
 
-    /** Execute the body pose controller startup sequence. */
-    bool startup_complete = body_pose_ctrl->executeStartupSequence(legs);
+    /** Execute the body pose controller startup sequence (OpenSHC executeSequence). */
+    int progress = body_pose_ctrl->executeSequence(START_UP, legs);
+    last_startup_progress_ = (progress < 0 ? 0 : progress);
+    bool startup_complete = (progress == PROGRESS_COMPLETE);
     startup_in_progress = !startup_complete;
 
     if (startup_complete) {
@@ -501,8 +504,9 @@ bool LocomotionSystem::executeShutdownSequence() {
         }
     }
 
-    /** Execute the body pose controller shutdown sequence. */
-    bool shutdown_complete = body_pose_ctrl->executeShutdownSequence(legs);
+    /** Execute the body pose controller shutdown sequence (OpenSHC executeSequence). */
+    int sd_progress = body_pose_ctrl->executeSequence(SHUT_DOWN, legs);
+    bool shutdown_complete = (sd_progress == PROGRESS_COMPLETE);
 
     if (shutdown_complete) {
         system_state = SYSTEM_READY;
@@ -615,8 +619,21 @@ bool LocomotionSystem::isStaticallyStable() {
 /** Body pose control. */
 /** Set standing pose using BodyPoseController with LegPoser. */
 bool LocomotionSystem::setStandingPose() {
-    /** Use BodyPoseController with LegPoser for pose control. */
-    bool success = body_pose_ctrl->setStandingPose(legs);
+    /** Set standing pose: apply configured joint angles to each leg (moved from BPC). */
+    if (!body_pose_ctrl->getLegPoser(0)) {
+        body_pose_ctrl->initializeLegPosers(legs);
+    }
+    for (int i = 0; i < NUM_LEGS; ++i) {
+        const auto &standing_joints = body_pose_ctrl->getBodyPoseConfig().standing_pose_joints[i];
+        JointAngles angles;
+        angles.coxa = standing_joints.coxa;
+        angles.femur = standing_joints.femur;
+        angles.tibia = standing_joints.tibia;
+        legs[i].setJointAngles(angles);
+        Point3D pos = model.forwardKinematicsGlobalCoordinates(i, angles);
+        legs[i].setCurrentTipPositionGlobal(pos);
+    }
+    bool success = true;
 
     if (success) {
         /** Ensure all legs are in STANCE_PHASE for standing pose. */
@@ -633,9 +650,12 @@ bool LocomotionSystem::setStandingPose() {
             }
         }
 
-        /** Update body position based on actual leg positions through BodyPoseController. */
-        /** The BodyPoseController handles the calculation of body position. */
-        body_position = body_pose_ctrl->calculateBodyPosition(legs);
+        /** Update body position from average leg tip height. */
+        double total_z = 0.0;
+        for (int i = 0; i < NUM_LEGS; i++) {
+            total_z += legs[i].getCurrentTipPositionGlobal().z;
+        }
+        body_position = Eigen::Vector3d(0.0, 0.0, total_z / NUM_LEGS);
 
         /** Set system state to READY (OpenSHC equivalent). */
         system_state = SYSTEM_READY;
@@ -676,7 +696,11 @@ bool LocomotionSystem::setRobotJointAngles(const JointAngles target_angles[NUM_L
     }
 
     if (body_pose_ctrl) {
-        body_position = body_pose_ctrl->calculateBodyPosition(legs);
+        double total_z = 0.0;
+        for (int i = 0; i < NUM_LEGS; i++) {
+            total_z += legs[i].getCurrentTipPositionGlobal().z;
+        }
+        body_position = Eigen::Vector3d(0.0, 0.0, total_z / NUM_LEGS);
     }
 
     return true;
@@ -685,28 +709,31 @@ bool LocomotionSystem::setRobotJointAngles(const JointAngles target_angles[NUM_L
 bool LocomotionSystem::setBodyPose(const Eigen::Vector3d &position, const Eigen::Vector3d &orientation) {
     /** Orientation expected in radians (roll, pitch, yaw). */
 
-    /** Use BodyPoseController to set the pose. */
-    bool success = body_pose_ctrl->setBodyPose(position, orientation, legs);
+    /** Apply body pose via IK to all legs (moved from BPC). */
+    Eigen::Quaterniond body_rotation = math_utils::eulerAnglesToQuaterniond(orientation);
+    Pose body_pose(Point3D(position.x(), position.y(), position.z()), body_rotation);
 
-    if (success) {
-        /** Apply the calculated joint angles to servos. */
-        for (int i = 0; i < NUM_LEGS; i++) {
-            JointAngles angles = legs[i].getJointAngles();
-            if (!setLegJointAngles(i, angles)) {
-                last_error = KINEMATICS_ERROR;
-                return false;
-            }
+    for (int i = 0; i < NUM_LEGS; i++) {
+        Point3D default_tip = legs[i].getCurrentTipPositionGlobal();
+        Point3D posed_tip = body_pose.inverseTransformVector(default_tip);
+        if (!legs[i].applyIK(posed_tip)) {
+            last_error = KINEMATICS_ERROR;
+            return false;
         }
-
-        /** Update body position and orientation. */
-        body_position = position;
-        body_orientation = orientation;
-
-        return true;
-    } else {
-        last_error = KINEMATICS_ERROR;
-        return false;
     }
+
+    /** Apply joint angles to servos. */
+    for (int i = 0; i < NUM_LEGS; i++) {
+        JointAngles angles = legs[i].getJointAngles();
+        if (!setLegJointAngles(i, angles)) {
+            last_error = KINEMATICS_ERROR;
+            return false;
+        }
+    }
+
+    body_position = position;
+    body_orientation = orientation;
+    return true;
 }
 
 bool LocomotionSystem::setManualBodyPoseInput(const Eigen::Vector3d &position, const Eigen::Vector3d &orientation) {
@@ -715,8 +742,8 @@ bool LocomotionSystem::setManualBodyPoseInput(const Eigen::Vector3d &position, c
         return false;
     }
 
-    body_pose_ctrl->setManualPoseInput(Point3D(position.x(), position.y(), position.z()),
-                                       Point3D(orientation.x(), orientation.y(), orientation.z()));
+    body_pose_ctrl->setManualPoseInput(Eigen::Vector3d(position.x(), position.y(), position.z()),
+                                       Eigen::Vector3d(orientation.x(), orientation.y(), orientation.z()));
     body_pose_ctrl->setManualPoseEnabled(true);
     return true;
 }
@@ -750,12 +777,11 @@ bool LocomotionSystem::applyManualLegInputs(int primary_leg_index,
 }
 
 bool LocomotionSystem::isSmoothMovementInProgress() const {
-    return body_pose_ctrl->isTrajectoryInProgress();
+    return false;
 }
 
 void LocomotionSystem::resetSmoothMovement() {
-    if (body_pose_ctrl)
-        body_pose_ctrl->resetTrajectory();
+    /** No-op: trajectory support removed (not in OpenSHC). */
 }
 
 /**
@@ -817,9 +843,8 @@ bool LocomotionSystem::runControlPipelineStep() {
         admittance_ctrl->updateAdmittance(legs, fsr_interface);
     }
 
-    /** Handle initial standing pose transition (non-blocking) prior to normal running. */
-    /** During initial standing S-curve we temporarily keep system_state as SYSTEM_READY until finished. */
-    if (body_pose_ctrl && body_pose_ctrl->isInitialStandingPoseActive()) {
+    /** Handle initial standing pose transition (non-blocking) using directStartup. */
+    if (initial_standing_active_) {
         if (!stepInitialStandingPose()) {
             /** Error already set. */
             return false;
@@ -853,43 +878,20 @@ bool LocomotionSystem::runControlPipelineStep() {
         for (int i = 0; i < NUM_LEGS; i++) {
             auto leg_stepper = walk_ctrl->getLegStepper(i);
             if (leg_stepper) {
-                /** Do not set StepPhase here; defer to updateLegStates() after considering FSR contact. */
-
-                /** OpenSHC pattern: use Bezier-calculated position for both swing and stance phases. */
-                /** The LegStepper.updateTipPositionIterative() correctly handles both phases. */
-                /** Swing uses Bezier curves for air movement. */
-                /** Stance uses Bezier curves for ground movement (coxa movement). */
                 Point3D desired_tip_position = leg_stepper->getCurrentTipPose();
                 legs[i].setDesiredTipPosition(desired_tip_position);
             }
         }
 
-        /** Step 2a: update body pose (partial OpenSHC PoseController::updateCurrentPose). */
-        /** We only update auto-pose modulation and walk plane pose estimation here. */
+        /** Step 2a: update composed body pose (OpenSHC PoseController::updateCurrentPose equivalent). */
         if (body_pose_ctrl) {
-
-            /** OpenSHC: master_phase is int directly from leg_stepper->getPhase() (no float conversion) */
-            int gait_phase = 0;
-            auto leg0 = walk_ctrl->getLegStepper(0);
-            if (leg0) {
-                gait_phase = leg0->getPhase();
-            }
-            body_pose_ctrl->updateCurrentPose(gait_phase, legs);
+            int robot_state = state_controller_ ? static_cast<int>(state_controller_->getRobotState()) : 0;
+            body_pose_ctrl->updateCurrentPose(robot_state, legs);
+            body_pose_ctrl->applyBodyPoseToDesiredTips(legs);
         }
 
         /** Step 2b: finalize leg phases (FSR or pure kinematic) after trajectories computed. */
         updateLegStates();
-
-        /** Step 2c: apply global body pose (translation + rotation) before per-leg auto pose adjustments. */
-        if (body_pose_ctrl) {
-            body_pose_ctrl->applyGlobalBodyPoseToDesiredTips(legs);
-        }
-
-        /** Step 2d: apply auto pose modulation to desired tip positions prior to IK. */
-        /** Horizontal components (x, y, yaw-derived) affect coxa angles (OpenSHC-style stance posing integration). */
-        if (body_pose_ctrl) {
-            body_pose_ctrl->applyAutoPoseToDesiredTips(legs);
-        }
 
         /** Step 3: apply IK to all legs at once (= OpenSHC::Model::updateModel). */
         applyInverseKinematicsToAllLegs();
@@ -1405,26 +1407,31 @@ void LocomotionSystem::publishJointAnglesToServos() {
     }
 }
 
-/** Initial standing pose establishment (OpenSHC-style Bezier transition). */
+/** Initial standing pose establishment using directStartup (OpenSHC parity). */
 bool LocomotionSystem::establishInitialStandingPose() {
     if (!servo_interface || !body_pose_ctrl) {
         last_error = SERVO_ERROR;
         return false;
     }
-    if (body_pose_ctrl->isInitialStandingPoseActive()) {
+    if (initial_standing_active_) {
         /** Already in progress; just step. */
         return stepInitialStandingPose();
     }
-    /** Refresh leg joint angles from actual servo feedback so S-curve profiles start at true hardware pose. */
-    /** If servo interface does not provide meaningful feedback, this is harmless. */
-    body_pose_ctrl->getCurrentServoPositions(servo_interface, legs);
-    /** Initialize controller-side profiles using current leg joint angles. */
-    if (!body_pose_ctrl->beginInitialStandingPoseTransition(legs)) {
-        /** No change. */
-        return false;
+    /** Refresh leg joint angles from actual servo feedback. */
+    for (int i = 0; i < NUM_LEGS; i++) {
+        JointAngles current_angles;
+        current_angles.coxa = servo_interface->getJointAngle(i, 0);
+        current_angles.femur = servo_interface->getJointAngle(i, 1);
+        current_angles.tibia = servo_interface->getJointAngle(i, 2);
+        legs[i].setJointAngles(current_angles);
+        legs[i].setCurrentTipPositionGlobal(model.forwardKinematicsGlobalCoordinates(i, current_angles));
     }
+    /** Use directStartup for joint-space transition to standing pose. */
+    if (!body_pose_ctrl->getLegPoser(0)) {
+        body_pose_ctrl->initializeLegPosers(legs);
+    }
+    initial_standing_active_ = true;
     startup_in_progress = true;
-    /** Use READY as transitional state for startup S-curve. */
     system_state = SYSTEM_READY;
     return stepInitialStandingPose();
 }
@@ -1434,96 +1441,27 @@ bool LocomotionSystem::stepInitialStandingPose() {
         last_error = SERVO_ERROR;
         return false;
     }
-    if (!body_pose_ctrl->isInitialStandingPoseActive()) {
-        /** Nothing to do. */
+    if (!initial_standing_active_) {
         return true;
     }
 
-    /** Use internal parameter set time delta. */
-    /** Time step seconds. */
-    double dt = params.time_delta;
+    /** Use directStartup to transition joints to standing configuration. */
+    int progress = body_pose_ctrl->directStartup(legs);
 
-    /** Allocate temporary buffers for positions, velocities, accelerations per joint. */
-    double positions[NUM_LEGS][3];
-    double velocities[NUM_LEGS][3];
-    double accelerations[NUM_LEGS][3];
-
+    /** Apply resulting joint angles to servos. */
     for (int i = 0; i < NUM_LEGS; ++i) {
-        JointAngles ja = legs[i].getJointAngles();
-        positions[i][0] = ja.coxa;
-        positions[i][1] = ja.femur;
-        positions[i][2] = ja.tibia;
-        velocities[i][0] = velocities[i][1] = velocities[i][2] = 0.0;
-        accelerations[i][0] = accelerations[i][1] = accelerations[i][2] = 0.0;
-    }
-
-    bool sample_ready = body_pose_ctrl->stepInitialStandingPoseTransition(legs, dt, positions, velocities, accelerations);
-    if (!sample_ready && !body_pose_ctrl->isInitialStandingPoseActive()) {
-        /** Transition finished this tick with no fresh sample; nothing to publish. */
-        return true;
-    }
-
-    /** Map radian joint state to servo commands each iteration. */
-    /** Determine speed multipliers relative to heuristic vmax per joint. */
-    /** Recompute heuristic vmax in degrees/s to convert to speed multiplier (0..1), then send acceleration when available. */
-    double angles_deg[NUM_LEGS][3];
-    double speeds[NUM_LEGS][3];
-    double accels[NUM_LEGS][3];
-
-    /** Normalize commanded speed/accel against configured servo limits (deg/s). */
-    double vmax_deg = (params.max_angular_velocity > 0.0) ? params.max_angular_velocity : DEFAULT_MAX_ANGULAR_VELOCITY;
-    double amax_deg = vmax_deg * 4.0;
-
-    for (int i = 0; i < NUM_LEGS; ++i) {
-        for (int j = 0; j < 3; ++j) {
-            double pos_rad = positions[i][j];
-            double vel_rad = velocities[i][j];
-            double acc_rad = accelerations[i][j];
-            double sign = 1.0;
-            if (j == 0)
-                sign = params.angle_sign_coxa;
-            else if (j == 1)
-                sign = params.angle_sign_femur;
-            else
-                sign = params.angle_sign_tibia;
-            angles_deg[i][j] = math_utils::radiansToDegrees(pos_rad * sign);
-            double vel_deg = math_utils::radiansToDegrees(vel_rad);
-            double speed_mult = vmax_deg > 1e-6 ? fabs(vel_deg) / vmax_deg : 0.0;
-            double acc_deg = math_utils::radiansToDegrees(acc_rad);
-            double accel_mult = amax_deg > 1e-6 ? fabs(acc_deg) / amax_deg : 0.0;
-            if (speed_mult > 1.0)
-                speed_mult = 1.0;
-            if (accel_mult > 1.0)
-                accel_mult = 1.0;
-            speeds[i][j] = speed_mult;
-            accels[i][j] = accel_mult;
-        }
-        if (!coxa_movement_enabled_) {
-            /** Freeze coxa if disabled. */
-            angles_deg[i][0] = 0.0;
-            speeds[i][0] = 0.0;
-            accels[i][0] = 0.0;
-        }
-    }
-
-    /** Prefer batch interface supporting acceleration if available. */
-    bool batch_ok = false;
-    if (servo_interface->syncSetAllJointAnglesSpeedsAccels(angles_deg, speeds, accels)) {
-        /** Full accel-capable batch path. */
-        batch_ok = true;
-    }
-    if (!batch_ok) {
-        /** Fallback: per-joint. */
-        for (int i = 0; i < NUM_LEGS; ++i) {
-            for (int j = 0; j < 3; ++j) {
-                servo_interface->setJointAngleSpeedAccel(i, j, angles_deg[i][j], speeds[i][j], accels[i][j]);
-            }
-        }
+        JointAngles angles = legs[i].getJointAngles();
+        setLegJointAngles(i, angles);
     }
 
     /** If finished, finalize state and compute body position. */
-    if (!body_pose_ctrl->isInitialStandingPoseActive()) {
-        body_position = body_pose_ctrl->calculateBodyPosition(legs);
+    if (progress == PROGRESS_COMPLETE) {
+        initial_standing_active_ = false;
+        double total_z = 0.0;
+        for (int i = 0; i < NUM_LEGS; i++) {
+            total_z += legs[i].getCurrentTipPositionGlobal().z;
+        }
+        body_position = Eigen::Vector3d(0.0, 0.0, total_z / NUM_LEGS);
         system_state = SYSTEM_READY;
         startup_in_progress = false;
         shutdown_in_progress = false;

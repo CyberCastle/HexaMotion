@@ -5,6 +5,7 @@
 #include "../src/leg_stepper.h"
 #include "../src/walk_controller.h"
 #include "../src/workspace_analyzer.h"
+#include "test_pose_helpers.h"
 #include "test_stubs.h"
 #include <algorithm>
 #include <cassert>
@@ -468,7 +469,7 @@ void testWalkPlanePoseBasicFunctionality(BodyPoseController &pose_controller, co
     }
 
     // Set standing pose to ensure legs are at proper height (150mm body clearance)
-    pose_controller.setStandingPose(test_legs);
+    testSetStandingPose(pose_controller, model, test_legs);
 
     // Validate leg heights
     for (int i = 0; i < NUM_LEGS; i++) {
@@ -488,20 +489,16 @@ void testWalkPlanePoseBasicFunctionality(BodyPoseController &pose_controller, co
     assert(std::abs(retrieved_pose.position.y - test_pose.position.y) < 0.1);
     assert(std::abs(retrieved_pose.position.z - test_pose.position.z) < 0.1);
 
-    // Test enable/disable functionality
-    pose_controller.setWalkPlanePoseEnabled(false);
-    assert(!pose_controller.isWalkPlanePoseEnabled());
-    pose_controller.setWalkPlanePoseEnabled(true);
-    assert(pose_controller.isWalkPlanePoseEnabled());
-
     // Test walk plane pose update with leg positions
-    for (int i = 0; i < 100; i++) { // Simulate multiple control loop iterations
+    // OpenSHC: updateWalkPlanePose only interpolates during swing phases.
+    // With static (non-walking) legs, the pose should remain unchanged.
+    for (int i = 0; i < 100; i++) {
         pose_controller.updateWalkPlanePose(test_legs);
     }
 
     Pose updated_pose = pose_controller.getWalkPlanePose();
-    double expected_height = 0.0; // Ground level
-    assert(std::abs(updated_pose.position.z - expected_height) < 50.0);
+    // No legs are swinging, so pose stays at the manually-set value
+    assert(std::abs(updated_pose.position.z - test_pose.position.z) < 0.1);
 
     std::cout << "  ✅ Walk plane pose basic functionality passed" << std::endl;
 }
@@ -526,44 +523,50 @@ void testWalkPlaneNormalCalculation(BodyPoseController &pose_controller, const R
     }
 
     // Set standing pose to ensure legs are at proper height (150mm body clearance)
-    pose_controller.setStandingPose(test_legs);
+    testSetStandingPose(pose_controller, model, test_legs);
 
     // Set legs to different phases to simulate stance/swing
     for (int i = 0; i < NUM_LEGS; i++) {
         // Set tripod pattern: legs 0,2,4 in stance, legs 1,3,5 in swing
         StepPhase phase = (i % 2 == 0) ? STANCE_PHASE : SWING_PHASE;
         test_legs[i].setStepPhase(phase);
+        if (phase == SWING_PHASE) {
+            test_legs[i].setSwingProgress(0.5); // Midway through swing
+        }
     }
 
+    // Reset walk plane pose to identity so we can observe the update
+    pose_controller.setWalkPlanePose(Pose::Identity());
+
     // Update walk plane pose with current leg configuration
-    // With Bézier curves, allow multiple iterations for convergence
+    // OpenSHC: walk plane updates happen during swing, using swing progress as interpolation factor
     for (int i = 0; i < 100; i++) {
         pose_controller.updateWalkPlanePose(test_legs);
     }
     Pose plane_pose = pose_controller.getWalkPlanePose();
 
-    // The walk plane should be at ground level (0mm) after applying body_clearance
-    // This represents the terrain reference level for the robot
-    double expected_height = 0.0;                                     // Ground level - walk plane represents terrain surface
-    assert(std::abs(plane_pose.position.z - expected_height) < 50.0); // Allow 50mm tolerance for Bézier smoothing
+    // The walk plane z should reflect stance leg tip heights + body clearance
+    // Stance leg tips are at z=-150, body clearance=150, so walk plane z should be near 0
+    double expected_height = 0.0;                                     // Ground level
+    assert(std::abs(plane_pose.position.z - expected_height) < 50.0);
     std::cout << "  Walk plane height: " << plane_pose.position.z << " mm (expected: " << expected_height << " mm)" << std::endl;
     std::cout << "  Body clearance maintained: " << (plane_pose.position.z + 150.0) << " mm from leg tips" << std::endl;
 
-    // Test with all legs in stance
+    // Test with all legs in stance (no swing = no walk plane update)
     for (int i = 0; i < NUM_LEGS; i++) {
         test_legs[i].setStepPhase(STANCE_PHASE);
+        test_legs[i].setSwingProgress(-1.0);
     }
-    // Allow Bézier transition to complete
+    Pose before_all_stance = pose_controller.getWalkPlanePose();
     for (int i = 0; i < 100; i++) {
         pose_controller.updateWalkPlanePose(test_legs);
     }
     Pose all_stance_pose = pose_controller.getWalkPlanePose();
     std::cout << "  All stance walk plane height: " << all_stance_pose.position.z << " mm" << std::endl;
 
-    // With all legs in stance, should be at ground level (0mm)
-    // Reuse the same expected_height variable from above
-    assert(std::abs(all_stance_pose.position.z - expected_height) < 50.0); // Allow 50mm tolerance for Bézier smoothing
-    std::cout << "  ✅ All stance walk plane height maintained at ground level" << std::endl;
+    // With all legs in stance (no swing), walk plane pose is unchanged (OpenSHC behavior)
+    assert(std::abs(all_stance_pose.position.z - before_all_stance.position.z) < 0.1);
+    std::cout << "  ✅ All stance walk plane height maintained (no swing = no update)" << std::endl;
 
     std::cout << "  ✅ Walk plane normal calculation passed" << std::endl;
 }
@@ -582,7 +585,7 @@ void testWalkPlanePoseIntegrationWithMovement(BodyPoseController &pose_controlle
     }
 
     // Set standing pose to ensure legs are at proper height (150mm body clearance)
-    pose_controller.setStandingPose(test_legs);
+    testSetStandingPose(pose_controller, model, test_legs);
 
     // Record initial walk plane pose
     Pose initial_pose = pose_controller.getWalkPlanePose();
@@ -629,7 +632,7 @@ void testWalkPlanePoseTerrainAdaptation(BodyPoseController &pose_controller, con
     }
 
     // Set standing pose to ensure legs are at proper height (150mm body clearance)
-    pose_controller.setStandingPose(test_legs);
+    testSetStandingPose(pose_controller, model, test_legs);
 
     // Reset walk plane pose to ground level before terrain adaptation test
     Pose ground_level_pose(Point3D(0.0, 0.0, 0.0), Eigen::Quaterniond::Identity());
@@ -693,7 +696,7 @@ void testBodyPoseControllerWalkControllerIntegration(BodyPoseController &pose_co
     }
 
     // Set standing pose to ensure legs are at proper height (150mm body clearance)
-    pose_controller.setStandingPose(test_legs);
+    testSetStandingPose(pose_controller, model, test_legs);
 
     // Verify that WalkController can access walk plane data through BodyPoseController
     Point3D walk_plane_position = wc.getWalkPlane();
@@ -731,7 +734,7 @@ void testWalkPlaneStabilityDuringGait(BodyPoseController &pose_controller, WalkC
     }
 
     // Set standing pose to ensure legs are at proper height (150mm body clearance)
-    pose_controller.setStandingPose(test_legs);
+    testSetStandingPose(pose_controller, model, test_legs);
 
     std::vector<double> walk_plane_heights;
     Point3D velocity(8.0, 0.0, 0.0); // 8 mm/s forward
@@ -798,7 +801,7 @@ void testGaitConfigurationValidation(const Parameters &p, BodyPoseController &po
 
     // Set standing pose to ensure legs are at proper height (150mm body clearance)
     // This positions leg tips at Z = -150mm (below ground level)
-    pose_controller.setStandingPose(test_legs);
+    testSetStandingPose(pose_controller, model, test_legs);
 
     // Allow pose controller to stabilize
     for (int i = 0; i < 100; i++) {
@@ -943,9 +946,8 @@ int main() {
     // Configure standing pose using BodyPoseController
     BodyPoseConfiguration pose_config = getDefaultBodyPoseConfig(p);
     BodyPoseController pose_controller(model, pose_config);
-    pose_controller.setWalkPlanePoseEnabled(true);
     pose_controller.initializeLegPosers(test_legs);
-    assert(pose_controller.setStandingPose(test_legs));
+    assert(testSetStandingPose(pose_controller, model, test_legs));
 
     // Initialize walk controller after setting standing pose
     WalkController wc(model, test_legs, pose_config);
@@ -956,9 +958,7 @@ int main() {
     // Test WalkController basic functionality with walk_plane_pose_
     std::cout << "\n--- Testing WalkController with walk_plane_pose_ ---" << std::endl;
 
-    // Verify walk plane pose system is enabled
-    assert(pose_controller.isWalkPlanePoseEnabled());
-    std::cout << "✅ Walk plane pose system is enabled" << std::endl;
+    std::cout << "✅ Walk plane pose system is active" << std::endl;
 
     // Get initial walk plane pose
     Pose initial_walk_plane_pose = pose_controller.getWalkPlanePose();

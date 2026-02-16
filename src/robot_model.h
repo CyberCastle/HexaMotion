@@ -161,6 +161,18 @@ struct Parameters {
         bool joint_control = true;               //< true = joint_control mode, false = tip_control mode (OpenSHC: leg_manipulation_mode)
     } manual_leg;
 
+    // OpenSHC-equivalent body posing runtime flags and velocity caps.
+    bool manual_posing = true;
+    bool inclination_posing = false;
+    bool imu_posing = false;
+    bool auto_posing = false;
+    bool gravity_aligned_tips = false;
+    double max_translation_velocity = 50.0; //< mm/s
+    double max_rotation_velocity = 0.2;     //< rad/s
+    double pose_frequency = -1.0;           //< Hz, -1 sync to gait cycle
+    int pose_phase_length = 4;
+    double time_to_start = 6.0; //< directStartup duration in seconds
+
     // Tipo de gait seleccionado (OpenSHC compatible)
     std::string gait_type;
 

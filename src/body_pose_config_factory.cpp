@@ -163,18 +163,28 @@ BodyPoseConfiguration createPoseConfiguration(const Parameters &params, const st
     config.max_translation = {25.0f, 25.0f, 25.0f};
     /** 0.25 radian rotation limits. */
     config.max_rotation = {0.25f, 0.25f, 0.25f};
-    /** 50 mm/s velocity limit. */
-    config.max_translation_velocity = 50.0f;
-    /** 0.2 rad/s rotation limit. */
-    config.max_rotation_velocity = 0.200f;
+    /** Velocity limits. */
+    config.max_translation_velocity = params.max_translation_velocity;
+    config.max_rotation_velocity = params.max_rotation_velocity;
 
     /** OpenSHC equivalent pose control flags. */
-    /** Match OpenSHC default.yaml. */
-    config.gravity_aligned_tips = false;
+    config.manual_posing_enabled = params.manual_posing;
+    config.inclination_posing_enabled = params.inclination_posing;
+    config.imu_posing_enabled = params.imu_posing;
+    config.auto_posing_enabled = params.auto_posing;
+    config.gravity_aligned_tips_enabled = params.gravity_aligned_tips;
+    config.gravity_aligned_tips = params.gravity_aligned_tips;
     /** Maintain hexagonal symmetry. */
     config.force_symmetric_pose = true;
     /** Match OpenSHC default.yaml. */
     config.leg_manipulation_mode = "tip_control";
+
+    for (int i = 0; i < NUM_LEGS; ++i) {
+        config.offset_multiplier[i] = 0;
+        config.pose_negation_phase_starts[i] = 0;
+        config.pose_negation_phase_ends[i] = 0;
+        config.negation_transition_ratio[i] = 0.0;
+    }
 
     /** Modify based on configuration type. */
     if (config_type == "conservative") {
@@ -209,6 +219,7 @@ BodyPoseConfiguration createPoseConfiguration(const Parameters &params, const st
         config.swing_height *= 1.5f;
         /** Disable for speed. */
         config.gravity_aligned_tips = false;
+        config.gravity_aligned_tips_enabled = false;
     }
 
     return config;
@@ -244,13 +255,13 @@ BodyPoseConfiguration getDefaultBodyPoseConfig(const Parameters &params) {
 AutoPoseConfiguration createAutoPoseConfigurationForGait(const Parameters &params, const std::string &gait_name) {
     /** Disabled by default. */
     AutoPoseConfiguration cfg;
-    /** Synchronized. */
-    cfg.pose_frequency = -1.0;
+    /** Synchronized by default or overridden by Parameters. */
+    cfg.pose_frequency = params.pose_frequency;
     cfg.gait_name = gait_name;
     cfg.enabled = true;
 
     if (gait_name == "tripod_gait") {
-        cfg.pose_phase_length = 4;
+        cfg.pose_phase_length = (params.pose_phase_length > 0) ? params.pose_phase_length : 4;
         cfg.pose_phase_starts = {1, 3};
         cfg.pose_phase_ends = {3, 1};
         cfg.roll_amplitudes = {-0.015, 0.015};
@@ -268,7 +279,7 @@ AutoPoseConfiguration createAutoPoseConfigurationForGait(const Parameters &param
             cfg.negation_transition_ratio[i] = 0.0;
         }
     } else if (gait_name == "wave_gait") {
-        cfg.pose_phase_length = 12;
+        cfg.pose_phase_length = (params.pose_phase_length > 0) ? params.pose_phase_length : 12;
         cfg.pose_phase_starts = {1, 3, 5, 7, 9, 11};
         cfg.pose_phase_ends = {3, 5, 7, 9, 11, 1};
         cfg.roll_amplitudes = {-0.015, 0.015, 0.015, 0.015, -0.015, -0.015};
@@ -286,7 +297,7 @@ AutoPoseConfiguration createAutoPoseConfigurationForGait(const Parameters &param
             cfg.negation_transition_ratio[i] = 0.0;
         }
     } else if (gait_name == "ripple_gait") {
-        cfg.pose_phase_length = 6;
+        cfg.pose_phase_length = (params.pose_phase_length > 0) ? params.pose_phase_length : 6;
         cfg.pose_phase_starts = {0, 1, 2, 3, 4, 5};
         cfg.pose_phase_ends = {2, 3, 4, 5, 0, 1};
         cfg.roll_amplitudes = {-0.015, 0.015, -0.015, 0.015, -0.015, 0.015};

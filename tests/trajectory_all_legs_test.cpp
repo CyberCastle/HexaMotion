@@ -5,6 +5,7 @@
 #include "../src/leg_stepper.h"
 #include "../src/walk_controller.h"
 #include "../src/workspace_analyzer.h"
+#include "test_pose_helpers.h"
 #include "test_stubs.h"
 #include <algorithm>
 #include <cassert>
@@ -489,10 +490,9 @@ int main() {
     // Configure standing pose using BodyPoseController
     BodyPoseConfiguration pose_config = getDefaultBodyPoseConfig(p);
     BodyPoseController pose_controller(model, pose_config);
-    pose_controller.setWalkPlanePoseEnabled(true);
     pose_controller.initializeLegPosers(test_legs);
 
-    bool pose_success = pose_controller.setStandingPose(test_legs);
+    bool pose_success = testSetStandingPose(pose_controller, model, test_legs);
     if (!pose_success) {
         std::cerr << "❌ ERROR: No se pudo establecer la posición de pie" << std::endl;
         return 1;

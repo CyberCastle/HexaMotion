@@ -8,6 +8,7 @@
 #include "../src/velocity_limits.h"
 #include "../src/walk_controller.h"
 #include "../src/workspace_analyzer.h"
+#include "test_pose_helpers.h"
 #include <cmath>
 #include <iostream>
 #include <vector>
@@ -106,9 +107,8 @@ int main() {
 
         BodyPoseConfiguration pose_config = getDefaultBodyPoseConfig(params);
         BodyPoseController pose_controller(model, pose_config);
-        pose_controller.setWalkPlanePoseEnabled(true);
         pose_controller.initializeLegPosers(wc_legs);
-        if (!pose_controller.setStandingPose(wc_legs)) {
+        if (!testSetStandingPose(pose_controller, model, wc_legs)) {
             std::cout << "❌ BodyPoseController failed to apply standing pose" << std::endl;
         } else {
             WalkController walk_controller(model, wc_legs, pose_config);

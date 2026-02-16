@@ -11,10 +11,10 @@
 
 /**
  * @file body_pose_controller.cpp
- * @brief Implementation of the body pose controller for HexaMotion
+ * @brief 1:1 port of OpenSHC PoseController for HexaMotion.
  *
- * This implementation is adapted from OpenSHC's PoseController but simplified for HexaMotion architecture.
- * No progress tracking - that's handled by LocomotionSystem.
+ * This file contains ONLY functional equivalents of OpenSHC's PoseController methods.
+ * Convenience/utility methods (setStandingPose, setBodyPose, etc.) live in LocomotionSystem.
  */
 
 // Internal implementation class to avoid circular dependencies
@@ -33,28 +33,18 @@ class BodyPoseController::LegPoserImpl {
 // Definition of static constexpr member declared in header
 constexpr int BodyPoseController::tripod_leg_groups[2][3];
 
+////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+// OpenSHC PoseController constructor equivalent
+////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 BodyPoseController::BodyPoseController(RobotModel &m, const BodyPoseConfiguration &config)
     : model(m), body_pose_config(config), auto_pose_enabled(false), current_gait_type_(TRIPOD_GAIT),
-      trajectory_in_progress(false), trajectory_progress(0.0), trajectory_step_count(0),
-      step_to_new_stance_current_group(0), step_to_new_stance_sequence_generated(false),
-      shutdown_sequence_initialized(false),
-      // OpenSHC state variables initialization
       executing_transition_(false), transition_step_(0), transition_step_count_(0),
       set_target_(true), proximity_alert_(false), horizontal_transition_complete_(false),
       vertical_transition_complete_(false), first_sequence_execution_(true),
       reset_transition_sequence_(true), legs_completed_step_(0), current_group_(0) {
 
-    // Initialize leg posers
     for (int i = 0; i < NUM_LEGS; i++) {
         leg_posers_[i] = nullptr;
-    }
-
-    // Initialize trajectory arrays
-    for (int i = 0; i < NUM_LEGS; i++) {
-        trajectory_start_positions[i] = Point3D(0, 0, 0);
-        trajectory_start_angles[i] = JointAngles(0, 0, 0);
-        trajectory_target_positions[i] = Point3D(0, 0, 0);
-        trajectory_target_angles[i] = JointAngles(0, 0, 0);
     }
 
     // Initialize per-leg walk plane normal snapshots (OpenSHC parity)
@@ -63,208 +53,365 @@ BodyPoseController::BodyPoseController(RobotModel &m, const BodyPoseConfiguratio
         tip_align_normal_captured_[i] = false;
     }
 
-    // Initialize walk plane pose system (OpenSHC equivalent with Bézier curves)
+    resetAllPosing();
+
+    rotation_absement_error_ = Eigen::Vector3d::Zero();
+    rotation_position_error_ = Eigen::Vector3d::Zero();
+    rotation_velocity_error_ = Eigen::Vector3d::Zero();
+
+    translation_velocity_input_ = Eigen::Vector3d::Zero();
+    rotation_velocity_input_ = Eigen::Vector3d::Zero();
+
+    // Initialize walk plane pose (OpenSHC: init())
     walk_plane_pose_ = Pose(Point3D(0.0, 0.0, body_pose_config.body_clearance), Eigen::Quaterniond::Identity());
     origin_walk_plane_pose_ = walk_plane_pose_;
-    walk_plane_pose_enabled = false;
-    walk_plane_update_threshold = 1.0; // 1mm threshold
 
-    // Initialize Bézier curve control system
-    walk_plane_bezier_in_progress = false;
-    walk_plane_bezier_time = 0.0;
-    walk_plane_bezier_duration = 1.0; // 1 second transition time
-
-    // Initialize control nodes arrays
-    for (int i = 0; i < 5; i++) {
-        walk_plane_position_nodes[i] = Point3D(0.0, 0.0, body_pose_config.body_clearance);
-        walk_plane_rotation_nodes[i] = Eigen::Quaterniond::Identity();
-    }
-
-    // Initialize auto-pose configuration (default: tripod)
+    // Initialize auto-pose configuration
     std::string gait_name = model.getParams().gait_type.empty() ? "tripod_gait" : model.getParams().gait_type;
     auto_pose_config = createAutoPoseConfigurationForGait(model.getParams(), gait_name);
+    setAutoPoseParams();
 
-    // Default pose reference (identity)
     default_pose_ = Pose::Identity();
+    manual_pose_enabled_ = body_pose_config.manual_posing_enabled;
+    inclination_pose_enabled_ = body_pose_config.inclination_posing_enabled;
+    imu_pose_enabled_ = body_pose_config.imu_posing_enabled;
+    auto_pose_enabled = body_pose_config.auto_posing_enabled;
+    tip_align_pose_enabled_ = body_pose_config.gravity_aligned_tips_enabled;
 }
 
-void BodyPoseController::setManualPoseInput(const Point3D &translation, const Point3D &rotation) {
-    Point3D clamped_translation = translation;
-    clamped_translation.x = math_utils::clamp(clamped_translation.x, -body_pose_config.max_translation.x, body_pose_config.max_translation.x);
-    clamped_translation.y = math_utils::clamp(clamped_translation.y, -body_pose_config.max_translation.y, body_pose_config.max_translation.y);
-    clamped_translation.z = math_utils::clamp(clamped_translation.z, -body_pose_config.max_translation.z, body_pose_config.max_translation.z);
-
-    Point3D clamped_rotation = rotation;
-    clamped_rotation.x = math_utils::clamp(clamped_rotation.x, -body_pose_config.max_rotation.roll, body_pose_config.max_rotation.roll);
-    clamped_rotation.y = math_utils::clamp(clamped_rotation.y, -body_pose_config.max_rotation.pitch, body_pose_config.max_rotation.pitch);
-    clamped_rotation.z = math_utils::clamp(clamped_rotation.z, -body_pose_config.max_rotation.yaw, body_pose_config.max_rotation.yaw);
-
-    manual_pose_.position = clamped_translation;
-    Eigen::Vector3d clamped_euler(clamped_rotation.x, clamped_rotation.y, clamped_rotation.z);
-    manual_pose_.rotation = math_utils::eulerAnglesToQuaterniond(clamped_euler, true);
+BodyPoseController::~BodyPoseController() {
+    for (int i = 0; i < NUM_LEGS; i++) {
+        delete leg_posers_[i];
+        leg_posers_[i] = nullptr;
+    }
 }
 
+////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+// OpenSHC PoseController::init() equivalent
+////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+void BodyPoseController::initializeLegPosers(Leg legs[NUM_LEGS]) {
+    legs_ref_ = legs;
+    for (int i = 0; i < NUM_LEGS; i++) {
+        delete leg_posers_[i];
+        leg_posers_[i] = new LegPoserImpl(i, legs[i], model);
+    }
+    setAutoPoseParams();
+    walk_plane_pose_ = Pose(Point3D(0.0, 0.0, body_pose_config.body_clearance), Eigen::Quaterniond::Identity());
+    origin_walk_plane_pose_ = walk_plane_pose_;
+}
+
+LegPoser *BodyPoseController::getLegPoser(int leg_index) const {
+    if (leg_index >= 0 && leg_index < NUM_LEGS && leg_posers_[leg_index]) {
+        return leg_posers_[leg_index]->get();
+    }
+    return nullptr;
+}
+
+////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+// OpenSHC PoseController::setAutoPoseParams() equivalent
+////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+void BodyPoseController::setAutoPoseParams() {
+    pose_frequency_ = auto_pose_config.pose_frequency;
+
+    double raw_phase_length;
+    int base_phase_length;
+
+    // Calculate posing phase length and normalisation values based off gait/posing cycle parameters
+    // (OpenSHC parity: 1:1 port of PoseController::setAutoPoseParams)
+    if (pose_frequency_ == -1.0) {
+        // Use step cycle parameters (OpenSHC: params_.stance_phase + params_.swing_phase)
+        base_phase_length = gait_stance_phase_ + gait_swing_phase_;
+        if (base_phase_length <= 0) {
+            base_phase_length = 1; // Safety fallback
+        }
+        double swing_ratio = static_cast<double>(gait_swing_phase_) / base_phase_length;
+        if (swing_ratio <= 0.0) {
+            swing_ratio = 1.0; // Safety fallback
+        }
+        double step_frequency = std::max(1e-6, model.getParams().step_frequency);
+        raw_phase_length = ((1.0 / step_frequency) / model.getTimeDelta()) / swing_ratio;
+    } else {
+        base_phase_length = auto_pose_config.pose_phase_length;
+        if (base_phase_length <= 0) {
+            int max_phase = 0;
+            for (size_t i = 0; i < auto_pose_config.pose_phase_starts.size(); ++i) {
+                max_phase = std::max(max_phase, auto_pose_config.pose_phase_starts[i]);
+            }
+            for (size_t i = 0; i < auto_pose_config.pose_phase_ends.size(); ++i) {
+                max_phase = std::max(max_phase, auto_pose_config.pose_phase_ends[i]);
+            }
+            base_phase_length = std::max(1, max_phase + 1);
+        }
+        raw_phase_length = (1.0 / std::max(1e-6, pose_frequency_)) / model.getTimeDelta();
+    }
+
+    pose_phase_length_ = math_utils::roundToEvenInt(raw_phase_length / base_phase_length) * base_phase_length;
+    if (pose_phase_length_ < base_phase_length) {
+        pose_phase_length_ = base_phase_length;
+    }
+    normaliser_ = pose_phase_length_ / std::max(1, base_phase_length);
+    if (normaliser_ < 1) {
+        normaliser_ = 1;
+    }
+
+    // Set posing negation phase variables per leg (OpenSHC parity)
+    for (int i = 0; i < NUM_LEGS; ++i) {
+        if (leg_posers_[i]) {
+            LegPoser *lp = leg_posers_[i]->get();
+            lp->setPoseNegationPhaseStart(auto_pose_config.negation_phase_start[i]);
+            lp->setPoseNegationPhaseEnd(auto_pose_config.negation_phase_end[i]);
+            lp->setNegationTransitionRatio(auto_pose_config.negation_transition_ratio[i]);
+        }
+    }
+
+    // Set reference leg for auto posing system (leg with zero phase offset) (OpenSHC parity)
+    auto_pose_reference_leg_ = 0;
+    for (auto it = body_pose_config.offset_multiplier.begin(); it != body_pose_config.offset_multiplier.end(); ++it) {
+        if (it->second == 0) {
+            auto_pose_reference_leg_ = it->first;
+            break;
+        }
+    }
+
+    // Clear any old auto-poser objects and re-populate container (OpenSHC parity)
+    auto_poser_container_.clear();
+    size_t poser_count = std::min(auto_pose_config.pose_phase_starts.size(), auto_pose_config.pose_phase_ends.size());
+    for (size_t i = 0; i < poser_count; ++i) {
+        std::shared_ptr<AutoPoser> poser = std::make_shared<AutoPoser>(static_cast<int>(i));
+        poser->setStartPhase(auto_pose_config.pose_phase_starts[i]);
+        poser->setEndPhase(auto_pose_config.pose_phase_ends[i]);
+        if (i < auto_pose_config.x_amplitudes.size())
+            poser->setXAmplitude(auto_pose_config.x_amplitudes[i]);
+        if (i < auto_pose_config.y_amplitudes.size())
+            poser->setYAmplitude(auto_pose_config.y_amplitudes[i]);
+        if (i < auto_pose_config.z_amplitudes.size())
+            poser->setZAmplitude(auto_pose_config.z_amplitudes[i]);
+        if (i < auto_pose_config.gravity_amplitudes.size())
+            poser->setGravityAmplitude(auto_pose_config.gravity_amplitudes[i]);
+        if (i < auto_pose_config.roll_amplitudes.size())
+            poser->setRollAmplitude(auto_pose_config.roll_amplitudes[i]);
+        if (i < auto_pose_config.pitch_amplitudes.size())
+            poser->setPitchAmplitude(auto_pose_config.pitch_amplitudes[i]);
+        if (i < auto_pose_config.yaw_amplitudes.size())
+            poser->setYawAmplitude(auto_pose_config.yaw_amplitudes[i]);
+        poser->resetChecks();
+        auto_poser_container_.push_back(poser);
+    }
+
+    pose_phase_ = 0;
+    auto_posing_state_ = POSING_COMPLETE;
+}
+
+////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+// OpenSHC PoseController::setManualPoseInput() equivalent (simple setter)
+////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+void BodyPoseController::setManualPoseInput(const Eigen::Vector3d &translation_velocity,
+                                            const Eigen::Vector3d &rotation_velocity) {
+    translation_velocity_input_ = translation_velocity;
+    rotation_velocity_input_ = rotation_velocity;
+}
+
+////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+// OpenSHC PoseController::updateManualPose() equivalent
+////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+void BodyPoseController::updateManualPose() {
+    const double time_delta = model.getParams().time_delta;
+    Eigen::Vector3d current_position(manual_pose_.position.x, manual_pose_.position.y, manual_pose_.position.z);
+    Eigen::Vector3d current_rotation = math_utils::quaterniondToEulerAngles(manual_pose_.rotation);
+    Eigen::Vector3d default_position(default_pose_.position.x, default_pose_.position.y, default_pose_.position.z);
+    Eigen::Vector3d default_rotation = math_utils::quaterniondToEulerAngles(default_pose_.rotation);
+    Eigen::Vector3d max_position(body_pose_config.max_translation.x,
+                                 body_pose_config.max_translation.y,
+                                 body_pose_config.max_translation.z);
+    Eigen::Vector3d max_rotation(body_pose_config.max_rotation.roll,
+                                 body_pose_config.max_rotation.pitch,
+                                 body_pose_config.max_rotation.yaw);
+
+    Eigen::Vector3d translation_limit(0.0, 0.0, 0.0);
+    Eigen::Vector3d rotation_limit(0.0, 0.0, 0.0);
+    Eigen::Vector3d translation_velocity(0.0, 0.0, 0.0);
+    Eigen::Vector3d rotation_velocity(0.0, 0.0, 0.0);
+    Eigen::Vector3d desired_position(0.0, 0.0, 0.0);
+    Eigen::Vector3d desired_rotation(0.0, 0.0, 0.0);
+
+    bool reset_translation[3] = {false, false, false};
+    bool reset_rotation[3] = {false, false, false};
+    switch (pose_reset_mode_) {
+    case Z_AND_YAW_RESET:
+        reset_translation[2] = true;
+        reset_rotation[2] = true;
+        break;
+    case X_AND_Y_RESET:
+        reset_translation[0] = true;
+        reset_translation[1] = true;
+        break;
+    case PITCH_AND_ROLL_RESET:
+        reset_rotation[0] = true;
+        reset_rotation[1] = true;
+        break;
+    case ALL_RESET:
+        for (int i = 0; i < 3; ++i) {
+            reset_translation[i] = true;
+            reset_rotation[i] = true;
+        }
+        break;
+    case IMMEDIATE_ALL_RESET:
+        manual_pose_ = default_pose_;
+        return;
+    default:
+        break;
+    }
+
+    for (int i = 0; i < 3; ++i) {
+        if (reset_translation[i]) {
+            double diff = current_position[i] - default_position[i];
+            if (diff < 0.0) {
+                translation_velocity_input_[i] = 1.0;
+            } else if (diff > 0.0) {
+                translation_velocity_input_[i] = -1.0;
+            }
+        }
+        if (reset_rotation[i]) {
+            double diff = current_rotation[i] - default_rotation[i];
+            if (diff < 0.0) {
+                rotation_velocity_input_[i] = 1.0;
+            } else if (diff > 0.0) {
+                rotation_velocity_input_[i] = -1.0;
+            }
+        }
+
+        translation_velocity[i] = translation_velocity_input_[i] * body_pose_config.max_translation_velocity;
+        rotation_velocity[i] = rotation_velocity_input_[i] * body_pose_config.max_rotation_velocity;
+
+        desired_position[i] = current_position[i] + translation_velocity[i] * time_delta;
+        desired_rotation[i] = current_rotation[i] + rotation_velocity[i] * time_delta;
+
+        translation_limit[i] = math_utils::sign(translation_velocity[i]) * max_position[i];
+        if (reset_translation[i] && default_position[i] < max_position[i] && default_position[i] > -max_position[i]) {
+            translation_limit[i] = default_position[i];
+        }
+
+        bool positive_translation_velocity = math_utils::sign(translation_velocity[i]) > 0;
+        bool exceeds_positive_translation_limit = positive_translation_velocity && desired_position[i] > translation_limit[i];
+        bool exceeds_negative_translation_limit = !positive_translation_velocity && desired_position[i] < translation_limit[i];
+        if (exceeds_positive_translation_limit || exceeds_negative_translation_limit) {
+            translation_velocity[i] = (translation_limit[i] - current_position[i]) / time_delta;
+        }
+
+        rotation_limit[i] = math_utils::sign(rotation_velocity[i]) * max_rotation[i];
+        if (reset_rotation[i] && default_rotation[i] < max_rotation[i] && default_rotation[i] > -max_rotation[i]) {
+            rotation_limit[i] = default_rotation[i];
+        }
+
+        bool positive_rotation_velocity = math_utils::sign(rotation_velocity[i]) > 0;
+        bool exceeds_positive_rotation_limit = positive_rotation_velocity && desired_rotation[i] > rotation_limit[i];
+        bool exceeds_negative_rotation_limit = !positive_rotation_velocity && desired_rotation[i] < rotation_limit[i];
+        if (exceeds_positive_rotation_limit || exceeds_negative_rotation_limit) {
+            rotation_velocity[i] = (rotation_limit[i] - current_rotation[i]) / time_delta;
+        }
+
+        desired_position[i] = current_position[i] + translation_velocity[i] * time_delta;
+        desired_rotation[i] = current_rotation[i] + rotation_velocity[i] * time_delta;
+    }
+
+    manual_pose_.position = Point3D(desired_position.x(), desired_position.y(), desired_position.z());
+    manual_pose_.rotation = math_utils::correctRotation(math_utils::eulerAnglesToQuaterniond(desired_rotation, true),
+                                                        Eigen::Quaterniond::Identity());
+}
+
+////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+// OpenSHC PoseController::updateInclinationPose() equivalent
+////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+void BodyPoseController::updateInclinationPose() {
+    if (!imu_data_valid_) {
+        inclination_pose_ = Pose::Identity();
+        return;
+    }
+
+    Eigen::Quaterniond imu_orientation = Eigen::Quaterniond::Identity();
+    if (imu_data_.absolute_data.absolute_orientation_valid) {
+        Eigen::Vector3d imu_euler(math_utils::degreesToRadians(imu_data_.absolute_data.absolute_roll),
+                                  math_utils::degreesToRadians(imu_data_.absolute_data.absolute_pitch),
+                                  math_utils::degreesToRadians(imu_data_.absolute_data.absolute_yaw));
+        imu_orientation = math_utils::eulerAnglesToQuaterniond(imu_euler);
+    } else {
+        Eigen::Vector3d imu_euler(math_utils::degreesToRadians(imu_data_.roll),
+                                  math_utils::degreesToRadians(imu_data_.pitch),
+                                  math_utils::degreesToRadians(imu_data_.yaw));
+        imu_orientation = math_utils::eulerAnglesToQuaterniond(imu_euler);
+    }
+
+    Eigen::Quaterniond compensation_combined = (manual_pose_.rotation * auto_pose_.rotation).normalized();
+    Eigen::Quaterniond compensation_removed = (imu_orientation * compensation_combined.inverse()).normalized();
+    Eigen::Vector3d euler = math_utils::quaterniondToEulerAngles(compensation_removed);
+
+    double longitudinal = -body_pose_config.body_clearance * std::tan(euler[1]);
+    double lateral = body_pose_config.body_clearance * std::tan(euler[0]);
+    longitudinal = math_utils::clamp(longitudinal, -body_pose_config.max_translation.x, body_pose_config.max_translation.x);
+    lateral = math_utils::clamp(lateral, -body_pose_config.max_translation.y, body_pose_config.max_translation.y);
+
+    inclination_pose_.position = Point3D(longitudinal, lateral, 0.0);
+    inclination_pose_.rotation = Eigen::Quaterniond::Identity();
+}
+
+////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+// IMU data input (replaces ROS subscription in OpenSHC)
+////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 void BodyPoseController::setIMUData(const IMUData &imu_data) {
     imu_data_ = imu_data;
     imu_data_valid_ = imu_data.is_valid;
 }
 
-// -------------------------------------------------------------------------------------------------
-// NOTE OpenSHC PoseController::updateCurrentPose adaptation status
-// Implemented here (1:1 with OpenSHC unless noted):
-//  - Walk plane pose estimation (height + normal) with Bézier smoothing and clearance integration.
-//  - Multi-layer body pose composition (walk plane -> manual -> inclination -> IMU/auto -> tip align -> IK error).
-//  - Inclination posing with manual+auto rotation compensation removal (OpenSHC parity).
-//  - IMU and auto-pose mutual exclusion (OpenSHC parity: if/else pattern).
-//  - Auto pose per‑leg modulation plus stance‑leg averaged global_auto_pose_ (removal/addition ordering mirrors OpenSHC).
-//  - Tip alignment pose with per-leg walk plane normal snapshots frozen at swing start (OpenSHC parity).
-//  - IK error compensation pose (disabled by default — commented out in OpenSHC).
-//  - Default (zero-moment) pose for leg manipulation balance (disabled by default — commented out in OpenSHC).
-//
-// Missing / Deferred relative to full OpenSHC PoseController capabilities:
-//  - Manual / external body pose input filtering & interpolation inside updateCurrentPose (currently externalised).
-//  - Pose reset / recovery and progress tracking sequences (startup/shutdown progress only partially elsewhere).
-//  - Dynamic stiffness / compliance modulation tied to pose transitions.
-//  - Advanced quaternion averaging (current incremental SLERP adequate for small auto pose deltas only).
-//  - Per-leg asymmetric stance weighting / adaptive exclusion for slipping or faulted legs.
-//  - Velocity & acceleration limiting of body pose changes beyond Bézier walk plane smoothing.
-//
-// Rationale: Non-critical layers (admittance) are centralised in LocomotionSystem or dedicated modules
-// to keep this controller focused on geometric walk plane maintenance plus auto pose synthesis. Items above remain TODOs for
-// future parity with full OpenSHC if required.
-void BodyPoseController::updateCurrentPose(int gait_phase, Leg legs[NUM_LEGS]) {
-    // Keep walk plane pose coherent with current stance distribution.
-    updateWalkPlanePose(legs);
-
-    // Compose global body pose (OpenSHC order: walk plane -> manual -> inclination -> IMU).
+////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+// OpenSHC PoseController::updateCurrentPose() equivalent
+////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+void BodyPoseController::updateCurrentPose(int robot_state, Leg legs[NUM_LEGS]) {
     Pose new_pose = Pose::Identity();
+
+    updateWalkPlanePose(legs);
     new_pose = new_pose.addPose(walk_plane_pose_);
 
     if (manual_pose_enabled_) {
+        updateManualPose();
         new_pose = new_pose.addPose(manual_pose_);
     }
 
-    if (inclination_pose_enabled_ && imu_data_valid_) {
-        // Build IMU orientation quaternion
-        Eigen::Quaterniond imu_orientation = Eigen::Quaterniond::Identity();
-        if (imu_data_.absolute_data.absolute_orientation_valid) {
-            Eigen::Vector3d euler_rad(math_utils::degreesToRadians(imu_data_.absolute_data.absolute_roll),
-                                      math_utils::degreesToRadians(imu_data_.absolute_data.absolute_pitch),
-                                      math_utils::degreesToRadians(imu_data_.absolute_data.absolute_yaw));
-            imu_orientation = math_utils::eulerAnglesToQuaterniond(euler_rad);
-        } else {
-            Eigen::Vector3d euler_rad(math_utils::degreesToRadians(imu_data_.roll),
-                                      math_utils::degreesToRadians(imu_data_.pitch),
-                                      math_utils::degreesToRadians(imu_data_.yaw));
-            imu_orientation = math_utils::eulerAnglesToQuaterniond(euler_rad);
-        }
-
-        // Remove manual + auto pose rotation compensation (OpenSHC parity:
-        // isolate terrain inclination from any manually or automatically applied rotations)
-        Eigen::Quaterniond compensation_combined =
-            (manual_pose_.rotation * global_auto_pose_.rotation).normalized();
-        Eigen::Quaterniond compensation_removed =
-            (imu_orientation * compensation_combined.inverse()).normalized();
-        Eigen::Vector3d compensated_euler = math_utils::quaterniondToEulerAngles(compensation_removed);
-
-        double longitudinal = -body_pose_config.body_clearance * std::tan(compensated_euler.y());
-        double lateral = body_pose_config.body_clearance * std::tan(compensated_euler.x());
-        longitudinal = math_utils::clamp(longitudinal, -body_pose_config.max_translation.x, body_pose_config.max_translation.x);
-        lateral = math_utils::clamp(lateral, -body_pose_config.max_translation.y, body_pose_config.max_translation.y);
-        inclination_pose_.position = Point3D(longitudinal, lateral, 0.0);
-        inclination_pose_.rotation = Eigen::Quaterniond::Identity();
+    if (inclination_pose_enabled_) {
+        updateInclinationPose();
         new_pose = new_pose.addPose(inclination_pose_);
     }
 
-    // IMU and auto-pose are mutually exclusive (OpenSHC parity: if/else pattern)
-    if (imu_pose_enabled_ && imu_data_valid_) {
+    bool running_state = (robot_state > 1);
+    if (imu_pose_enabled_ && imu_data_valid_ && running_state) {
         updateIMUPosePID();
         new_pose = new_pose.addPose(imu_pose_);
+    } else if (auto_pose_enabled && auto_pose_config.enabled) {
+        updateAutoPose(legs);
+        new_pose = new_pose.addPose(auto_pose_);
     }
 
-    // Tip alignment pose (experimental, 3DOF legs only) - OpenSHC equivalent
     if (tip_align_pose_enabled_) {
         updateTipAlignPose(legs);
         new_pose = new_pose.addPose(tip_align_pose_);
     }
 
-    // IK error compensation pose - OpenSHC equivalent
     if (ik_error_pose_enabled_) {
         updateIKErrorPose(legs);
         new_pose = new_pose.addPose(ik_error_pose_);
     }
 
-    // Default (zero-moment) pose for balance during leg manipulation
     if (default_pose_enabled_) {
         calculateDefaultPose(legs);
+        new_pose = new_pose.addPose(default_pose_);
     }
 
     body_pose_current_ = new_pose;
-
-    // Update (but do NOT yet apply) auto-pose patterning. We aggregate into global_auto_pose_
-    // and per-leg posers; actual spatial effect on desired tip positions happens in
-    // applyAutoPoseToDesiredTips() just before IK (mirrors OpenSHC ordering: compose then apply).
-    // NOTE: Auto-pose and IMU posing are mutually exclusive (OpenSHC parity: if/else pattern).
-    // When IMU posing is active, auto-pose updates are skipped; stale values persist for per-leg application.
-    bool imu_posing_active = imu_pose_enabled_ && imu_data_valid_;
-    if (!imu_posing_active && auto_pose_enabled && auto_pose_config.enabled) {
-        // Run phase update => populates each leg poser auto_pose_ (negated windows) and computes base amplitudes.
-        updateAutoPose(gait_phase, legs);
-        // Reconstruct a global base auto pose by averaging per‑leg auto poses of stance legs (OpenSHC analogue).
-        // Rationale: In OpenSHC, auto_pose_ aggregates multiple AutoPoser outputs before leg-specific negations.
-        // Here each LegPoser holds its own per-leg pose; we approximate the shared component by averaging stance legs.
-        int count = 0;
-        Eigen::Vector3d accum_pos(0, 0, 0);
-        std::vector<Eigen::Quaterniond> quats;
-        for (int i = 0; i < NUM_LEGS; ++i) {
-            if (!leg_posers_[i])
-                continue;
-            if (legs[i].getStepPhase() != STANCE_PHASE)
-                continue; // only stance legs contribute to stable body estimate
-            Pose lp_pose = leg_posers_[i]->get()->getAutoPose();
-            accum_pos += Eigen::Vector3d(lp_pose.position.x, lp_pose.position.y, lp_pose.position.z);
-            quats.push_back(lp_pose.rotation);
-            ++count;
-        }
-        if (count == 0) { // fallback: use all legs if no stance legs (rare edge during full aerial phase)
-            for (int i = 0; i < NUM_LEGS; ++i) {
-                if (!leg_posers_[i])
-                    continue;
-                Pose lp_pose = leg_posers_[i]->get()->getAutoPose();
-                accum_pos += Eigen::Vector3d(lp_pose.position.x, lp_pose.position.y, lp_pose.position.z);
-                quats.push_back(lp_pose.rotation);
-                ++count;
-            }
-        }
-        if (count > 0) {
-            Eigen::Vector3d avg_pos = accum_pos / static_cast<double>(count);
-            // Quaternion averaging (incremental slerp) – adequate for small pose deviations typical of auto pose.
-            Eigen::Quaterniond avg_q = Eigen::Quaterniond::Identity();
-            int qi = 0;
-            for (const auto &q : quats) {
-                if (qi == 0) {
-                    avg_q = q;
-                } else {
-                    double w = 1.0 / static_cast<double>(qi + 1);
-                    avg_q = avg_q.slerp(w, q);
-                }
-                ++qi;
-            }
-            global_auto_pose_.position = Point3D(avg_pos.x(), avg_pos.y(), avg_pos.z());
-            global_auto_pose_.rotation = avg_q.normalized();
-        } else {
-            global_auto_pose_ = Pose::Identity();
-        }
-    } else {
-        global_auto_pose_ = Pose::Identity();
-    }
 }
 
-// ================================================================================================
-// OpenSHC PID-based IMU posing (PoseController::updateIMUPose equivalent)
-// ================================================================================================
+////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+// OpenSHC PoseController::updateIMUPose() equivalent
+////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 void BodyPoseController::updateIMUPosePID() {
-    // Obtain current IMU orientation as quaternion
     Eigen::Quaterniond current_rotation = Eigen::Quaterniond::Identity();
     if (imu_data_.absolute_data.absolute_orientation_valid) {
         Eigen::Vector3d euler_rad(math_utils::degreesToRadians(imu_data_.absolute_data.absolute_roll),
@@ -279,54 +426,37 @@ void BodyPoseController::updateIMUPosePID() {
     }
     current_rotation = math_utils::correctRotation(current_rotation, Eigen::Quaterniond::Identity());
 
-    // Target rotation from manual pose component
     Eigen::Quaterniond target_rotation = math_utils::correctRotation(manual_pose_.rotation,
                                                                      Eigen::Quaterniond::Identity());
 
-    // Rotation error: current * target^-1
     Eigen::Quaterniond rotation_error = (current_rotation * target_rotation.inverse()).normalized();
 
-    // PID gains from parameters
     double kp = model.getParams().body_comp.imu_pid_kp;
     double ki = model.getParams().body_comp.imu_pid_ki;
     double kd = model.getParams().body_comp.imu_pid_kd;
     double time_delta = model.getParams().time_delta;
 
-    // Position error (euler angles) - zero yaw compensation
     rotation_position_error_ = math_utils::quaterniondToEulerAngles(rotation_error);
     rotation_position_error_[2] = 0.0;
 
-    // IMU posing deadband (OpenSHC default 0.0 radians)
     constexpr double IMU_POSING_DEADBAND = 0.0;
     if (rotation_position_error_.norm() < IMU_POSING_DEADBAND) {
         return;
     }
 
-    // Integrate position error to absement
     rotation_absement_error_ += rotation_position_error_ * time_delta;
 
-    // Low-pass filter of IMU angular velocity data (OpenSHC smoothing_factor = 0.15)
     constexpr double smoothing_factor = 0.15;
-    Eigen::Vector3d angular_velocity = Eigen::Vector3d::Zero();
-    if (imu_data_.absolute_data.absolute_orientation_valid) {
-        // Use gyroscope data directly (deg/s -> rad/s)
-        angular_velocity = Eigen::Vector3d(math_utils::degreesToRadians(imu_data_.gyro_x),
-                                           math_utils::degreesToRadians(imu_data_.gyro_y),
-                                           math_utils::degreesToRadians(imu_data_.gyro_z));
-    } else {
-        angular_velocity = Eigen::Vector3d(math_utils::degreesToRadians(imu_data_.gyro_x),
-                                           math_utils::degreesToRadians(imu_data_.gyro_y),
-                                           math_utils::degreesToRadians(imu_data_.gyro_z));
-    }
+    Eigen::Vector3d angular_velocity(math_utils::degreesToRadians(imu_data_.gyro_x),
+                                     math_utils::degreesToRadians(imu_data_.gyro_y),
+                                     math_utils::degreesToRadians(imu_data_.gyro_z));
     rotation_velocity_error_ = smoothing_factor * (-angular_velocity) +
                                (1.0 - smoothing_factor) * rotation_velocity_error_;
 
-    // PID correction
     Eigen::Vector3d rotation_correction = -(kd * rotation_velocity_error_ +
                                             kp * rotation_position_error_ +
                                             ki * rotation_absement_error_);
 
-    // Clamp within rotation limits
     double max_roll = body_pose_config.max_rotation.roll;
     double max_pitch = body_pose_config.max_rotation.pitch;
     if (max_roll > 0.0) {
@@ -335,14 +465,11 @@ void BodyPoseController::updateIMUPosePID() {
     if (max_pitch > 0.0) {
         rotation_correction[1] = math_utils::clamp(rotation_correction[1], -max_pitch, max_pitch);
     }
-    // Preserve target yaw (no compensation in yaw)
     Eigen::Vector3d target_euler = math_utils::quaterniondToEulerAngles(target_rotation);
     rotation_correction[2] = target_euler[2];
 
-    // Stability check (OpenSHC STABILITY_THRESHOLD = 100)
     constexpr double STABILITY_THRESHOLD = 100.0;
     if (rotation_correction.norm() > STABILITY_THRESHOLD) {
-        // IMU compensation unstable - reset PID state
         rotation_absement_error_ = Eigen::Vector3d::Zero();
         rotation_velocity_error_ = Eigen::Vector3d::Zero();
         return;
@@ -353,9 +480,9 @@ void BodyPoseController::updateIMUPosePID() {
     imu_pose_.position = Point3D(0.0, 0.0, 0.0);
 }
 
-// ================================================================================================
-// OpenSHC calculateDefaultPose equivalent - zero-moment body offset
-// ================================================================================================
+////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+// OpenSHC PoseController::calculateDefaultPose() equivalent
+////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 void BodyPoseController::calculateDefaultPose(Leg legs[NUM_LEGS]) {
     int legs_loaded = 0;
     int legs_transitioning = 0;
@@ -370,7 +497,6 @@ void BodyPoseController::calculateDefaultPose(Leg legs[NUM_LEGS]) {
         }
     }
 
-    // Only recalculate when legs are transitioning states
     if (legs_transitioning != 0) {
         if (recalculate_default_pose_) {
             Eigen::Vector3d zero_moment_offset = Eigen::Vector3d::Zero();
@@ -378,7 +504,6 @@ void BodyPoseController::calculateDefaultPose(Leg legs[NUM_LEGS]) {
             for (int i = 0; i < NUM_LEGS; ++i) {
                 LegState state = legs[i].getLegState();
                 if (state == LEG_WALKING || state == LEG_MANUAL_TO_WALKING) {
-                    // Use default stance positions for zero-moment calculation
                     const auto &stance = body_pose_config.leg_stance_positions[i];
                     zero_moment_offset[0] += stance.x;
                     zero_moment_offset[1] += stance.y;
@@ -406,30 +531,22 @@ void BodyPoseController::calculateDefaultPose(Leg legs[NUM_LEGS]) {
     }
 }
 
-// ================================================================================================
-// OpenSHC updateTipAlignPose equivalent - align final joint with tip along walk plane normal
-// ================================================================================================
+////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+// OpenSHC PoseController::updateTipAlignPose() equivalent
+////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 void BodyPoseController::updateTipAlignPose(Leg legs[NUM_LEGS]) {
     for (int i = 0; i < NUM_LEGS; ++i) {
         if (!leg_posers_[i])
             continue;
 
-        // Check if leg is in swing phase with valid progress
         double swing_progress = legs[i].getSwingProgress();
         if (swing_progress < 0.0 || swing_progress > 1.0) {
-            // Leg not in swing — release capture flag for next swing period
             tip_align_normal_captured_[i] = false;
             continue;
         }
 
-        // Freeze walk plane normal at swing start (OpenSHC parity: per-leg snapshot
-        // prevents jitter from terrain estimate changes mid-swing)
         if (!tip_align_normal_captured_[i]) {
-            if (walk_plane_pose_enabled) {
-                tip_align_walk_plane_normals_[i] = walk_plane_pose_.rotation * Eigen::Vector3d::UnitZ();
-            } else {
-                tip_align_walk_plane_normals_[i] = Eigen::Vector3d::UnitZ();
-            }
+            tip_align_walk_plane_normals_[i] = walk_plane_pose_.rotation * Eigen::Vector3d::UnitZ();
             tip_align_normal_captured_[i] = true;
         }
 
@@ -437,12 +554,8 @@ void BodyPoseController::updateTipAlignPose(Leg legs[NUM_LEGS]) {
         Eigen::Quaterniond walk_plane_rotation = Eigen::Quaterniond::FromTwoVectors(
             Eigen::Vector3d::UnitZ(), walk_plane_normal);
 
-        // Calculate vector from tip position to last joint position (tibia pivot).
-        // Trigonometric computation equivalent to OpenSHC's full FK chain for 3DOF legs
-        // (valid when all DH link d-offsets are zero).
         double tibia_length = model.getParams().tibia_length;
         JointAngles angles = legs[i].getJointAngles();
-        // OpenSHC parity: joint angles and BASE_THETA_OFFSETS are both in radians.
         double femur_angle_rad = angles.femur;
         double tibia_angle_rad = angles.tibia;
         double leg_angle = BASE_THETA_OFFSETS[i] + angles.coxa;
@@ -454,13 +567,11 @@ void BodyPoseController::updateTipAlignPose(Leg legs[NUM_LEGS]) {
             z_component);
         double link_length = tip_to_joint.norm();
 
-        // Body translation to align joint inline with tip along walk plane normal (OpenSHC algorithm)
         Eigen::Vector3d a = walk_plane_rotation._transformVector(tip_to_joint);
         Eigen::Vector3d b = link_length * walk_plane_normal;
         Eigen::Vector3d rejection = a - (a.dot(b) / b.dot(b)) * b;
         Eigen::Vector3d translation_to_alignment = -rejection;
 
-        // Component of current translation aligned with walk plane
         a = Eigen::Vector3d(tip_align_pose_.position.x, tip_align_pose_.position.y, tip_align_pose_.position.z);
         b = walk_plane_normal;
         rejection = a - (a.dot(b) / b.dot(b)) * b;
@@ -468,7 +579,6 @@ void BodyPoseController::updateTipAlignPose(Leg legs[NUM_LEGS]) {
 
         Eigen::Vector3d target_translation = current_walk_plane_aligned + translation_to_alignment;
 
-        // Clamp within limits (OpenSHC: clamped(target_translation, limit))
         if (body_pose_config.max_translation.x > 0.0) {
             target_translation[0] = math_utils::clamp(target_translation[0],
                                                       -body_pose_config.max_translation.x, body_pose_config.max_translation.x);
@@ -482,7 +592,6 @@ void BodyPoseController::updateTipAlignPose(Leg legs[NUM_LEGS]) {
                                                       -body_pose_config.max_translation.z, body_pose_config.max_translation.z);
         }
 
-        // Interpolate using Pose::interpolate (1:1 with OpenSHC)
         double c = math_utils::smoothStep(swing_progress);
         if (swing_progress < 0.5) {
             c = math_utils::smoothStep(c * 2.0);
@@ -494,19 +603,17 @@ void BodyPoseController::updateTipAlignPose(Leg legs[NUM_LEGS]) {
                         Eigen::Quaterniond::Identity()));
         }
 
-        // Save origin for next swing period interpolation
         if (swing_progress >= 1.0) {
             origin_tip_align_pose_ = tip_align_pose_;
         }
     }
 }
 
-// ================================================================================================
-// OpenSHC updateIKErrorPose equivalent - compensate IK position errors
-// ================================================================================================
+////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+// OpenSHC PoseController::updateIKErrorPose() equivalent
+////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 void BodyPoseController::updateIKErrorPose(Leg legs[NUM_LEGS]) {
     for (int i = 0; i < NUM_LEGS; ++i) {
-        // Only compensate for walking legs
         if (legs[i].getLegState() != LEG_WALKING)
             continue;
 
@@ -519,627 +626,469 @@ void BodyPoseController::updateIKErrorPose(Leg legs[NUM_LEGS]) {
         ik_error_pose_.position.y -= ik_error.y();
         ik_error_pose_.position.z -= ik_error.z();
     }
-    // Decay back to zero (OpenSHC factor: 0.95)
     ik_error_pose_.position.x *= 0.95;
     ik_error_pose_.position.y *= 0.95;
     ik_error_pose_.position.z *= 0.95;
 }
 
-void BodyPoseController::applyAutoPoseToDesiredTips(Leg legs[NUM_LEGS]) {
-    if (!auto_pose_enabled || !auto_pose_config.enabled)
-        return;
-    // Remove global pose then add per-leg pose, equivalent to OpenSHC updateStance() logic.
+////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+// OpenSHC PoseController::updateStance() equivalent
+////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+void BodyPoseController::updateStance(Leg legs[NUM_LEGS]) {
     for (int i = 0; i < NUM_LEGS; ++i) {
-        Point3D raw = legs[i].getDesiredTipPosition();
-        Pose raw_pose(raw, Eigen::Quaterniond::Identity());
-        Pose posed = raw_pose.removePose(global_auto_pose_);
-        if (leg_posers_[i]) {
-            posed = posed.addPose(leg_posers_[i]->get()->getAutoPose());
+        if (!leg_posers_[i]) {
+            continue;
         }
-        // Write back only position (orientation ignored by current IK path).
-        legs[i].setDesiredTipPosition(posed.position);
+        LegPoser *leg_poser = leg_posers_[i]->get();
+        Pose current_pose = body_pose_current_;
+        LegState leg_state = legs[i].getLegState();
+
+        if (leg_state == LEG_WALKING || leg_state == LEG_MANUAL_TO_WALKING) {
+            current_pose = current_pose.removePose(auto_pose_);
+            current_pose = current_pose.addPose(leg_poser->getAutoPose());
+            Point3D desired_tip = legs[i].getDesiredTipPosition();
+            Point3D posed_tip = current_pose.inverseTransformVector(desired_tip);
+            leg_poser->setCurrentTipPose(model, Pose(posed_tip, Eigen::Quaterniond::Identity()));
+            legs[i].setDesiredTipPosition(leg_poser->getCurrentTipPose().position);
+        } else if (leg_state == LEG_MANUAL || leg_state == LEG_WALKING_TO_MANUAL) {
+            Point3D current_tip = legs[i].getCurrentTipPositionGlobal();
+            leg_poser->setCurrentTipPose(model, Pose(current_tip, Eigen::Quaterniond::Identity()));
+            legs[i].setDesiredTipPosition(leg_poser->getCurrentTipPose().position);
+        }
     }
 }
 
-void BodyPoseController::applyGlobalBodyPoseToDesiredTips(Leg legs[NUM_LEGS]) {
-    // Apply translation + rotation of current composed body pose to desired tip positions prior to per‑leg auto pose.
-    // Morphology note (AGENTS.md): Default stance has tibia vertical and body reference at z = -tibia_length.
-    // Desired tip Z already embeds clearance; to avoid double counting we offset Z by (body_pose_current_.position.z - body_pose_config.body_clearance).
-    Eigen::Vector3d translation(body_pose_current_.position.x, body_pose_current_.position.y, body_pose_current_.position.z - body_pose_config.body_clearance);
+////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+// Adapted body-pose-to-desired-tips for HexaMotion's FK frame convention.
+// Unlike updateStance() (which uses inverseTransformVector for OpenSHC where FK includes body transforms),
+// this applies the body pose translation minus the body_clearance baseline and rotation to desired tips.
+// Only desired tip is modified; the Leg's stored tip_position_ stays at the FK result from the
+// previous setJointAngles() call so IK sees a correct delta.
+////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+void BodyPoseController::applyBodyPoseToDesiredTips(Leg legs[NUM_LEGS]) {
+    // Apply global body pose translation + rotation to desired tip positions.
+    // Z offset subtracts body_clearance because walk_plane_pose already includes it as
+    // a baseline, and the FK-derived current tip does not include body transforms.
+    Eigen::Vector3d translation(body_pose_current_.position.x,
+                                body_pose_current_.position.y,
+                                body_pose_current_.position.z - body_pose_config.body_clearance);
     Eigen::Quaterniond rotation = body_pose_current_.rotation;
+
     for (int i = 0; i < NUM_LEGS; ++i) {
         Point3D p = legs[i].getDesiredTipPosition();
         Eigen::Vector3d v(p.x, p.y, p.z);
-        Eigen::Vector3d rotated = rotation * v;
-        Eigen::Vector3d transformed = rotated + translation;
+        Eigen::Vector3d transformed = rotation * v + translation;
         legs[i].setDesiredTipPosition(Point3D(transformed.x(), transformed.y(), transformed.z()));
     }
-}
 
-BodyPoseController::~BodyPoseController() {
-    // Clean up leg posers
-    for (int i = 0; i < NUM_LEGS; i++) {
-        delete leg_posers_[i];
-        leg_posers_[i] = nullptr;
-    }
-}
-
-void BodyPoseController::initializeLegPosers(Leg legs[NUM_LEGS]) {
-    // Initialize LegPoser instances for each leg
-    for (int i = 0; i < NUM_LEGS; i++) {
-        // Delete existing poser if any
-        delete leg_posers_[i];
-        // Create LegPoser with the corresponding leg
-        leg_posers_[i] = new LegPoserImpl(i, legs[i], model);
-    }
-}
-
-LegPoser *BodyPoseController::getLegPoser(int leg_index) const {
-    if (leg_index >= 0 && leg_index < NUM_LEGS && leg_posers_[leg_index]) {
-        return leg_posers_[leg_index]->get();
-    }
-    return nullptr;
-}
-
-bool BodyPoseController::setBodyPose(const Eigen::Vector3d &position, const Eigen::Vector3d &orientation,
-                                     Leg legs[NUM_LEGS]) {
-    // orientation is already in radians (roll,pitch,yaw)
-    if (!checkBodyPoseLimits(position, orientation)) {
-        return false;
-    }
-    if (model.getParams().smooth_trajectory.use_current_servo_positions &&
-        model.getParams().smooth_trajectory.enable_pose_interpolation) {
-        return setBodyPoseSmooth(position, orientation, legs);
-    }
-    return setBodyPoseImmediate(position, orientation, legs);
-}
-
-bool BodyPoseController::setLegPosition(int leg_index, const Point3D &position, Leg legs[NUM_LEGS]) {
-    // Use current joint angles as starting point for IK (OpenSHC approach)
-    JointAngles current_angles = legs[leg_index].getJointAngles();
-    JointAngles angles = model.inverseKinematicsCurrentGlobalCoordinates(leg_index, current_angles, position);
-
-    // Clamp IK output to radian limits (OpenSHC parity: IK operates in radians)
-    angles.coxa = model.constrainAngle(angles.coxa, model.getCoxaAngleLimitRad(0),
-                                       model.getCoxaAngleLimitRad(1));
-    angles.femur = model.constrainAngle(angles.femur, model.getFemurAngleLimitRad(0),
-                                        model.getFemurAngleLimitRad(1));
-    angles.tibia = model.constrainAngle(angles.tibia, model.getTibiaAngleLimitRad(0),
-                                        model.getTibiaAngleLimitRad(1));
-
-    // Update leg with new joint angles and calculated position
-    legs[leg_index].setJointAngles(angles);
-    Point3D calculated_position = model.forwardKinematicsGlobalCoordinates(leg_index, angles);
-    legs[leg_index].setCurrentTipPositionGlobal(calculated_position);
-
-    return true;
-}
-
-bool BodyPoseController::calculateBodyPoseFromConfig(double height_offset, Leg legs[NUM_LEGS]) {
-    // Update walk plane pose with current leg positions
-    updateWalkPlanePose(legs);
-
-    // Calculate target Z position using walk plane pose
-    double target_z;
-    if (walk_plane_pose_enabled) {
-        // Use walk plane pose height (already includes body clearance)
-        target_z = walk_plane_pose_.position.z + height_offset;
-    } else {
-        // Fallback to traditional body clearance calculation
-        target_z = -(body_pose_config.body_clearance + height_offset);
-    }
-
-    // Use configured stance positions for each leg
-    for (int i = 0; i < NUM_LEGS; i++) {
-        // Get stance position from configuration
-        double stance_x_mm = body_pose_config.leg_stance_positions[i].x;
-        double stance_y_mm = body_pose_config.leg_stance_positions[i].y;
-
-        Point3D target_pos;
-        target_pos.x = stance_x_mm;
-        target_pos.y = stance_y_mm;
-        target_pos.z = target_z;
-
-        // Apply walk plane pose rotation if enabled
-        if (walk_plane_pose_enabled) {
-            // Transform leg position by walk plane pose rotation
-            Eigen::Vector3d leg_vector(target_pos.x, target_pos.y, target_pos.z);
-            Eigen::Vector3d rotated_vector = walk_plane_pose_.rotation * leg_vector;
-            target_pos.x = rotated_vector.x();
-            target_pos.y = rotated_vector.y();
-            target_pos.z = rotated_vector.z();
-        }
-
-        // Use LegPoser if available for smooth movement
-        if (getLegPoser(i)) {
-            setLegPosition(i, target_pos, legs);
-        } else {
-            // Fallback to direct calculation
-            JointAngles current_angles = legs[i].getJointAngles();
-            JointAngles angles = model.inverseKinematicsCurrentGlobalCoordinates(i, current_angles, target_pos);
-
-            if (!model.checkJointLimits(i, angles)) {
-                return false;
-            }
-
-            legs[i].setCurrentTipPositionGlobal(target_pos);
-            legs[i].setJointAngles(angles);
-            legs[i].setCurrentTipPositionGlobal(target_pos);
-        }
-    }
-
-    return true;
-}
-
-void BodyPoseController::initializeDefaultPose(Leg legs[NUM_LEGS]) {
-    // Initialize LegPosers if not already done
-    if (!getLegPoser(0)) {
-        initializeLegPosers(legs);
-    }
-
-    // Use configuration-based calculation instead of direct geometry
-    calculateBodyPoseFromConfig(0.0, legs);
-}
-
-bool BodyPoseController::setStandingPose(Leg legs[NUM_LEGS]) {
-    // Initialize LegPosers if not already done
-    if (!getLegPoser(0)) {
-        initializeLegPosers(legs);
-    }
-
-    // Apply configured standing pose joint angles for each leg
-    for (int i = 0; i < NUM_LEGS; ++i) {
-        const auto &standing_joints = body_pose_config.standing_pose_joints[i];
-
-        JointAngles angles;
-        angles.coxa = standing_joints.coxa;
-        angles.femur = standing_joints.femur;
-        angles.tibia = standing_joints.tibia;
-
-        // Update leg with standing joint angles and corresponding tip position
-        legs[i].setJointAngles(angles);
-        Point3D pos = model.forwardKinematicsGlobalCoordinates(i, angles);
-        legs[i].setCurrentTipPositionGlobal(pos);
-    }
-
-    return true;
-}
-
-StandingPoseJoints BodyPoseController::getStandingPoseJoints(int leg_index) const {
-    if (leg_index < 0 || leg_index >= NUM_LEGS) {
-        return {0.0, 0.0, 0.0};
-    }
-    return body_pose_config.standing_pose_joints[leg_index];
-}
-
-bool BodyPoseController::setBodyPoseQuaternion(const Eigen::Vector3d &position, const Eigen::Vector4d &quaternion,
-                                               Leg legs[NUM_LEGS]) {
-    // Convert quaternion to Euler (radians) directly and pass through
-    Point3D euler_rad = math_utils::quaternionToEulerPoint3D(quaternion);
-    Eigen::Vector3d orientation(euler_rad.x, euler_rad.y, euler_rad.z);
-    if (model.getParams().smooth_trajectory.use_current_servo_positions &&
-        model.getParams().smooth_trajectory.enable_pose_interpolation &&
-        model.getParams().smooth_trajectory.use_quaternion_slerp) {
-        return setBodyPoseSmoothQuaternion(position, quaternion, legs);
-    }
-    return setBodyPose(position, orientation, legs);
-}
-
-bool BodyPoseController::interpolatePose(const Eigen::Vector3d &start_pos, const Eigen::Vector4d &start_quat,
-                                         const Eigen::Vector3d &end_pos, const Eigen::Vector4d &end_quat,
-                                         double t, Leg legs[NUM_LEGS]) {
-    // Clamp interpolation parameter
-    t = std::max(0.0, std::min(DEFAULT_ANGULAR_SCALING, t));
-
-    // Linear interpolation for position
-    Eigen::Vector3d interp_pos = start_pos + t * (end_pos - start_pos);
-
-    // Spherical linear interpolation (SLERP) for quaternion
-    Eigen::Vector4d interp_quat = math_utils::quaternionSlerp(start_quat, end_quat, t);
-
-    return setBodyPoseQuaternion(interp_pos, interp_quat, legs);
-}
-
-bool BodyPoseController::setBodyPoseSmooth(const Eigen::Vector3d &position, const Eigen::Vector3d &orientation,
-                                           Leg legs[NUM_LEGS], IServoInterface *servos) {
-    // Check if smooth trajectory is enabled
-    if (!model.getParams().smooth_trajectory.use_current_servo_positions) {
-        return setBodyPoseImmediate(position, orientation, legs);
-    }
-
-    // If not already in progress, initialize trajectory from current servo positions
-    if (!trajectory_in_progress) {
-
-        initializeTrajectoryFromCurrent(position, orientation, legs, servos);
-        trajectory_in_progress = true;
-        trajectory_progress = 0.0;
-        trajectory_step_count = 0;
-    }
-
-    // Update trajectory step
-    return updateTrajectoryStep(legs);
-}
-
-bool BodyPoseController::setBodyPoseSmoothQuaternion(const Eigen::Vector3d &position, const Eigen::Vector4d &quaternion,
-                                                     Leg legs[NUM_LEGS]) {
-    Point3D euler_rad = math_utils::quaternionToEulerPoint3D(quaternion);
-    Eigen::Vector3d orientation(euler_rad.x, euler_rad.y, euler_rad.z);
-    return setBodyPoseSmooth(position, orientation, legs);
-}
-
-bool BodyPoseController::getCurrentServoPositions(IServoInterface *servos, Leg legs[NUM_LEGS]) {
-    if (!servos) {
-        return false;
-    }
-
-    for (int i = 0; i < NUM_LEGS; i++) {
-        JointAngles current_angles;
-        current_angles.coxa = servos->getJointAngle(i, 0);
-        current_angles.femur = servos->getJointAngle(i, 1);
-        current_angles.tibia = servos->getJointAngle(i, 2);
-
-        // Update leg object with current servo positions
-        legs[i].setJointAngles(current_angles);
-        legs[i].setCurrentTipPositionGlobal(model.forwardKinematicsGlobalCoordinates(i, current_angles));
-    }
-
-    return true;
-}
-
-bool BodyPoseController::setBodyPoseImmediate(const Eigen::Vector3d &position, const Eigen::Vector3d &orientation,
-                                              Leg legs[NUM_LEGS]) {
-    // Reset any active trajectory
-    resetTrajectory();
-
-    // Calculate leg positions based on body pose
-    return calculateBodyPoseFromConfig(0.0, legs);
-}
-
-void BodyPoseController::configureSmoothTrajectory(bool use_current_positions, double interpolation_speed, uint8_t max_steps) {
-    // Legacy method - parameters are ignored in current implementation
-    // Only resets trajectory state for compatibility
-    resetTrajectory();
-}
-
-bool BodyPoseController::checkBodyPoseLimits(const Eigen::Vector3d &position, const Eigen::Vector3d &orientation) {
-    // Check translation limits using configured max_translation values
-    if (std::abs(position.x()) > body_pose_config.max_translation.x ||
-        std::abs(position.y()) > body_pose_config.max_translation.y ||
-        std::abs(position.z()) > body_pose_config.max_translation.z) {
-        return false;
-    }
-
-    // Check rotation limits using configured max_rotation values
-    double roll_rad = orientation.x();
-    double pitch_rad = orientation.y();
-    double yaw_rad = orientation.z();
-
-    if (std::abs(roll_rad) > body_pose_config.max_rotation.roll ||
-        std::abs(pitch_rad) > body_pose_config.max_rotation.pitch ||
-        std::abs(yaw_rad) > body_pose_config.max_rotation.yaw) {
-        return false;
-    }
-
-    return true;
-}
-
-Eigen::Vector3d BodyPoseController::calculateBodyPosition(Leg legs[NUM_LEGS]) const {
-
-    // Use walk plane pose for body position calculation (OpenSHC equivalent)
-    if (walk_plane_pose_enabled) {
-        // Update walk plane pose for current leg positions
-        const_cast<BodyPoseController *>(this)->updateWalkPlanePose(legs);
-
-        return Eigen::Vector3d(
-            walk_plane_pose_.position.x,
-            walk_plane_pose_.position.y,
-            walk_plane_pose_.position.z);
-    }
-
-    // Fallback to legacy calculation if walk plane pose disabled
-    double total_z = 0.0;
-    for (int i = 0; i < NUM_LEGS; i++) {
-        Point3D leg_pos = legs[i].getCurrentTipPositionGlobal();
-        total_z += leg_pos.z;
-    }
-    double average_leg_z = total_z / NUM_LEGS;
-
-    return Eigen::Vector3d(0.0, 0.0, average_leg_z);
-}
-
-bool BodyPoseController::initializeTrajectoryFromCurrent(const Eigen::Vector3d &target_position,
-                                                         const Eigen::Vector3d &target_orientation,
-                                                         Leg legs[NUM_LEGS], IServoInterface *servos) {
-    // Store current positions as trajectory start
-    for (int i = 0; i < NUM_LEGS; i++) {
-        trajectory_start_positions[i] = legs[i].getCurrentTipPositionGlobal();
-        trajectory_start_angles[i] = legs[i].getJointAngles();
-    }
-
-    // Calculate target positions for each leg
-    for (int i = 0; i < NUM_LEGS; i++) {
-        trajectory_target_positions[i] = trajectory_start_positions[i];
-        trajectory_target_positions[i].z = -target_position.z();
-
-        // Calculate target angles using current angles as starting point
-        JointAngles current_angles = legs[i].getJointAngles();
-        trajectory_target_angles[i] = model.inverseKinematicsCurrentGlobalCoordinates(i, current_angles, trajectory_target_positions[i]);
-    }
-
-    return true;
-}
-
-bool BodyPoseController::updateTrajectoryStep(Leg legs[NUM_LEGS]) {
-    if (!trajectory_in_progress) {
-        return false;
-    }
-
-    // Update trajectory progress
-    trajectory_progress += model.getParams().smooth_trajectory.interpolation_speed;
-    trajectory_step_count++;
-
-    // Check if trajectory is complete
-    if (trajectory_progress >= 1.0 || trajectory_step_count >= model.getParams().smooth_trajectory.max_interpolation_steps) {
-        // Set final positions
-        for (int i = 0; i < NUM_LEGS; i++) {
-            legs[i].setCurrentTipPositionGlobal(trajectory_target_positions[i]);
-            legs[i].setJointAngles(trajectory_target_angles[i]);
-            legs[i].setCurrentTipPositionGlobal(trajectory_target_positions[i]);
-        }
-
-        resetTrajectory();
-        return true;
-    }
-
-    // Interpolate between start and target positions
-    for (int i = 0; i < NUM_LEGS; i++) {
-        // Linear interpolation for positions
-        Point3D interp_pos;
-        interp_pos.x = trajectory_start_positions[i].x +
-                       trajectory_progress * (trajectory_target_positions[i].x - trajectory_start_positions[i].x);
-        interp_pos.y = trajectory_start_positions[i].y +
-                       trajectory_progress * (trajectory_target_positions[i].y - trajectory_start_positions[i].y);
-        interp_pos.z = trajectory_start_positions[i].z +
-                       trajectory_progress * (trajectory_target_positions[i].z - trajectory_start_positions[i].z);
-
-        // Linear interpolation for angles
-        JointAngles interp_angles;
-        interp_angles.coxa = trajectory_start_angles[i].coxa +
-                             trajectory_progress * (trajectory_target_angles[i].coxa - trajectory_start_angles[i].coxa);
-        interp_angles.femur = trajectory_start_angles[i].femur +
-                              trajectory_progress * (trajectory_target_angles[i].femur - trajectory_start_angles[i].femur);
-        interp_angles.tibia = trajectory_start_angles[i].tibia +
-                              trajectory_progress * (trajectory_target_angles[i].tibia - trajectory_start_angles[i].tibia);
-
-        // Update leg
-        legs[i].setCurrentTipPositionGlobal(interp_pos);
-        legs[i].setJointAngles(interp_angles);
-        legs[i].setCurrentTipPositionGlobal(interp_pos);
-    }
-
-    return true;
-}
-
-void BodyPoseController::resetTrajectory() {
-    trajectory_in_progress = false;
-    trajectory_progress = 0.0;
-    trajectory_step_count = 0;
-}
-
-bool BodyPoseController::beginInitialStandingPoseTransition(Leg legs[NUM_LEGS]) {
-    if (initial_standing_active_) {
-        return true; // already active
-    }
-    if (!getLegPoser(0)) {
-        initializeLegPosers(legs);
-    }
-
-    // Use OpenSHC direct startup-style transition for standing up.
-    initial_standing_use_bezier_ = false;
-    initial_standing_progress_ = 0.0;
-    initial_standing_active_ = true;
-    return true;
-}
-
-bool BodyPoseController::stepInitialStandingPoseTransition(Leg legs[NUM_LEGS], double dt,
-                                                           double out_pos[NUM_LEGS][DOF_PER_LEG],
-                                                           double out_vel[NUM_LEGS][DOF_PER_LEG],
-                                                           double out_acc[NUM_LEGS][DOF_PER_LEG]) {
-    if (!initial_standing_active_) {
-        return false; // nothing to advance
-    }
-
-    if (initial_standing_use_bezier_) {
-        return false;
-    }
-
-    int min_progress = PROGRESS_COMPLETE;
-    int completed_legs = 0;
-    double time_to_start = body_pose_config.time_to_start;
-
-    for (int l = 0; l < NUM_LEGS; ++l) {
-        if (!leg_posers_[l])
-            continue;
-        LegPoser *lp = leg_posers_[l]->get();
-        const StandingPoseJoints &standing = body_pose_config.standing_pose_joints[l];
-        JointAngles target_angles;
-        target_angles.coxa = standing.coxa;
-        target_angles.femur = standing.femur;
-        target_angles.tibia = standing.tibia;
-        Point3D target_tip = model.forwardKinematicsGlobalCoordinates(l, target_angles);
-        Pose target_pose(target_tip, Eigen::Quaterniond::Identity());
-
-        int progress = lp->stepToPosition(target_pose, Pose::Identity(), 0.0, time_to_start, false);
-        min_progress = std::min(min_progress, progress);
-
-        Point3D desired_tip = lp->getCurrentPosition();
-        legs[l].setCurrentTipPositionGlobal(desired_tip);
-        JointAngles current_angles = legs[l].getJointAngles();
-        JointAngles next_angles = model.inverseKinematicsCurrentGlobalCoordinates(l, current_angles, desired_tip);
-        legs[l].setJointAngles(next_angles);
-        legs[l].setCurrentTipPositionGlobal(desired_tip);
-
-        if (progress == PROGRESS_COMPLETE) {
-            completed_legs++;
-        }
-    }
-
-    initial_standing_progress_ = math_utils::clamp(static_cast<double>(min_progress) / 100.0, 0.0, 1.0);
-
-    if (completed_legs == NUM_LEGS) {
-        for (int l = 0; l < NUM_LEGS; ++l) {
-            const StandingPoseJoints &standing = body_pose_config.standing_pose_joints[l];
-            JointAngles ja;
-            ja.coxa = standing.coxa;
-            ja.femur = standing.femur;
-            ja.tibia = standing.tibia;
-            legs[l].setJointAngles(ja);
-            Point3D pos = model.forwardKinematicsGlobalCoordinates(l, ja);
-            legs[l].setCurrentTipPositionGlobal(pos);
-            legs[l].setStepPhase(STANCE_PHASE);
-            if (leg_posers_[l]) {
-                leg_posers_[l]->get()->setTargetPosition(pos);
-                leg_posers_[l]->get()->resetStepToPosition();
-            }
-        }
-        initial_standing_active_ = false;
-        initial_standing_progress_ = 1.0;
-        return true;
-    }
-
-    for (int l = 0; l < NUM_LEGS; ++l) {
-        JointAngles ja = legs[l].getJointAngles();
-        if (out_pos) {
-            out_pos[l][0] = ja.coxa;
-            out_pos[l][1] = ja.femur;
-            out_pos[l][2] = ja.tibia;
-        }
-        if (out_vel) {
-            out_vel[l][0] = 0.0;
-            out_vel[l][1] = 0.0;
-            out_vel[l][2] = 0.0;
-        }
-        if (out_acc) {
-            out_acc[l][0] = 0.0;
-            out_acc[l][1] = 0.0;
-            out_acc[l][2] = 0.0;
-        }
-    }
-
-    return false;
-}
-
-// Tripod leg coordination for stance transition (OpenSHC equivalent)
-bool BodyPoseController::stepToNewStance(Leg legs[NUM_LEGS], double step_height, double step_time) {
-    // OpenSHC stepToNewStance() implementation - Tripod coordination only
-    // "The stepping motion is coordinated such that half of the legs execute the step at any one time
-    //  (for a hexapod this results in a Tripod stepping coordination)"
-
-    const int leg_count = NUM_LEGS;
-    const int legs_per_group = leg_count / 2; // 3 legs per group for hexapod
-    bool all_current_group_complete = true;
-
-    // Initialize sequence if not already done
-    if (!step_to_new_stance_sequence_generated) {
-        // Set target positions using LegStepper's default tip poses (OpenSHC approach)
-        // This ensures continuity with gait execution instead of jumping to static standing poses
-        for (int i = 0; i < NUM_LEGS; i++) {
+    // Per-leg auto-pose adjustment: remove global auto-pose then add per-leg variant.
+    if (auto_pose_enabled && auto_pose_config.enabled) {
+        for (int i = 0; i < NUM_LEGS; ++i) {
+            Point3D raw = legs[i].getDesiredTipPosition();
+            Pose raw_pose(raw, Eigen::Quaterniond::Identity());
+            Pose posed = raw_pose.removePose(auto_pose_);
             if (leg_posers_[i]) {
-                // Get default tip pose from leg's stepper (OpenSHC equivalent)
-                // This maintains continuity with the planned gait trajectory
-                Point3D current_position = legs[i].getCurrentTipPositionGlobal();
-
-                // Use current position as target to maintain stance (OpenSHC behavior)
-                // The actual step target will be set by gait execution, not startup sequence
-                leg_posers_[i]->get()->setTargetPosition(current_position);
+                posed = posed.addPose(leg_posers_[i]->get()->getAutoPose());
             }
+            legs[i].setDesiredTipPosition(posed.position);
         }
-        step_to_new_stance_current_group = 0;
-        step_to_new_stance_sequence_generated = true;
+    }
+}
+
+////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+// OpenSHC PoseController::updateWalkPlanePose() equivalent
+////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+void BodyPoseController::updateWalkPlanePose(Leg legs[NUM_LEGS]) {
+    // Generate control input for transitioning to new walk plane pose using swinging leg as reference (OpenSHC)
+    Eigen::Vector3d walk_plane = Eigen::Vector3d::Zero();
+    Eigen::Vector3d walk_plane_normal = Eigen::Vector3d::UnitZ();
+    double c = 0.0;
+
+    // Calculate swing_progress_scaler (OpenSHC parity: handles overlapping swing periods)
+    double swing_progress_scaler = 1.0;
+    if (gait_phase_offset_ > 0) {
+        swing_progress_scaler = std::max(1.0, static_cast<double>(gait_swing_phase_) / gait_phase_offset_);
     }
 
-    // Process current group legs (OpenSHC approach)
-    int completed_legs_in_group = 0;
-    for (int idx = 0; idx < legs_per_group; idx++) {
-        int leg_index = tripod_leg_groups[step_to_new_stance_current_group][idx];
-
-        if (leg_posers_[leg_index]) {
-            LegPoser *leg_poser = leg_posers_[leg_index]->get();
-
-            // Set legs in current group to SWING phase during movement
-            legs[leg_index].setStepPhase(SWING_PHASE);
-
-            // Execute step to target position for this leg
-            bool leg_complete = leg_poser->stepToPosition(leg_poser->getTargetPosition(), step_height, step_time);
-
-            // Update leg state from poser (OpenSHC pattern)
-            Point3D desired_tip = leg_poser->getCurrentPosition();
-            legs[leg_index].setCurrentTipPositionGlobal(desired_tip);
-            JointAngles current_angles = legs[leg_index].getJointAngles();
-            legs[leg_index].setJointAngles(model.inverseKinematicsCurrentGlobalCoordinates(leg_index, current_angles, desired_tip));
-            legs[leg_index].setCurrentTipPositionGlobal(desired_tip);
-
-            if (leg_complete) {
-                // When leg completes movement, set back to STANCE phase
-                legs[leg_index].setStepPhase(STANCE_PHASE);
-                completed_legs_in_group++;
-            } else {
-                all_current_group_complete = false;
-            }
+    for (int i = 0; i < NUM_LEGS; ++i) {
+        double swing_progress = legs[i].getSwingProgress() * swing_progress_scaler;
+        if (swing_progress >= 0.0 && swing_progress <= 1.0) {
+            c = math_utils::smoothStep(swing_progress);
+            // Calculate walk plane from stance legs (HexaMotion: no per-leg LegStepper walk plane data)
+            Point3D normal = calculateWalkPlaneNormal(legs);
+            walk_plane_normal = Eigen::Vector3d(normal.x, normal.y, normal.z);
+            walk_plane[2] = calculateWalkPlaneHeight(legs);
         }
     }
 
-    // Ensure legs not in current group are in STANCE phase
+    // Align robot body with walk plane (OpenSHC)
+    Pose new_walk_plane_pose;
+    new_walk_plane_pose.rotation = Eigen::Quaterniond::FromTwoVectors(Eigen::Vector3d::UnitZ(), walk_plane_normal);
+    new_walk_plane_pose.rotation = math_utils::correctRotation(new_walk_plane_pose.rotation,
+                                                               Eigen::Quaterniond::Identity());
+
+    // Pose robot body along normal of walk plane, offset by body clearance (OpenSHC)
+    Eigen::Vector3d body_clearance(0.0, 0.0, body_pose_config.body_clearance);
+    Eigen::Vector3d offset = new_walk_plane_pose.rotation._transformVector(body_clearance);
+    new_walk_plane_pose.position = Point3D(offset.x(), offset.y(), offset.z() + walk_plane[2]);
+
+    // Interpolate walk plane pose from origin to new (OpenSHC)
+    walk_plane_pose_ = origin_walk_plane_pose_.interpolate(c, new_walk_plane_pose);
+    if (c == 1.0) {
+        origin_walk_plane_pose_ = walk_plane_pose_;
+    }
+}
+
+////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+// Walk plane calculation helpers (HexaMotion adaptation - stance-leg-based since no per-leg LegStepper walk plane)
+////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+Point3D BodyPoseController::calculateWalkPlaneNormal(Leg legs[NUM_LEGS]) const {
+    std::vector<Point3D> stance_points;
     for (int i = 0; i < NUM_LEGS; i++) {
-        bool in_current_group = false;
-        for (int idx = 0; idx < legs_per_group; idx++) {
-            if (i == tripod_leg_groups[step_to_new_stance_current_group][idx]) {
-                in_current_group = true;
-                break;
-            }
-        }
-        if (!in_current_group) {
-            legs[i].setStepPhase(STANCE_PHASE);
+        if (legs[i].getStepPhase() == STANCE_PHASE) {
+            stance_points.push_back(legs[i].getCurrentTipPositionGlobal());
         }
     }
 
-    // Check if current group is complete and advance to next group or finish
-    if (all_current_group_complete && completed_legs_in_group == legs_per_group) {
-        if (step_to_new_stance_current_group == 0) {
-            // Move to second group (Group B)
-            step_to_new_stance_current_group = 1;
-            // Reset posers for second group
-            for (int idx = 0; idx < legs_per_group; idx++) {
-                int leg_index = tripod_leg_groups[step_to_new_stance_current_group][idx];
-                if (leg_posers_[leg_index]) {
-                    leg_posers_[leg_index]->get()->resetStepToPosition();
-                }
-            }
+    if (stance_points.size() < 3) {
+        return Point3D(0.0, 0.0, 1.0);
+    }
+
+    std::vector<double> raw_A;
+    std::vector<double> raw_B;
+    for (const auto &point : stance_points) {
+        raw_A.push_back(point.x);
+        raw_A.push_back(point.y);
+        raw_A.push_back(1.0);
+        raw_B.push_back(point.z);
+    }
+
+    double a, b, c_val;
+    if (math_utils::solveLeastSquaresPlane(raw_A.data(), raw_B.data(), stance_points.size(), a, b, c_val)) {
+        double normal_magnitude = std::sqrt(a * a + b * b + 1.0);
+        Point3D normal(-a / normal_magnitude, -b / normal_magnitude, 1.0 / normal_magnitude);
+        if (normal.z < 0) {
+            normal.x = -normal.x;
+            normal.y = -normal.y;
+            normal.z = -normal.z;
+        }
+        return normal;
+    }
+
+    return Point3D(0.0, 0.0, 1.0);
+}
+
+double BodyPoseController::calculateWalkPlaneHeight(Leg legs[NUM_LEGS]) const {
+    double total_z = 0.0;
+    int stance_count = 0;
+    for (int i = 0; i < NUM_LEGS; i++) {
+        if (legs[i].getStepPhase() == STANCE_PHASE) {
+            total_z += legs[i].getCurrentTipPositionGlobal().z;
+            stance_count++;
+        }
+    }
+    if (stance_count > 0) {
+        return total_z / stance_count;
+    }
+    return walk_plane_pose_.position.z - body_pose_config.body_clearance;
+}
+
+Pose BodyPoseController::getWalkPlanePose() const {
+    return walk_plane_pose_;
+}
+
+void BodyPoseController::setWalkPlanePose(const Pose &pose) {
+    walk_plane_pose_ = pose;
+    origin_walk_plane_pose_ = pose;
+}
+
+////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+// OpenSHC PoseController::updateAutoPose() equivalent — 1:1 port
+////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+bool BodyPoseController::updateAutoPose(Leg legs[NUM_LEGS]) {
+    if (!auto_pose_enabled || !auto_pose_config.enabled || auto_poser_container_.empty()) {
+        auto_pose_ = Pose::Identity();
+        auto_posing_state_ = POSING_COMPLETE;
+        return true;
+    }
+
+    auto_pose_ = Pose::Identity();
+
+    // Update auto posing state from walk state (OpenSHC parity)
+    if (current_walk_state_ == WALK_STARTING || current_walk_state_ == WALK_MOVING) {
+        auto_posing_state_ = POSING;
+    } else if ((body_velocity_zero_ && current_walk_state_ == WALK_STOPPING) ||
+               current_walk_state_ == WALK_STOPPED) {
+        auto_posing_state_ = STOP_POSING;
+    }
+
+    // Update master phase (OpenSHC parity: sync_with_step_cycle or free-running)
+    int master_phase;
+    bool sync_with_step_cycle = (pose_frequency_ == -1.0);
+    if (sync_with_step_cycle) {
+        master_phase = pose_phase_; // Phase already set by caller via updateAutoPose(gait_phase, legs)
+    } else {
+        master_phase = pose_phase_;
+        pose_phase_ = (pose_phase_ + 1) % std::max(1, pose_phase_length_);
+    }
+
+    if (pose_phase_length_ <= 0) {
+        pose_phase_length_ = std::max(1, auto_pose_config.pose_phase_length);
+    }
+
+    // Estimate gravity direction
+    Eigen::Vector3d gravity = Eigen::Vector3d::UnitZ();
+    if (imu_data_valid_) {
+        if (imu_data_.absolute_data.linear_acceleration_valid) {
+            gravity = Eigen::Vector3d(-imu_data_.absolute_data.linear_accel_x,
+                                      -imu_data_.absolute_data.linear_accel_y,
+                                      -imu_data_.absolute_data.linear_accel_z);
         } else {
-            // Both groups complete - sequence finished
-            step_to_new_stance_sequence_generated = false;
-            step_to_new_stance_current_group = 0;
-            return true;
+            gravity = Eigen::Vector3d(-imu_data_.accel_x, -imu_data_.accel_y, -imu_data_.accel_z);
+        }
+    }
+    if (gravity.norm() < 1e-9) {
+        gravity = Eigen::Vector3d::UnitZ();
+    }
+    gravity.normalize();
+
+    // Update auto pose from auto posers (OpenSHC parity — new signature with normaliser/PosingState)
+    int auto_posers_complete = 0;
+    for (size_t i = 0; i < auto_poser_container_.size(); ++i) {
+        Pose component = auto_poser_container_[i]->updatePose(
+            master_phase, pose_phase_length_, normaliser_,
+            static_cast<int>(auto_posing_state_), pose_frequency_, gravity);
+        auto_posers_complete += int(!auto_poser_container_[i]->isPosing());
+        auto_pose_ = auto_pose_.addPose(component);
+    }
+
+    // All auto posers have completed their required posing cycle (OpenSHC parity)
+    if (auto_posers_complete == static_cast<int>(auto_poser_container_.size())) {
+        auto_posing_state_ = POSING_COMPLETE;
+    }
+
+    // Update leg specific auto pose using leg posers (OpenSHC parity — new signature)
+    for (int leg_index = 0; leg_index < NUM_LEGS; ++leg_index) {
+        if (leg_posers_[leg_index]) {
+            leg_posers_[leg_index]->get()->updateAutoPose(
+                master_phase, auto_pose_, normaliser_, pose_phase_length_);
         }
     }
 
-    return false;
+    (void)legs;
+    return true;
 }
 
-// Execute startup sequence (READY -> RUNNING transition)
-bool BodyPoseController::executeStartupSequence(Leg legs[NUM_LEGS]) {
-    int progress = executeSequenceInternal("startup", legs);
-    if (progress < 0) {
-        last_startup_progress_ = 0;
-        return false;
+bool BodyPoseController::updateAutoPose(int gait_phase, Leg legs[NUM_LEGS]) {
+    pose_phase_ = gait_phase;
+    return updateAutoPose(legs);
+}
+
+////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+// OpenSHC PoseController::stepToNewStance() equivalent
+////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+int BodyPoseController::stepToNewStance() {
+    if (!legs_ref_) {
+        return 0;
     }
-    last_startup_progress_ = progress;
-    return progress == PROGRESS_COMPLETE;
+    Leg *legs = legs_ref_;
+    int progress = 0;
+    int leg_count = NUM_LEGS;
+    for (int i = 0; i < NUM_LEGS; ++i) {
+        if (i == tripod_leg_groups[current_group_][0] ||
+            i == tripod_leg_groups[current_group_][1] ||
+            i == tripod_leg_groups[current_group_][2]) {
+            if (!leg_posers_[i]) {
+                continue;
+            }
+            Pose target_pose(Point3D(body_pose_config.leg_stance_positions[i].x,
+                                     body_pose_config.leg_stance_positions[i].y,
+                                     body_pose_config.leg_stance_positions[i].z),
+                             Eigen::Quaterniond::Identity());
+            double step_height = body_pose_config.swing_height;
+            double step_time = 1.0 / std::max(0.001, model.getParams().step_frequency);
+            progress = leg_posers_[i]->get()->stepToPosition(target_pose, Pose::Identity(), step_height, step_time, true);
+            Point3D p = leg_posers_[i]->get()->getCurrentPosition();
+            legs[i].setDesiredTipPosition(p);
+            legs[i].applyIK(p);
+            legs_completed_step_ += int(progress == PROGRESS_COMPLETE);
+        }
+    }
+
+    progress = progress / 2 + current_group_ * 50;
+    current_group_ = legs_completed_step_ / (leg_count / 2);
+    if (legs_completed_step_ >= leg_count) {
+        legs_completed_step_ = 0;
+        current_group_ = 0;
+    }
+    reset_transition_sequence_ = true;
+    return progress;
 }
 
-// Transition all legs simultaneously to externally defined target poses (OpenSHC equivalent)
+////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+// OpenSHC PoseController::poseForLegManipulation() equivalent — 1:1 port
+////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+int BodyPoseController::poseForLegManipulation() {
+    if (!legs_ref_) {
+        return 0;
+    }
+    Leg *legs = legs_ref_;
+    if (!getLegPoser(0)) {
+        initializeLegPosers(legs);
+    }
+
+    const Parameters &params = model.getParams();
+    double step_height = body_pose_config.swing_height;
+    double step_time = 1.0 / std::max(0.001, params.step_frequency);
+
+    Pose target_pose;
+    int min_progress = 100;
+
+    for (int i = 0; i < NUM_LEGS; ++i) {
+        LegPoser *leg_poser = getLegPoser(i);
+        if (!leg_poser)
+            continue;
+
+        // Set up target pose for legs depending on state (OpenSHC parity)
+        if (legs[i].getLegState() == LEG_WALKING_TO_MANUAL) {
+            target_pose = Pose::Identity();
+            target_pose.position = target_pose.position + inclination_pose_.position;
+            target_pose.position.z -= step_height; // Pose leg at step height to begin manipulation
+        } else {
+            // Use current composed pose minus manual plus default (OpenSHC parity)
+            target_pose = body_pose_current_;
+            target_pose.position.x -= manual_pose_.position.x;
+            target_pose.position.y -= manual_pose_.position.y;
+            target_pose.position.z -= manual_pose_.position.z;
+            target_pose.position.x += default_pose_.position.x;
+            target_pose.position.y += default_pose_.position.y;
+            target_pose.position.z += default_pose_.position.z;
+        }
+
+        Point3D default_tip = leg_poser->getDefaultTipPose();
+        Point3D target_tip_position = target_pose.inverseTransformVector(default_tip);
+
+        Pose target_tip_pose(target_tip_position, Eigen::Quaterniond::Identity());
+
+        double effective_step_height = step_height;
+
+        // Set walker tip position for use in manual or walking mode (OpenSHC parity)
+        if (legs[i].getLegState() == LEG_WALKING_TO_MANUAL) {
+            leg_poser->setCurrentTipPose(model, target_tip_pose);
+            effective_step_height = 0.0; // Zero step height in transition from WALKING to MANUAL
+        } else if (legs[i].getLegState() == LEG_MANUAL_TO_WALKING) {
+            Pose default_pose(default_tip, Eigen::Quaterniond::Identity());
+            leg_poser->setCurrentTipPose(model, default_pose);
+        }
+
+        int progress = leg_poser->stepToPosition(target_tip_pose, Pose::Identity(),
+                                                 effective_step_height, step_time);
+        min_progress = std::min(progress, min_progress);
+
+        if (progress != PROGRESS_COMPLETE) {
+            Point3D tip_pos = leg_poser->getCurrentTipPose().position;
+            legs[i].setDesiredTipPosition(tip_pos);
+            legs[i].applyIK(tip_pos);
+        }
+    }
+
+    return min_progress;
+}
+
+////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+// OpenSHC PoseController::directStartup() equivalent
+////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+int BodyPoseController::directStartup(Leg legs[NUM_LEGS]) {
+    if (!getLegPoser(0)) {
+        initializeLegPosers(legs);
+    }
+    int progress = 0;
+    double time_to_start = body_pose_config.time_to_start;
+    for (int i = 0; i < NUM_LEGS; ++i) {
+        if (!leg_posers_[i]) {
+            continue;
+        }
+        const StandingPoseJoints &standing = body_pose_config.standing_pose_joints[i];
+        leg_posers_[i]->get()->setDesiredConfiguration(standing.coxa, standing.femur, standing.tibia);
+        progress = leg_posers_[i]->get()->transitionConfiguration(time_to_start);
+    }
+    executing_transition_ = (progress != 0 && progress != PROGRESS_COMPLETE);
+    return progress;
+}
+
+////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+// OpenSHC PoseController::packLegs() equivalent
+////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+int BodyPoseController::packLegs(double time_to_pack, Leg legs[NUM_LEGS]) {
+    if (!getLegPoser(0)) {
+        initializeLegPosers(legs);
+    }
+    int progress = 0;
+    for (int i = 0; i < NUM_LEGS; ++i) {
+        if (!leg_posers_[i]) {
+            continue;
+        }
+        const JointPoseAngles &packed = model.getParams().packed_pose_joints[i];
+        leg_posers_[i]->get()->setDesiredConfiguration(packed.coxa, packed.femur, packed.tibia);
+        progress = leg_posers_[i]->get()->transitionConfiguration(time_to_pack);
+    }
+    executing_transition_ = (progress != 0 && progress != PROGRESS_COMPLETE);
+    if (progress == PROGRESS_COMPLETE) {
+        pack_step_ = std::min(pack_step_ + 1, 1);
+    }
+    return progress;
+}
+
+////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+// OpenSHC PoseController::unpackLegs() equivalent
+////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+int BodyPoseController::unpackLegs(double time_to_unpack, Leg legs[NUM_LEGS]) {
+    if (!getLegPoser(0)) {
+        initializeLegPosers(legs);
+    }
+    int progress = 0;
+    for (int i = 0; i < NUM_LEGS; ++i) {
+        if (!leg_posers_[i]) {
+            continue;
+        }
+        const JointPoseAngles &unpacked = model.getParams().unpacked_pose_joints[i];
+        leg_posers_[i]->get()->setDesiredConfiguration(unpacked.coxa, unpacked.femur, unpacked.tibia);
+        progress = leg_posers_[i]->get()->transitionConfiguration(time_to_unpack);
+    }
+    executing_transition_ = (progress != 0 && progress != PROGRESS_COMPLETE);
+    if (progress == PROGRESS_COMPLETE) {
+        pack_step_ = std::max(pack_step_ - 1, 0);
+    }
+    return progress;
+}
+
+////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+// OpenSHC PoseController::transitionConfiguration() equivalent
+////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+int BodyPoseController::transitionConfiguration(double transition_time, Leg legs[NUM_LEGS]) {
+    if (!getLegPoser(0)) {
+        initializeLegPosers(legs);
+    }
+    int min_progress = INT_MAX;
+    for (int i = 0; i < NUM_LEGS; ++i) {
+        if (!leg_posers_[i]) {
+            continue;
+        }
+        int progress = leg_posers_[i]->get()->transitionConfiguration(transition_time);
+        min_progress = std::min(min_progress, progress);
+    }
+    if (min_progress == INT_MAX) {
+        min_progress = PROGRESS_COMPLETE;
+    }
+    executing_transition_ = (min_progress != 0 && min_progress != PROGRESS_COMPLETE);
+    return min_progress;
+}
+
+////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+// OpenSHC PoseController::transitionStance() equivalent
+////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 int BodyPoseController::transitionStance(Leg legs[NUM_LEGS], double transition_time) {
-    int min_progress = INT_MAX; // Percentage progress (0% -> 100%)
+    int min_progress = INT_MAX;
 
     for (int i = 0; i < NUM_LEGS; i++) {
         if (!leg_posers_[i])
@@ -1150,19 +1099,15 @@ int BodyPoseController::transitionStance(Leg legs[NUM_LEGS], double transition_t
         Pose target_tip_pose = Pose::Identity();
         double swing_clearance = 0.0;
 
-        // Update target if externally set target exists
         if (target.defined) {
-            // Compose target: transform * pose (OpenSHC: target.transform_.addPose(target.pose_))
             target_tip_pose.position = target.transform.position + target.pose.position;
             target_tip_pose.rotation = target.transform.rotation * target.pose.rotation;
             swing_clearance = target.swing_clearance;
         }
 
-        // Step to target pose using current body pose
         int progress = leg_poser->stepToPosition(target_tip_pose, body_pose_current_,
                                                  swing_clearance, transition_time, true);
 
-        // Update leg state from poser result
         Point3D desired_tip = leg_poser->getCurrentPosition();
         legs[i].setCurrentTipPositionGlobal(desired_tip);
         JointAngles current_angles = legs[i].getJointAngles();
@@ -1171,7 +1116,6 @@ int BodyPoseController::transitionStance(Leg legs[NUM_LEGS], double transition_t
 
         min_progress = std::min(progress, min_progress);
 
-        // Reset external target when achieved
         if (target.defined && progress == PROGRESS_COMPLETE) {
             target.defined = false;
             leg_poser->setExternalTarget(target);
@@ -1182,342 +1126,25 @@ int BodyPoseController::transitionStance(Leg legs[NUM_LEGS], double transition_t
     return min_progress;
 }
 
-int BodyPoseController::getStartupProgressPercent() const {
-    int percent = last_startup_progress_;
-    if (percent < 0)
-        percent = 0;
-    if (percent > PROGRESS_COMPLETE)
-        percent = PROGRESS_COMPLETE;
-    return percent;
+////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+// OpenSHC PoseController::executeSequence() equivalent
+////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+int BodyPoseController::executeSequence(const SequenceSelection &sequence, Leg legs[NUM_LEGS]) {
+    executing_transition_ = true;
+    int progress = executeSequenceInternal(sequence, legs);
+    if (progress == PROGRESS_COMPLETE) {
+        executing_transition_ = false;
+    }
+    return progress;
 }
 
-// Execute shutdown sequence (RUNNING -> READY transition - OpenSHC equivalent)
-bool BodyPoseController::executeShutdownSequence(Leg legs[NUM_LEGS]) {
-    int progress = executeSequenceInternal("shutdown", legs);
-    if (progress < 0) {
-        last_shutdown_progress_ = 0;
-        return false;
-    }
-    last_shutdown_progress_ = progress;
-    return progress == PROGRESS_COMPLETE;
-}
-
-// Update auto-pose during gait execution (OpenSHC equivalent)
-bool BodyPoseController::updateAutoPose(int gait_phase, Leg legs[NUM_LEGS]) {
-
-    if (!auto_pose_enabled || !auto_pose_config.enabled)
-        return true; // nothing to do
-
-    // Determine pose cycle length.
-    // If pose_frequency == -1.0 we assume sync with gait step cycle and use configured pose_phase_length.
-    // Otherwise we still use pose_phase_length as discrete resolution for the pose cycle.
-    int base_period = auto_pose_config.pose_phase_length;
-    if (base_period <= 0) {
-        // Derive fallback from the largest index found in starts/ends (robust for partial configurations)
-        int max_idx = 0;
-        for (int v : auto_pose_config.pose_phase_starts)
-            if (v > max_idx)
-                max_idx = v;
-        for (int v : auto_pose_config.pose_phase_ends)
-            if (v > max_idx)
-                max_idx = v;
-        base_period = std::max(4, max_idx + 1); // reasonable minimum
-    }
-
-    // OpenSHC: gait_phase is already an integer index (no conversion needed)
-    int current_phase_index = gait_phase % base_period;
-
-    // Per-leg delegation to the LegPoser (OpenSHC parity). Each LegPoser recalculates offsets and applies threshold.
-    for (int leg_index = 0; leg_index < NUM_LEGS; ++leg_index) {
-        if (leg_posers_[leg_index]) {
-            leg_posers_[leg_index]->get()->updateAutoPose(current_phase_index, auto_pose_config, body_pose_config);
-        }
-    }
-    return true;
-}
-
-// Walk plane pose system implementation (OpenSHC equivalent)
-void BodyPoseController::updateWalkPlanePose(Leg legs[NUM_LEGS]) {
-    if (!walk_plane_pose_enabled) {
-        return;
-    }
-
-    // Calculate walk plane normal and height from stance leg positions
-    Point3D walk_plane_normal = calculateWalkPlaneNormal(legs);
-    double walk_plane_height = calculateWalkPlaneHeight(legs);
-
-    // Create target walk plane pose
-    Pose target_walk_plane_pose;
-    target_walk_plane_pose.position = Point3D(0.0, 0.0, walk_plane_height + body_pose_config.body_clearance);
-
-    // Set orientation: align body with walk plane normal
-    Eigen::Vector3d unit_z(0.0, 0.0, 1.0);
-    Eigen::Vector3d walk_normal(walk_plane_normal.x, walk_plane_normal.y, walk_plane_normal.z);
-    walk_normal.normalize();
-    target_walk_plane_pose.rotation = Eigen::Quaterniond::FromTwoVectors(unit_z, walk_normal);
-
-    // Check if change is significant enough to update
-    double position_change = (target_walk_plane_pose.position - walk_plane_pose_.position).norm();
-    double rotation_change = target_walk_plane_pose.rotation.angularDistance(walk_plane_pose_.rotation);
-
-    bool need_update = (position_change > walk_plane_update_threshold || rotation_change > 0.01);
-
-    if (!need_update) {
-        // Only advance if a Bézier transition is currently active
-        if (walk_plane_bezier_in_progress) {
-            walk_plane_bezier_time += model.getTimeDelta();
-            double t = std::min(1.0, walk_plane_bezier_time / walk_plane_bezier_duration);
-            double smooth_t = math_utils::smoothStep(t);
-            walk_plane_pose_.position = math_utils::quarticBezier(walk_plane_position_nodes, smooth_t);
-            walk_plane_pose_.rotation = walk_plane_rotation_nodes[0].slerp(smooth_t, walk_plane_rotation_nodes[4]);
-            if (t >= 1.0) {
-                walk_plane_bezier_in_progress = false;
-                origin_walk_plane_pose_ = walk_plane_pose_;
-#ifdef TESTING_ENABLED
-                std::cout << "[WalkPlane] Bezier transition completed." << std::endl;
-#endif
-            }
-        }
-        return;
-    }
-
-#ifdef TESTING_ENABLED
-    std::cout << "[WalkPlane] target_height=" << target_walk_plane_pose.position.z
-              << " current_height=" << walk_plane_pose_.position.z
-              << " pos_change=" << position_change << " rot_change=" << rotation_change << std::endl;
-#endif
-
-    // Small changes -> direct assignment (skip Bézier smoothing for minor adjustments)
-    if (position_change < 200.0 && rotation_change < 0.1) {
-        walk_plane_pose_ = target_walk_plane_pose;
-        origin_walk_plane_pose_ = walk_plane_pose_;
-        walk_plane_bezier_in_progress = false;
-#ifdef TESTING_ENABLED
-        std::cout << "[WalkPlane] Direct assignment applied. New height=" << walk_plane_pose_.position.z << std::endl;
-#endif
-        return;
-    }
-
-    // Determine if the target changed significantly (decides whether to (re)build Bézier control nodes)
-    bool target_changed = !walk_plane_bezier_in_progress ||
-                          (target_walk_plane_pose.position - walk_plane_position_nodes[4]).norm() > 1e-3 ||
-                          walk_plane_rotation_nodes[4].angularDistance(target_walk_plane_pose.rotation) > 1e-4;
-
-    if (target_changed) {
-        // Use origin_walk_plane_pose_ as the Bézier start (OpenSHC parity: interpolate from origin)
-        Point3D start_position = origin_walk_plane_pose_.position;
-        Point3D end_position = target_walk_plane_pose.position;
-        Eigen::Quaterniond start_rotation = origin_walk_plane_pose_.rotation;
-        Eigen::Quaterniond end_rotation = target_walk_plane_pose.rotation;
-
-        // Generate quartic Bézier control nodes for position (OpenSHC-inspired smoothing) only when target changes
-        walk_plane_position_nodes[0] = start_position;
-        walk_plane_position_nodes[1] = start_position + (end_position - start_position) * 0.2;
-        walk_plane_position_nodes[2] = start_position + (end_position - start_position) * 0.5;
-        walk_plane_position_nodes[3] = start_position + (end_position - start_position) * 0.8;
-        walk_plane_position_nodes[4] = end_position;
-
-        // Generate corresponding Slerp-based control nodes for orientation interpolation
-        walk_plane_rotation_nodes[0] = start_rotation;
-        walk_plane_rotation_nodes[1] = start_rotation.slerp(0.2, end_rotation);
-        walk_plane_rotation_nodes[2] = start_rotation.slerp(0.5, end_rotation);
-        walk_plane_rotation_nodes[3] = start_rotation.slerp(0.8, end_rotation);
-        walk_plane_rotation_nodes[4] = end_rotation;
-
-        walk_plane_bezier_in_progress = true;
-        walk_plane_bezier_time = 0.0;
-
-#ifdef TESTING_ENABLED
-        std::cout << "[WalkPlane] Bezier transition (re)started." << std::endl;
-#endif
-    }
-
-    // Advance current Bézier transition
-    if (walk_plane_bezier_in_progress) {
-        walk_plane_bezier_time += model.getTimeDelta();
-        double t = std::min(1.0, walk_plane_bezier_time / walk_plane_bezier_duration);
-        double smooth_t = math_utils::smoothStep(t);
-        walk_plane_pose_.position = math_utils::quarticBezier(walk_plane_position_nodes, smooth_t);
-        walk_plane_pose_.rotation = walk_plane_rotation_nodes[0].slerp(smooth_t, walk_plane_rotation_nodes[4]);
-        if (t >= 1.0) {
-            walk_plane_bezier_in_progress = false;
-            origin_walk_plane_pose_ = walk_plane_pose_;
-
-#ifdef TESTING_ENABLED
-            std::cout << "[WalkPlane] Bezier transition completed." << std::endl;
-#endif
-        }
-    }
-}
-
-Point3D BodyPoseController::calculateWalkPlaneNormal(Leg legs[NUM_LEGS]) const {
-    // Collect stance leg positions for plane fitting
-    std::vector<Point3D> stance_points;
-
-    for (int i = 0; i < NUM_LEGS; i++) {
-        if (legs[i].getStepPhase() == STANCE_PHASE) {
-            stance_points.push_back(legs[i].getCurrentTipPositionGlobal());
-        }
-    }
-
-    // Need at least 3 points to define a plane
-    if (stance_points.size() < 3) {
-        return Point3D(0.0, 0.0, 1.0); // Default to horizontal plane
-    }
-
-    // Prepare data for least squares plane fitting
-    std::vector<double> raw_A;
-    std::vector<double> raw_B;
-
-    for (const auto &point : stance_points) {
-        raw_A.push_back(point.x);
-        raw_A.push_back(point.y);
-        raw_A.push_back(1.0);
-        raw_B.push_back(point.z);
-    }
-
-    // Solve for plane equation: ax + by + c = z
-    double a, b, c;
-    if (math_utils::solveLeastSquaresPlane(raw_A.data(), raw_B.data(), stance_points.size(), a, b, c)) {
-        // Convert plane coefficients to normal vector
-        // Plane equation: ax + by - z + c = 0
-        // Normal vector: (a, b, -1)
-        double normal_magnitude = std::sqrt(a * a + b * b + 1.0);
-        Point3D normal(-a / normal_magnitude, -b / normal_magnitude, 1.0 / normal_magnitude);
-
-        // Ensure normal points upward (positive Z component)
-        if (normal.z < 0) {
-            normal.x = -normal.x;
-            normal.y = -normal.y;
-            normal.z = -normal.z;
-        }
-
-        return normal;
-    }
-
-    // Fallback to horizontal plane if calculation fails
-    return Point3D(0.0, 0.0, 1.0);
-}
-
-double BodyPoseController::calculateWalkPlaneHeight(Leg legs[NUM_LEGS]) const {
-    // Calculate average Z position of stance legs
-    double total_z = 0.0;
-    int stance_count = 0;
-
-    for (int i = 0; i < NUM_LEGS; i++) {
-        if (legs[i].getStepPhase() == STANCE_PHASE) {
-            total_z += legs[i].getCurrentTipPositionGlobal().z;
-            stance_count++;
-        }
-    }
-
-    if (stance_count > 0) {
-        return total_z / stance_count;
-    }
-
-    // Fallback: use current walk plane height minus body clearance
-    return walk_plane_pose_.position.z - body_pose_config.body_clearance;
-}
-
-Pose BodyPoseController::getWalkPlanePose() const {
-    return walk_plane_pose_;
-}
-
-void BodyPoseController::setWalkPlanePose(const Pose &pose) {
-    walk_plane_pose_ = pose;
-
-    // Reset Bézier transition state
-    walk_plane_bezier_in_progress = false;
-    walk_plane_bezier_time = 0.0;
-
-    // Initialize all control nodes to current pose
-    for (int i = 0; i < 5; i++) {
-        walk_plane_position_nodes[i] = pose.position;
-        walk_plane_rotation_nodes[i] = pose.rotation;
-    }
-}
-
-void BodyPoseController::setWalkPlanePoseEnabled(bool enabled) {
-    walk_plane_pose_enabled = enabled;
-    if (enabled) {
-        // Reset to neutral position
-        Pose neutral_pose(Point3D(0.0, 0.0, body_pose_config.body_clearance), Eigen::Quaterniond::Identity());
-        walk_plane_pose_ = neutral_pose;
-
-        // Reset Bézier transition state
-        walk_plane_bezier_in_progress = false;
-        walk_plane_bezier_time = 0.0;
-
-        // Initialize all control nodes to neutral pose
-        for (int i = 0; i < 5; i++) {
-            walk_plane_position_nodes[i] = neutral_pose.position;
-            walk_plane_rotation_nodes[i] = neutral_pose.rotation;
-        }
-    }
-}
-
-bool BodyPoseController::isWalkPlanePoseEnabled() const {
-    return walk_plane_pose_enabled;
-}
-
-int BodyPoseController::poseForLegManipulation(Leg legs[NUM_LEGS]) {
-    // OpenSHC poseForLegManipulation: simultaneously transition all legs to poses
-    // suitable for manual leg manipulation or return to walking.
-    // Each leg uses stepToPosition with a step_height and step_time derived from params.
+int BodyPoseController::executeSequenceInternal(const SequenceSelection &sequence, Leg legs[NUM_LEGS]) {
+    const bool is_startup = sequence == START_UP;
 
     if (!getLegPoser(0)) {
         initializeLegPosers(legs);
     }
 
-    const Parameters &params = model.getParams();
-    double step_height = params.standing_height * 0.1; // Modest lift for repositioning
-    double step_time = 1.0 / params.step_frequency;
-
-    int min_progress = 100; // Track minimum progress across all legs (OpenSHC UNASSIGNED equivalent)
-
-    for (int i = 0; i < NUM_LEGS; ++i) {
-        LegPoser *leg_poser = getLegPoser(i);
-        if (!leg_poser)
-            continue;
-
-        // Build target tip pose depending on leg state
-        Point3D target_tip_position = leg_poser->getDefaultTipPose();
-
-        // For WALKING_TO_MANUAL: lift leg slightly above default to prepare for manipulation
-        // For MANUAL_TO_WALKING: return to default walking stance
-        // Other legs: hold at default stance (add default_pose offset for load redistribution)
-
-        double effective_step_height = step_height;
-
-        // Use stepToPosition for gradual Bézier-based movement
-        Pose target_pose(target_tip_position, Eigen::Quaterniond::Identity());
-        int progress = leg_poser->stepToPosition(target_pose, Pose::Identity(),
-                                                 effective_step_height, step_time);
-        min_progress = std::min(progress, min_progress);
-
-        if (progress != PROGRESS_COMPLETE) {
-            // Apply the intermediate pose: set desired tip and run IK
-            Point3D tip_pos = leg_poser->getCurrentTipPose().position;
-            legs[i].setDesiredTipPosition(tip_pos);
-            legs[i].applyIK(tip_pos);
-        }
-    }
-
-    return min_progress;
-}
-
-int BodyPoseController::executeSequenceInternal(const std::string &sequence_type, Leg legs[NUM_LEGS]) {
-    const bool is_startup = sequence_type == "startup";
-    const bool is_shutdown = sequence_type == "shutdown";
-    if (!is_startup && !is_shutdown) {
-        return 0;
-    }
-
-    if (!getLegPoser(0)) {
-        initializeLegPosers(legs);
-    }
-
-    // Initialise/reset saved transition sequence
     if (reset_transition_sequence_ && is_startup) {
         reset_transition_sequence_ = false;
         first_sequence_execution_ = true;
@@ -1540,7 +1167,7 @@ int BodyPoseController::executeSequenceInternal(const std::string &sequence_type
     int transition_step_target = transition_step_count_;
     bool execute_horizontal_transition = !(transition_step_ % 2);
     bool execute_vertical_transition = transition_step_ % 2;
-    if (is_shutdown) {
+    if (sequence == SHUT_DOWN) {
         execute_horizontal_transition = transition_step_ % 2;
         execute_vertical_transition = !(transition_step_ % 2);
         next_transition_step = transition_step_ - 1;
@@ -1563,7 +1190,6 @@ int BodyPoseController::executeSequenceInternal(const std::string &sequence_type
     auto compute_limit_proximity = [&](const JointAngles &angles) {
         double min_proximity = 1.0;
         double joints[3] = {angles.coxa, angles.femur, angles.tibia};
-        // Use radian limits (joint angles are in radians, OpenSHC parity)
         double limits[3][2] = {
             {model.getCoxaAngleLimitRad(0), model.getCoxaAngleLimitRad(1)},
             {model.getFemurAngleLimitRad(0), model.getFemurAngleLimitRad(1)},
@@ -1625,8 +1251,6 @@ int BodyPoseController::executeSequenceInternal(const std::string &sequence_type
                     JointAngles current_angles = legs[i].getJointAngles();
                     JointAngles next_angles = model.inverseKinematicsCurrentGlobalCoordinates(i, current_angles, desired_tip);
                     legs[i].setJointAngles(next_angles);
-                    // Restore authoritative LegPoser position after setJointAngles
-                    // (setJointAngles triggers FK which can drift from the bezier output)
                     legs[i].setCurrentTipPositionGlobal(desired_tip);
 
                     double limit_proximity = compute_limit_proximity(next_angles);
@@ -1714,8 +1338,6 @@ int BodyPoseController::executeSequenceInternal(const std::string &sequence_type
             JointAngles current_angles = legs[i].getJointAngles();
             JointAngles next_angles = model.inverseKinematicsCurrentGlobalCoordinates(i, current_angles, desired_tip);
             legs[i].setJointAngles(next_angles);
-            // Restore authoritative LegPoser position after setJointAngles
-            // (setJointAngles triggers FK which can drift from the bezier output)
             legs[i].setCurrentTipPositionGlobal(desired_tip);
             double limit_proximity = compute_limit_proximity(next_angles);
             all_legs_within_workspace = all_legs_within_workspace && !(limit_proximity < safety_factor);
@@ -1766,24 +1388,13 @@ int BodyPoseController::executeSequenceInternal(const std::string &sequence_type
     return (first_sequence_execution_ ? -1 : total_progress);
 }
 
+////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+// OpenSHC Model::legsBearingLoad() equivalent (used by executeSequenceInternal)
+////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 bool BodyPoseController::legsBearingLoad(const Leg legs[NUM_LEGS]) const {
     double body_height_estimate = 0.0;
     for (int i = 0; i < NUM_LEGS; ++i) {
         body_height_estimate += legs[i].getCurrentTipPositionGlobal().z;
     }
     return -(body_height_estimate / NUM_LEGS) > HALF_BODY_DEPTH_MM;
-}
-
-int BodyPoseController::executeSequence(const std::string &sequence_type, Leg legs[NUM_LEGS]) {
-    executing_transition_ = true;
-    int progress = executeSequenceInternal(sequence_type, legs);
-    if (sequence_type == "startup") {
-        last_startup_progress_ = (progress < 0 ? 0 : progress);
-    } else if (sequence_type == "shutdown") {
-        last_shutdown_progress_ = (progress < 0 ? 0 : progress);
-    }
-    if (progress == PROGRESS_COMPLETE) {
-        executing_transition_ = false;
-    }
-    return progress;
 }

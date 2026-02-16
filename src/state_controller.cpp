@@ -74,18 +74,18 @@ std::string toString(PosingMode mode) {
 
 std::string toString(PoseResetMode mode) {
     switch (mode) {
-    case PoseResetMode::POSE_RESET_NONE:
-        return "POSE_RESET_NONE";
-    case PoseResetMode::POSE_RESET_Z_AND_YAW:
-        return "POSE_RESET_Z_AND_YAW";
-    case PoseResetMode::POSE_RESET_X_AND_Y:
-        return "POSE_RESET_X_AND_Y";
-    case PoseResetMode::POSE_RESET_PITCH_AND_ROLL:
-        return "POSE_RESET_PITCH_AND_ROLL";
-    case PoseResetMode::POSE_RESET_ALL:
-        return "POSE_RESET_ALL";
-    case PoseResetMode::POSE_RESET_IMMEDIATE_ALL:
-        return "POSE_RESET_IMMEDIATE_ALL";
+    case PoseResetMode::NO_RESET:
+        return "NO_RESET";
+    case PoseResetMode::Z_AND_YAW_RESET:
+        return "Z_AND_YAW_RESET";
+    case PoseResetMode::X_AND_Y_RESET:
+        return "X_AND_Y_RESET";
+    case PoseResetMode::PITCH_AND_ROLL_RESET:
+        return "PITCH_AND_ROLL_RESET";
+    case PoseResetMode::ALL_RESET:
+        return "ALL_RESET";
+    case PoseResetMode::IMMEDIATE_ALL_RESET:
+        return "IMMEDIATE_ALL_RESET";
     default:
         return "UNKNOWN";
     }
@@ -147,7 +147,7 @@ String toArduinoString(const std::string &str) {
 } // namespace
 
 StateController::StateController(StateControllerContext &context, const StateMachineConfig &config)
-    : context_(context), config_(config), current_system_state_(SystemState::SYSTEM_PACKED), current_robot_state_(RobotState::ROBOT_UNKNOWN), current_walk_state_(WalkState::WALK_STOPPED), current_posing_mode_(PosingMode::POSING_NONE), current_cruise_control_mode_(CruiseControlMode::CRUISE_CONTROL_OFF), current_planner_mode_(PlannerMode::PLANNER_MODE_OFF), current_pose_reset_mode_(PoseResetMode::POSE_RESET_NONE), desired_system_state_(SystemState::SYSTEM_PACKED), desired_robot_state_(RobotState::ROBOT_UNKNOWN), leg_states_{}, manual_leg_count_(0), toggle_leg_index_(-1), toggle_leg_state_pending_(false), is_transitioning_(false), desired_linear_velocity_(Eigen::Vector2d::Zero()), desired_angular_velocity_(0.0f), desired_body_position_(Eigen::Vector3d::Zero()), desired_body_orientation_(Eigen::Vector3d::Zero()), cruise_velocity_(Eigen::Vector3d::Zero()), cruise_start_time_(0), cruise_end_time_(0), last_update_time_(0), time_delta_(0.02f), has_error_(false), startup_step_(0), startup_transition_initialized_(false), startup_transition_step_count_(4), shutdown_step_(0), shutdown_transition_initialized_(false), shutdown_transition_step_count_(3), pack_step_(0), unpack_step_(0), executing_pack_transition_(false), is_initialized_(false) {
+    : context_(context), config_(config), current_system_state_(SystemState::SYSTEM_PACKED), current_robot_state_(RobotState::ROBOT_UNKNOWN), current_walk_state_(WalkState::WALK_STOPPED), current_posing_mode_(PosingMode::POSING_NONE), current_cruise_control_mode_(CruiseControlMode::CRUISE_CONTROL_OFF), current_planner_mode_(PlannerMode::PLANNER_MODE_OFF), current_pose_reset_mode_(PoseResetMode::NO_RESET), desired_system_state_(SystemState::SYSTEM_PACKED), desired_robot_state_(RobotState::ROBOT_UNKNOWN), leg_states_{}, manual_leg_count_(0), toggle_leg_index_(-1), toggle_leg_state_pending_(false), is_transitioning_(false), desired_linear_velocity_(Eigen::Vector2d::Zero()), desired_angular_velocity_(0.0f), desired_body_position_(Eigen::Vector3d::Zero()), desired_body_orientation_(Eigen::Vector3d::Zero()), cruise_velocity_(Eigen::Vector3d::Zero()), cruise_start_time_(0), cruise_end_time_(0), last_update_time_(0), time_delta_(0.02f), has_error_(false), startup_step_(0), startup_transition_initialized_(false), startup_transition_step_count_(4), shutdown_step_(0), shutdown_transition_initialized_(false), shutdown_transition_step_count_(3), executing_pack_transition_(false), is_initialized_(false) {
 
     // Initialize leg states
     for (int i = 0; i < NUM_LEGS; i++) {
@@ -713,7 +713,7 @@ void StateController::reset() {
     current_posing_mode_ = PosingMode::POSING_NONE;
     current_cruise_control_mode_ = CruiseControlMode::CRUISE_CONTROL_OFF;
     current_planner_mode_ = PlannerMode::PLANNER_MODE_OFF;
-    current_pose_reset_mode_ = PoseResetMode::POSE_RESET_NONE;
+    current_pose_reset_mode_ = PoseResetMode::NO_RESET;
 
     desired_system_state_ = SystemState::SYSTEM_PACKED;
     desired_robot_state_ = RobotState::ROBOT_UNKNOWN;
@@ -950,7 +950,7 @@ void StateController::handleLegStateTransitions() {
         // Drive all legs to manipulation-ready poses via poseForLegManipulation
         int progress = 100;
         if (bpc) {
-            progress = bpc->poseForLegManipulation(context_.getLegsArray());
+            progress = bpc->poseForLegManipulation();
         }
 
         // Update admittance stiffness during transition (OpenSHC: scale 0->1)
@@ -972,7 +972,7 @@ void StateController::handleLegStateTransitions() {
         // Drive all legs back to walking-ready poses via poseForLegManipulation
         int progress = 100;
         if (bpc) {
-            progress = bpc->poseForLegManipulation(context_.getLegsArray());
+            progress = bpc->poseForLegManipulation();
         }
 
         // Update admittance stiffness during transition (OpenSHC: scale 1->0)
@@ -1091,7 +1091,7 @@ void StateController::updatePoseControl() {
     }
 
     // Apply pose reset if needed (equivalent to OpenSHC pose reset logic)
-    if (current_pose_reset_mode_ != PoseResetMode::POSE_RESET_NONE) {
+    if (current_pose_reset_mode_ != PoseResetMode::NO_RESET) {
         applyPoseReset();
     }
 }
@@ -1175,7 +1175,7 @@ void StateController::applyPoseReset() {
     Eigen::Vector3d reset_orientation = desired_body_orientation_;
 
     switch (current_pose_reset_mode_) {
-    case PoseResetMode::POSE_RESET_Z_AND_YAW: {
+    case PoseResetMode::Z_AND_YAW_RESET: {
         // Reset Z position and yaw orientation
         reset_position.z() = 0.0f;
         reset_orientation.z() = 0.0f; // yaw
@@ -1183,7 +1183,7 @@ void StateController::applyPoseReset() {
         break;
     }
 
-    case PoseResetMode::POSE_RESET_X_AND_Y: {
+    case PoseResetMode::X_AND_Y_RESET: {
         // Reset X and Y positions
         reset_position.x() = 0.0f;
         reset_position.y() = 0.0f;
@@ -1191,7 +1191,7 @@ void StateController::applyPoseReset() {
         break;
     }
 
-    case PoseResetMode::POSE_RESET_PITCH_AND_ROLL: {
+    case PoseResetMode::PITCH_AND_ROLL_RESET: {
         // Reset pitch and roll orientations
         reset_orientation.x() = 0.0f; // roll
         reset_orientation.y() = 0.0f; // pitch
@@ -1199,7 +1199,7 @@ void StateController::applyPoseReset() {
         break;
     }
 
-    case PoseResetMode::POSE_RESET_ALL: {
+    case PoseResetMode::ALL_RESET: {
         // Reset all pose parameters gradually
         reset_position = Eigen::Vector3d::Zero();
         reset_orientation = Eigen::Vector3d::Zero();
@@ -1207,7 +1207,7 @@ void StateController::applyPoseReset() {
         break;
     }
 
-    case PoseResetMode::POSE_RESET_IMMEDIATE_ALL: {
+    case PoseResetMode::IMMEDIATE_ALL_RESET: {
         // Reset all pose parameters immediately
         reset_position = Eigen::Vector3d::Zero();
         reset_orientation = Eigen::Vector3d::Zero();
@@ -1229,7 +1229,7 @@ void StateController::applyPoseReset() {
         desired_body_orientation_ = reset_orientation;
 
         // Clear the reset mode after successful application
-        current_pose_reset_mode_ = PoseResetMode::POSE_RESET_NONE;
+        current_pose_reset_mode_ = PoseResetMode::NO_RESET;
 
         logDebug("Pose reset applied successfully");
     } else {
@@ -1292,118 +1292,23 @@ int StateController::executeShutdownSequence() {
 }
 
 int StateController::executePackSequence() {
-    const Parameters &params = context_.getParams();
     BodyPoseController *bpc = context_.getBodyPoseController();
+    if (!bpc) {
+        return 0;
+    }
+    const Parameters &params = context_.getParams();
     double transition_time = PACK_TIME / params.step_frequency;
-
-    if (params.use_configured_packed_unpacked_poses && bpc) {
-        if (!executing_pack_transition_) {
-            for (int i = 0; i < NUM_LEGS; ++i) {
-                LegPoser *lp = bpc->getLegPoser(i);
-                if (lp) {
-                    lp->setDesiredConfiguration(
-                        packed_target_angles_[i].coxa,
-                        packed_target_angles_[i].femur,
-                        packed_target_angles_[i].tibia);
-                }
-            }
-            executing_pack_transition_ = true;
-        }
-
-        int min_progress = PROGRESS_COMPLETE;
-        for (int i = 0; i < NUM_LEGS; ++i) {
-            LegPoser *lp = bpc->getLegPoser(i);
-            if (lp) {
-                int progress = lp->transitionConfiguration(transition_time);
-                if (progress < min_progress) {
-                    min_progress = progress;
-                }
-            }
-        }
-
-        if (min_progress >= PROGRESS_COMPLETE) {
-            executing_pack_transition_ = false;
-            pack_step_ = 0;
-            return PROGRESS_COMPLETE;
-        }
-        return min_progress;
-    }
-
-    // Legacy fallback when no explicit packed/unpacked poses are configured.
-    if (pack_step_ == 0) {
-        pack_step_ = 1;
-        return 50;
-    }
-
-    if (context_.setStandingPose()) {
-        pack_step_ = 0;
-        for (int i = 0; i < NUM_LEGS; ++i) {
-            packed_target_angles_[i] = context_.getJointAngles(i);
-        }
-        return PROGRESS_COMPLETE;
-    }
-
-    return 50;
+    return bpc->packLegs(transition_time, context_.getLegsArray());
 }
 
 int StateController::executeUnpackSequence() {
-    const Parameters &params = context_.getParams();
     BodyPoseController *bpc = context_.getBodyPoseController();
-    double transition_time = PACK_TIME / params.step_frequency;
-
-    if (params.use_configured_packed_unpacked_poses && bpc) {
-        if (!executing_pack_transition_) {
-            for (int i = 0; i < NUM_LEGS; ++i) {
-                LegPoser *lp = bpc->getLegPoser(i);
-                if (lp) {
-                    lp->setDesiredConfiguration(
-                        ready_target_angles_[i].coxa,
-                        ready_target_angles_[i].femur,
-                        ready_target_angles_[i].tibia);
-                }
-            }
-            executing_pack_transition_ = true;
-        }
-
-        int min_progress = PROGRESS_COMPLETE;
-        for (int i = 0; i < NUM_LEGS; ++i) {
-            LegPoser *lp = bpc->getLegPoser(i);
-            if (lp) {
-                int progress = lp->transitionConfiguration(transition_time);
-                if (progress < min_progress) {
-                    min_progress = progress;
-                }
-            }
-        }
-
-        if (min_progress >= PROGRESS_COMPLETE) {
-            executing_pack_transition_ = false;
-            unpack_step_ = 0;
-            return PROGRESS_COMPLETE;
-        }
-        return min_progress;
-    }
-
-    // Legacy fallback when no explicit packed/unpacked poses are configured.
-    bool ok = context_.establishInitialStandingPose();
-    if (!ok) {
+    if (!bpc) {
         return 0;
     }
-
-    if (!context_.isInitialStandingPoseActive()) {
-        for (int i = 0; i < NUM_LEGS; ++i) {
-            ready_target_angles_[i] = context_.getJointAngles(i);
-        }
-        unpack_step_ = 0;
-        return PROGRESS_COMPLETE;
-    }
-
-    int progress = context_.getStartupProgressPercent();
-    if (progress < 0)
-        progress = 0;
-    if (progress >= PROGRESS_COMPLETE)
-        progress = PROGRESS_COMPLETE - 1;
-    return progress;
+    const Parameters &params = context_.getParams();
+    double transition_time = PACK_TIME / params.step_frequency;
+    return bpc->unpackLegs(transition_time, context_.getLegsArray());
 }
 
 bool StateController::isRobotPacked() const {

@@ -54,6 +54,11 @@ struct BodyPoseConfiguration {
         max_rotation = {0.0, 0.0, 0.0};
         max_translation_velocity = 0.0;
         max_rotation_velocity = 0.0;
+        manual_posing_enabled = true;
+        inclination_posing_enabled = false;
+        imu_posing_enabled = false;
+        auto_posing_enabled = false;
+        gravity_aligned_tips_enabled = false;
         gravity_aligned_tips = false;
         force_symmetric_pose = false;
         leg_manipulation_mode = "none";
@@ -108,9 +113,20 @@ struct BodyPoseConfiguration {
     double max_rotation_velocity;    /**< Maximum rotation velocity (rad/s). */
 
     /** OpenSHC-equivalent pose control flags. */
+    bool manual_posing_enabled;        /**< Enable manual pose contribution. */
+    bool inclination_posing_enabled;   /**< Enable inclination CoG correction. */
+    bool imu_posing_enabled;           /**< Enable IMU PID pose correction. */
+    bool auto_posing_enabled;          /**< Enable auto-pose contribution. */
+    bool gravity_aligned_tips_enabled; /**< Enable tip gravity alignment contribution. */
     bool gravity_aligned_tips;         /**< Align tips with gravity direction when true. */
     bool force_symmetric_pose;         /**< Force hexagonal symmetry when true. */
     std::string leg_manipulation_mode; /**< Leg manipulation mode identifier. */
+
+    /** OpenSHC-equivalent per-leg phase maps for auto-pose negation and offsetting. */
+    std::map<int, int> offset_multiplier;
+    std::map<int, int> pose_negation_phase_starts;
+    std::map<int, int> pose_negation_phase_ends;
+    std::map<int, double> negation_transition_ratio;
 };
 
 /**

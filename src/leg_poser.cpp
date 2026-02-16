@@ -126,113 +126,65 @@ int LegPoser::stepToPosition(const Pose &target_tip_pose, const Pose &target_pos
     return progress_percent;
 }
 
-void LegPoser::updateAutoPose(int phase_index, const AutoPoseConfiguration &auto_cfg, const BodyPoseConfiguration &body_cfg) {
-    // Full auto-pose update (OpenSHC-style) with subtraction-based negation.
-    if (!auto_cfg.enabled) {
-        auto_pose_ = Pose();
-        return;
+////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+// OpenSHC LegPoser::updateAutoPose() equivalent — 1:1 port
+// Takes global auto_pose_ from BPC and applies per-leg negation using iteration-based
+// first_half/smoothStep logic matching OpenSHC exactly.
+////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+void LegPoser::updateAutoPose(int phase, const Pose &global_auto_pose, int normaliser, int phase_length) {
+    // Scale negation phases by normaliser (OpenSHC parity)
+    int start_phase = pose_negation_phase_start_ * normaliser;
+    int end_phase = pose_negation_phase_end_ * normaliser;
+    int negation_phase = phase;
+
+    // Changes start/end phases from zero to phase length value (which is equivalent) (OpenSHC parity)
+    if (start_phase == 0) {
+        start_phase = phase_length;
+    }
+    if (end_phase == 0) {
+        end_phase = phase_length;
     }
 
-    // Determine base posing cycle length (robust fallback for malformed configs)
-    int base_period = auto_cfg.pose_phase_length;
-    if (base_period <= 0) {
-        int max_idx = 0;
-        for (int v : auto_cfg.pose_phase_starts)
-            if (v > max_idx)
-                max_idx = v;
-        for (int v : auto_cfg.pose_phase_ends)
-            if (v > max_idx)
-                max_idx = v;
-        base_period = std::max(4, max_idx + 1);
-    }
-    int phase = (phase_index % base_period + base_period) % base_period; // normalised phase index
-
-    // Helper lambdas
-    auto inWindow = [base_period](int start, int end, int value) {
-        if (start == end)
-            return false; // empty window
-        if (start < end)
-            return value >= start && value < end;
-        return value >= start || value < end; // wrapped window
-    };
-    auto modDist = [base_period](int from, int to) { return (to - from + base_period) % base_period; };
-    auto smoothstep = [](double x) { x = math_utils::clamp(x, 0.0, 1.0); return x * x * (3.0 - 2.0 * x); };
-
-    // Aggregate base amplitudes (average of all active windows covering current phase) per axis
-    auto computeAxis = [&](const std::vector<double> &amps) {
-        if (amps.empty())
-            return 0.0;
-        double acc = 0.0;
-        int count = 0;
-        for (size_t i = 0; i < auto_cfg.pose_phase_starts.size() && i < amps.size(); ++i) {
-            if (inWindow(auto_cfg.pose_phase_starts[i], auto_cfg.pose_phase_ends[i], phase)) {
-                acc += amps[i];
-                ++count;
-            }
+    // Handle phase overlapping master phase start/end (OpenSHC parity)
+    if (start_phase > end_phase) {
+        end_phase += phase_length;
+        if (negation_phase < start_phase) {
+            negation_phase += phase_length;
         }
-        return count ? acc / count : 0.0;
-    };
+    }
 
-    // Amplitudes are defined in radians (config file). Use directly.
-    double base_roll = computeAxis(auto_cfg.roll_amplitudes);   // radians
-    double base_pitch = computeAxis(auto_cfg.pitch_amplitudes); // radians
-    double base_yaw = computeAxis(auto_cfg.yaw_amplitudes);     // radians
-    double base_x = computeAxis(auto_cfg.x_amplitudes);         // mm
-    double base_y = computeAxis(auto_cfg.y_amplitudes);         // mm
-    double base_z = computeAxis(auto_cfg.z_amplitudes);         // mm
+    // Switch on/off auto pose negation (OpenSHC parity)
+    // Note: OpenSHC also checks step_state != FORCE_STANCE && FORCE_STOP,
+    // but HexaMotion's LegPoser doesn't have LegStepper access. Omitted as
+    // FORCE states only occur during transitions, not normal auto-posing.
+    if (negation_phase == start_phase) {
+        negate_auto_pose_ = true;
+    }
+    if (negation_phase < start_phase || negation_phase > end_phase) {
+        negate_auto_pose_ = false;
+    }
 
-    // Orientation-induced positional offsets (small-angle approximation) relative to stance reference
-    const LegStancePosition &stance = body_cfg.leg_stance_positions[leg_index_];
-    double xs = stance.x;                // mm
-    double ys = stance.y;                // mm
-    double orient_dx = (-base_yaw * ys); // small-angle approximation (rad * mm)
-    double orient_dy = (base_yaw * xs);
-    double orient_dz = base_roll * ys - base_pitch * xs; // roll/pitch induce vertical shift (rad*mm)
+    // Assign leg auto pose according to default auto pose (OpenSHC parity)
+    auto_pose_ = global_auto_pose;
 
-    // Build base pose (translation + orientation quaternion)
-    Point3D base_translation(base_x + orient_dx, base_y + orient_dy, base_z + orient_dz);
-    Eigen::Vector3d euler_rad(base_roll, base_pitch, base_yaw);
-    Eigen::Quaterniond q = Eigen::AngleAxisd(euler_rad.z(), Eigen::Vector3d::UnitZ()) *
-                           Eigen::AngleAxisd(euler_rad.y(), Eigen::Vector3d::UnitY()) *
-                           Eigen::AngleAxisd(euler_rad.x(), Eigen::Vector3d::UnitX());
-    base_auto_pose_ = Pose(base_translation, q);
-
-    // Negation window (per leg): cancellation by subtracting an interpolated fraction of the base pose
-    int ns = auto_cfg.negation_phase_start[leg_index_] % base_period;
-    int ne = auto_cfg.negation_phase_end[leg_index_] % base_period;
-    bool inside = inWindow(ns, ne, phase);
-    int window_len = modDist(ns, ne);
-    if (window_len == 0)
-        window_len = base_period; // full cycle window
-    double tr_ratio = math_utils::clamp(auto_cfg.negation_transition_ratio[leg_index_], 0.0, 0.49);
-    double transition_span = window_len * tr_ratio;
-    double control_input = 0.0; // 0=no cancellation, 1=full cancellation
-    if (inside) {
-        if (transition_span <= 0.0) {
-            control_input = 1.0; // full cancel inside window
-        } else {
-            int dist_from_start = modDist(ns, phase);
-            int dist_to_end = modDist(phase, ne);
-            if (dist_from_start < transition_span) { // entry ramp
-                control_input = smoothstep(double(dist_from_start) / transition_span);
-            } else if (dist_to_end < transition_span) { // exit ramp
-                control_input = smoothstep(double(dist_to_end) / transition_span);
+    // Negate auto pose for this leg during negation period as defined by parameters (OpenSHC parity)
+    if (negate_auto_pose_) {
+        int iteration = negation_phase - start_phase + 1;
+        int num_iterations = end_phase - start_phase;
+        bool first_half = iteration <= num_iterations / 2;
+        double control_input = 1.0;
+        if (negation_transition_ratio_ > 0.0) {
+            if (first_half) {
+                control_input = std::min(1.0, static_cast<double>(iteration) /
+                                                  (num_iterations * negation_transition_ratio_));
             } else {
-                control_input = 1.0; // middle region full cancel
+                control_input = std::min(1.0, static_cast<double>(num_iterations - iteration) /
+                                                  (num_iterations * negation_transition_ratio_));
             }
         }
-    }
-
-    if (control_input <= 0.0) {
-        auto_pose_ = base_auto_pose_; // unchanged
-    } else if (control_input >= 1.0) {
-
-        // Fully cancelled (identity pose)
-        auto_pose_ = Pose();
-    } else {
-        // Subtract interpolated fraction of base pose
-        Pose portion = Pose().interpolate(control_input, base_auto_pose_);
-        auto_pose_ = base_auto_pose_.removePose(portion);
+        control_input = math_utils::smoothStep(control_input);
+        Pose negation = Pose::Identity().interpolate(control_input, auto_pose_);
+        auto_pose_ = auto_pose_.removePose(negation);
     }
 }
 

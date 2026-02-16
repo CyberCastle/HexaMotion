@@ -107,6 +107,11 @@ class LegPoser {
     inline void setExternalTarget(const ExternalTarget &target) { external_target_ = target; }
     inline void setAutoPose(const Pose &auto_pose) { auto_pose_ = auto_pose; }
     inline void setLegCompletedStep(bool complete) { leg_completed_step_ = complete; }
+
+    // Negation parameter setters (OpenSHC parity: set from setAutoPoseParams)
+    inline void setPoseNegationPhaseStart(int start) { pose_negation_phase_start_ = start; }
+    inline void setPoseNegationPhaseEnd(int end) { pose_negation_phase_end_ = end; }
+    inline void setNegationTransitionRatio(double ratio) { negation_transition_ratio_ = ratio; }
     // Admittance delta (external compliance offset) setter
     inline void setAdmittanceDelta(const Point3D &delta) {
         // Defensive validation: sanitize NaN/Inf and clamp to safe engineering bounds (class constant)
@@ -168,12 +173,17 @@ class LegPoser {
                        double lift_height, double time_to_step, bool apply_delta = true);
 
     /**
-     * @brief Update leg-specific auto pose using phased window & negation logic (OpenSHC-style).
-     * @param phase_index Integer phase index in [0, base_period) for the unified posing cycle.
-     * @param auto_cfg   Reference auto-pose configuration (phase windows, amplitudes, negation windows).
-     * @param body_cfg   Reference body pose configuration (stance reference positions).
+     * @brief Update leg-specific auto pose (1:1 port of OpenSHC LegPoser::updateAutoPose).
+     *
+     * Takes the global auto_pose_ from BodyPoseController and applies per-leg negation
+     * using iteration-based first_half/smoothStep logic, matching OpenSHC exactly.
+     *
+     * @param phase Current master phase index.
+     * @param global_auto_pose Global auto pose from BodyPoseController aggregation.
+     * @param normaliser Normaliser for scaling negation phase windows.
+     * @param phase_length Total normalised phase length (pose_phase_length_).
      */
-    void updateAutoPose(int phase_index, const AutoPoseConfiguration &auto_cfg, const BodyPoseConfiguration &body_cfg);
+    void updateAutoPose(int phase, const Pose &global_auto_pose, int normaliser, int phase_length);
 
     /**
      * @brief Set target position for leg movement
@@ -217,9 +227,8 @@ class LegPoser {
     RobotModel &robot_model_; //< Reference to the robot model for parameter access
 
     Pose auto_pose_;                         //< Leg specific auto pose (post-negation)
-    Pose base_auto_pose_;                    //< Base (global) auto pose before leg negation
-    int pose_negation_phase_start_ = 0;      //< Phase start for negation window
-    int pose_negation_phase_end_ = 0;        //< Phase end for negation window
+    int pose_negation_phase_start_ = 0;      //< Base phase start for negation window (pre-normaliser)
+    int pose_negation_phase_end_ = 0;        //< Base phase end for negation window (pre-normaliser)
     double negation_transition_ratio_ = 0.0; //< Ratio of window used for ramp in/out
     bool negate_auto_pose_ = false;          //< Flag if currently negating
     bool first_iteration_ = true;            //< Flag denoting if an iterating function is on it's first iteration

@@ -585,7 +585,6 @@ int main(int argc, char **argv) {
         return 1;
     }
 
-    BodyPoseController *pose_ctrl = sys.getBodyPoseController();
     int standing_iter = 0;
     int max_standing_iters = 600; // will be expanded dynamically based on progress feedback
 
@@ -601,10 +600,10 @@ int main(int argc, char **argv) {
             return 1;
         }
 
-        if (pose_ctrl) {
-            double normalized = pose_ctrl->getInitialStandingPoseProgress(); // 0.0-1.0
+        {
+            double progress_pct = static_cast<double>(sys.getStartupProgressPercent());
+            double normalized = progress_pct / 100.0;
             if (standing_iter % 20 == 0) {
-                double progress_pct = normalized * 100.0;
                 std::cout << "Initial standing pose progress: " << std::fixed << std::setprecision(1) << progress_pct << "%" << std::endl;
                 std::cout << std::defaultfloat;
             }

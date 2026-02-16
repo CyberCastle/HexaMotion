@@ -6,6 +6,7 @@
 #include "../src/walk_controller.h"
 #include "../src/workspace_analyzer.h"
 #include "math_utils.h"
+#include "test_pose_helpers.h"
 #include "test_stubs.h"
 #include <algorithm>
 #include <cassert>
@@ -549,7 +550,6 @@ int main() {
     /** Configure standing pose using BodyPoseController. */
     BodyPoseConfiguration pose_config = getDefaultBodyPoseConfig(p);
     BodyPoseController pose_controller(model, pose_config);
-    pose_controller.setWalkPlanePoseEnabled(true);
 
     /** Create array of legs for pose controller initialization. */
     Leg test_legs[NUM_LEGS] = {
@@ -562,7 +562,7 @@ int main() {
     }
 
     pose_controller.initializeLegPosers(test_legs);
-    assert(pose_controller.setStandingPose(test_legs));
+    assert(testSetStandingPose(pose_controller, model, test_legs));
 
     /** Debug: show the standing pose configuration. */
     std::cout << "\n=== STANDING POSE CONFIGURATION ===" << std::endl;

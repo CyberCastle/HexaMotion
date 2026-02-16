@@ -6,6 +6,7 @@
 #include "../src/walk_controller.h"
 #include "../src/workspace_analyzer.h"
 #include "math_utils.h"
+#include "test_pose_helpers.h"
 #include "test_stubs.h"
 #include <algorithm>
 #include <cassert>
@@ -581,10 +582,9 @@ int main() {
     // Configure standing pose using BodyPoseController
     BodyPoseConfiguration pose_config = getDefaultBodyPoseConfig(p);
     BodyPoseController pose_controller(model, pose_config);
-    pose_controller.setWalkPlanePoseEnabled(true);
     pose_controller.initializeLegPosers(hexapod_legs);
 
-    bool standing_pose_success = pose_controller.setStandingPose(hexapod_legs);
+    bool standing_pose_success = testSetStandingPose(pose_controller, model, hexapod_legs);
     if (!standing_pose_success) {
         std::cerr << "❌ FAILED to set standing pose for hexapod legs" << std::endl;
         return 1;
