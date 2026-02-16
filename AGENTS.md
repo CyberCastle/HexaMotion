@@ -9,6 +9,8 @@ HexaMotion is a 1:1 port of OpenSHC without ROS support. It brings OpenSHC's loc
 Key differences from OpenSHC:
 
 - Supports only 3DOF per leg.
+- `updateTipRotation` (OpenSHC LegStepper tip-rotation path) is intentionally not ported. With 3DOF legs in HexaMotion, tip orientation is not controllable as an independent task variable during gait; therefore HexaMotion does not implement tip-orientation tracking/transition features that depend on extra rotational DOF.
+- Because of the same 3DOF limit, OpenSHC behaviors that rely on explicit tip orientation constraints (e.g., swing-phase tip rotation blending, gravity-aligned tip orientation as a rotational objective, and rotation-constrained tip IK objectives) are out of scope in HexaMotion.
 - Supports only six legs.
 - AMBLE_GAIT is not supported with current morphology/constraints.
 - `StateController` must preserve OpenSHC's functional orchestration 1:1 (state transitions, running loop sequencing, gait/pose/manual leg coordination), excluding ROS transport details.
