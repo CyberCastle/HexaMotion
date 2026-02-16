@@ -21,10 +21,13 @@ Key differences from OpenSHC:
 - `ExternalTarget` is intentionally not ported to HexaMotion; equivalent externally-driven tip target/default behavior must be provided through the API exposed by `LocomotionSystem`.
 - Conceptually, OpenSHC's external ROS graph/script that reads subscriptions and writes publishers is replaced by `LocomotionSystem` + direct API calls in HexaMotion.
 - No YAML configuration files; everything is configured through the `Parameters` structure.
+- `velocity_input_mode` is intentionally not implemented in HexaMotion. Equivalent throttle-vs-real input behavior should be implemented by external software using the API exposed by `LocomotionSystem` (and/or by pre-scaling commands before calling it).
 - OpenSHC logic is split into specific classes so the code is more readable and maintainable; the current HexaMotion organization follows this.
 - Class/data structures and naming (classes, constants, globals, locals) follow a semantic, self-documenting pattern, so some names differ from OpenSHC while keeping 1:1 logic.
 - Includes tests to verify hexapod kinematics and dynamics logic.
 - Certain configurations are handled via factory patterns.
+- Workspace generation strategy differs by design: OpenSHC uses an explicit full model copy for workspace search isolation, while HexaMotion uses a decoupled `WorkspaceAnalyzer` over the live model context to reduce RAM/CPU overhead on MCU targets.
+- This HexaMotion approach is expected to be more efficient on MCU, but requires careful cache/update timing to avoid transient consistency issues when parameters or reference tip states change.
 - No dynamic configuration support.
 - `ParameterSelection` is intentionally not implemented in HexaMotion. Runtime/dynamic parameter adjustment (OpenSHC-style selector workflow) is out of scope; configuration must be provided through `LocomotionSystem` APIs and/or direct updates to the `Parameters` structure.
 
