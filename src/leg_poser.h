@@ -48,14 +48,10 @@ class LegPoser {
     // Accessors
     inline int getLegIndex() const { return leg_index_; }
     /**
-     * @brief Get the current tip pose from the Leg's global tip position.
-     * Note: In executeSequenceInternal, the authoritative position is restored
-     * after setJointAngles to prevent FK drift from corrupting this value.
+     * @brief Get the current tip pose (OpenSHC parity: returns stored current_tip_pose_).
+     * The stored value is set by setCurrentTipPose() from BodyPoseController::updateStance().
      */
-    inline Pose getCurrentTipPose() const {
-        Point3D tip_pos = leg_.getCurrentTipPositionGlobal();
-        return Pose(tip_pos, Eigen::Vector3d(0, 0, 0));
-    }
+    inline const Pose &getCurrentTipPose() const { return current_tip_pose_; }
     inline Pose getTargetTipPose() const { return target_tip_pose_; }
     inline ExternalTarget getExternalTarget() const { return external_target_; }
     inline Pose getAutoPose() const { return auto_pose_; }
@@ -97,8 +93,11 @@ class LegPoser {
     }
 
     // Modifiers
+    // OpenSHC parity: only store in LegPoser's current_tip_pose_, do NOT modify
+    // the Leg's global tip position. The Leg's tip is updated exclusively via FK
+    // after IK (setJointAngles → updateTipPosition). Writing it here would make
+    // current == desired in the IK pipeline, producing zero movement.
     inline void setCurrentTipPose(const RobotModel &model, const Pose &current) {
-        leg_.setCurrentTipPositionGlobal(current.position);
         current_tip_pose_ = current;
     }
     inline void setTargetTipPose(const Pose &target) { target_tip_pose_ = target; }

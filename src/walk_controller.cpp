@@ -41,12 +41,12 @@ WalkController::WalkController(RobotModel &m, Leg legs[NUM_LEGS], const BodyPose
         const LegStancePosition leg_stance_position = pose_config.leg_stance_positions[i];
 
         // Calculate the identity tip pose from the leg stance position
-        // This assumes the stance position is in the robot's body frame
-        // For HexaMotion, use actual standing height instead of Z=0
+        // OpenSHC parity: z=0.0 (walk plane frame). The body_clearance (standing height)
+        // is handled by BodyPoseController::updateStance() via inverseTransformVector.
         Point3D identity_tip_pose = Point3D(
             leg_stance_position.x,
             leg_stance_position.y,
-            leg_stance_position.z); // Use standing height for HexaMotion compatibility
+            0.0); // OpenSHC: z=0 in walk plane frame
 
         // Update terrain adaptation parameters
         auto stepper = std::make_shared<LegStepper>(i, identity_tip_pose, legs[i], model);

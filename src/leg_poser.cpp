@@ -18,10 +18,18 @@ LegPoser::LegPoser(int leg_index, Leg &leg, RobotModel &robot_model)
     // Initialize physical reference height (z = getDefaultHeightOffset() when all angles are 0°)
     physical_reference_height_ = robot_model_.getDefaultHeightOffset();
 
-    // Initialize poses
+    // Initialize poses — seed current_tip_pose_ from Leg's FK position so that
+    // stepToPosition() and executeSequence() read a valid origin before the first
+    // updateStance() call.  OpenSHC does this implicitly because its stepToPosition
+    // reads leg_->getCurrentTipPose() directly; HexaMotion's version reads the stored
+    // current_tip_pose_, so it must be pre-populated here.
     auto_pose_ = Pose();
     origin_tip_pose_ = Pose();
-    current_tip_pose_ = Pose();
+    {
+        Point3D fk_tip = robot_model_.forwardKinematicsGlobalCoordinates(
+            leg_index_, leg_.getJointAngles());
+        current_tip_pose_ = Pose(fk_tip, Eigen::Quaterniond::Identity());
+    }
     target_tip_pose_ = Pose();
     external_target_ = ExternalTarget();
 
