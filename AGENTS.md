@@ -8,30 +8,29 @@ HexaMotion is a 1:1 port of OpenSHC without ROS support. It brings OpenSHC's loc
 
 Key differences from OpenSHC:
 
+- Supports only six legs.
 - Supports only 3DOF per leg.
+- AMBLE_GAIT is not supported with current morphology/constraints.
 - `updateTipRotation` (OpenSHC LegStepper tip-rotation path) is intentionally not ported. With 3DOF legs in HexaMotion, tip orientation is not controllable as an independent task variable during gait; therefore HexaMotion does not implement tip-orientation tracking/transition features that depend on extra rotational DOF.
 - Because of the same 3DOF limit, OpenSHC behaviors that rely on explicit tip orientation constraints (e.g., swing-phase tip rotation blending, gravity-aligned tip orientation as a rotational objective, and rotation-constrained tip IK objectives) are out of scope in HexaMotion.
-- Supports only six legs.
-- AMBLE_GAIT is not supported with current morphology/constraints.
+- Rotation-constrained IK retry paths are intentionally not ported in HexaMotion because this port is scoped to robots with exactly six legs and 3DOF per leg, where orientation-constrained retry logic from OpenSHC is not applicable.
 - `StateController` must preserve OpenSHC's functional orchestration 1:1 (state transitions, running loop sequencing, gait/pose/manual leg coordination), excluding ROS transport details.
 - `LocomotionSystem` acts as a ROS-less wrapper/facade around `StateController` for integration: it replaces the external ROS script/graph role, routes external inputs into `StateController`, and executes low-level hardware/control pipeline steps (sensors, walk update, IK, servo output).
 - `LocomotionSystem` should expose predefined high-level robot actions (e.g., forward, backward, turn left/right, stop) as convenience APIs; these are equivalent to common ROS command patterns but are provided directly as library methods.
+- Conceptually, OpenSHC's external ROS graph/script that reads subscriptions and writes publishers is replaced by `LocomotionSystem` + direct API calls in HexaMotion.
 - Planner mode is intentionally not ported to HexaMotion; equivalent planning behavior should be implemented by an external software component using the API exposed by `LocomotionSystem`.
 - Cruise control is intentionally not ported to HexaMotion; equivalent cruise behavior should be implemented by an external software component using the API exposed by `LocomotionSystem`.
 - `ExternalTarget` is intentionally not ported to HexaMotion; equivalent externally-driven tip target/default behavior must be provided through the API exposed by `LocomotionSystem`.
-- Conceptually, OpenSHC's external ROS graph/script that reads subscriptions and writes publishers is replaced by `LocomotionSystem` + direct API calls in HexaMotion.
-- No YAML configuration files; everything is configured through the `Parameters` structure.
 - `velocity_input_mode` is intentionally not implemented in HexaMotion. Equivalent throttle-vs-real input behavior should be implemented by external software using the API exposed by `LocomotionSystem` (and/or by pre-scaling commands before calling it).
 - `ignore_IK_warnings` is intentionally not ported to HexaMotion, because suppressing IK warning paths would interfere with the current control/diagnostic flow and error-handling behavior implemented in HexaMotion.
-- OpenSHC's dynamic parameter adjustment path via `StateController::adjustParameter()` is intentionally not ported to HexaMotion. It is replaced by explicit parameter-specific `LocomotionSystem` setter APIs (for example: `setStepFrequency`, `setSwingHeight`, `setSwingWidth`, `setStepDepth`, and admittance setters) and/or direct updates to the `Parameters` structure before runtime.
+- No YAML configuration files; everything is configured through the `Parameters` structure.
+- Runtime/dynamic configuration workflows are intentionally not ported in HexaMotion (including OpenSHC `ParameterSelection` and `StateController::adjustParameter()`, as well as generic string-key parameter adjustment patterns). This is replaced by explicit parameter-specific `LocomotionSystem` setter APIs (for example: `setStepFrequency`, `setSwingHeight`, `setSwingWidth`, `setStepDepth`, and admittance setters) and/or direct updates to the `Parameters` structure before runtime.
 - OpenSHC logic is split into specific classes so the code is more readable and maintainable; the current HexaMotion organization follows this.
 - Class/data structures and naming (classes, constants, globals, locals) follow a semantic, self-documenting pattern, so some names differ from OpenSHC while keeping 1:1 logic.
 - Includes tests to verify hexapod kinematics and dynamics logic.
 - Certain configurations are handled via factory patterns.
 - Workspace generation strategy differs by design: OpenSHC uses an explicit full model copy for workspace search isolation, while HexaMotion uses a decoupled `WorkspaceAnalyzer` over the live model context to reduce RAM/CPU overhead on MCU targets.
 - This HexaMotion approach is expected to be more efficient on MCU, but requires careful cache/update timing to avoid transient consistency issues when parameters or reference tip states change.
-- No dynamic configuration support.
-- `ParameterSelection` is intentionally not implemented in HexaMotion. Runtime/dynamic parameter adjustment (OpenSHC-style selector workflow) is out of scope; configuration must be provided through `LocomotionSystem` APIs and/or direct updates to the `Parameters` structure.
 
 ## Code Style
 
