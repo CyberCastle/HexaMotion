@@ -252,6 +252,53 @@ void testStrideVectorUpdates(LegStepper &stepper) {
     }
     std::cout << "  ✅ Stride vector updates passed" << std::endl;
 }
+
+void testForceNormalTouchdownParity(LegStepper &stepper, const RobotModel &model) {
+    std::cout << "Testing forceNormalTouchdown parity" << std::endl;
+
+    Point3D origin = stepper.getCurrentTipPose();
+    stepper.setCurrentTipPose(origin);
+    stepper.setDefaultTipPose(origin);
+    stepper.setWalkPlaneNormal(Point3D(0.0, 0.0, 1.0));
+    stepper.setStepClearanceHeight(20.0);
+    stepper.setDesiredVelocity(Point3D(80.0, -20.0, 0.0), 0.0);
+    stepper.updateStride();
+
+    Point3D target = origin + Point3D(30.0, -12.0, 0.0);
+    stepper.setTargetTipPose(target);
+    stepper.setSwingOriginTipVelocity(Point3D(5.0, 0.0, 0.0));
+    stepper.initializeSwingPeriod(1);
+    stepper.calculateSwingTiming(model.getTimeDelta());
+
+    int stance_iterations = stepper.getStanceIterations();
+    assert(stance_iterations > 0);
+
+    Point3D stride_vector = stepper.getStrideVector();
+    Point3D swing_clearance = stepper.getSwingClearance();
+
+    Point3D final_tip_velocity = stride_vector * (-1.0 / static_cast<double>(stance_iterations));
+    Point3D stance_node_separation = final_tip_velocity * 0.25;
+
+    Point3D expected_bezier_origin = target - stance_node_separation * 4.0;
+    expected_bezier_origin.z = std::max(origin.z, target.z);
+    expected_bezier_origin = expected_bezier_origin + swing_clearance;
+
+    Point3D expected_swing2_node2 = target - stance_node_separation * 2.0;
+    Point3D expected_swing1_node3 = expected_bezier_origin - (expected_swing2_node2 - expected_bezier_origin) / 2.0;
+    Point3D expected_swing2_node1 = expected_bezier_origin + (expected_swing2_node2 - expected_bezier_origin) / 2.0;
+
+    stepper.testForceNormalTouchdown();
+
+    const double tolerance = 1e-6;
+    assert(isPointClose(stepper.getSwing1ControlNode(4), expected_bezier_origin, tolerance));
+    assert(isPointClose(stepper.getSwing2ControlNode(0), expected_bezier_origin, tolerance));
+    assert(isPointClose(stepper.getSwing2ControlNode(2), expected_swing2_node2, tolerance));
+    assert(isPointClose(stepper.getSwing1ControlNode(3), expected_swing1_node3, tolerance));
+    assert(isPointClose(stepper.getSwing2ControlNode(1), expected_swing2_node1, tolerance));
+
+    std::cout << "  ✅ forceNormalTouchdown parity passed" << std::endl;
+}
+
 void testExternalTargetHandling(LegStepper &stepper, Leg &leg) {
     std::cout << "Testing external target handling" << std::endl;
 
@@ -973,6 +1020,13 @@ int main() {
     testWalkPlanePoseTerrainAdaptation(pose_controller, model);
     testBodyPoseControllerWalkControllerIntegration(pose_controller, wc, model);
     testWalkPlaneStabilityDuringGait(pose_controller, wc, model);
+
+    {
+        Point3D identity_pose = test_legs[0].getCurrentTipPositionGlobal();
+        LegStepper parity_stepper(0, identity_pose, test_legs[0], const_cast<RobotModel &>(model));
+        parity_stepper.setDefaultTipPose(identity_pose);
+        testForceNormalTouchdownParity(parity_stepper, model);
+    }
 
     // Simular un paso de marcha con velocidad hacia adelante
     Point3D forward_velocity(10.0, 0.0, 0.0); // 10 mm/s en X

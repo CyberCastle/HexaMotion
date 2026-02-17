@@ -1,7 +1,6 @@
 #include "body_pose_controller.h"
 #include "body_pose_config_factory.h"
 #include "gait_types.h"
-#include "hexamotion_constants.h"
 #include "leg_poser.h"
 #include "math_utils.h"
 #include <algorithm>
@@ -45,12 +44,6 @@ BodyPoseController::BodyPoseController(RobotModel &m, const BodyPoseConfiguratio
 
     for (int i = 0; i < NUM_LEGS; i++) {
         leg_posers_[i] = nullptr;
-    }
-
-    // Initialize per-leg walk plane normal snapshots (OpenSHC parity)
-    for (int i = 0; i < NUM_LEGS; i++) {
-        tip_align_walk_plane_normals_[i] = Eigen::Vector3d::UnitZ();
-        tip_align_normal_captured_[i] = false;
     }
 
     resetAllPosing();
@@ -541,30 +534,16 @@ void BodyPoseController::updateTipAlignPose(Leg legs[NUM_LEGS]) {
 
         double swing_progress = legs[i].getSwingProgress();
         if (swing_progress < 0.0 || swing_progress > 1.0) {
-            tip_align_normal_captured_[i] = false;
             continue;
         }
 
-        if (!tip_align_normal_captured_[i]) {
-            tip_align_walk_plane_normals_[i] = walk_plane_pose_.rotation * Eigen::Vector3d::UnitZ();
-            tip_align_normal_captured_[i] = true;
-        }
-
-        Eigen::Vector3d walk_plane_normal = tip_align_walk_plane_normals_[i];
+        Eigen::Vector3d walk_plane_normal = walk_plane_pose_.rotation * Eigen::Vector3d::UnitZ();
         Eigen::Quaterniond walk_plane_rotation = Eigen::Quaterniond::FromTwoVectors(
             Eigen::Vector3d::UnitZ(), walk_plane_normal);
 
-        double tibia_length = model.getParams().tibia_length;
         JointAngles angles = legs[i].getJointAngles();
-        double femur_angle_rad = angles.femur;
-        double tibia_angle_rad = angles.tibia;
-        double leg_angle = BASE_THETA_OFFSETS[i] + angles.coxa;
-        double z_component = tibia_length * std::cos(femur_angle_rad + tibia_angle_rad);
-        double h_component = tibia_length * std::sin(femur_angle_rad + tibia_angle_rad);
-        Eigen::Vector3d tip_to_joint(
-            -h_component * std::cos(leg_angle),
-            -h_component * std::sin(leg_angle),
-            z_component);
+        Point3D tip_to_joint_point = model.getTipToLastJointVectorGlobal(i, angles);
+        Eigen::Vector3d tip_to_joint(tip_to_joint_point.x, tip_to_joint_point.y, tip_to_joint_point.z);
         double link_length = tip_to_joint.norm();
 
         Eigen::Vector3d a = walk_plane_rotation._transformVector(tip_to_joint);

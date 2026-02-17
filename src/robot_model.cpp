@@ -378,6 +378,19 @@ Point3D RobotModel::forwardKinematicsGlobalCoordinates(int leg, const JointAngle
     return Point3D{transform(0, 3), transform(1, 3), transform(2, 3)};
 }
 
+Point3D RobotModel::getTipToLastJointVectorGlobal(int leg, const JointAngles &q) const {
+    std::vector<Eigen::Matrix4d> transforms = buildDHTransforms(leg, q);
+    if (transforms.size() < static_cast<size_t>(DOF_PER_LEG + 1)) {
+        return Point3D(0.0, 0.0, 0.0);
+    }
+
+    const Eigen::Vector3d joint_position = transforms[DOF_PER_LEG - 1].block<3, 1>(0, 3);
+    const Eigen::Vector3d tip_position = transforms[DOF_PER_LEG].block<3, 1>(0, 3);
+    const Eigen::Vector3d tip_to_joint = joint_position - tip_position;
+
+    return Point3D(tip_to_joint.x(), tip_to_joint.y(), tip_to_joint.z());
+}
+
 Point3D RobotModel::getLegBasePosition(int leg_index) const {
     /** Calculate base position using DH transform matrix. */
     /** Apply only the base transform (row 0) without joint angles. */

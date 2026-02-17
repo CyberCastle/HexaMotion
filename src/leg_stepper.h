@@ -214,6 +214,7 @@ class LegStepper {
     void testGeneratePrimarySwingControlNodes() { generatePrimarySwingControlNodes(); }
     void testGenerateSecondarySwingControlNodes(bool ground_contact = false) { generateSecondarySwingControlNodes(ground_contact); }
     void testGenerateStanceControlNodes(double stride_scaler = 1.0) { generateStanceControlNodes(stride_scaler); }
+    void testForceNormalTouchdown() { forceNormalTouchdown(); }
 #endif
 
   private:

@@ -311,10 +311,6 @@ class BodyPoseController {
         ik_error_pose_ = Pose::Identity();
         tip_align_pose_ = Pose::Identity();
         origin_tip_align_pose_ = Pose::Identity();
-        for (int i = 0; i < NUM_LEGS; ++i) {
-            tip_align_walk_plane_normals_[i] = Eigen::Vector3d::UnitZ();
-            tip_align_normal_captured_[i] = false;
-        }
         walk_plane_pose_ = Pose::Identity();
         origin_walk_plane_pose_ = walk_plane_pose_;
         rotation_absement_error_ = Eigen::Vector3d::Zero();
@@ -382,8 +378,6 @@ class BodyPoseController {
     Pose inclination_pose_ = Pose::Identity();
     Pose tip_align_pose_ = Pose::Identity();
     Pose origin_tip_align_pose_ = Pose::Identity();
-    Eigen::Vector3d tip_align_walk_plane_normals_[NUM_LEGS];
-    bool tip_align_normal_captured_[NUM_LEGS] = {};
     Pose default_pose_ = Pose::Identity();
     Pose ik_error_pose_ = Pose::Identity();
 

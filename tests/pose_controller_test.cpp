@@ -9,6 +9,7 @@
 #include <cassert>
 #include <cmath>
 #include <iostream>
+#include <vector>
 
 /**
  * @brief BodyPoseController test — validates OpenSHC-equivalent functionality.
@@ -53,6 +54,65 @@ int main() {
     std::cout << "Max translation: X=" << config.max_translation.x
               << " Y=" << config.max_translation.y
               << " Z=" << config.max_translation.z << std::endl;
+
+    // ── FK tip-to-last-joint regression validation ──────────────────────────
+    std::cout << "\n=== Testing FK tip-to-last-joint parity ===" << std::endl;
+    const double tibia_length = model.getParams().tibia_length;
+    const double tilt_degrees[] = {0.0, 5.0, 15.0, 30.0};
+    const double sample_factors[] = {-0.6, 0.0, 0.6};
+    double max_legacy_error_mm = 0.0;
+    for (int leg_index = 0; leg_index < NUM_LEGS; ++leg_index) {
+        for (double coxa_factor : sample_factors) {
+            for (double femur_factor : sample_factors) {
+                for (double tibia_factor : sample_factors) {
+                    JointAngles q(
+                        coxa_factor * model.getCoxaAngleLimitRad(1),
+                        femur_factor * model.getFemurAngleLimitRad(1),
+                        tibia_factor * model.getTibiaAngleLimitRad(1));
+                    if (!model.checkJointLimits(leg_index, q)) {
+                        continue;
+                    }
+
+                    Point3D fk_tip_to_joint = model.getTipToLastJointVectorGlobal(leg_index, q);
+
+                    std::vector<Eigen::Matrix4d> transforms = model.buildDHTransforms(leg_index, q);
+                    assert(transforms.size() == static_cast<size_t>(DOF_PER_LEG + 1));
+                    Eigen::Vector3d expected_vec = transforms[DOF_PER_LEG - 1].block<3, 1>(0, 3) -
+                                                   transforms[DOF_PER_LEG].block<3, 1>(0, 3);
+                    Eigen::Vector3d fk_vec(fk_tip_to_joint.x, fk_tip_to_joint.y, fk_tip_to_joint.z);
+                    double fk_error_mm = (fk_vec - expected_vec).norm();
+                    assert(fk_error_mm < 1e-9);
+
+                    double leg_angle = BASE_THETA_OFFSETS[leg_index] + q.coxa;
+                    double z_component = tibia_length * std::cos(q.femur + q.tibia);
+                    double h_component = tibia_length * std::sin(q.femur + q.tibia);
+                    Point3D analytical_tip_to_joint(
+                        -h_component * std::cos(leg_angle),
+                        -h_component * std::sin(leg_angle),
+                        z_component);
+
+                    for (double tilt_deg : tilt_degrees) {
+                        double tilt_rad = math_utils::degreesToRadians(tilt_deg);
+                        Eigen::Quaterniond tilt_rotation = math_utils::eulerAnglesToQuaterniond(
+                            Eigen::Vector3d(tilt_rad, tilt_rad * 0.5, 0.0));
+
+                        Eigen::Vector3d fk_rot = tilt_rotation._transformVector(
+                            Eigen::Vector3d(fk_tip_to_joint.x, fk_tip_to_joint.y, fk_tip_to_joint.z));
+                        Eigen::Vector3d analytical_rot = tilt_rotation._transformVector(
+                            Eigen::Vector3d(analytical_tip_to_joint.x, analytical_tip_to_joint.y, analytical_tip_to_joint.z));
+
+                        double error_mm = (fk_rot - analytical_rot).norm();
+                        assert(std::isfinite(error_mm));
+                        if (error_mm > max_legacy_error_mm) {
+                            max_legacy_error_mm = error_mm;
+                        }
+                    }
+                }
+            }
+        }
+    }
+    std::cout << "FK tip-to-last-joint parity OK (DH-consistent); max legacy analytical delta="
+              << max_legacy_error_mm << " mm" << std::endl;
 
     // ── Standing pose (via test helper) ─────────────────────────────────────
     std::cout << "\n=== Testing Standing Pose ===" << std::endl;

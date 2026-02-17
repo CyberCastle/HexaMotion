@@ -604,6 +604,18 @@ class RobotModel {
     /** Compute forward kinematics for a leg (Global coordinates). */
     Point3D forwardKinematicsGlobalCoordinates(int leg, const JointAngles &q) const;
 
+    /**
+     * @brief Compute vector from tip to last actuated joint in robot frame.
+     *
+     * For 3DOF legs this corresponds to (joint-3 position) - (tip position),
+     * derived from the full DH chain rather than an analytical shortcut.
+     *
+     * @param leg Leg index.
+     * @param q Joint angles.
+     * @return Vector from tip to last joint in robot frame.
+     */
+    Point3D getTipToLastJointVectorGlobal(int leg, const JointAngles &q) const;
+
     /** Numerical Jacobian calculation. */
     Eigen::Matrix3d calculateJacobian(int leg, const JointAngles &q, const Point3D &target) const;
     /** Homogeneous transform for a full leg chain. */

@@ -333,12 +333,14 @@ void LegStepper::generateSecondarySwingControlNodes(bool ground_contact) {
 }
 
 void LegStepper::forceNormalTouchdown() {
-    // OpenSHC exact: rewrite swing junction nodes so the second-half trajectory
-    // approaches the touchdown target with the same velocity vector as stance motion
-    // (i.e. -stride_vector), making the foot land normal to the walk plane.
-    double time_delta = params_.time_delta;
-    Point3D final_tip_velocity = stride_vector_ * (-1.0) * (stance_delta_t_ / time_delta);
-    Point3D stance_node_separation = final_tip_velocity * 0.25 * (time_delta / swing_delta_t_);
+    if (stance_iterations_ <= 0) {
+        return;
+    }
+
+    // Node separation is based on stance iterations only,
+    // matching the OpenSHC reference derivation.
+    Point3D final_tip_velocity = stride_vector_ * (-1.0 / static_cast<double>(stance_iterations_));
+    Point3D stance_node_separation = final_tip_velocity * 0.25;
 
     Point3D bezier_target = target_tip_pose_;
     Point3D bezier_origin = target_tip_pose_ - stance_node_separation * 4.0;
