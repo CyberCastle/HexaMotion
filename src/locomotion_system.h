@@ -418,9 +418,6 @@ class LocomotionSystem : public StateControllerContext {
                               bool secondary_pose_valid,
                               const Point3D &secondary_tip_pose) override;
 
-    /** Check if smooth movement is in progress. */
-    bool isSmoothMovementInProgress() const;
-
     ErrorCode getLastError() const { return last_error; }
     String getErrorMessage(ErrorCode error);
     bool handleError(ErrorCode error);

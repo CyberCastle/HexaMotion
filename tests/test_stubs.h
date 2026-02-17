@@ -327,10 +327,6 @@ inline Parameters createDefaultParameters() {
     params.use_fsr_contact = false;
     params.preserve_swing_end_pose = false; // Default to false for testing
 
-    // Disable smooth trajectory features for unit tests
-    params.smooth_trajectory.use_current_servo_positions = false;
-    params.smooth_trajectory.enable_pose_interpolation = false;
-
     // Startup normalization defaults tuned for brisk but safe standing transitions
     enableConfiguredPackedUnpackedPoses(params);
     return params;

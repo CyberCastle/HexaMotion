@@ -842,10 +842,6 @@ bool LocomotionSystem::applyManualLegInputs(int primary_leg_index,
     return true;
 }
 
-bool LocomotionSystem::isSmoothMovementInProgress() const {
-    return false;
-}
-
 /**
  * @brief Main system update — delegates to StateController.
  *
