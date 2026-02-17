@@ -23,6 +23,7 @@ Key differences from OpenSHC:
 - No YAML configuration files; everything is configured through the `Parameters` structure.
 - `velocity_input_mode` is intentionally not implemented in HexaMotion. Equivalent throttle-vs-real input behavior should be implemented by external software using the API exposed by `LocomotionSystem` (and/or by pre-scaling commands before calling it).
 - `ignore_IK_warnings` is intentionally not ported to HexaMotion, because suppressing IK warning paths would interfere with the current control/diagnostic flow and error-handling behavior implemented in HexaMotion.
+- OpenSHC's dynamic parameter adjustment path via `StateController::adjustParameter()` is intentionally not ported to HexaMotion. It is replaced by explicit parameter-specific `LocomotionSystem` setter APIs (for example: `setStepFrequency`, `setSwingHeight`, `setSwingWidth`, `setStepDepth`, and admittance setters) and/or direct updates to the `Parameters` structure before runtime.
 - OpenSHC logic is split into specific classes so the code is more readable and maintainable; the current HexaMotion organization follows this.
 - Class/data structures and naming (classes, constants, globals, locals) follow a semantic, self-documenting pattern, so some names differ from OpenSHC while keeping 1:1 logic.
 - Includes tests to verify hexapod kinematics and dynamics logic.
