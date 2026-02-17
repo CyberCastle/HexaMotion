@@ -259,7 +259,6 @@ void testExternalTargetHandling(LegStepper &stepper, Leg &leg) {
     LegStepperExternalTarget target;
     target.position = Point3D(50.0, 30.0, 208.0);
     target.swing_clearance = 15.0;
-    target.frame_id = "robot_frame";
     target.defined = true;
 
     stepper.setExternalTarget(target);
@@ -267,7 +266,7 @@ void testExternalTargetHandling(LegStepper &stepper, Leg &leg) {
     // Verify target was set (basic verification)
     LegStepperExternalTarget retrieved = stepper.getExternalTarget();
     assert(retrieved.defined);
-    assert(retrieved.frame_id == target.frame_id);
+    assert(retrieved.position.isApprox(target.position));
 
     std::cout << "  ✅ External target handling passed" << std::endl;
 }
@@ -547,7 +546,7 @@ void testWalkPlaneNormalCalculation(BodyPoseController &pose_controller, const R
 
     // The walk plane z should reflect stance leg tip heights + body clearance
     // Stance leg tips are at z=-150, body clearance=150, so walk plane z should be near 0
-    double expected_height = 0.0;                                     // Ground level
+    double expected_height = 0.0; // Ground level
     assert(std::abs(plane_pose.position.z - expected_height) < 50.0);
     std::cout << "  Walk plane height: " << plane_pose.position.z << " mm (expected: " << expected_height << " mm)" << std::endl;
     std::cout << "  Body clearance maintained: " << (plane_pose.position.z + 150.0) << " mm from leg tips" << std::endl;
@@ -1116,11 +1115,11 @@ int main() {
             LegStepperExternalTarget target;
             target.position = Point3D(50.0, 30.0, 208.0);
             target.swing_clearance = 15.0;
-            target.frame_id = "robot_frame";
             target.defined = true;
             stepper.setExternalTarget(target);
             LegStepperExternalTarget retrieved = stepper.getExternalTarget();
-            results.external_target_handling_passed = (retrieved.defined && retrieved.frame_id == target.frame_id);
+            results.external_target_handling_passed = (retrieved.defined &&
+                                                       retrieved.position.isApprox(target.position));
 
             // Test 8: Walk State Transitions
             StepState states[] = {STEP_SWING, STEP_STANCE, STEP_FORCE_STANCE, STEP_FORCE_STOP};

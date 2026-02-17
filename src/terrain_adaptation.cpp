@@ -137,7 +137,8 @@ Point3D TerrainAdaptation::adaptTrajectoryForTerrain(int leg_index, const Point3
     Point3D adapted_trajectory = trajectory;
 
     // Apply external target if defined
-    if (external_targets_[leg_index].defined && leg_state == SWING_PHASE) {
+    if (external_targets_[leg_index].defined &&
+        leg_state == SWING_PHASE) {
         // Use external target position for swing trajectory
         const ExternalTarget &target = external_targets_[leg_index];
 

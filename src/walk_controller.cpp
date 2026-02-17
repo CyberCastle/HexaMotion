@@ -448,8 +448,6 @@ void WalkController::updateWalk(const Point3D &linear_velocity_input, double ang
         LegStepperExternalTarget ls_target;
         ls_target.position = ext_target.position;
         ls_target.swing_clearance = ext_target.swing_clearance;
-        ls_target.frame_id = ext_target.frame_id;
-        ls_target.timestamp = ext_target.timestamp;
         ls_target.defined = ext_target.defined;
         leg_stepper->setExternalTarget(ls_target);
 
@@ -457,8 +455,6 @@ void WalkController::updateWalk(const Point3D &linear_velocity_input, double ang
         LegStepperExternalTarget ls_default;
         ls_default.position = ext_default.position;
         ls_default.swing_clearance = ext_default.swing_clearance;
-        ls_default.frame_id = ext_default.frame_id;
-        ls_default.timestamp = ext_default.timestamp;
         ls_default.defined = ext_default.defined;
         leg_stepper->setExternalDefault(ls_default);
 

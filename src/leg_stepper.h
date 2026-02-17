@@ -18,11 +18,9 @@ enum StepState {
  * @brief External target for leg positioning (OpenSHC equivalent)
  */
 struct LegStepperExternalTarget {
-    Point3D position;            //< Target position
-    double swing_clearance;      //< Swing clearance height
-    std::string frame_id;        //< Reference frame ID
-    unsigned long timestamp = 0; //< Request timestamp (ms)
-    bool defined = false;        //< Whether target is defined
+    Point3D position;       //< Target position
+    double swing_clearance; //< Swing clearance height
+    bool defined = false;   //< Whether target is defined
 };
 
 /**

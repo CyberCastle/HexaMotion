@@ -18,8 +18,6 @@
 struct ExternalTarget {
     Pose pose;              //< The target tip pose
     double swing_clearance; //< The height of the swing trajectory clearance
-    std::string frame_id;   //< The target tip pose reference frame id
-    unsigned long time;     //< The time of the request for the target tip pose (milliseconds)
     Pose transform;         //< The transform between reference frames
     bool defined = false;   //< Flag denoting if external target object has been defined
 };

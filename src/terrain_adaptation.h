@@ -26,14 +26,12 @@ class TerrainAdaptation {
      * @brief External target structure for terrain-aware stepping
      */
     struct ExternalTarget {
-        Point3D position;        /**< Target tip position. */
-        double swing_clearance;  /**< Height clearance during swing. */
-        std::string frame_id;    /**< Reference frame ID. */
-        unsigned long timestamp; /**< Request timestamp. */
-        bool defined;            /**< Whether target is valid. */
+        Point3D position;       /**< Target tip position. */
+        double swing_clearance; /**< Height clearance during swing. */
+        bool defined;           /**< Whether target is valid. */
 
         ExternalTarget() : position(0, 0, 0), swing_clearance(0),
-                           frame_id(""), timestamp(0), defined(false) {}
+                           defined(false) {}
     };
 
     /**
