@@ -22,6 +22,14 @@ LocomotionSystem::LocomotionSystem(const Parameters &params)
       body_pose_ctrl(nullptr), walk_ctrl(nullptr), admittance_ctrl(nullptr),
       system_state(SYSTEM_UNKNOWN), startup_in_progress(false), shutdown_in_progress(false) {
 
+    for (int i = 0; i < NUM_LEGS; ++i) {
+        for (int j = 0; j < DOF_PER_LEG; ++j) {
+            last_joint_command_deg_[i][j] = 0.0;
+            last_joint_command_valid_[i][j] = false;
+            desired_joint_command_state_[i][j] = DesiredJointCommandState();
+        }
+    }
+
     /** Initialize last logged phases for FSR debug debouncing (testing only). */
 #ifdef TESTING_ENABLED
     for (int i = 0; i < NUM_LEGS; ++i) {
@@ -297,23 +305,34 @@ bool LocomotionSystem::setLegJointAngles(int leg, const JointAngles &q) {
     double femur_speed = velocity_controller ? velocity_controller->getServoSpeed(leg, 1) : params.default_servo_speed;
     double tibia_speed = velocity_controller ? velocity_controller->getServoSpeed(leg, 2) : params.default_servo_speed;
 
+    syncDesiredJointStateFromInternalCommand(leg, clamped_angles, JointAngles(coxa_speed, femur_speed, tibia_speed));
+
     /** Apply sign inversion/preservation per servo using params.angle_sign_*. */
     double servo_coxa = math_utils::radiansToDegrees(clamped_angles.coxa * params.angle_sign_coxa);
     double servo_femur = math_utils::radiansToDegrees(clamped_angles.femur * params.angle_sign_femur);
     double servo_tibia = math_utils::radiansToDegrees(clamped_angles.tibia * params.angle_sign_tibia);
+
+    servo_coxa = applyJointOutputCalibration(leg, 0, servo_coxa);
+    servo_femur = applyJointOutputCalibration(leg, 1, servo_femur);
+    servo_tibia = applyJointOutputCalibration(leg, 2, servo_tibia);
 
     /** Enable coxa movement based for test mode. */
     /** This allows us to gate coxa servo output during test. */
     /** If coxa movement is disabled, freeze coxa at 0 degrees angle. */
     if (coxa_movement_enabled_) {
         /** Normal behavior: command coxa as computed. */
+        servo_coxa = limitJointAngularSpeedCommand(leg, 0, servo_coxa);
         servo_interface->setJointAngleAndSpeed(leg, 0, servo_coxa, coxa_speed);
     } else {
         /** Test mode: freeze coxa at 0 degrees angle. */
+        last_joint_command_deg_[leg][0] = 0.0;
+        last_joint_command_valid_[leg][0] = true;
         servo_interface->setJointAngleAndSpeed(leg, 0, 0, coxa_speed);
     }
 
     /** Apply the computed angles to the servos. */
+    servo_femur = limitJointAngularSpeedCommand(leg, 1, servo_femur);
+    servo_tibia = limitJointAngularSpeedCommand(leg, 2, servo_tibia);
     servo_interface->setJointAngleAndSpeed(leg, 1, servo_femur, femur_speed);
     servo_interface->setJointAngleAndSpeed(leg, 2, servo_tibia, tibia_speed);
     return true;
@@ -827,10 +846,6 @@ bool LocomotionSystem::isSmoothMovementInProgress() const {
     return false;
 }
 
-void LocomotionSystem::resetSmoothMovement() {
-    /** No-op: trajectory support removed (not in OpenSHC). */
-}
-
 /**
  * @brief Main system update — delegates to StateController.
  *
@@ -998,6 +1013,16 @@ void LocomotionSystem::updateLegJointTelemetry() {
         efforts.tibia = servo_interface->getJointEffort(i, 2);
         legs[i].setCurrentJointEffort(efforts);
         legs[i].calculateTipForce();
+
+        if (std::isfinite(efforts.coxa)) {
+            desired_joint_command_state_[i][0].desired_effort = efforts.coxa;
+        }
+        if (std::isfinite(efforts.femur)) {
+            desired_joint_command_state_[i][1].desired_effort = efforts.femur;
+        }
+        if (std::isfinite(efforts.tibia)) {
+            desired_joint_command_state_[i][2].desired_effort = efforts.tibia;
+        }
     }
 }
 
@@ -1179,7 +1204,144 @@ bool LocomotionSystem::setParameters(const Parameters &new_params) {
     }
 
     params = new_params;
+
+    for (int i = 0; i < NUM_LEGS; ++i) {
+        for (int j = 0; j < DOF_PER_LEG; ++j) {
+            last_joint_command_deg_[i][j] = 0.0;
+            last_joint_command_valid_[i][j] = false;
+        }
+    }
+
     return validateParameters();
+}
+
+bool LocomotionSystem::isValidJointAddress(int leg_index, int joint_index) const {
+    return leg_index >= 0 && leg_index < NUM_LEGS && joint_index >= 0 && joint_index < DOF_PER_LEG;
+}
+
+/**
+ * @brief Mirror internal command updates into OpenSHC-like desired/prev desired state.
+ *
+ * Called from internal command paths (single-joint and sync publish) so that
+ * external software can inspect a coherent desired_* / prev_desired_* history.
+ */
+void LocomotionSystem::syncDesiredJointStateFromInternalCommand(int leg_index, const JointAngles &desired_positions,
+                                                                const JointAngles &desired_velocities) {
+    if (leg_index < 0 || leg_index >= NUM_LEGS) {
+        return;
+    }
+
+    const double positions[DOF_PER_LEG] = {desired_positions.coxa, desired_positions.femur, desired_positions.tibia};
+    const double velocities[DOF_PER_LEG] = {desired_velocities.coxa, desired_velocities.femur, desired_velocities.tibia};
+
+    for (int joint = 0; joint < DOF_PER_LEG; ++joint) {
+        DesiredJointCommandState &state = desired_joint_command_state_[leg_index][joint];
+        state.prev_desired_position_rad = state.desired_position_rad;
+        state.prev_desired_velocity_rad_s = state.desired_velocity_rad_s;
+        state.prev_desired_effort = state.desired_effort;
+
+        state.desired_position_rad = positions[joint];
+        state.desired_velocity_rad_s = velocities[joint];
+    }
+}
+
+/**
+ * @brief Advance desired-state cycle markers (desired_* -> prev_desired_*).
+ *
+ * This method intentionally does not change current desired values; it only shifts
+ * previous snapshots, matching OpenSHC-style cycle bookkeeping expectations.
+ */
+void LocomotionSystem::beginDesiredJointCommandCycle() {
+    for (int leg = 0; leg < NUM_LEGS; ++leg) {
+        for (int joint = 0; joint < DOF_PER_LEG; ++joint) {
+            DesiredJointCommandState &state = desired_joint_command_state_[leg][joint];
+            state.prev_desired_position_rad = state.desired_position_rad;
+            state.prev_desired_velocity_rad_s = state.desired_velocity_rad_s;
+            state.prev_desired_effort = state.desired_effort;
+        }
+    }
+}
+
+/**
+ * @brief Set desired command tuple for one physical joint.
+ *
+ * The prev_desired_* fields are not modified here; use beginDesiredJointCommandCycle()
+ * to advance cycle history explicitly.
+ */
+bool LocomotionSystem::setDesiredJointCommandState(int leg_index, int joint_index,
+                                                   double desired_position_rad,
+                                                   double desired_velocity_rad_s,
+                                                   double desired_effort) {
+    if (!isValidJointAddress(leg_index, joint_index)) {
+        return false;
+    }
+
+    DesiredJointCommandState &state = desired_joint_command_state_[leg_index][joint_index];
+    state.desired_position_rad = desired_position_rad;
+    state.desired_velocity_rad_s = desired_velocity_rad_s;
+    state.desired_effort = desired_effort;
+    return true;
+}
+
+/**
+ * @brief Update only desired effort for one physical joint.
+ *
+ * Useful when an external estimator/controller computes effort independently from
+ * position/velocity targets.
+ */
+bool LocomotionSystem::setDesiredJointEffort(int leg_index, int joint_index, double desired_effort) {
+    if (!isValidJointAddress(leg_index, joint_index)) {
+        return false;
+    }
+    desired_joint_command_state_[leg_index][joint_index].desired_effort = desired_effort;
+    return true;
+}
+
+/**
+ * @brief Retrieve desired/prev desired state snapshot for one joint.
+ */
+bool LocomotionSystem::getDesiredJointCommandState(int leg_index, int joint_index, DesiredJointCommandState &state) const {
+    if (!isValidJointAddress(leg_index, joint_index)) {
+        return false;
+    }
+    state = desired_joint_command_state_[leg_index][joint_index];
+    return true;
+}
+
+double LocomotionSystem::applyJointOutputCalibration(int leg_index, int joint_index, double commanded_angle_deg) const {
+    if (leg_index < 0 || leg_index >= NUM_LEGS || joint_index < 0 || joint_index >= DOF_PER_LEG) {
+        return commanded_angle_deg;
+    }
+    return commanded_angle_deg + params.joint_angle_offset_deg[leg_index][joint_index];
+}
+
+double LocomotionSystem::limitJointAngularSpeedCommand(int leg_index, int joint_index, double target_angle_deg) {
+    if (leg_index < 0 || leg_index >= NUM_LEGS || joint_index < 0 || joint_index >= DOF_PER_LEG) {
+        return target_angle_deg;
+    }
+
+    const double configured_max_speed = params.joint_max_angular_speed_deg_s[leg_index][joint_index];
+    if (!std::isfinite(configured_max_speed) || configured_max_speed <= 0.0 || !std::isfinite(params.time_delta) || params.time_delta <= 0.0) {
+        last_joint_command_deg_[leg_index][joint_index] = target_angle_deg;
+        last_joint_command_valid_[leg_index][joint_index] = true;
+        return target_angle_deg;
+    }
+
+    if (!last_joint_command_valid_[leg_index][joint_index] || !std::isfinite(last_joint_command_deg_[leg_index][joint_index])) {
+        last_joint_command_deg_[leg_index][joint_index] = target_angle_deg;
+        last_joint_command_valid_[leg_index][joint_index] = true;
+        return target_angle_deg;
+    }
+
+    const double previous_command = last_joint_command_deg_[leg_index][joint_index];
+    const double max_delta = configured_max_speed * params.time_delta;
+    const double min_allowed = previous_command - max_delta;
+    const double max_allowed = previous_command + max_delta;
+    const double limited_command = math_utils::clamp(target_angle_deg, min_allowed, max_allowed);
+
+    last_joint_command_deg_[leg_index][joint_index] = limited_command;
+    last_joint_command_valid_[leg_index][joint_index] = true;
+    return limited_command;
 }
 
 double LocomotionSystem::calculateDynamicStabilityIndex() {
@@ -1407,21 +1569,31 @@ void LocomotionSystem::publishJointAnglesToServos() {
     if (servo_interface) {
         double angles_deg[NUM_LEGS][DOF_PER_LEG];
         double speeds[NUM_LEGS][DOF_PER_LEG];
+        JointAngles desired_positions[NUM_LEGS];
 
         for (int i = 0; i < NUM_LEGS; ++i) {
             JointAngles a = legs[i].getJointAngles();
+            desired_positions[i] = a;
 
             /** Convert to output degrees with sign. */
             /** Respect runtime coxa gating in the fast sync path as well. */
             if (coxa_movement_enabled_) {
                 angles_deg[i][0] = math_utils::radiansToDegrees(a.coxa * params.angle_sign_coxa);
+                angles_deg[i][0] = applyJointOutputCalibration(i, 0, angles_deg[i][0]);
+                angles_deg[i][0] = limitJointAngularSpeedCommand(i, 0, angles_deg[i][0]);
             } else {
                 /** Freeze coxa at 0 degrees when disabled (same behavior as per-leg path). */
                 angles_deg[i][0] = 0.0;
+                last_joint_command_deg_[i][0] = 0.0;
+                last_joint_command_valid_[i][0] = true;
             }
 
             angles_deg[i][1] = math_utils::radiansToDegrees(a.femur * params.angle_sign_femur);
             angles_deg[i][2] = math_utils::radiansToDegrees(a.tibia * params.angle_sign_tibia);
+            angles_deg[i][1] = applyJointOutputCalibration(i, 1, angles_deg[i][1]);
+            angles_deg[i][2] = applyJointOutputCalibration(i, 2, angles_deg[i][2]);
+            angles_deg[i][1] = limitJointAngularSpeedCommand(i, 1, angles_deg[i][1]);
+            angles_deg[i][2] = limitJointAngularSpeedCommand(i, 2, angles_deg[i][2]);
 
             /** Per-joint speeds. */
             speeds[i][0] = velocity_controller ? velocity_controller->getServoSpeed(i, 0) : params.default_servo_speed;
@@ -1432,6 +1604,10 @@ void LocomotionSystem::publishJointAnglesToServos() {
         }
 
         if (servo_interface->syncSetAllJointAnglesAndSpeeds(angles_deg, speeds)) {
+            for (int li = 0; li < NUM_LEGS; ++li) {
+                syncDesiredJointStateFromInternalCommand(li, desired_positions[li],
+                                                         JointAngles(speeds[li][0], speeds[li][1], speeds[li][2]));
+            }
             /** Cache last servo commands (degrees) for telemetry. */
 #ifdef TESTING_ENABLED
             for (int li = 0; li < NUM_LEGS; ++li) {
@@ -1462,9 +1638,12 @@ void LocomotionSystem::publishJointAnglesToServos() {
         }
         /** Cache per-leg command (degrees). */
 #ifdef TESTING_ENABLED
-        last_servo_cmd_deg_[i][0] = math_utils::radiansToDegrees(angles.coxa * params.angle_sign_coxa);
-        last_servo_cmd_deg_[i][1] = math_utils::radiansToDegrees(angles.femur * params.angle_sign_femur);
-        last_servo_cmd_deg_[i][2] = math_utils::radiansToDegrees(angles.tibia * params.angle_sign_tibia);
+        last_servo_cmd_deg_[i][0] = last_joint_command_valid_[i][0] ? last_joint_command_deg_[i][0]
+                                                                    : math_utils::radiansToDegrees(angles.coxa * params.angle_sign_coxa);
+        last_servo_cmd_deg_[i][1] = last_joint_command_valid_[i][1] ? last_joint_command_deg_[i][1]
+                                                                    : math_utils::radiansToDegrees(angles.femur * params.angle_sign_femur);
+        last_servo_cmd_deg_[i][2] = last_joint_command_valid_[i][2] ? last_joint_command_deg_[i][2]
+                                                                    : math_utils::radiansToDegrees(angles.tibia * params.angle_sign_tibia);
 #endif
     }
 }

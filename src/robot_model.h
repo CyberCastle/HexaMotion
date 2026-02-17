@@ -38,6 +38,10 @@ struct Parameters {
         for (int i = 0; i < NUM_LEGS; ++i) {
             packed_pose_joints[i] = {-1.571, 1.900, 1.200};
             unpacked_pose_joints[i] = {0.000, 0.785, -1.138};
+            for (int j = 0; j < DOF_PER_LEG; ++j) {
+                joint_angle_offset_deg[i][j] = 0.0;
+                joint_max_angular_speed_deg_s[i][j] = 0.0;
+            }
         }
     }
 
@@ -59,6 +63,14 @@ struct Parameters {
     double angle_sign_coxa = 1.0f;  //< Sign multiplier for coxa joint output (+1.0 or -1.0 to match servo direction)
     double angle_sign_femur = 1.0f; //< Sign multiplier for femur joint output (+1.0 or -1.0 to match servo direction)
     double angle_sign_tibia = 1.0f; //< Sign multiplier for tibia joint output (+1.0 or -1.0 to match servo direction)
+
+    // Per-physical-joint output calibration in servo command space (degrees).
+    // Indexed as [leg][joint] where joint=0(c),1(f),2(t).
+    double joint_angle_offset_deg[NUM_LEGS][DOF_PER_LEG];
+
+    // Per-physical-joint angular speed limit in servo command space (deg/s).
+    // Value <= 0.0 disables limiting for that joint.
+    double joint_max_angular_speed_deg_s[NUM_LEGS][DOF_PER_LEG];
 
     // Enable FSR contact detection
     bool use_fsr_contact = false;

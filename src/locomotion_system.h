@@ -22,6 +22,32 @@ class StateController;
 /** Main locomotion system class. */
 class LocomotionSystem : public StateControllerContext {
   public:
+    /**
+     * @brief OpenSHC-like desired command replica for one physical joint.
+     *
+     * This structure is intentionally exposed so an external orchestrator can mirror
+     * OpenSHC semantics around desired_* and prev_desired_* without ROS transport.
+     *
+     * Units:
+     * - desired_position_rad / prev_desired_position_rad: radians
+     * - desired_velocity_rad_s / prev_desired_velocity_rad_s: rad/s
+     * - desired_effort / prev_desired_effort: driver units (implementation-defined)
+     */
+    /**
+     * @brief Runtime desired-command state per physical joint.
+     *
+     * This mirrors OpenSHC joint fields used by external orchestration logic:
+     * desired_position_, desired_velocity_, desired_effort_ and their prev_desired_* counterparts.
+     */
+    struct DesiredJointCommandState {
+        double desired_position_rad = 0.0;
+        double desired_velocity_rad_s = 0.0;
+        double desired_effort = 0.0;
+        double prev_desired_position_rad = 0.0;
+        double prev_desired_velocity_rad_s = 0.0;
+        double prev_desired_effort = 0.0;
+    };
+
     /** Stop behavior options for stopWalking(). */
     enum StopMode {
         STOP_UNIFORM, /**< Force identical stance (phase reset, identity pose) for all legs. */
@@ -132,6 +158,12 @@ class LocomotionSystem : public StateControllerContext {
 
     bool setLegJointAngles(int leg_index, const JointAngles &q);
 
+    /** Apply configured per-joint output offset in degrees. */
+    double applyJointOutputCalibration(int leg_index, int joint_index, double commanded_angle_deg) const;
+
+    /** Limit per-joint commanded angle slew rate using configured deg/s cap. */
+    double limitJointAngularSpeedCommand(int leg_index, int joint_index, double target_angle_deg);
+
     /** OpenSHC-style IK batch processing functions. */
     void applyInverseKinematicsToAllLegs();
     void publishJointAnglesToServos();
@@ -141,6 +173,23 @@ class LocomotionSystem : public StateControllerContext {
 
     /** Runtime-only switch to gate coxa servo output during tests. */
     bool coxa_movement_enabled_ = true;
+
+    /** Last commanded servo angles (degrees) for per-joint slew limiting. */
+    double last_joint_command_deg_[NUM_LEGS][DOF_PER_LEG] = {{0.0}};
+    bool last_joint_command_valid_[NUM_LEGS][DOF_PER_LEG] = {{false}};
+
+    /**
+     * Desired/previous desired command state per joint.
+     *
+     * Indexing:
+     * - First dimension: leg index [0..NUM_LEGS-1]
+     * - Second dimension: joint index [0..DOF_PER_LEG-1] => 0=coxa, 1=femur, 2=tibia
+     */
+    DesiredJointCommandState desired_joint_command_state_[NUM_LEGS][DOF_PER_LEG];
+
+    bool isValidJointAddress(int leg_index, int joint_index) const;
+    void syncDesiredJointStateFromInternalCommand(int leg_index, const JointAngles &desired_positions,
+                                                  const JointAngles &desired_velocities);
 
 #ifdef TESTING_ENABLED
     /** Coxa telemetry instrumentation (testing only). */
@@ -372,9 +421,6 @@ class LocomotionSystem : public StateControllerContext {
     /** Check if smooth movement is in progress. */
     bool isSmoothMovementInProgress() const;
 
-    /** Reset smooth movement trajectory. */
-    void resetSmoothMovement();
-
     ErrorCode getLastError() const { return last_error; }
     String getErrorMessage(ErrorCode error);
     bool handleError(ErrorCode error);
@@ -449,6 +495,54 @@ class LocomotionSystem : public StateControllerContext {
 
     /** Get current servo speed for a specific joint (affected by velocity control). */
     double getCurrentServoSpeed(int leg_index, int joint_index) const;
+
+    /**
+     * @brief Start a new external desired-command cycle by shifting desired_* to prev_desired_*.
+     *
+     * External software can call this once per control cycle before writing new desired
+     * values to replicate OpenSHC's prev_desired_* progression semantics.
+     *
+     * Recommended external flow per cycle:
+     * 1) call beginDesiredJointCommandCycle()
+     * 2) call setDesiredJointCommandState()/setDesiredJointEffort() as needed
+     * 3) optionally read back via getDesiredJointCommandState()
+     *
+     * Note: the internal locomotion pipeline also updates this state from commanded
+     * joint targets, so external software can use this as a unified observability point.
+     */
+    void beginDesiredJointCommandCycle();
+
+    /**
+     * @brief Set desired position/velocity/effort for one joint from external software.
+     * @param leg_index Leg index (0..NUM_LEGS-1)
+     * @param joint_index Joint index (0=coxa,1=femur,2=tibia)
+     * @param desired_position_rad Desired joint position in radians
+     * @param desired_velocity_rad_s Desired joint velocity in rad/s
+     * @param desired_effort Desired joint effort in driver units
+     * @return True when indices are valid and state was updated
+     */
+    bool setDesiredJointCommandState(int leg_index, int joint_index,
+                                     double desired_position_rad,
+                                     double desired_velocity_rad_s,
+                                     double desired_effort);
+
+    /**
+     * @brief Update only desired effort for one joint from external software.
+     * @param leg_index Leg index (0..NUM_LEGS-1)
+     * @param joint_index Joint index (0=coxa,1=femur,2=tibia)
+     * @param desired_effort Desired joint effort in driver units
+     * @return True when indices are valid and state was updated
+     */
+    bool setDesiredJointEffort(int leg_index, int joint_index, double desired_effort);
+
+    /**
+     * @brief Get desired/previous desired command state for one joint.
+     * @param leg_index Leg index (0..NUM_LEGS-1)
+     * @param joint_index Joint index (0=coxa,1=femur,2=tibia)
+     * @param state Output command state
+     * @return True when indices are valid and state was written
+     */
+    bool getDesiredJointCommandState(int leg_index, int joint_index, DesiredJointCommandState &state) const;
 
     /** Get robot parameters. */
     const Parameters &getParams() const override { return params; }
