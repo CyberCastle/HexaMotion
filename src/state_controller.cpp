@@ -568,11 +568,6 @@ bool StateController::changeGait(GaitType gait) {
     return true;
 }
 
-// Remove getTransitionProgress() method
-// TransitionProgress StateController::getTransitionProgress() const {
-//     return transition_progress_;
-// }
-
 bool StateController::hasErrors() const {
     return has_error_;
 }
@@ -589,11 +584,6 @@ String StateController::getDiagnosticInfo() const {
     info += "  Posing Mode: " + toArduinoString(toString(current_posing_mode_)) + "\n";
     info += "  Manual Legs: " + toArduinoString(toString(manual_leg_count_)) + "/" + toArduinoString(toString(config_.max_manual_legs)) + "\n";
     info += "  Transitioning: " + String(is_transitioning_ ? "Yes" : "No") + "\n";
-
-    // Remove transition_progress_ updates in transition and reset methods
-    // if (is_transitioning_) {
-    //     info += "  Transition Progress: " + toArduinoString(toString(transition_progress_.completion_percentage)) + "%\n";
-    // }
 
     if (has_error_) {
         info += "  Error: " + last_error_message_ + "\n";
@@ -661,14 +651,6 @@ void StateController::reset() {
 
     // Reset transition state
     is_transitioning_ = false;
-    // Remove transition_progress_ updates in transition and reset methods
-    // transition_progress_.current_step = 0;
-    // transition_progress_.total_steps = 0;
-    // transition_progress_.completion_percentage = 0.0f;
-    // transition_progress_.is_complete = true;
-    // transition_progress_.has_error = false;
-    // transition_progress_.error_message = "";
-
     // Initialize pose controller
     body_pose_controller_ = nullptr;
 }

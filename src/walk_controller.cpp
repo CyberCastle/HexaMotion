@@ -89,6 +89,47 @@ Point3D WalkController::getWalkPlaneNormal() const {
     return Point3D(0, 0, 1);
 }
 
+void WalkController::setBodyPoseController(BodyPoseController *controller) {
+    body_pose_controller_ = controller;
+    for (size_t i = 0; i < leg_steppers_.size(); ++i) {
+        if (leg_steppers_[i]) {
+            leg_steppers_[i]->setBodyPoseController(controller);
+        }
+    }
+}
+
+void WalkController::computeLimitsForConfig(const GaitConfiguration &gait_config,
+                                            std::map<int, double> &max_linear_speed,
+                                            std::map<int, double> &max_angular_speed,
+                                            std::map<int, double> &max_linear_acceleration,
+                                            std::map<int, double> &max_angular_acceleration) {
+    StepCycle step_cycle = gait_config.generateStepCycle();
+    velocity_limits_.generateLimits(step_cycle,
+                                    gait_config,
+                                    &max_linear_speed,
+                                    &max_angular_speed,
+                                    &max_linear_acceleration,
+                                    &max_angular_acceleration);
+}
+
+double WalkController::getLimit(const Eigen::Vector2d &linear_velocity_input,
+                                double angular_velocity_input,
+                                const std::map<int, double> &limit_map) const {
+    if (limit_map.empty()) {
+        return 0.0;
+    }
+
+    Point3D tip_positions[NUM_LEGS];
+    for (int i = 0; i < NUM_LEGS; ++i) {
+        if (i < static_cast<int>(leg_steppers_.size()) && leg_steppers_[i]) {
+            tip_positions[i] = leg_steppers_[i]->getCurrentTipPose();
+        } else {
+            tip_positions[i] = model.getLegDefaultPosition(i);
+        }
+    }
+    return velocity_limits_.getLimit(linear_velocity_input, angular_velocity_input, limit_map, tip_positions);
+}
+
 double WalkController::getStanceDuration() const {
     double total_period = current_gait_config_.phase_config.stance_phase + current_gait_config_.phase_config.swing_phase;
     return total_period > 0 ? static_cast<double>(current_gait_config_.phase_config.stance_phase) / total_period : 0.0;
@@ -105,6 +146,8 @@ double WalkController::getCycleFrequency() const { return current_gait_config_.g
 bool WalkController::setGaitConfiguration(const GaitConfiguration &gait_config) {
     // Store the new gait configuration
     current_gait_config_ = gait_config;
+    step_clearance_ = gait_config.swing_height;
+    step_depth_ = gait_config.step_depth;
 
     // Apply the configuration to all leg steppers
     applyGaitConfigToLegSteppers(gait_config);
@@ -142,6 +185,7 @@ void WalkController::applyGaitConfigToLegSteppers(const GaitConfiguration &gait_
         // Set gait-specific parameters (not part of StepCycle)
         leg_stepper->setSwingWidth(gait_config.swing_width);
         leg_stepper->setStepClearanceHeight(gait_config.swing_height);
+        leg_stepper->setStepDepth(gait_config.step_depth);
         leg_stepper->setStanceSpanModifier(gait_config.stance_span_modifier); // OpenSHC stance_span_modifier propagation
 
         // Calculate phase offset using OpenSHC formula
@@ -473,10 +517,11 @@ void WalkController::updateWalk(const Point3D &linear_velocity_input, double ang
             // OpenSHC STARTING state: per-leg phase synchronization
             if (walk_state_ == WALK_STARTING) {
                 int swing_end_wrapped = step_cycle.swing_end_ % step_cycle.period_;
+                int stance_start_wrapped = step_cycle.stance_start_ % step_cycle.period_;
 
                 // Once ALL legs are at correct phase, track completed first step
                 if (legs_at_correct_phase_ == leg_count) {
-                    if (leg_stepper->getPhase() == swing_end_wrapped && !leg_stepper->hasCompletedFirstStep()) {
+                    if (leg_stepper->getPhase() == stance_start_wrapped && !leg_stepper->hasCompletedFirstStep()) {
                         leg_stepper->setCompletedFirstStep(true);
                         legs_completed_first_step_++;
                     }
@@ -486,9 +531,9 @@ void WalkController::updateWalk(const Point3D &linear_velocity_input, double ang
                 if (!leg_stepper->isAtCorrectPhase()) {
                     // OpenSHC: phase offset is already in iterations (no conversion needed)
                     int offset_iters = leg_stepper->getPhaseOffset();
-                    bool offset_in_swing = (offset_iters > step_cycle.swing_start_ && offset_iters < step_cycle.swing_end_);
+                    bool offset_in_swing = (offset_iters >= step_cycle.swing_start_ && offset_iters < step_cycle.swing_end_);
 
-                    if (offset_in_swing && leg_stepper->getPhase() != swing_end_wrapped) {
+                    if (offset_in_swing && leg_stepper->getPhase() != stance_start_wrapped) {
                         // Leg's offset is in swing range and hasn't reached swing end yet
                         leg_stepper->setStepState(STEP_FORCE_STANCE);
                     } else {
@@ -593,8 +638,10 @@ void WalkController::updateManual(int primary_leg_index, const Eigen::Vector3d &
 
         if (params.manual_leg.joint_control) {
             // Joint control: velocity inputs x/y/z mapped to coxa/tibia joint positions (OpenSHC 3DOF path)
-            double coxa_joint_velocity = tip_velocity_input[1] * params.manual_leg.max_rotation_velocity * time_delta_;
-            double tibia_joint_velocity = tip_velocity_input[0] * params.manual_leg.max_rotation_velocity * time_delta_;
+            double x_input = math_utils::clamp(tip_velocity_input[0], -1.0, 1.0);
+            double y_input = math_utils::clamp(tip_velocity_input[1], -1.0, 1.0);
+            double coxa_joint_velocity = y_input * params.manual_leg.max_rotation_velocity * time_delta_;
+            double tibia_joint_velocity = x_input * params.manual_leg.max_rotation_velocity * time_delta_;
 
             // Get current joint angles (radians), modify, and set back
             JointAngles angles = leg.getJointAngles();

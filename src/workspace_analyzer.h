@@ -146,7 +146,10 @@ class WorkspaceAnalyzer {
     // ========================================================================
 
     void generateWalkspaceForLeg(int leg_index);
-    bool detailedReachabilityCheck(int leg_index, const Point3D &position);
+    bool detailedReachabilityCheck(int leg_index,
+                                   const Point3D &position,
+                                   const JointAngles &initial_guess,
+                                   JointAngles *solution = nullptr);
 };
 
 #endif // WORKSPACE_ANALYZER_H

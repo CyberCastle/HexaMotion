@@ -446,7 +446,8 @@ void WorkspaceAnalyzer::generateWalkspaceForLeg(int leg_index) {
     Point3D id_tip = model_.forwardKinematicsGlobalCoordinates(leg_index, zero);
 
     // If it cannot reach the identity position -> workspace is empty
-    bool identity_reachable = detailedReachabilityCheck(leg_index, id_tip);
+    JointAngles zero_seed(0, 0, 0);
+    bool identity_reachable = detailedReachabilityCheck(leg_index, id_tip, zero_seed, nullptr);
 
     // OpenSHC parity: workspace layers are relative to the identity tip workplane (height 0).
     // Per-leg workspace is bounded only by IK reachability (no adjacent-leg overlap constraints).
@@ -454,6 +455,9 @@ void WorkspaceAnalyzer::generateWalkspaceForLeg(int leg_index) {
     double height_min = -MAX_WORKSPACE_RADIUS;
     double height_max = MAX_WORKSPACE_RADIUS;
     double layer_step = (height_max - height_min) / WORKSPACE_LAYERS;
+
+    JointAngles previous_bearing_seed(0, 0, 0);
+    bool has_previous_bearing_seed = false;
 
     for (int b = 0; b <= 360; b += BEARING_STEP) {
         double rad = math_utils::degreesToRadians(static_cast<double>(b));
@@ -463,21 +467,36 @@ void WorkspaceAnalyzer::generateWalkspaceForLeg(int leg_index) {
         double max_allowed_radius = identity_reachable ? MAX_WORKSPACE_RADIUS : 0.0;
 
         // Process all height layers for this bearing
+        JointAngles bearing_seed = has_previous_bearing_seed ? previous_bearing_seed : JointAngles(0, 0, 0);
+        bool bearing_seed_valid = has_previous_bearing_seed;
+
         for (int layer = 0; layer <= WORKSPACE_LAYERS; ++layer) {
             double h = height_min + layer * layer_step;
 
             // Find the maximum reachable radius at this height and bearing
             double best = 0.0;
             if (max_allowed_radius > 0.0) {
+                JointAngles search_seed = bearing_seed_valid ? bearing_seed : JointAngles(0, 0, 0);
+                bool has_search_seed = bearing_seed_valid;
                 for (double r = 0.0; r <= max_allowed_radius; r += MAX_POSITION_DELTA) {
                     Point3D p = id_tip;
                     p.z = id_tip.z + h;
                     p.x += r * cos(rad);
                     p.y += r * sin(rad);
-                    if (detailedReachabilityCheck(leg_index, p))
+                    JointAngles solved;
+                    JointAngles initial_guess = has_search_seed ? search_seed : JointAngles(0, 0, 0);
+                    if (detailedReachabilityCheck(leg_index, p, initial_guess, &solved)) {
                         best = r;
-                    else
+                        search_seed = solved;
+                        has_search_seed = true;
+                    } else {
                         break;
+                    }
+                }
+
+                if (has_search_seed) {
+                    bearing_seed = search_seed;
+                    bearing_seed_valid = true;
                 }
             }
 
@@ -486,6 +505,11 @@ void WorkspaceAnalyzer::generateWalkspaceForLeg(int leg_index) {
                 leg_workspaces_[leg_index][h] = Workplane();
             }
             leg_workspaces_[leg_index][h][b] = best;
+        }
+
+        if (bearing_seed_valid) {
+            previous_bearing_seed = bearing_seed;
+            has_previous_bearing_seed = true;
         }
     }
 
@@ -498,10 +522,15 @@ void WorkspaceAnalyzer::generateWalkspaceForLeg(int leg_index) {
     leg_workspace_generated_[leg_index] = true;
 }
 
-bool WorkspaceAnalyzer::detailedReachabilityCheck(int leg_index, const Point3D &position) {
+bool WorkspaceAnalyzer::detailedReachabilityCheck(int leg_index,
+                                                  const Point3D &position,
+                                                  const JointAngles &initial_guess,
+                                                  JointAngles *solution) {
     try {
-        JointAngles zero_angles(0, 0, 0);
-        JointAngles angles = model_.inverseKinematicsCurrentGlobalCoordinates(leg_index, zero_angles, position);
+        JointAngles angles = model_.inverseKinematicsCurrentGlobalCoordinates(leg_index, initial_guess, position);
+        if (solution) {
+            *solution = angles;
+        }
         return model_.checkJointLimits(leg_index, angles);
     } catch (...) {
         return false;

@@ -74,6 +74,7 @@ struct GaitConfiguration {
     // Gait-specific parameters
     double step_length;                //< Default step length in mm
     double swing_height;               //< Swing trajectory height in mm
+    double step_depth;                 //< Reactive step depth in mm
     double body_clearance;             //< Body clearance above ground in mm
     double stance_span_modifier = 0.0; // Modificador de span lateral de apoyo (OpenSHC compatible)
 

@@ -12,6 +12,17 @@
 #include <chrono>
 #endif
 
+namespace {
+double clampAndStep(double input, double min_value, double max_value, double step) {
+    double clamped = math_utils::clamp(input, min_value, max_value);
+    if (step <= 0.0) {
+        return clamped;
+    }
+    double stepped = std::round((clamped - min_value) / step) * step + min_value;
+    return math_utils::clamp(stepped, min_value, max_value);
+}
+} // namespace
+
 /** Constructor. */
 LocomotionSystem::LocomotionSystem(const Parameters &params)
     : params(params), imu_interface(nullptr), fsr_interface(nullptr), servo_interface(nullptr),
@@ -129,6 +140,8 @@ bool LocomotionSystem::initialize(IIMUInterface *imu, IFSRInterface *fsr, IServo
     walk_ctrl = new WalkController(model, legs, pose_config);
     admittance_ctrl = new AdmittanceController(params);
     velocity_controller = new CartesianVelocityController(model);
+
+    walk_ctrl->setBodyPoseController(body_pose_ctrl);
 
     /** Enable IMU pose compensation by default if configured. */
     body_pose_ctrl->setIMUPoseEnabled(params.body_comp.enable);
@@ -347,6 +360,10 @@ bool LocomotionSystem::setGaitConfiguration(const GaitConfiguration &gait_config
 
     bool result = walk_ctrl->setGait(gait_config);
 
+    if (result) {
+        walk_ctrl->generateWalkspace();
+    }
+
     /** Update BodyPoseController with current gait type for startup sequence selection. */
     if (result && body_pose_ctrl) {
         body_pose_ctrl->setCurrentGaitType(gait_config.gait_type);
@@ -369,46 +386,150 @@ bool LocomotionSystem::planGaitSequence(double velocity_x, double velocity_y, do
     return true;
 }
 
-bool LocomotionSystem::setParameter(const std::string &name, double value) {
+bool LocomotionSystem::canApplyStepFrequency(double step_frequency) const {
+    if (!walk_ctrl) {
+        return false;
+    }
+
+    GaitConfiguration proposed = walk_ctrl->getCurrentGaitConfig();
+    proposed.step_frequency = step_frequency;
+
+    std::map<int, double> new_linear_limits;
+    std::map<int, double> new_angular_limits;
+    std::map<int, double> unused_linear_accel;
+    std::map<int, double> unused_angular_accel;
+    walk_ctrl->computeLimitsForConfig(proposed,
+                                      new_linear_limits,
+                                      new_angular_limits,
+                                      unused_linear_accel,
+                                      unused_angular_accel);
+
+    if (new_linear_limits.empty() || new_angular_limits.empty()) {
+        return false;
+    }
+
+    Eigen::Vector2d current_linear(walk_ctrl->getDesiredLinearVelocity().x,
+                                   walk_ctrl->getDesiredLinearVelocity().y);
+    double current_angular = walk_ctrl->getDesiredAngularVelocity();
+
+    double max_linear = walk_ctrl->getLimit(current_linear, current_angular, new_linear_limits);
+    double max_angular = walk_ctrl->getLimit(current_linear, current_angular, new_angular_limits);
+
+    return (current_linear.norm() <= max_linear && std::abs(current_angular) <= std::abs(max_angular));
+}
+
+bool LocomotionSystem::applyStepFrequency(double step_frequency) {
     if (!walk_ctrl) {
         last_error = PARAMETER_ERROR;
         return false;
     }
 
-    auto clampAndStep = [](double input, double min_value, double max_value, double step) {
-        double clamped = math_utils::clamp(input, min_value, max_value);
-        if (step <= 0.0) {
-            return clamped;
-        }
-        double stepped = std::round((clamped - min_value) / step) * step + min_value;
-        return math_utils::clamp(stepped, min_value, max_value);
-    };
-
     GaitConfiguration updated = walk_ctrl->getCurrentGaitConfig();
-    bool applied = false;
+    updated.step_frequency = step_frequency;
+    params.step_frequency = step_frequency;
+    model.setStepFrequency(step_frequency);
+    return setGaitConfiguration(updated);
+}
 
-    if (name == "step_frequency") {
-        double new_value = clampAndStep(value, 0.001, 2.0, 0.1);
-        updated.step_frequency = new_value;
-        params.step_frequency = new_value;
-        model.setStepFrequency(new_value);
-        applied = true;
-    } else if (name == "swing_height") {
-        double new_value = clampAndStep(value, 10.0, 80.0, 5.0);
-        updated.swing_height = new_value;
-        applied = true;
-    } else if (name == "stance_span_modifier") {
-        double new_value = clampAndStep(value, -1.0, 1.0, 0.1);
-        updated.stance_span_modifier = new_value;
-        applied = true;
+bool LocomotionSystem::tryApplyPendingStepFrequency() {
+    if (!step_frequency_adjust_pending_) {
+        return true;
     }
+    if (!walk_ctrl) {
+        last_error = PARAMETER_ERROR;
+        return false;
+    }
+    if (!canApplyStepFrequency(pending_step_frequency_)) {
+        return true;
+    }
+    if (!applyStepFrequency(pending_step_frequency_)) {
+        return false;
+    }
+    step_frequency_adjust_pending_ = false;
+    pending_step_frequency_ = 0.0;
+    return true;
+}
 
-    if (!applied) {
+bool LocomotionSystem::setStepFrequency(double value) {
+    if (!walk_ctrl) {
         last_error = PARAMETER_ERROR;
         return false;
     }
 
-    return walk_ctrl->setGaitConfiguration(updated);
+    double new_value = clampAndStep(value, 0.001, 2.0, 0.1);
+    if (canApplyStepFrequency(new_value)) {
+        step_frequency_adjust_pending_ = false;
+        pending_step_frequency_ = 0.0;
+        return applyStepFrequency(new_value);
+    }
+
+    step_frequency_adjust_pending_ = true;
+    pending_step_frequency_ = new_value;
+    return true;
+}
+
+bool LocomotionSystem::setSwingHeight(double value) {
+    if (!walk_ctrl) {
+        last_error = PARAMETER_ERROR;
+        return false;
+    }
+
+    GaitConfiguration updated = walk_ctrl->getCurrentGaitConfig();
+    updated.swing_height = clampAndStep(value, 10.0, 80.0, 5.0);
+    return setGaitConfiguration(updated);
+}
+
+bool LocomotionSystem::setStanceSpanModifier(double value) {
+    if (!walk_ctrl) {
+        last_error = PARAMETER_ERROR;
+        return false;
+    }
+
+    GaitConfiguration updated = walk_ctrl->getCurrentGaitConfig();
+    updated.stance_span_modifier = clampAndStep(value, -1.0, 1.0, 0.1);
+    return setGaitConfiguration(updated);
+}
+
+bool LocomotionSystem::setSwingWidth(double value) {
+    if (!walk_ctrl) {
+        last_error = PARAMETER_ERROR;
+        return false;
+    }
+
+    GaitConfiguration updated = walk_ctrl->getCurrentGaitConfig();
+    updated.swing_width = clampAndStep(value, 0.0, 200.0, 5.0);
+    return setGaitConfiguration(updated);
+}
+
+bool LocomotionSystem::setStepDepth(double value) {
+    if (!walk_ctrl) {
+        last_error = PARAMETER_ERROR;
+        return false;
+    }
+
+    GaitConfiguration updated = walk_ctrl->getCurrentGaitConfig();
+    updated.step_depth = clampAndStep(value, -100.0, 100.0, 5.0);
+    return setGaitConfiguration(updated);
+}
+
+bool LocomotionSystem::setVirtualMass(double value) {
+    params.admittance.virtual_mass = clampAndStep(value, 0.01, 10.0, 0.01);
+    return true;
+}
+
+bool LocomotionSystem::setVirtualStiffness(double value) {
+    params.admittance.virtual_stiffness = clampAndStep(value, 0.0, 100.0, 1.0);
+    return true;
+}
+
+bool LocomotionSystem::setVirtualDamping(double value) {
+    params.admittance.virtual_damping_ratio = clampAndStep(value, 0.0, 50.0, 0.5);
+    return true;
+}
+
+bool LocomotionSystem::setForceGain(double value) {
+    params.admittance.force_gain = clampAndStep(value, 0.0, 10.0, 0.1);
+    return true;
 }
 
 /** Forward locomotion control. */
@@ -912,6 +1033,15 @@ bool LocomotionSystem::runControlPipelineStep() {
         }
     }
 
+    if (!robot_running && step_frequency_adjust_pending_) {
+        if (!applyStepFrequency(pending_step_frequency_)) {
+            last_error = PARAMETER_ERROR;
+            return false;
+        }
+        step_frequency_adjust_pending_ = false;
+        pending_step_frequency_ = 0.0;
+    }
+
     /** Only update leg trajectories if robot state is RUNNING. */
     if (walk_ctrl && robot_running) {
         /** Optional kinematic integration of body pose (test / simulation). */
@@ -934,6 +1064,11 @@ bool LocomotionSystem::runControlPipelineStep() {
         walk_ctrl->updateWalk(applied_linear_velocity,
                               commanded_angular_velocity_,
                               body_position, body_orientation);
+
+        if (!tryApplyPendingStepFrequency()) {
+            last_error = PARAMETER_ERROR;
+            return false;
+        }
 
         /** Step 1b: apply manual-leg updates after walk (OpenSHC update order parity). */
         walk_ctrl->updateManual(pending_primary_leg_index_,
@@ -1189,26 +1324,6 @@ double LocomotionSystem::constrainAngle(double angle, double min_angle, double m
 
 bool LocomotionSystem::validateParameters() {
     return model.validate();
-}
-
-bool LocomotionSystem::setParameters(const Parameters &new_params) {
-    /** Validate new parameters. */
-    if (new_params.hexagon_radius <= 0 || new_params.coxa_length <= 0 ||
-        new_params.femur_length <= 0 || new_params.tibia_length <= 0) {
-        last_error = PARAMETER_ERROR;
-        return false;
-    }
-
-    params = new_params;
-
-    for (int i = 0; i < NUM_LEGS; ++i) {
-        for (int j = 0; j < DOF_PER_LEG; ++j) {
-            last_joint_command_deg_[i][j] = 0.0;
-            last_joint_command_valid_[i][j] = false;
-        }
-    }
-
-    return validateParameters();
 }
 
 bool LocomotionSystem::isValidJointAddress(int leg_index, int joint_index) const {

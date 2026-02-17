@@ -274,6 +274,7 @@ class BodyPoseController {
     void setBodyPoseConfig(const BodyPoseConfiguration &config) { body_pose_config = config; }
 
     const Pose &getCurrentBodyPose() const { return body_pose_current_; }
+    Pose getDefaultBodyPose() const { return body_pose_current_; }
 
     const AutoPoseConfiguration &getAutoPoseConfig() const { return auto_pose_config; }
     void setAutoPoseConfig(const AutoPoseConfiguration &config) { auto_pose_config = config; }

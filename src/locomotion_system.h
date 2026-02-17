@@ -156,6 +156,9 @@ class LocomotionSystem : public StateControllerContext {
     Point3D pending_primary_tip_pose_;
     Point3D pending_secondary_tip_pose_;
 
+    bool step_frequency_adjust_pending_ = false;
+    double pending_step_frequency_ = 0.0;
+
     bool setLegJointAngles(int leg_index, const JointAngles &q);
 
     /** Apply configured per-joint output offset in degrees. */
@@ -190,6 +193,9 @@ class LocomotionSystem : public StateControllerContext {
     bool isValidJointAddress(int leg_index, int joint_index) const;
     void syncDesiredJointStateFromInternalCommand(int leg_index, const JointAngles &desired_positions,
                                                   const JointAngles &desired_velocities);
+    bool canApplyStepFrequency(double step_frequency) const;
+    bool applyStepFrequency(double step_frequency);
+    bool tryApplyPendingStepFrequency();
 
 #ifdef TESTING_ENABLED
     /** Coxa telemetry instrumentation (testing only). */
@@ -286,12 +292,67 @@ class LocomotionSystem : public StateControllerContext {
     bool planGaitSequence(double velocity_x, double velocity_y, double angular_velocity) override;
 
     /**
-     * @brief Update a runtime-adjustable parameter by name (lightweight parity with OpenSHC).
-     * @param name Parameter name (step_frequency, swing_height, stance_span_modifier)
-     * @param value New parameter value
-     * @return True if parameter was accepted and applied
+     * @brief Set gait step frequency with velocity-guarded transition.
+     * @param value New step frequency (Hz).
+     * @return True if accepted (applied now or deferred until safe).
      */
-    bool setParameter(const std::string &name, double value);
+    bool setStepFrequency(double value);
+
+    /**
+     * @brief Set gait swing height.
+     * @param value New swing height (mm).
+     * @return True if applied.
+     */
+    bool setSwingHeight(double value);
+
+    /**
+     * @brief Set gait stance span modifier.
+     * @param value New stance span modifier.
+     * @return True if applied.
+     */
+    bool setStanceSpanModifier(double value);
+
+    /**
+     * @brief Set gait swing width.
+     * @param value New swing width (mm).
+     * @return True if applied.
+     */
+    bool setSwingWidth(double value);
+
+    /**
+     * @brief Set gait step depth.
+     * @param value New step depth (mm).
+     * @return True if applied.
+     */
+    bool setStepDepth(double value);
+
+    /**
+     * @brief Set admittance virtual mass.
+     * @param value New virtual mass.
+     * @return True if applied.
+     */
+    bool setVirtualMass(double value);
+
+    /**
+     * @brief Set admittance virtual stiffness.
+     * @param value New virtual stiffness.
+     * @return True if applied.
+     */
+    bool setVirtualStiffness(double value);
+
+    /**
+     * @brief Set admittance virtual damping ratio.
+     * @param value New virtual damping ratio.
+     * @return True if applied.
+     */
+    bool setVirtualDamping(double value);
+
+    /**
+     * @brief Set admittance force gain.
+     * @param value New force gain.
+     * @return True if applied.
+     */
+    bool setForceGain(double value);
 
     /** State management (OpenSHC equivalent). */
     /**
@@ -472,10 +533,6 @@ class LocomotionSystem : public StateControllerContext {
     Leg &getLeg(int leg_index) { return legs[leg_index]; }
     /** Get pointer to legs array (for batch operations like poseForLegManipulation). */
     Leg *getLegsArray() override { return legs; }
-
-    /** Setters. */
-    /** Replace the current parameter set. */
-    bool setParameters(const Parameters &new_params);
 
     /** Cartesian velocity control. */
     /** Get the velocity controller instance for configuration. */

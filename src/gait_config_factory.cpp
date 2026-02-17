@@ -147,6 +147,7 @@ GaitConfiguration createWaveGaitConfig(const Parameters &params) {
     double leg_reach = RobotModel::computeStandingHorizontalReach(params); // conservative horizontal reach
     config.step_length = leg_reach * GAIT_WAVE_LENGTH_FACTOR;
     config.swing_height = params.standing_height * GAIT_WAVE_HEIGHT_FACTOR;
+    config.step_depth = STEP_DEPTH_DEFAULT;
     config.body_clearance = params.standing_height;
 
     // OpenSHC trajectory parameters
@@ -187,6 +188,7 @@ GaitConfiguration createTripodGaitConfig(const Parameters &params) {
     double leg_reach = RobotModel::computeStandingHorizontalReach(params);
     config.step_length = leg_reach * GAIT_TRIPOD_LENGTH_FACTOR;
     config.swing_height = params.standing_height * GAIT_TRIPOD_HEIGHT_FACTOR;
+    config.step_depth = STEP_DEPTH_DEFAULT;
     config.body_clearance = params.standing_height;
 
     // OpenSHC trajectory parameters
@@ -225,6 +227,7 @@ GaitConfiguration createRippleGaitConfig(const Parameters &params) {
     double leg_reach = RobotModel::computeStandingHorizontalReach(params);
     config.step_length = leg_reach * GAIT_RIPPLE_LENGTH_FACTOR;
     config.swing_height = params.standing_height * GAIT_RIPPLE_HEIGHT_FACTOR;
+    config.step_depth = STEP_DEPTH_DEFAULT;
     config.body_clearance = params.standing_height;
 
     // OpenSHC trajectory parameters
@@ -263,6 +266,7 @@ GaitConfiguration createMetachronalGaitConfig(const Parameters &params) {
     double leg_reach = RobotModel::computeStandingHorizontalReach(params);
     config.step_length = leg_reach * GAIT_METACHRONAL_LENGTH_FACTOR;
     config.swing_height = params.standing_height * GAIT_METACHRONAL_HEIGHT_FACTOR;
+    config.step_depth = STEP_DEPTH_DEFAULT;
     config.body_clearance = params.standing_height;
 
     // OpenSHC trajectory parameters

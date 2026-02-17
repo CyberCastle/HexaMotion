@@ -1,4 +1,5 @@
 #include "leg_stepper.h"
+#include "body_pose_controller.h"
 #include "hexamotion_constants.h"
 #include "math_utils.h"
 #include "workspace_analyzer.h"
@@ -69,6 +70,8 @@ LegStepper::LegStepper(int leg_index, const Point3D &identity_tip_pose, Leg &leg
     // Initialize gait configuration parameters (not part of StepCycle)
     swing_width_ = 5.0;            // Default swing width (will be overridden by gait configuration)
     step_clearance_height_ = 20.0; // Default step clearance height in mm (will be overridden by gait configuration)
+    step_depth_ = STEP_DEPTH_DEFAULT;
+    body_pose_controller_ = nullptr;
 
     // Initialize swing state management
     swing_initialized_ = false;
@@ -526,7 +529,7 @@ void LegStepper::updateTipPositionIterative(int iteration, double time_delta, bo
                     Point3D difference = target_tip_position - target_tip_pose_;
                     target_tip_pose_ = target_tip_pose_ + math_utils::projectVector(difference, walk_plane_normal_);
                 } else {
-                    target_tip_pose_.z -= STEP_DEPTH_DEFAULT;
+                    target_tip_pose_.z -= step_depth_;
                 }
             }
         }
@@ -793,7 +796,12 @@ void LegStepper::updateDefaultTipPosition() {
     // 1. Modify identity tip position by stance span change
     Point3D identity_tip_position = identity_tip_pose_ + calculateStanceSpanChange();
 
-    // NOTE: OpenSHC transforms through default body pose; HexaMotion uses body frame identity.
+    if (body_pose_controller_) {
+        Pose default_body_pose = body_pose_controller_->getDefaultBodyPose();
+        Eigen::Vector3d transformed = default_body_pose.transformVector(
+            Eigen::Vector3d(identity_tip_position.x, identity_tip_position.y, identity_tip_position.z));
+        identity_tip_position = Point3D(transformed.x(), transformed.y(), transformed.z());
+    }
 
     // 2. Project vector from identity to stance origin onto walk plane normal
     Point3D identity_to_stance_origin = stance_origin_tip_position_ - identity_tip_position;

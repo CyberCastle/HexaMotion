@@ -111,7 +111,25 @@ class WalkController {
      * @brief Set body pose controller reference for walk plane functionality
      * @param controller Pointer to BodyPoseController instance
      */
-    void setBodyPoseController(BodyPoseController *controller) { body_pose_controller_ = controller; }
+    void setBodyPoseController(BodyPoseController *controller);
+
+    /**
+     * @brief Compute velocity/acceleration limits for a hypothetical gait configuration.
+     *
+     * This does not modify the current active gait configuration or leg steppers.
+     */
+    void computeLimitsForConfig(const GaitConfiguration &gait_config,
+                                std::map<int, double> &max_linear_speed,
+                                std::map<int, double> &max_angular_speed,
+                                std::map<int, double> &max_linear_acceleration,
+                                std::map<int, double> &max_angular_acceleration);
+
+    /**
+     * @brief Get interpolated limit for a command from a provided bearing limit map.
+     */
+    double getLimit(const Eigen::Vector2d &linear_velocity_input,
+                    double angular_velocity_input,
+                    const std::map<int, double> &limit_map) const;
 
     /**
      * @brief Estimate gravity vector

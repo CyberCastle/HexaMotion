@@ -6,6 +6,8 @@
 #include "robot_model.h"
 #include "workspace_analyzer.h"
 
+class BodyPoseController;
+
 enum StepState {
     STEP_SWING,        //< The leg step cycle is in 'swing' state, the forward 'in air' progression of the step cycle
     STEP_STANCE,       //< The leg step cycle is in 'stance' state, the backward 'on ground' regression of the step cycle
@@ -160,6 +162,7 @@ class LegStepper {
     void setAtCorrectPhase(bool at_correct) { at_correct_phase_ = at_correct; }
     void setWalkPlaneNormal(const Point3D &walk_plane_normal) { walk_plane_normal_ = walk_plane_normal; }
     Point3D getWalkPlaneNormal() const { return walk_plane_normal_; }
+    void setBodyPoseController(BodyPoseController *controller) { body_pose_controller_ = controller; }
 
     // OpenSHC-style StepCycle interface
     void setStepCycle(const StepCycle &step_cycle) { step_cycle_ = step_cycle; }
@@ -170,6 +173,8 @@ class LegStepper {
     double getSwingWidth() const { return swing_width_; }
     void setStepClearanceHeight(double step_clearance_height) { step_clearance_height_ = step_clearance_height; }
     double getStepClearanceHeight() const { return step_clearance_height_; }
+    void setStepDepth(double step_depth) { step_depth_ = step_depth; }
+    double getStepDepth() const { return step_depth_; }
     // Stance span modifier (OpenSHC: stance_span_modifier) applied to default tip position lateral spread
     void setStanceSpanModifier(double m) { stance_span_modifier_ = m; }
     double getStanceSpanModifier() const { return stance_span_modifier_; }
@@ -296,7 +301,10 @@ class LegStepper {
     // Gait configuration parameters (not part of StepCycle)
     double swing_width_;                // Lateral shift at mid-swing (OpenSHC mid_lateral_shift)
     double step_clearance_height_;      // Step clearance height (equivalent to OpenSHC walker_->getStepClearance())
+    double step_depth_;                 // Step depth in mm for reactive terrain probing
     double stance_span_modifier_ = 0.0; // OpenSHC stance_span_modifier (range typically [-1.0, 1.0])
+
+    BodyPoseController *body_pose_controller_;
 
     // Swing state management (OpenSHC style)
     bool swing_initialized_;
