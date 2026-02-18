@@ -32,6 +32,7 @@
 #include <cmath>
 #include <iomanip>
 #include <iostream>
+#include <sstream>
 #include <vector>
 
 // Test configuration
@@ -43,6 +44,352 @@ constexpr int REQUIRED_SWING_TRANSITIONS = 2;
 constexpr int MAX_STEPS = 600;
 constexpr int EXPECTED_TRIPOD_HALF_PERIOD = 52;
 
+// Phase transition angle validation constants
+// At Z=-150 (standing height) the expected femur/tibia angles are approximately -35°/+35°
+constexpr double EXPECTED_FEMUR_DEG = -35.05;
+constexpr double EXPECTED_TIBIA_DEG = 35.05;
+constexpr double EXPECTED_Z = -150.0;
+
+// Tolerance for phase-boundary angle deviations (degrees)
+// Origin/Target/Midpoint should be close to standing angles when Z ≈ -150
+constexpr double ANGLE_TOLERANCE_DEG = 12.0; // Report deviations; wide for observation
+constexpr double Z_TOLERANCE = 2.0;          // Z acceptable range around -150
+
+/**
+ * @brief Record of angle state at a phase transition point.
+ */
+struct PhaseTransitionRecord {
+    int step;               ///< Simulation step when transition occurred
+    int leg_index;          ///< Leg index (0-5)
+    int transition_number;  ///< Which transition for this leg (1-based)
+    std::string transition; ///< "STANCE->SWING" or "SWING->STANCE"
+
+    // Origin point (start of the new phase)
+    Point3D origin_pos;
+    double origin_femur_deg;
+    double origin_tibia_deg;
+    double origin_coxa_deg;
+
+    // Target point (end of the new phase)
+    Point3D target_pos;
+    double target_femur_deg;
+    double target_tibia_deg;
+    double target_coxa_deg;
+
+    // Midpoint (average of origin and target)
+    Point3D midpoint_pos;
+    double midpoint_femur_deg;
+    double midpoint_tibia_deg;
+    double midpoint_coxa_deg;
+
+    // Current tip position/angles at the exact transition instant
+    Point3D current_pos;
+    double current_femur_deg;
+    double current_tibia_deg;
+    double current_coxa_deg;
+};
+
+/**
+ * @brief Computes IK angles for a given tip position using the robot model.
+ * @param model The robot model
+ * @param leg_index Leg index for IK context
+ * @param pos The tip position in global coordinates
+ * @param out_coxa Output coxa angle in degrees
+ * @param out_femur Output femur angle in degrees
+ * @param out_tibia Output tibia angle in degrees
+ * @return true if IK succeeded (angles are finite)
+ */
+static bool computeIKAnglesDeg(const RobotModel &model, int leg_index, const Point3D &pos,
+                               double &out_coxa, double &out_femur, double &out_tibia) {
+    JointAngles angles = model.inverseKinematicsGlobalCoordinates(leg_index, pos);
+    out_coxa = math_utils::radiansToDegrees(angles.coxa);
+    out_femur = math_utils::radiansToDegrees(angles.femur);
+    out_tibia = math_utils::radiansToDegrees(angles.tibia);
+    return std::isfinite(out_coxa) && std::isfinite(out_femur) && std::isfinite(out_tibia);
+}
+
+/**
+ * @brief Captures a PhaseTransitionRecord at a phase boundary.
+ *
+ * Records origin, midpoint, and target positions and their IK-derived angles
+ * for deterministic analysis of angle deviations at each gait phase change.
+ *
+ * @param sys The LocomotionSystem
+ * @param leg_index Leg index (0-5)
+ * @param step Current simulation step
+ * @param transition_num Current transition count for this leg
+ * @param is_stance_to_swing true if STANCE->SWING, false if SWING->STANCE
+ * @return PhaseTransitionRecord with all fields populated
+ */
+static PhaseTransitionRecord capturePhaseTransition(
+    LocomotionSystem &sys, int leg_index, int step, int transition_num,
+    bool is_stance_to_swing) {
+
+    PhaseTransitionRecord rec;
+    rec.step = step;
+    rec.leg_index = leg_index;
+    rec.transition_number = transition_num;
+    rec.transition = is_stance_to_swing ? "STANCE->SWING" : "SWING->STANCE";
+
+    const RobotModel &model = sys.getRobotModel();
+    const Leg &leg = sys.getLeg(leg_index);
+    auto leg_stepper = sys.getWalkController()->getLegStepper(leg_index);
+
+    // Get body pose for walk-plane → global coordinate transformation.
+    // LegStepper positions are in the walk-plane frame (z=0 = ground plane);
+    // body_pose.inverseTransformVector() applies the body height + rotation
+    // to produce global coordinates suitable for IK.
+    const BodyPoseController *bpc = sys.getBodyPoseController();
+    Pose body_pose;
+    if (bpc) {
+        body_pose = bpc->getCurrentBodyPose();
+    }
+
+    // Current position and angles at the transition instant
+    rec.current_pos = leg.getCurrentTipPositionGlobal();
+    JointAngles cur_angles = leg.getJointAngles();
+    rec.current_coxa_deg = math_utils::radiansToDegrees(cur_angles.coxa);
+    rec.current_femur_deg = math_utils::radiansToDegrees(cur_angles.femur);
+    rec.current_tibia_deg = math_utils::radiansToDegrees(cur_angles.tibia);
+
+    if (leg_stepper) {
+        // Origin: where the new phase started (swing_origin for swing, stance_origin for stance)
+        // These are in walk-plane frame; transform to global for IK
+        Point3D origin_walk;
+        if (is_stance_to_swing) {
+            origin_walk = leg_stepper->getSwingOriginTipPosition();
+        } else {
+            origin_walk = leg_stepper->getStanceOriginTipPosition();
+        }
+        rec.origin_pos = body_pose.inverseTransformVector(origin_walk);
+        computeIKAnglesDeg(model, leg_index, rec.origin_pos,
+                           rec.origin_coxa_deg, rec.origin_femur_deg, rec.origin_tibia_deg);
+
+        // Target: where this phase aims to end (walk-plane frame → global)
+        Point3D target_walk = leg_stepper->getTargetTipPose();
+        rec.target_pos = body_pose.inverseTransformVector(target_walk);
+        computeIKAnglesDeg(model, leg_index, rec.target_pos,
+                           rec.target_coxa_deg, rec.target_femur_deg, rec.target_tibia_deg);
+
+        // Midpoint: geometric average of origin and target (in global frame)
+        rec.midpoint_pos.x = (rec.origin_pos.x + rec.target_pos.x) / 2.0;
+        rec.midpoint_pos.y = (rec.origin_pos.y + rec.target_pos.y) / 2.0;
+        rec.midpoint_pos.z = (rec.origin_pos.z + rec.target_pos.z) / 2.0;
+        computeIKAnglesDeg(model, leg_index, rec.midpoint_pos,
+                           rec.midpoint_coxa_deg, rec.midpoint_femur_deg, rec.midpoint_tibia_deg);
+    }
+
+    return rec;
+}
+
+/**
+ * @brief Prints a single PhaseTransitionRecord in a formatted table.
+ */
+static void printPhaseTransitionRecord(const PhaseTransitionRecord &rec) {
+    auto fmtPos = [](const Point3D &p) -> std::string {
+        std::stringstream ss;
+        ss << std::fixed << std::setprecision(2)
+           << "[" << std::setw(8) << p.x << ", " << std::setw(8) << p.y << ", " << std::setw(8) << p.z << "]";
+        return ss.str();
+    };
+
+    auto fmtAng = [](double coxa, double femur, double tibia) -> std::string {
+        std::stringstream ss;
+        ss << std::fixed << std::setprecision(2)
+           << "[" << std::setw(8) << coxa << ", " << std::setw(8) << femur << ", " << std::setw(8) << tibia << "]";
+        return ss.str();
+    };
+
+    auto deviationTag = [](double femur, double tibia) -> std::string {
+        double femur_dev = std::abs(femur - EXPECTED_FEMUR_DEG);
+        double tibia_dev = std::abs(tibia - EXPECTED_TIBIA_DEG);
+        if (femur_dev > ANGLE_TOLERANCE_DEG || tibia_dev > ANGLE_TOLERANCE_DEG) {
+            std::stringstream ss;
+            ss << " !! DEV femur=" << std::fixed << std::setprecision(1)
+               << femur_dev << "° tibia=" << tibia_dev << "°";
+            return ss.str();
+        }
+        return "";
+    };
+
+    std::cout << "\n  +--- Phase Transition [Step " << rec.step
+              << "] Leg " << (rec.leg_index + 1)
+              << " | " << rec.transition
+              << " | Transition #" << rec.transition_number << "\n";
+
+    std::cout << "  |  CURRENT  Pos=" << fmtPos(rec.current_pos)
+              << "  Angles=" << fmtAng(rec.current_coxa_deg, rec.current_femur_deg, rec.current_tibia_deg)
+              << deviationTag(rec.current_femur_deg, rec.current_tibia_deg) << "\n";
+
+    std::cout << "  |  ORIGIN   Pos=" << fmtPos(rec.origin_pos)
+              << "  Angles=" << fmtAng(rec.origin_coxa_deg, rec.origin_femur_deg, rec.origin_tibia_deg)
+              << deviationTag(rec.origin_femur_deg, rec.origin_tibia_deg) << "\n";
+
+    std::cout << "  |  MIDPOINT Pos=" << fmtPos(rec.midpoint_pos)
+              << "  Angles=" << fmtAng(rec.midpoint_coxa_deg, rec.midpoint_femur_deg, rec.midpoint_tibia_deg)
+              << deviationTag(rec.midpoint_femur_deg, rec.midpoint_tibia_deg) << "\n";
+
+    std::cout << "  |  TARGET   Pos=" << fmtPos(rec.target_pos)
+              << "  Angles=" << fmtAng(rec.target_coxa_deg, rec.target_femur_deg, rec.target_tibia_deg)
+              << deviationTag(rec.target_femur_deg, rec.target_tibia_deg) << "\n";
+
+    std::cout << "  +---\n";
+}
+
+/**
+ * @brief Prints a summary table of all phase transition records with deviation analysis.
+ *
+ * Groups records by leg and transition type, showing the angle deviations from
+ * the expected standing pose angles (femur ≈ -35°, tibia ≈ 35°) at each
+ * critical point (origin, midpoint, target).
+ */
+static void printPhaseTransitionSummary(const std::vector<PhaseTransitionRecord> &records) {
+    std::cout << "\n"
+              << std::string(120, '=') << "\n";
+    std::cout << "  PHASE TRANSITION ANGLE DEVIATION ANALYSIS\n";
+    std::cout << "  Expected at Z=" << EXPECTED_Z << " : femur=" << EXPECTED_FEMUR_DEG
+              << "° tibia=" << EXPECTED_TIBIA_DEG << "°\n";
+    std::cout << "  Tolerance: " << ANGLE_TOLERANCE_DEG << "°\n";
+    std::cout << std::string(120, '=') << "\n\n";
+
+    // Header
+    std::cout << std::left
+              << std::setw(6) << "Leg"
+              << std::setw(16) << "Transition"
+              << std::setw(5) << "#"
+              << std::setw(6) << "Step"
+              << std::setw(10) << "Point"
+              << std::setw(10) << "Z"
+              << std::setw(12) << "Femur(°)"
+              << std::setw(12) << "Tibia(°)"
+              << std::setw(14) << "dFemur(°)"
+              << std::setw(14) << "dTibia(°)"
+              << "Status\n";
+    std::cout << std::string(120, '-') << "\n";
+
+    int total_points = 0;
+    int within_tolerance = 0;
+    int z_deviations = 0;
+    double max_femur_dev = 0.0;
+    double max_tibia_dev = 0.0;
+    int max_femur_dev_leg = -1;
+    int max_tibia_dev_leg = -1;
+
+    for (const auto &rec : records) {
+        struct PointData {
+            const char *name;
+            Point3D pos;
+            double femur, tibia, coxa;
+        };
+
+        PointData points[] = {
+            {"ORIGIN", rec.origin_pos, rec.origin_femur_deg, rec.origin_tibia_deg, rec.origin_coxa_deg},
+            {"MIDPOINT", rec.midpoint_pos, rec.midpoint_femur_deg, rec.midpoint_tibia_deg, rec.midpoint_coxa_deg},
+            {"TARGET", rec.target_pos, rec.target_femur_deg, rec.target_tibia_deg, rec.target_coxa_deg},
+            {"CURRENT", rec.current_pos, rec.current_femur_deg, rec.current_tibia_deg, rec.current_coxa_deg},
+        };
+
+        for (const auto &pt : points) {
+            double femur_dev = pt.femur - EXPECTED_FEMUR_DEG;
+            double tibia_dev = pt.tibia - EXPECTED_TIBIA_DEG;
+            double abs_femur_dev = std::abs(femur_dev);
+            double abs_tibia_dev = std::abs(tibia_dev);
+            bool z_ok = std::abs(pt.pos.z - EXPECTED_Z) <= Z_TOLERANCE;
+            bool angle_ok = abs_femur_dev <= ANGLE_TOLERANCE_DEG && abs_tibia_dev <= ANGLE_TOLERANCE_DEG;
+
+            std::string status;
+            if (!z_ok) {
+                status = "Z-DEV";
+                z_deviations++;
+            } else if (angle_ok) {
+                status = "OK";
+                within_tolerance++;
+            } else {
+                status = "DEVIATION";
+            }
+            total_points++;
+
+            if (abs_femur_dev > max_femur_dev) {
+                max_femur_dev = abs_femur_dev;
+                max_femur_dev_leg = rec.leg_index;
+            }
+            if (abs_tibia_dev > max_tibia_dev) {
+                max_tibia_dev = abs_tibia_dev;
+                max_tibia_dev_leg = rec.leg_index;
+            }
+
+            std::cout << std::left
+                      << std::setw(6) << (rec.leg_index + 1)
+                      << std::setw(16) << rec.transition
+                      << std::setw(5) << rec.transition_number
+                      << std::setw(6) << rec.step
+                      << std::setw(10) << pt.name
+                      << std::fixed << std::setprecision(2)
+                      << std::setw(10) << pt.pos.z
+                      << std::setw(12) << pt.femur
+                      << std::setw(12) << pt.tibia
+                      << std::showpos
+                      << std::setw(14) << femur_dev
+                      << std::setw(14) << tibia_dev
+                      << std::noshowpos
+                      << status << "\n";
+        }
+        std::cout << std::string(120, '-') << "\n";
+    }
+
+    // Summary statistics
+    std::cout << "\n"
+              << std::string(80, '=') << "\n";
+    std::cout << "  DEVIATION SUMMARY\n";
+    std::cout << std::string(80, '=') << "\n";
+    std::cout << "  Total measurement points: " << total_points << "\n";
+    std::cout << "  Within tolerance:         " << within_tolerance
+              << " (" << (total_points > 0 ? 100.0 * within_tolerance / total_points : 0.0) << "%)\n";
+    std::cout << "  Z deviations (|dZ|>" << Z_TOLERANCE << "): " << z_deviations << "\n";
+    std::cout << "  Max femur deviation:      " << std::fixed << std::setprecision(2)
+              << max_femur_dev << "° (Leg " << (max_femur_dev_leg + 1) << ")\n";
+    std::cout << "  Max tibia deviation:      " << max_tibia_dev
+              << "° (Leg " << (max_tibia_dev_leg + 1) << ")\n";
+    std::cout << std::string(80, '=') << "\n\n";
+
+    // Per-leg summary
+    std::cout << "  PER-LEG DEVIATION PROFILE (origin/midpoint/target at Z≈" << EXPECTED_Z << "):\n";
+    std::cout << std::string(80, '-') << "\n";
+    for (int leg = 0; leg < NUM_LEGS; ++leg) {
+        double sum_femur_dev = 0.0, sum_tibia_dev = 0.0;
+        int count = 0;
+        for (const auto &rec : records) {
+            if (rec.leg_index != leg)
+                continue;
+            // Only consider points where Z is close to expected
+            struct {
+                double femur, tibia;
+                Point3D pos;
+            } pts[] = {
+                {rec.origin_femur_deg, rec.origin_tibia_deg, rec.origin_pos},
+                {rec.midpoint_femur_deg, rec.midpoint_tibia_deg, rec.midpoint_pos},
+                {rec.target_femur_deg, rec.target_tibia_deg, rec.target_pos},
+            };
+            for (const auto &pt : pts) {
+                if (std::abs(pt.pos.z - EXPECTED_Z) <= Z_TOLERANCE) {
+                    sum_femur_dev += std::abs(pt.femur - EXPECTED_FEMUR_DEG);
+                    sum_tibia_dev += std::abs(pt.tibia - EXPECTED_TIBIA_DEG);
+                    count++;
+                }
+            }
+        }
+        if (count > 0) {
+            std::cout << "  Leg " << (leg + 1)
+                      << ": avg |dFemur|=" << std::fixed << std::setprecision(2)
+                      << (sum_femur_dev / count)
+                      << "°  avg |dTibia|=" << (sum_tibia_dev / count)
+                      << "°  (from " << count << " points at Z≈" << EXPECTED_Z << ")\n";
+        } else {
+            std::cout << "  Leg " << (leg + 1) << ": no points at Z≈" << EXPECTED_Z << "\n";
+        }
+    }
+    std::cout << std::string(80, '-') << "\n";
+}
 /**
  * @brief Validates tripod symmetry between legs in the same group
  *
@@ -398,6 +745,9 @@ int main() {
     std::cout << "(Validación estricta: tripod exige 52 iteraciones por swing y 52 por stance)." << std::endl;
     int step = 0;
     int transition_counts[NUM_LEGS] = {0};
+    int stance_to_swing_counts[NUM_LEGS] = {0}; // STANCE->SWING transition counter per leg
+    int swing_to_stance_counts[NUM_LEGS] = {0}; // SWING->STANCE transition counter per leg
+    std::vector<PhaseTransitionRecord> transition_records;
     StepPhase previous_phases[NUM_LEGS];
     for (int i = 0; i < NUM_LEGS; ++i) {
         previous_phases[i] = sys.getLeg(i).getStepPhase();
@@ -427,15 +777,25 @@ int main() {
                 leg_phase_values[i] = leg_stepper->getPhase();
             }
 
-            // Detectar transiciones STANCE -> SWING solo para contar
+            // Detectar transiciones STANCE -> SWING: contar y capturar registro
             if (previous_phases[i] == STANCE_PHASE && current_phase == SWING_PHASE) {
                 transition_counts[i]++;
+                stance_to_swing_counts[i]++;
+                PhaseTransitionRecord rec = capturePhaseTransition(
+                    sys, i, step, stance_to_swing_counts[i], true);
+                transition_records.push_back(rec);
+                printPhaseTransitionRecord(rec);
             }
 
-            // Validate end-of-swing touchdown posture is kinematically safe.
-            // Under dynamic walking, touchdown can deviate from standing angles,
-            // especially with stride offsets and local IK minima.
+            // Detectar transiciones SWING -> STANCE: capturar registro y validar
             if (previous_phases[i] == SWING_PHASE && current_phase == STANCE_PHASE) {
+                swing_to_stance_counts[i]++;
+                PhaseTransitionRecord rec = capturePhaseTransition(
+                    sys, i, step, swing_to_stance_counts[i], false);
+                transition_records.push_back(rec);
+                printPhaseTransitionRecord(rec);
+
+                // Validate end-of-swing touchdown posture is kinematically safe.
                 JointAngles touchdown_angles = sys.getLeg(i).getJointAngles();
                 double femur_deg = math_utils::radiansToDegrees(touchdown_angles.femur);
                 double tibia_deg = math_utils::radiansToDegrees(touchdown_angles.tibia);
@@ -566,6 +926,11 @@ int main() {
             final_all_in_stance = false;
             std::cerr << "ERROR: Leg " << i + 1 << " did not return to STANCE phase." << std::endl;
         }
+    }
+
+    // Print comprehensive phase transition deviation analysis
+    if (!transition_records.empty()) {
+        printPhaseTransitionSummary(transition_records);
     }
 
     if (final_all_in_stance) {

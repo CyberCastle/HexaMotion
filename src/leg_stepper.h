@@ -77,6 +77,11 @@ class LegStepper {
     double getDriftEMANorm() const { return drift_ema_norm_; }
     double getPlanarDriftNorm() const { return planar_drift_norm_; }
     double getVerticalDrift() const { return vertical_drift_; }
+
+    // Phase boundary pose accessors - only available in testing builds
+    Point3D getSwingOriginTipPosition() const { return swing_origin_tip_position_; }
+    Point3D getStanceOriginTipPosition() const { return stance_origin_tip_position_; }
+    Point3D getFrozenTargetTipPose() const { return frozen_target_tip_pose_; }
 #endif
 
 #ifdef COXA_STRIDE_TESTING_ENABLED
