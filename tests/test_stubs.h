@@ -323,9 +323,8 @@ inline Parameters createDefaultParameters() {
     params.fsr_touchdown_threshold = 0.1;
     params.fsr_liftoff_threshold = 0.05;
     params.fsr_max_pressure = 10.0;
-    params.preserve_swing_end_pose = false;
+    params.preserve_swing_end_pose = true;
     params.use_fsr_contact = false;
-    params.preserve_swing_end_pose = false; // Default to false for testing
 
     // Startup normalization defaults tuned for brisk but safe standing transitions
     enableConfiguredPackedUnpackedPoses(params);

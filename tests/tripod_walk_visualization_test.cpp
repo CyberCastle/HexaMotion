@@ -43,11 +43,6 @@ constexpr int REQUIRED_SWING_TRANSITIONS = 2;
 constexpr int MAX_STEPS = 600;
 constexpr int EXPECTED_TRIPOD_HALF_PERIOD = 52;
 
-// Utility to convert radians to degrees
-static double toDegrees(double radians) {
-    return math_utils::radiansToDegrees(radians);
-}
-
 /**
  * @brief Validates tripod symmetry between legs in the same group
  *
@@ -181,9 +176,9 @@ static void printLegStates(const LocomotionSystem &sys, int step, const int tran
         // Format angles string
         std::stringstream ang_ss;
         ang_ss << std::fixed << std::setprecision(2)
-               << "[" << std::setw(7) << toDegrees(angles.coxa)
-               << ", " << std::setw(7) << toDegrees(angles.femur)
-               << ", " << std::setw(7) << toDegrees(angles.tibia) << "]";
+               << "[" << std::setw(7) << math_utils::radiansToDegrees(angles.coxa)
+               << ", " << std::setw(7) << math_utils::radiansToDegrees(angles.femur)
+               << ", " << std::setw(7) << math_utils::radiansToDegrees(angles.tibia) << "]";
 
         // Format phase value (absolute phase_ from LegStepper, 0-103 for period=104)
         std::stringstream phase_info_ss;
@@ -255,9 +250,9 @@ int main() {
 
         std::stringstream ang_ss;
         ang_ss << std::fixed << std::setprecision(2)
-               << "[ " << std::setw(6) << toDegrees(angles.coxa)
-               << ", " << std::setw(6) << toDegrees(angles.femur)
-               << ", " << std::setw(6) << toDegrees(angles.tibia) << "]";
+               << "[ " << std::setw(6) << math_utils::radiansToDegrees(angles.coxa)
+               << ", " << std::setw(6) << math_utils::radiansToDegrees(angles.femur)
+               << ", " << std::setw(6) << math_utils::radiansToDegrees(angles.tibia) << "]";
 
         std::cout << std::left << std::setw(8) << ("Leg " + std::to_string(i + 1))
                   << std::setw(8) << (phase == STANCE_PHASE ? "S" : "W")
@@ -442,8 +437,8 @@ int main() {
             // especially with stride offsets and local IK minima.
             if (previous_phases[i] == SWING_PHASE && current_phase == STANCE_PHASE) {
                 JointAngles touchdown_angles = sys.getLeg(i).getJointAngles();
-                double femur_deg = toDegrees(touchdown_angles.femur);
-                double tibia_deg = toDegrees(touchdown_angles.tibia);
+                double femur_deg = math_utils::radiansToDegrees(touchdown_angles.femur);
+                double tibia_deg = math_utils::radiansToDegrees(touchdown_angles.tibia);
                 bool femur_valid = std::isfinite(femur_deg) &&
                                    femur_deg >= p.femur_angle_limits[0] &&
                                    femur_deg <= p.femur_angle_limits[1];
