@@ -692,64 +692,35 @@ int main() {
     steppers[0].setDesiredVelocity(Point3D(base_velocity_x, base_velocity_y, 0), 0.0);
     steppers[0].updateStride();
 
-    // Test 2: Check if trajectory calculations are position-dependent
-    std::cout << "\nTest 2: Dependencia de posición inicial" << std::endl;
-    Point3D original_pos_leg1 = test_legs[1].getCurrentTipPositionGlobal();
-
-    // Save trajectories with original positions
-    std::vector<Point3D> original_trajectory_leg1;
-    steppers[1].setCurrentTipPose(original_pos_leg1);
-    steppers[1].setStepState(STEP_SWING);
-
-    for (int i = 1; i <= 10; i++) {
-        steppers[1].updateTipPositionIterative(i, model.getTimeDelta(), false, false);
-        original_trajectory_leg1.push_back(steppers[1].getCurrentTipPose());
-    }
-
-    // Temporarily move leg 1 to a different position
-    Point3D modified_pos = original_pos_leg1 + Point3D(5, 5, 0);
-    test_legs[1].applyIK(modified_pos);
-    steppers[1].setCurrentTipPose(modified_pos);
-    steppers[1].setStepState(STEP_SWING);
-
-    // Calculate trajectory from modified position
-    std::vector<Point3D> modified_trajectory_leg1;
-    for (int i = 1; i <= 10; i++) {
-        steppers[1].updateTipPositionIterative(i, model.getTimeDelta(), false, false);
-        modified_trajectory_leg1.push_back(steppers[1].getCurrentTipPose());
-    }
-
-    // Compare trajectory shapes (relative movements)
-    double trajectory_shape_difference = 0.0;
-    for (int i = 1; i < 10; i++) {
-        Point3D original_delta = original_trajectory_leg1[i] - original_trajectory_leg1[i - 1];
-        Point3D modified_delta = modified_trajectory_leg1[i] - modified_trajectory_leg1[i - 1];
-        trajectory_shape_difference += (original_delta - modified_delta).norm();
-    }
-    trajectory_shape_difference /= 9.0; // Average difference
-
-    std::cout << "  Diferencia promedio en forma de trayectoria: " << trajectory_shape_difference << " mm" << std::endl;
-    bool independence_test2 = trajectory_shape_difference < 0.1;
-    std::cout << "  → Independencia de forma: " << (independence_test2 ? "✓ PASÓ" : "❌ FALLÓ") << std::endl;
-
-    // Restore original position
-    test_legs[1].applyIK(original_pos_leg1);
-    steppers[1].setCurrentTipPose(original_pos_leg1);
+    // Note: There is no "Test 2: trajectory shape independence" check here because
+    // OpenSHC Bezier swing trajectories are position-adaptive BY DESIGN:
+    //   - initializeSwingPeriod() sets swing_origin_tip_position_ = current_tip_pose_
+    //   - generatePrimarySwingControlNodes() computes mid_tip_position from (origin + target)/2
+    //   - All 5+5 quartic Bezier control nodes depend on the origin position
+    // Therefore per-step deltas (quarticBezierDot) are expected to differ when the
+    // starting position changes. This is correct OpenSHC behavior, not a bug.
 
     // Summary
     std::cout << "\nRESUMEN DE INDEPENDENCIA:" << std::endl;
-    if (independence_test1 && independence_test2) {
-        std::cout << "✅ Las trayectorias se calculan independientemente" << std::endl;
-        std::cout << "   El error creciente se debe a las diferentes velocidades utilizadas" << std::endl;
+    if (independence_test1) {
+        std::cout << "✅ Los stride vectors se calculan independientemente entre patas" << std::endl;
     } else {
         std::cout << "⚠ Posible dependencia entre trayectorias detectada" << std::endl;
-        if (!independence_test1)
-            std::cout << "   - Los stride vectors pueden estar acoplados" << std::endl;
-        if (!independence_test2)
-            std::cout << "   - La forma de trayectoria depende de la posición inicial" << std::endl;
+        std::cout << "   - Los stride vectors pueden estar acoplados" << std::endl;
     }
 
     std::cout << "\n=== CONCLUSIONES DEL TEST ===" << std::endl;
+    int failures = 0;
+    if (!independence_test1) {
+        std::cerr << "FAIL: Stride vectors are coupled between legs" << std::endl;
+        failures++;
+    }
+
+    if (failures > 0) {
+        std::cerr << failures << " assertion(s) failed." << std::endl;
+        return 1;
+    }
+
     std::cout << "✅ Test completado exitosamente para las 6 patas" << std::endl;
     std::cout << "📊 Se analizaron las trayectorias de swing y stance para cada pata" << std::endl;
     std::cout << "🔍 Se verificaron los métodos de IK tradicional y delta para todas las patas" << std::endl;
