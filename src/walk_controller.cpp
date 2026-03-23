@@ -226,25 +226,9 @@ void WalkController::enableGravityAlignedTips(bool enabled) {
     terrain_adaptation_.setGravityAlignedTips(enabled);
 }
 
-void WalkController::setExternalTarget(int leg_index, const TerrainAdaptation::ExternalTarget &target) {
-    terrain_adaptation_.setExternalTarget(leg_index, target);
-}
-
-void WalkController::setExternalDefault(int leg_index, const TerrainAdaptation::ExternalTarget &default_pos) {
-    terrain_adaptation_.setExternalDefault(leg_index, default_pos);
-}
-
 // Terrain state accessors
 const TerrainAdaptation::WalkPlane &WalkController::getTerrainWalkPlane() const {
     return terrain_adaptation_.getWalkPlane();
-}
-
-const TerrainAdaptation::ExternalTarget &WalkController::getExternalTarget(int leg_index) const {
-    return terrain_adaptation_.getExternalTarget(leg_index);
-}
-
-const TerrainAdaptation::ExternalTarget &WalkController::getExternalDefault(int leg_index) const {
-    return terrain_adaptation_.getExternalDefault(leg_index);
 }
 
 const TerrainAdaptation::StepPlane &WalkController::getStepPlane(int leg_index) const {
@@ -487,21 +471,7 @@ void WalkController::updateWalk(const Point3D &linear_velocity_input, double ang
         // This aligns swing clearance and touchdown direction with the estimated walking surface.
         leg_stepper->setWalkPlaneNormal(getWalkPlaneNormal());
 
-        // Push terrain adaptation data into the leg stepper (OpenSHC-style external targets)
-        TerrainAdaptation::ExternalTarget ext_target = terrain_adaptation_.getExternalTarget(static_cast<int>(i));
-        LegStepperExternalTarget ls_target;
-        ls_target.position = ext_target.position;
-        ls_target.swing_clearance = ext_target.swing_clearance;
-        ls_target.defined = ext_target.defined;
-        leg_stepper->setExternalTarget(ls_target);
-
-        TerrainAdaptation::ExternalTarget ext_default = terrain_adaptation_.getExternalDefault(static_cast<int>(i));
-        LegStepperExternalTarget ls_default;
-        ls_default.position = ext_default.position;
-        ls_default.swing_clearance = ext_default.swing_clearance;
-        ls_default.defined = ext_default.defined;
-        leg_stepper->setExternalDefault(ls_default);
-
+        // Push terrain adaptation data into the leg stepper
         const auto &step_plane = terrain_adaptation_.getStepPlane(static_cast<int>(i));
         leg_stepper->setStepPlane(step_plane.position, step_plane.normal, step_plane.valid);
         leg_stepper->setTouchdownDetection(terrain_adaptation_.hasTouchdownDetection(static_cast<int>(i)));

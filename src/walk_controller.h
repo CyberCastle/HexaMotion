@@ -166,11 +166,7 @@ class WalkController {
     void enableRoughTerrainMode(bool enabled, bool force_normal_touchdown = true, bool proactive_adaptation = true);
     void enableForceNormalTouchdown(bool enabled);
     void enableGravityAlignedTips(bool enabled);
-    void setExternalTarget(int leg_index, const TerrainAdaptation::ExternalTarget &target);
-    void setExternalDefault(int leg_index, const TerrainAdaptation::ExternalTarget &default_pos);
     const TerrainAdaptation::WalkPlane &getTerrainWalkPlane() const;
-    const TerrainAdaptation::ExternalTarget &getExternalTarget(int leg_index) const;
-    const TerrainAdaptation::ExternalTarget &getExternalDefault(int leg_index) const;
     const TerrainAdaptation::StepPlane &getStepPlane(int leg_index) const;
     bool hasTouchdownDetection(int leg_index) const;
     /** Terrain adaptation accessors for LegStepper. */

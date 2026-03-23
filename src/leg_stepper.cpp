@@ -518,14 +518,9 @@ void LegStepper::updateTipPositionIterative(int iteration, double time_delta, bo
             ground_contact = leg_.isInContact();
         }
 
-        // Rough terrain handling: external target, step plane, and reactive probing
+        // Rough terrain handling: step plane and reactive probing
         if (rough_terrain_mode) {
-            if (external_target_.defined) {
-                target_tip_pose_ = external_target_.position;
-                if (external_target_.swing_clearance > 0.0) {
-                    swing_clearance_ = walk_plane_normal_ * external_target_.swing_clearance;
-                }
-            } else if (touchdown_detection_) {
+            if (touchdown_detection_) {
                 if (step_plane_valid_) {
                     Point3D target_tip_position = step_plane_position_;
                     Point3D difference = target_tip_position - target_tip_pose_;
@@ -590,11 +585,6 @@ void LegStepper::updateTipPositionIterative(int iteration, double time_delta, bo
         // Only reinitialize when truly entering stance from another state, not on cycle wrapping
         bool just_entered_stance = (previous_step_state_ != STEP_STANCE);
         if (stance_iteration == 1 && just_entered_stance) {
-
-            // Reset external target after swing completion (OpenSHC behavior)
-            if (external_target_.defined) {
-                external_target_.defined = false;
-            }
 
             // At stance entry, compare the touchdown pose against the frozen swing target. Any residual lateral
             // offset is projected onto the leg-aligned axis and bled off immediately. This keeps opposing legs
@@ -789,12 +779,6 @@ Point3D LegStepper::calculateStanceSpanChange() {
 }
 
 void LegStepper::updateDefaultTipPosition() {
-    // Generate new default tip pose from external request if present
-    if (external_default_.defined) {
-        default_tip_pose_ = external_default_.position;
-        return;
-    }
-
     // 1. Modify identity tip position by stance span change
     Point3D identity_tip_position = identity_tip_pose_ + calculateStanceSpanChange();
 

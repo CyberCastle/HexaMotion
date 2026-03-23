@@ -299,25 +299,6 @@ void testForceNormalTouchdownParity(LegStepper &stepper, const RobotModel &model
     std::cout << "  ✅ forceNormalTouchdown parity passed" << std::endl;
 }
 
-void testExternalTargetHandling(LegStepper &stepper, Leg &leg) {
-    std::cout << "Testing external target handling" << std::endl;
-
-    // Set external target
-    LegStepperExternalTarget target;
-    target.position = Point3D(50.0, 30.0, 208.0);
-    target.swing_clearance = 15.0;
-    target.defined = true;
-
-    stepper.setExternalTarget(target);
-
-    // Verify target was set (basic verification)
-    LegStepperExternalTarget retrieved = stepper.getExternalTarget();
-    assert(retrieved.defined);
-    assert(retrieved.position.isApprox(target.position));
-
-    std::cout << "  ✅ External target handling passed" << std::endl;
-}
-
 void testWalkStateTransitions(LegStepper &stepper) {
     std::cout << "Testing walk state transitions" << std::endl;
 
@@ -1057,7 +1038,6 @@ int main() {
         bool tip_position_updates_passed = false;
         bool trajectory_start_end_passed = false;
         bool stride_vector_updates_passed = false;
-        bool external_target_handling_passed = false;
         bool walk_state_transitions_passed = false;
         bool swing_height_compliance_passed = false;
         Point3D initial_position;
@@ -1165,17 +1145,7 @@ int main() {
             results.stride_magnitude = new_stride.norm();
             results.stride_vector_updates_passed = (results.stride_magnitude > 5.0);
 
-            // Test 7: External Target Handling
-            LegStepperExternalTarget target;
-            target.position = Point3D(50.0, 30.0, 208.0);
-            target.swing_clearance = 15.0;
-            target.defined = true;
-            stepper.setExternalTarget(target);
-            LegStepperExternalTarget retrieved = stepper.getExternalTarget();
-            results.external_target_handling_passed = (retrieved.defined &&
-                                                       retrieved.position.isApprox(target.position));
-
-            // Test 8: Walk State Transitions
+            // Test 7: Walk State Transitions
             StepState states[] = {STEP_SWING, STEP_STANCE, STEP_FORCE_STANCE, STEP_FORCE_STOP};
             bool state_transitions_ok = true;
             for (StepState state : states) {
@@ -1187,7 +1157,7 @@ int main() {
             }
             results.walk_state_transitions_passed = state_transitions_ok;
 
-            // Test 9: Swing Height Compliance
+            // Test 8: Swing Height Compliance
             // The Bézier swing trajectory must be traversed with sequential iterations
             // (1..swing_iterations_) so that the quarticBezierDot deltas accumulate correctly.
             // Using non-sequential jumps (0, 10, 20...) causes the curve parameterisation
@@ -1276,8 +1246,6 @@ int main() {
             leg_tests_passed++;
         if (results.stride_vector_updates_passed)
             leg_tests_passed++;
-        if (results.external_target_handling_passed)
-            leg_tests_passed++;
         if (results.walk_state_transitions_passed)
             leg_tests_passed++;
         if (results.swing_height_compliance_passed)
@@ -1285,15 +1253,15 @@ int main() {
 
         total_tests_passed += leg_tests_passed;
 
-        std::string status = (leg_tests_passed == 9) ? "✅ COMPLETO" : "⚠️  PARCIAL";
-        if (leg_tests_passed < 7) {
+        std::string status = (leg_tests_passed == 8) ? "✅ COMPLETO" : "⚠️  PARCIAL";
+        if (leg_tests_passed < 6) {
             status = "❌ FALLO";
             failed_legs.push_back(i);
-        } else if (leg_tests_passed == 9) {
+        } else if (leg_tests_passed == 8) {
             successful_legs++;
         }
 
-        std::cout << "   Pata " << i << ": " << status << " (" << leg_tests_passed << "/9 tests)" << std::endl;
+        std::cout << "   Pata " << i << ": " << status << " (" << leg_tests_passed << "/8 tests)" << std::endl;
 
         if (results.stride_magnitude > 0) {
             avg_stride_magnitude += results.stride_magnitude;

@@ -12,7 +12,6 @@
 
 namespace {
 // File-scope empty defaults to avoid static local initialization locks
-static const TerrainAdaptation::ExternalTarget EMPTY_EXTERNAL_TARGET;
 static const TerrainAdaptation::StepPlane EMPTY_STEP_PLANE;
 } // namespace
 
@@ -88,32 +87,6 @@ void TerrainAdaptation::update(IFSRInterface *fsr_interface, IIMUInterface *imu_
     }
 }
 
-void TerrainAdaptation::setExternalTarget(int leg_index, const ExternalTarget &target) {
-    if (leg_index >= 0 && leg_index < NUM_LEGS) {
-        external_targets_[leg_index] = target;
-    }
-}
-
-void TerrainAdaptation::setExternalDefault(int leg_index, const ExternalTarget &default_pos) {
-    if (leg_index >= 0 && leg_index < NUM_LEGS) {
-        external_defaults_[leg_index] = default_pos;
-    }
-}
-
-const TerrainAdaptation::ExternalTarget &TerrainAdaptation::getExternalTarget(int leg_index) const {
-    if (leg_index >= 0 && leg_index < NUM_LEGS) {
-        return external_targets_[leg_index];
-    }
-    return EMPTY_EXTERNAL_TARGET;
-}
-
-const TerrainAdaptation::ExternalTarget &TerrainAdaptation::getExternalDefault(int leg_index) const {
-    if (leg_index >= 0 && leg_index < NUM_LEGS) {
-        return external_defaults_[leg_index];
-    }
-    return EMPTY_EXTERNAL_TARGET;
-}
-
 const TerrainAdaptation::StepPlane &TerrainAdaptation::getStepPlane(int leg_index) const {
     if (leg_index >= 0 && leg_index < NUM_LEGS) {
         return step_planes_[leg_index];
@@ -135,27 +108,6 @@ Point3D TerrainAdaptation::adaptTrajectoryForTerrain(int leg_index, const Point3
     }
 
     Point3D adapted_trajectory = trajectory;
-
-    // Apply external target if defined
-    if (external_targets_[leg_index].defined &&
-        leg_state == SWING_PHASE) {
-        // Use external target position for swing trajectory
-        const ExternalTarget &target = external_targets_[leg_index];
-
-        // Interpolate towards external target
-        double blend_factor = swing_progress;
-        adapted_trajectory.x = trajectory.x * (DEFAULT_ANGULAR_SCALING - blend_factor) + target.position.x * blend_factor;
-        adapted_trajectory.y = trajectory.y * (DEFAULT_ANGULAR_SCALING - blend_factor) + target.position.y * blend_factor;
-        adapted_trajectory.z = trajectory.z * (DEFAULT_ANGULAR_SCALING - blend_factor) + target.position.z * blend_factor;
-
-        // Apply swing clearance
-        if (swing_progress > 0.2 && swing_progress < 0.8) {
-            adapted_trajectory.z +=
-                target.swing_clearance * sin(M_PI * (swing_progress - 0.2) / 0.6);
-        }
-
-        return adapted_trajectory;
-    }
 
     // Apply proactive adaptation if step plane detected
     if (step_planes_[leg_index].valid && step_planes_[leg_index].confidence > WORKSPACE_SCALING_FACTOR) {

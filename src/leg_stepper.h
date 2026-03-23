@@ -17,15 +17,6 @@ enum StepState {
 };
 
 /**
- * @brief External target for leg positioning (OpenSHC equivalent)
- */
-struct LegStepperExternalTarget {
-    Point3D position;       //< Target position
-    double swing_clearance; //< Swing clearance height
-    bool defined = false;   //< Whether target is defined
-};
-
-/**
  * @brief Leg stepper class for individual leg trajectory control (OpenSHC equivalent)
  *
  * This implementation follows OpenSHC's exact philosophy:
@@ -118,8 +109,6 @@ class LegStepper {
     Point3D getSwing2ControlNode(int i) const { return swing_2_nodes_[i]; }
     Point3D getStanceControlNode(int i) const { return stance_nodes_[i]; }
     Point3D getSwingClearance() const { return swing_clearance_; }
-    LegStepperExternalTarget getExternalTarget() const { return external_target_; }
-    LegStepperExternalTarget getExternalDefault() const { return external_default_; }
 
     // OpenSHC-specific accessors
     int getSwingIterations() const { return swing_iterations_; }
@@ -152,8 +141,6 @@ class LegStepper {
     }
     void setStepState(StepState state) { step_state_ = state; }
     void setPhase(int phase) { phase_ = phase; }
-    void setExternalTarget(const LegStepperExternalTarget &target) { external_target_ = target; }
-    void setExternalDefault(const LegStepperExternalTarget &target) { external_default_ = target; }
     void setTouchdownDetection(bool enabled) { touchdown_detection_ = enabled; }
     void setStepPlane(const Point3D &position, const Point3D &normal, bool valid) {
         step_plane_position_ = position;
@@ -318,9 +305,6 @@ class LegStepper {
     int last_swing_iteration_;
     int last_swing_start_iteration_;
 
-    // External target/default support (rough terrain)
-    LegStepperExternalTarget external_target_;
-    LegStepperExternalTarget external_default_;
     bool touchdown_detection_ = false;
     bool step_plane_valid_ = false;
     Point3D step_plane_position_;

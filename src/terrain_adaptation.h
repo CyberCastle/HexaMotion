@@ -23,18 +23,6 @@ class WorkspaceAnalyzer;
 class TerrainAdaptation {
   public:
     /**
-     * @brief External target structure for terrain-aware stepping
-     */
-    struct ExternalTarget {
-        Point3D position;       /**< Target tip position. */
-        double swing_clearance; /**< Height clearance during swing. */
-        bool defined;           /**< Whether target is valid. */
-
-        ExternalTarget() : position(0, 0, 0), swing_clearance(0),
-                           defined(false) {}
-    };
-
-    /**
      * @brief Step plane detection structure
      */
     struct StepPlane {
@@ -76,8 +64,6 @@ class TerrainAdaptation {
     static const size_t MAX_CONTACT_HISTORY = 20;
 
     /** Per-leg terrain data. */
-    ExternalTarget external_targets_[NUM_LEGS];
-    ExternalTarget external_defaults_[NUM_LEGS];
     StepPlane step_planes_[NUM_LEGS];
     bool touchdown_detection_[NUM_LEGS];
 
@@ -162,38 +148,10 @@ class TerrainAdaptation {
     void updateThresholdsFromModel();
 
     /**
-     * @brief Set external target for specific leg
-     * @param leg_index Leg index (0-5)
-     * @param target External target specification
-     */
-    void setExternalTarget(int leg_index, const ExternalTarget &target);
-
-    /**
-     * @brief Set external default position for specific leg
-     * @param leg_index Leg index (0-5)
-     * @param default_pos External default specification
-     */
-    void setExternalDefault(int leg_index, const ExternalTarget &default_pos);
-
-    /**
      * @brief Get current walk plane estimation
      * @return Current walk plane
      */
     const WalkPlane &getWalkPlane() const { return current_walk_plane_; }
-
-    /**
-     * @brief Get external target for specific leg
-     * @param leg_index Leg index (0-5)
-     * @return External target if defined
-     */
-    const ExternalTarget &getExternalTarget(int leg_index) const;
-
-    /**
-     * @brief Get external default for specific leg
-     * @param leg_index Leg index (0-5)
-     * @return External default if defined
-     */
-    const ExternalTarget &getExternalDefault(int leg_index) const;
 
     /**
      * @brief Get step plane detection for specific leg

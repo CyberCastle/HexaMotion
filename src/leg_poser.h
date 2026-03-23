@@ -9,19 +9,6 @@
 #include <memory>
 #include <vector>
 
-// Use existing Pose from robot_model.h
-
-/**
- * @brief External target structure for leg positioning
- * Equivalent to OpenSHC's ExternalTarget
- */
-struct ExternalTarget {
-    Pose pose;              //< The target tip pose
-    double swing_clearance; //< The height of the swing trajectory clearance
-    Pose transform;         //< The transform between reference frames
-    bool defined = false;   //< Flag denoting if external target object has been defined
-};
-
 /**
  * @brief LegPoser class for HexaMotion
  *
@@ -53,7 +40,6 @@ class LegPoser {
      */
     inline const Pose &getCurrentTipPose() const { return current_tip_pose_; }
     inline Pose getTargetTipPose() const { return target_tip_pose_; }
-    inline ExternalTarget getExternalTarget() const { return external_target_; }
     inline Pose getAutoPose() const { return auto_pose_; }
     inline bool getLegCompletedStep() const { return leg_completed_step_; }
     /**
@@ -101,7 +87,6 @@ class LegPoser {
         current_tip_pose_ = current;
     }
     inline void setTargetTipPose(const Pose &target) { target_tip_pose_ = target; }
-    inline void setExternalTarget(const ExternalTarget &target) { external_target_ = target; }
     inline void setAutoPose(const Pose &auto_pose) { auto_pose_ = auto_pose; }
     inline void setLegCompletedStep(bool complete) { leg_completed_step_ = complete; }
 
@@ -232,11 +217,9 @@ class LegPoser {
     int master_iteration_count_ = 0;         //< Master iteration count used in generating time input for bezier curves
     int current_num_iterations_ = 0;         //< Total iterations for current step (for progress reporting)
 
-    Pose origin_tip_pose_;           //< Origin tip pose used in bezier curve equations
-    Pose current_tip_pose_;          //< Current tip pose
-    Pose target_tip_pose_;           //< Target tip pose used in bezier curve equations
-    ExternalTarget external_target_; //< Externally set target tip pose object
-
+    Pose origin_tip_pose_;            //< Origin tip pose used in bezier curve equations
+    Pose current_tip_pose_;           //< Current tip pose
+    Pose target_tip_pose_;            //< Target tip pose used in bezier curve equations
     bool leg_completed_step_ = false; //< Flag denoting if leg has completed its required step in a sequence
 
     // OpenSHC-style transition sequence poses

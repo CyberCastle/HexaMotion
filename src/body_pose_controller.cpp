@@ -1066,15 +1066,8 @@ int BodyPoseController::transitionStance(Leg legs[NUM_LEGS], double transition_t
             continue;
 
         LegPoser *leg_poser = leg_posers_[i]->get();
-        ExternalTarget target = leg_poser->getExternalTarget();
         Pose target_tip_pose = Pose::Identity();
         double swing_clearance = 0.0;
-
-        if (target.defined) {
-            target_tip_pose.position = target.transform.position + target.pose.position;
-            target_tip_pose.rotation = target.transform.rotation * target.pose.rotation;
-            swing_clearance = target.swing_clearance;
-        }
 
         int progress = leg_poser->stepToPosition(target_tip_pose, body_pose_current_,
                                                  swing_clearance, transition_time, true);
@@ -1086,11 +1079,6 @@ int BodyPoseController::transitionStance(Leg legs[NUM_LEGS], double transition_t
         legs[i].setCurrentTipPositionGlobal(desired_tip);
 
         min_progress = std::min(progress, min_progress);
-
-        if (target.defined && progress == PROGRESS_COMPLETE) {
-            target.defined = false;
-            leg_poser->setExternalTarget(target);
-        }
     }
 
     executing_transition_ = (min_progress != 0 && min_progress != PROGRESS_COMPLETE);
