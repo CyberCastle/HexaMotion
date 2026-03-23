@@ -114,6 +114,7 @@ bash run_all_tests.sh
 | `coxa_tripod_symmetry_analytic_test` | Analytic symmetry of opposite tripod coxa behavior    | `leg_stepper`, `walk_controller`, `terrain_adaptation`, `state_controller`, `locomotion_system`, `cartesian_velocity_controller`                            |
 | `step_frequency_regeneration_test`   | Step frequency regeneration from gait parameters      | `gait_config_factory`, `robot_model`, `math_utils`, `workspace_analyzer`                                                                                    |
 | `ik_tracking_diagnostic_test`        | IK tracking diagnostics under gait progression        | `leg_stepper`, `walk_controller`, `robot_model`, `state_controller`, `locomotion_system`, `velocity_limits`                                                 |
+| `gravity_inclination_test`           | Gravity-driven CoG shift under terrain tilt           | `body_pose_controller`, `body_pose_config_factory`, `robot_model`, `leg`, `leg_poser`, `workspace_analyzer`                                                 |
 
 ## Physical characteristics of the robot
 
