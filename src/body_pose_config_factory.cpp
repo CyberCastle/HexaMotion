@@ -169,7 +169,6 @@ BodyPoseConfiguration createPoseConfiguration(const Parameters &params) {
     config.inclination_posing_enabled = params.inclination_posing;
     config.imu_posing_enabled = params.imu_posing;
     config.auto_posing_enabled = params.auto_posing;
-    config.gravity_aligned_tips_enabled = params.gravity_aligned_tips;
 
     for (int i = 0; i < NUM_LEGS; ++i) {
         config.offset_multiplier[i] = 0;

@@ -17,7 +17,7 @@ static const TerrainAdaptation::StepPlane EMPTY_STEP_PLANE;
 
 TerrainAdaptation::TerrainAdaptation(RobotModel &model)
     : model_(model), rough_terrain_mode_(false), force_normal_touchdown_(false),
-      gravity_aligned_tips_(false), step_depth_(STEP_DEPTH_DEFAULT),
+      step_depth_(STEP_DEPTH_DEFAULT),
       gravity_estimate_(0, 0, -math_utils::GRAVITY_ACCELERATION) {
 
     workspace_analyzer_ = std::make_unique<WorkspaceAnalyzer>(model_, ComputeConfig::medium());

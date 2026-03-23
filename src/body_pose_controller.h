@@ -103,14 +103,6 @@ class BodyPoseController {
      */
     int transitionConfiguration(double transition_time, Leg legs[NUM_LEGS]);
 
-    /**
-     * @brief Move all legs to externally defined target poses (OpenSHC transitionStance).
-     * @param legs Array of legs
-     * @param transition_time Duration in seconds
-     * @return Progress (0–100)
-     */
-    int transitionStance(Leg legs[NUM_LEGS], double transition_time);
-
     // ── Pose update pipeline (OpenSHC updateCurrentPose) ────────────────────
 
     /**
@@ -140,12 +132,6 @@ class BodyPoseController {
      * @param legs Array of legs
      */
     void calculateDefaultPose(Leg legs[NUM_LEGS]);
-
-    /**
-     * @brief Update tip alignment pose for 3DOF legs (OpenSHC updateTipAlignPose).
-     * @param legs Array of legs
-     */
-    void updateTipAlignPose(Leg legs[NUM_LEGS]);
 
     /**
      * @brief Update IK error compensation pose (OpenSHC updateIKErrorPose).
@@ -193,7 +179,6 @@ class BodyPoseController {
     void setInclinationPoseEnabled(bool enabled) { inclination_pose_enabled_ = enabled; }
     void setAutoPoseEnabled(bool enabled) { auto_pose_enabled = enabled; }
     bool isAutoPoseEnabled() const { return auto_pose_enabled; }
-    void setTipAlignPoseEnabled(bool enabled) { tip_align_pose_enabled_ = enabled; }
     void setIKErrorPoseEnabled(bool enabled) { ik_error_pose_enabled_ = enabled; }
     void setDefaultPoseEnabled(bool enabled) { default_pose_enabled_ = enabled; }
 
@@ -309,8 +294,6 @@ class BodyPoseController {
         inclination_pose_ = Pose::Identity();
         default_pose_ = Pose::Identity();
         ik_error_pose_ = Pose::Identity();
-        tip_align_pose_ = Pose::Identity();
-        origin_tip_align_pose_ = Pose::Identity();
         walk_plane_pose_ = Pose::Identity();
         origin_walk_plane_pose_ = walk_plane_pose_;
         rotation_absement_error_ = Eigen::Vector3d::Zero();
@@ -376,8 +359,6 @@ class BodyPoseController {
     Pose manual_pose_ = Pose::Identity();
     Pose imu_pose_ = Pose::Identity();
     Pose inclination_pose_ = Pose::Identity();
-    Pose tip_align_pose_ = Pose::Identity();
-    Pose origin_tip_align_pose_ = Pose::Identity();
     Pose default_pose_ = Pose::Identity();
     Pose ik_error_pose_ = Pose::Identity();
 
@@ -389,7 +370,6 @@ class BodyPoseController {
     bool manual_pose_enabled_ = false;
     bool imu_pose_enabled_ = false;
     bool inclination_pose_enabled_ = false;
-    bool tip_align_pose_enabled_ = false;
     bool ik_error_pose_enabled_ = false;
     bool default_pose_enabled_ = false;
     bool recalculate_default_pose_ = true;

@@ -15,7 +15,6 @@ class WorkspaceAnalyzer;
  * This system implements dynamic terrain adaptation equivalent to OpenSHC's
  * rough terrain handling system, including:
  * - Walk plane estimation using least squares fitting
- * - External target pose handling for proactive/reactive terrain adaptation
  * - Step surface detection and adjustment
  * - Rough terrain mode with touchdown detection
  * - Dynamic walkspace generation based on terrain geometry
@@ -51,7 +50,6 @@ class TerrainAdaptation {
     std::unique_ptr<WorkspaceAnalyzer> workspace_analyzer_; /**< Workspace analysis and validation. */
     bool rough_terrain_mode_;
     bool force_normal_touchdown_;
-    bool gravity_aligned_tips_;
 
     /** Terrain detection parameters. */
     double touchdown_threshold_; /**< FSR threshold for touchdown detection. */
@@ -98,12 +96,6 @@ class TerrainAdaptation {
      * @param enabled Whether to force normal touchdown to walk plane
      */
     void setForceNormalTouchdown(bool enabled) { force_normal_touchdown_ = enabled; }
-
-    /**
-     * @brief Enable/disable gravity-aligned tips
-     * @param enabled Whether tips should align with gravity
-     */
-    void setGravityAlignedTips(bool enabled) { gravity_aligned_tips_ = enabled; }
 
     /**
      * @brief Check if rough terrain mode is enabled

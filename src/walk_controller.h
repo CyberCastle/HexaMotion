@@ -165,7 +165,6 @@ class WalkController {
     /** Terrain adaptation methods. */
     void enableRoughTerrainMode(bool enabled, bool force_normal_touchdown = true, bool proactive_adaptation = true);
     void enableForceNormalTouchdown(bool enabled);
-    void enableGravityAlignedTips(bool enabled);
     const TerrainAdaptation::WalkPlane &getTerrainWalkPlane() const;
     const TerrainAdaptation::StepPlane &getStepPlane(int leg_index) const;
     bool hasTouchdownDetection(int leg_index) const;

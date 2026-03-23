@@ -175,7 +175,6 @@ struct Parameters {
     bool inclination_posing = false;
     bool imu_posing = false;
     bool auto_posing = false;
-    bool gravity_aligned_tips = false;
     double max_translation_velocity = 50.0; //< mm/s
     double max_rotation_velocity = 0.2;     //< rad/s
     double pose_frequency = -1.0;           //< Hz, -1 sync to gait cycle

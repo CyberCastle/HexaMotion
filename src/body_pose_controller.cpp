@@ -69,7 +69,6 @@ BodyPoseController::BodyPoseController(RobotModel &m, const BodyPoseConfiguratio
     inclination_pose_enabled_ = body_pose_config.inclination_posing_enabled;
     imu_pose_enabled_ = body_pose_config.imu_posing_enabled;
     auto_pose_enabled = body_pose_config.auto_posing_enabled;
-    tip_align_pose_enabled_ = body_pose_config.gravity_aligned_tips_enabled;
 }
 
 BodyPoseController::~BodyPoseController() {
@@ -383,11 +382,6 @@ void BodyPoseController::updateCurrentPose(int robot_state, Leg legs[NUM_LEGS]) 
         new_pose = new_pose.addPose(auto_pose_);
     }
 
-    if (tip_align_pose_enabled_) {
-        updateTipAlignPose(legs);
-        new_pose = new_pose.addPose(tip_align_pose_);
-    }
-
     if (ik_error_pose_enabled_) {
         updateIKErrorPose(legs);
         new_pose = new_pose.addPose(ik_error_pose_);
@@ -521,70 +515,6 @@ void BodyPoseController::calculateDefaultPose(Leg legs[NUM_LEGS]) {
         }
     } else {
         recalculate_default_pose_ = true;
-    }
-}
-
-////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-// OpenSHC PoseController::updateTipAlignPose() equivalent
-////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-void BodyPoseController::updateTipAlignPose(Leg legs[NUM_LEGS]) {
-    for (int i = 0; i < NUM_LEGS; ++i) {
-        if (!leg_posers_[i])
-            continue;
-
-        double swing_progress = legs[i].getSwingProgress();
-        if (swing_progress < 0.0 || swing_progress > 1.0) {
-            continue;
-        }
-
-        Eigen::Vector3d walk_plane_normal = walk_plane_pose_.rotation * Eigen::Vector3d::UnitZ();
-        Eigen::Quaterniond walk_plane_rotation = Eigen::Quaterniond::FromTwoVectors(
-            Eigen::Vector3d::UnitZ(), walk_plane_normal);
-
-        JointAngles angles = legs[i].getJointAngles();
-        Point3D tip_to_joint_point = model.getTipToLastJointVectorGlobal(i, angles);
-        Eigen::Vector3d tip_to_joint(tip_to_joint_point.x, tip_to_joint_point.y, tip_to_joint_point.z);
-        double link_length = tip_to_joint.norm();
-
-        Eigen::Vector3d a = walk_plane_rotation._transformVector(tip_to_joint);
-        Eigen::Vector3d b = link_length * walk_plane_normal;
-        Eigen::Vector3d rejection = a - (a.dot(b) / b.dot(b)) * b;
-        Eigen::Vector3d translation_to_alignment = -rejection;
-
-        a = Eigen::Vector3d(tip_align_pose_.position.x, tip_align_pose_.position.y, tip_align_pose_.position.z);
-        b = walk_plane_normal;
-        rejection = a - (a.dot(b) / b.dot(b)) * b;
-        Eigen::Vector3d current_walk_plane_aligned = rejection;
-
-        Eigen::Vector3d target_translation = current_walk_plane_aligned + translation_to_alignment;
-
-        if (body_pose_config.max_translation.x > 0.0) {
-            target_translation[0] = math_utils::clamp(target_translation[0],
-                                                      -body_pose_config.max_translation.x, body_pose_config.max_translation.x);
-        }
-        if (body_pose_config.max_translation.y > 0.0) {
-            target_translation[1] = math_utils::clamp(target_translation[1],
-                                                      -body_pose_config.max_translation.y, body_pose_config.max_translation.y);
-        }
-        if (body_pose_config.max_translation.z > 0.0) {
-            target_translation[2] = math_utils::clamp(target_translation[2],
-                                                      -body_pose_config.max_translation.z, body_pose_config.max_translation.z);
-        }
-
-        double c = math_utils::smoothStep(swing_progress);
-        if (swing_progress < 0.5) {
-            c = math_utils::smoothStep(c * 2.0);
-            tip_align_pose_ = origin_tip_align_pose_.interpolate(c, Pose::Identity());
-        } else {
-            c = math_utils::smoothStep((c - 0.5) * 2.0);
-            tip_align_pose_ = Pose::Identity().interpolate(
-                c, Pose(Point3D(target_translation[0], target_translation[1], target_translation[2]),
-                        Eigen::Quaterniond::Identity()));
-        }
-
-        if (swing_progress >= 1.0) {
-            origin_tip_align_pose_ = tip_align_pose_;
-        }
     }
 }
 
@@ -1051,36 +981,6 @@ int BodyPoseController::transitionConfiguration(double transition_time, Leg legs
     if (min_progress == INT_MAX) {
         min_progress = PROGRESS_COMPLETE;
     }
-    executing_transition_ = (min_progress != 0 && min_progress != PROGRESS_COMPLETE);
-    return min_progress;
-}
-
-////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-// OpenSHC PoseController::transitionStance() equivalent
-////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-int BodyPoseController::transitionStance(Leg legs[NUM_LEGS], double transition_time) {
-    int min_progress = INT_MAX;
-
-    for (int i = 0; i < NUM_LEGS; i++) {
-        if (!leg_posers_[i])
-            continue;
-
-        LegPoser *leg_poser = leg_posers_[i]->get();
-        Pose target_tip_pose = Pose::Identity();
-        double swing_clearance = 0.0;
-
-        int progress = leg_poser->stepToPosition(target_tip_pose, body_pose_current_,
-                                                 swing_clearance, transition_time, true);
-
-        Point3D desired_tip = leg_poser->getCurrentPosition();
-        legs[i].setCurrentTipPositionGlobal(desired_tip);
-        JointAngles current_angles = legs[i].getJointAngles();
-        legs[i].setJointAngles(model.inverseKinematicsCurrentGlobalCoordinates(i, current_angles, desired_tip));
-        legs[i].setCurrentTipPositionGlobal(desired_tip);
-
-        min_progress = std::min(progress, min_progress);
-    }
-
     executing_transition_ = (min_progress != 0 && min_progress != PROGRESS_COMPLETE);
     return min_progress;
 }

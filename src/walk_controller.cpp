@@ -211,19 +211,11 @@ void WalkController::enableRoughTerrainMode(bool enabled, bool force_normal_touc
                                             bool proactive_adaptation) {
     terrain_adaptation_.setRoughTerrainMode(enabled);
     terrain_adaptation_.setForceNormalTouchdown(force_normal_touchdown);
-
-    if (proactive_adaptation) {
-        // Enable proactive terrain adaptation features
-        terrain_adaptation_.setGravityAlignedTips(true);
-    }
+    (void)proactive_adaptation;
 }
 
 void WalkController::enableForceNormalTouchdown(bool enabled) {
     terrain_adaptation_.setForceNormalTouchdown(enabled);
-}
-
-void WalkController::enableGravityAlignedTips(bool enabled) {
-    terrain_adaptation_.setGravityAlignedTips(enabled);
 }
 
 // Terrain state accessors

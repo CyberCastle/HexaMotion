@@ -56,7 +56,6 @@ struct BodyPoseConfiguration {
         inclination_posing_enabled = false;
         imu_posing_enabled = false;
         auto_posing_enabled = false;
-        gravity_aligned_tips_enabled = false;
         /** Zero-initialize stance and pose arrays. */
         for (auto &ls : leg_stance_positions) {
             ls = {0.0, 0.0, 0.0};
@@ -106,11 +105,10 @@ struct BodyPoseConfiguration {
     double max_rotation_velocity;    /**< Maximum rotation velocity (rad/s). */
 
     /** OpenSHC-equivalent pose control flags. */
-    bool manual_posing_enabled;        /**< Enable manual pose contribution. */
-    bool inclination_posing_enabled;   /**< Enable inclination CoG correction. */
-    bool imu_posing_enabled;           /**< Enable IMU PID pose correction. */
-    bool auto_posing_enabled;          /**< Enable auto-pose contribution. */
-    bool gravity_aligned_tips_enabled; /**< Enable tip gravity alignment contribution. */
+    bool manual_posing_enabled;      /**< Enable manual pose contribution. */
+    bool inclination_posing_enabled; /**< Enable inclination CoG correction. */
+    bool imu_posing_enabled;         /**< Enable IMU PID pose correction. */
+    bool auto_posing_enabled;        /**< Enable auto-pose contribution. */
 
     /** OpenSHC-equivalent per-leg phase map for auto-pose offsetting. */
     std::map<int, int> offset_multiplier;
