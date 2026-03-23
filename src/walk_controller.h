@@ -131,11 +131,6 @@ class WalkController {
                     double angular_velocity_input,
                     const std::map<int, double> &limit_map) const;
 
-    /**
-     * @brief Estimate gravity vector
-     */
-    Point3D estimateGravity() const;
-
     /** Accessors. */
     /** Moved implementation to cpp. */
     StepCycle getStepCycle() const;

@@ -31,6 +31,9 @@ Key differences from OpenSHC:
 - Certain configurations are handled via factory patterns.
 - Workspace generation strategy differs by design: OpenSHC uses an explicit full model copy for workspace search isolation, while HexaMotion uses a decoupled `WorkspaceAnalyzer` over the live model context to reduce RAM/CPU overhead on MCU targets.
 - This HexaMotion approach is expected to be more efficient on MCU, but requires careful cache/update timing to avoid transient consistency issues when parameters or reference tip states change.
+- Gravity estimation in HexaMotion uses accelerometer data from the IMU interface directly (in `BodyPoseController` and `TerrainAdaptation`), rather than OpenSHC's orientation-based method (`Model::estimateGravity()` which rotates the known gravity vector by IMU pitch/roll). Both approaches yield equivalent results in quasi-static conditions; the accelerometer-based method is simpler but noisier under dynamic acceleration. `WalkController` does not expose an `estimateGravity()` method since gravity estimation is handled by `BodyPoseController` (for auto-pose and inclination compensation) and `TerrainAdaptation` (for terrain-aware gait adaptation) independently.
+- `gravity_aligned_tips` (OpenSHC parameter) is not ported. The tip-rotation variant (for >3DOF legs) is inapplicable to HexaMotion's 3DOF legs. The body-translation workaround (`updateTipAlignPose`, marked `// TODO EXPERIMENTAL` in OpenSHC for ≤3DOF legs) is also not ported because it falls under the same tip-orientation exclusion scope.
+- `gravity_amplitudes` in auto-pose and `updateInclinationPose` (CoG shift on inclines) are fully ported and functional. Both require a connected IMU (via `IIMUInterface`) to produce meaningful results; without IMU data, inclination pose resets to identity and gravity amplitudes default to the Z-axis direction.
 
 ## Code Style
 

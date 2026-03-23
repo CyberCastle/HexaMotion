@@ -235,11 +235,6 @@ void WalkController::updateTerrainAdaptation(IFSRInterface *fsr_interface, IIMUI
     terrain_adaptation_.update(fsr_interface, imu_interface);
 }
 
-Point3D WalkController::estimateGravity() const {
-    // Simple gravity estimation - in a real implementation this would use IMU data
-    return Point3D(0.0, 0.0, -9.81);
-}
-
 // --- WalkController Methods Implementation ---
 void WalkController::init(const Eigen::Vector3d &current_body_position, const Eigen::Vector3d &current_body_orientation) {
 
