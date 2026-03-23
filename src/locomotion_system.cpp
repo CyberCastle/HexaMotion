@@ -1650,6 +1650,16 @@ void LocomotionSystem::applyInverseKinematicsToAllLegs() {
         Point3D desired_tip_position = legs[i].getDesiredTipPosition();
 
         /**
+         * OpenSHC parity: if desired position is unset (zero),
+         * fall back to current tip position (equivalent to
+         * Leg::setDesiredTipPose(Pose::Undefined()) → poser->getCurrentTipPose()).
+         */
+        if (desired_tip_position.x == 0.0 && desired_tip_position.y == 0.0 &&
+            desired_tip_position.z == 0.0) {
+            desired_tip_position = legs[i].getCurrentTipPositionGlobal();
+        }
+
+        /**
          * Apply admittance delta (OpenSHC: done inside Leg::setDesiredTipPose).
          * Skip legs in MANUAL state (OpenSHC pattern).
          */

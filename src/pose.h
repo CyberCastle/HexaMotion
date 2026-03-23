@@ -123,6 +123,18 @@ struct Pose {
      */
     bool isUndefined() const;
 
+    /**
+     * @brief Check whether only the rotation component is undefined.
+     *
+     * OpenSHC equivalent: rotation_.isApprox(UNDEFINED_ROTATION).
+     */
+    bool isRotationUndefined() const;
+
+    /**
+     * @brief Check whether only the position component is undefined.
+     */
+    bool isPositionUndefined() const;
+
     bool operator==(const Pose &other) const;
 
     bool operator!=(const Pose &other) const;
@@ -232,6 +244,19 @@ inline bool Pose::isValid() const {
 
 inline bool Pose::isUndefined() const {
     return (*this) == Pose::Undefined();
+}
+
+inline bool Pose::isRotationUndefined() const {
+    return std::abs(rotation.w()) >= POSE_UNDEFINED_COMPONENT ||
+           std::abs(rotation.x()) >= POSE_UNDEFINED_COMPONENT ||
+           std::abs(rotation.y()) >= POSE_UNDEFINED_COMPONENT ||
+           std::abs(rotation.z()) >= POSE_UNDEFINED_COMPONENT;
+}
+
+inline bool Pose::isPositionUndefined() const {
+    return std::abs(position.x) >= POSE_UNDEFINED_COMPONENT ||
+           std::abs(position.y) >= POSE_UNDEFINED_COMPONENT ||
+           std::abs(position.z) >= POSE_UNDEFINED_COMPONENT;
 }
 
 inline bool Pose::operator==(const Pose &other) const {

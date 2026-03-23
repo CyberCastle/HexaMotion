@@ -5,6 +5,7 @@
 #include "hexamotion_constants.h"
 #include "math_utils.h"
 #include <array>
+#include <cassert>
 #include <cmath>
 #include <map>
 #include <string>
@@ -120,6 +121,10 @@ struct GaitConfiguration {
 
         step_cycle.stance_period_ = math_utils::mod(step_cycle.stance_end_ - step_cycle.stance_start_, step_cycle.period_);
         step_cycle.swing_period_ = step_cycle.swing_end_ - step_cycle.swing_start_;
+
+        /** OpenSHC parity: assert stance and swing periods are even. */
+        assert(step_cycle.stance_period_ % 2 == 0);
+        assert(step_cycle.swing_period_ % 2 == 0);
 
         return step_cycle;
     }
