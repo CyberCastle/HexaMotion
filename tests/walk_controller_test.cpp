@@ -273,15 +273,33 @@ void testForceNormalTouchdownParity(LegStepper &stepper, const RobotModel &model
     int stance_iterations = stepper.getStanceIterations();
     assert(stance_iterations > 0);
 
-    Point3D stride_vector = stepper.getStrideVector();
-    Point3D swing_clearance = stepper.getSwingClearance();
+    // Compute expected values independently from test-controlled inputs,
+    // avoiding the oracle problem of reading intermediate state from the SUT.
+    //
+    // swing_clearance = walk_plane_normal * step_clearance_height
+    //                 = (0,0,1) * 20.0 = (0, 0, 20)
+    Point3D swing_clearance_expected(0.0, 0.0, 20.0);
 
-    Point3D final_tip_velocity = stride_vector * (-1.0 / static_cast<double>(stance_iterations));
+    // stride_vector: with angular_velocity = 0, the angular component is zero.
+    // stride_linear = (80, -20, 0)
+    // Default step cycle: stance_period=3, period=4, frequency=1.0
+    // on_ground_ratio = 3/4 = 0.75, stride_scale = 0.75 / 1.0 = 0.75
+    // stride_vector = (80, -20, 0) * 0.75 = (60, -15, 0)
+    Point3D stride_vector_expected(60.0, -15.0, 0.0);
+
+    // Verify our independent computation matches (guard against wrong assumptions)
+    Point3D stride_vector_actual = stepper.getStrideVector();
+    Point3D swing_clearance_actual = stepper.getSwingClearance();
+    assert(isPointClose(stride_vector_actual, stride_vector_expected, 1e-6));
+    assert(isPointClose(swing_clearance_actual, swing_clearance_expected, 1e-6));
+
+    // Now derive expected Bezier nodes from independently-computed values
+    Point3D final_tip_velocity = stride_vector_expected * (-1.0 / static_cast<double>(stance_iterations));
     Point3D stance_node_separation = final_tip_velocity * 0.25;
 
     Point3D expected_bezier_origin = target - stance_node_separation * 4.0;
     expected_bezier_origin.z = std::max(origin.z, target.z);
-    expected_bezier_origin = expected_bezier_origin + swing_clearance;
+    expected_bezier_origin = expected_bezier_origin + swing_clearance_expected;
 
     Point3D expected_swing2_node2 = target - stance_node_separation * 2.0;
     Point3D expected_swing1_node3 = expected_bezier_origin - (expected_swing2_node2 - expected_bezier_origin) / 2.0;

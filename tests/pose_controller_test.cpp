@@ -151,24 +151,50 @@ int main() {
     }
     // Reset walk plane to known origin
     pc.setWalkPlanePose(Pose(Point3D(0, 0, config.body_clearance), Eigen::Quaterniond::Identity()));
+    // Set one leg to mid-swing so updateWalkPlanePose actually triggers (requires swing_progress in [0,1])
+    legs[0].setSwingProgress(0.5);
+    legs[0].setStepPhase(SWING_PHASE);
     pc.updateWalkPlanePose(legs);
     Pose hp = pc.getWalkPlanePose();
     double expected_h = -150.0 + config.body_clearance;
-    // Walk plane interpolation may not converge in 1 step, so check reasonable bound
-    std::cout << "Horizontal walk plane Z=" << hp.position.z
+    // Walk plane interpolation uses smoothStep(swing_progress) as blend factor
+    assert(std::isfinite(hp.position.z));
+    // After many iterations with ongoing swing, walk plane Z should converge
+    for (int it = 0; it < 80; ++it) {
+        pc.updateWalkPlanePose(legs);
+    }
+    Pose hp_conv = pc.getWalkPlanePose();
+    assert(std::isfinite(hp_conv.position.z));
+    std::cout << "Horizontal walk plane Z=" << hp_conv.position.z
               << " (target ~" << expected_h << ")" << std::endl;
+
+    // Restore leg 0 to stance for next phase
+    legs[0].setStepPhase(STANCE_PHASE);
+    legs[0].setSwingProgress(-1.0);
 
     // Tilted plane
     for (int i = 0; i < NUM_LEGS; i++) {
         legs[i].setStepPhase(STANCE_PHASE);
+        legs[i].setSwingProgress(-1.0);
         legs[i].setCurrentTipPositionGlobal(Point3D(i * 50.0, i * 30.0, -150.0 + i * 10.0));
     }
+    // One leg swinging to enable walk plane interpolation
+    legs[1].setSwingProgress(0.8);
+    legs[1].setStepPhase(SWING_PHASE);
     int max_iters = 80;
     for (int it = 0; it < max_iters; ++it) {
         pc.updateWalkPlanePose(legs);
     }
     Pose tp = pc.getWalkPlanePose();
-    std::cout << "Tilted walk plane Z=" << tp.position.z << std::endl;
+    assert(std::isfinite(tp.position.z));
+    // Tilted tips (linearly increasing z) should produce a different walk plane from horizontal case
+    double tilt_diff = std::abs(tp.position.z - hp_conv.position.z);
+    std::cout << "Tilted walk plane Z=" << tp.position.z
+              << " (horizontal was " << hp_conv.position.z
+              << ", diff=" << tilt_diff << ")" << std::endl;
+    // Restore legs
+    legs[1].setStepPhase(STANCE_PHASE);
+    legs[1].setSwingProgress(-1.0);
 
     // ── Leg posers ──────────────────────────────────────────────────────────
     std::cout << "\n=== Testing Leg Posers ===" << std::endl;

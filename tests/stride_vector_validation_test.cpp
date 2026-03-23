@@ -394,6 +394,9 @@ static bool validateFrameCenterAssumption(const StrideTestCase &baseTc, RobotMod
 }
 
 // Calcula el stride vector esperado usando la fórmula OpenSHC (idéntica a walk_controller.cpp de OpenSHC).
+// NOTA: Esta función replica la misma fórmula que el SUT (LegStepper::updateStride).
+// Se usa como cross-check algorítmico, NO como oráculo independiente.
+// La validación independiente se hace con los valores hardcoded en hardcoded_expected_strides[].
 static Point3D computeExpectedOpenSHCStride(const StrideTestCase &tc) {
     // Componentes lineales
     Point3D stride_linear(tc.linear_velocity.x, tc.linear_velocity.y, 0.0);
@@ -447,8 +450,35 @@ int main() {
         {Point3D(60.0, 40.0, params.default_height_offset), Point3D(30.0, 0.0, 0.0), 0.00, 1.5, 3, 1, "SoloLineal"},
         {Point3D(90.0, -70.0, params.default_height_offset), Point3D(-25.0, 15.0, 0.0), 0.75, 2.0, 4, 2, "AltaFrecuencia"}};
 
+    // ======================================================================
+    // Hardcoded expected strides — hand-computed from first principles.
+    // Formula: stride = (v_linear + omega_z_hat × radius_xy) * (stance/period) / freq
+    //   where radius_xy = (tip.x, tip.y, 0), omega_z_hat × r = (-ω*y, ω*x, 0)
+    // These serve as the PRIMARY independent oracle (not derived from SUT).
+    // ======================================================================
+    // Case 0 "Combinado_PositiveY": v=(50,30,0), ω=0.5, tip=(100,0,z), scale=0.75/1.0=0.75
+    //   angular = (-0.5*0, 0.5*100, 0) = (0, 50, 0), total = (50,80,0)*0.75 = (37.5, 60.0, 0)
+    // Case 1 "AnguloY_PositiveX": v=(40,-10,0), ω=0.25, tip=(80,60,z), scale=0.75/1.2=0.625
+    //   angular = (-0.25*60, 0.25*80, 0) = (-15, 20, 0), total = (25,10,0)*0.625 = (15.625, 6.25, 0)
+    // Case 2 "SoloAngular_NegOmega": v=(0,20,0), ω=-0.4, tip=(120,-50,z), scale=0.5/0.8=0.625
+    //   angular = (0.4*(-50), -0.4*120, 0) = (-20, -48, 0), total = (-20,-28,0)*0.625 = (-12.5, -17.5, 0)
+    // Case 3 "SoloLineal": v=(30,0,0), ω=0.0, tip=(60,40,z), scale=0.75/1.5=0.5
+    //   angular = (0, 0, 0), total = (30,0,0)*0.5 = (15.0, 0.0, 0.0)
+    // Case 4 "AltaFrecuencia": v=(-25,15,0), ω=0.75, tip=(90,-70,z), scale=(4/6)/2.0=1/3
+    //   angular = (0.75*70, 0.75*90, 0) = (52.5, 67.5, 0), total = (27.5,82.5,0)/3 = (55/6, 27.5, 0)
+    const Point3D hardcoded_expected_strides[] = {
+        Point3D(37.5, 60.0, 0.0),       // Case 0
+        Point3D(15.625, 6.25, 0.0),     // Case 1
+        Point3D(-12.5, -17.5, 0.0),     // Case 2
+        Point3D(15.0, 0.0, 0.0),        // Case 3
+        Point3D(55.0 / 6.0, 27.5, 0.0), // Case 4
+    };
+    static_assert(sizeof(hardcoded_expected_strides) / sizeof(hardcoded_expected_strides[0]) == 5,
+                  "Hardcoded expected strides must match number of test cases");
+
     const double TOL = 1e-9; // Tolerancia estricta
     bool all_passed = true;
+    int case_idx = 0;
 
     for (const auto &tc : cases) {
         // Preparar LegStepper
@@ -475,6 +505,13 @@ int main() {
 
         Point3D got = stepper.getStrideVector();
         Point3D expected = computeExpectedOpenSHCStride(tc);
+
+        // PRIMARY oracle: validate against hand-computed hardcoded expected values
+        Point3D hc = hardcoded_expected_strides[case_idx];
+        Point3D hc_diff = got - hc;
+        double hc_err = std::sqrt(hc_diff.x * hc_diff.x + hc_diff.y * hc_diff.y + hc_diff.z * hc_diff.z);
+
+        // SECONDARY cross-check: formula reimplementation (same math as SUT, catches refactoring regressions)
         Point3D diff = got - expected;
         double err = std::sqrt(diff.x * diff.x + diff.y * diff.y + diff.z * diff.z);
 
@@ -492,8 +529,9 @@ int main() {
         std::cout << " Linear Vel:   (" << tc.linear_velocity.x << ", " << tc.linear_velocity.y << ") mm/s  Angular Vel: " << tc.angular_velocity << " rad/s" << std::endl;
         std::cout << " freq=" << tc.frequency << " stance_period=" << tc.stance_period << " swing_period=" << tc.swing_period << std::endl;
         std::cout << " Expected Stride: (" << expected.x << ", " << expected.y << ", " << expected.z << ")" << std::endl;
+        std::cout << " Hardcoded Exp:   (" << hc.x << ", " << hc.y << ", " << hc.z << ")" << std::endl;
         std::cout << " Got Stride:      (" << got.x << ", " << got.y << ", " << got.z << ")" << std::endl;
-        std::cout << " |Error|=" << err << "  Angular |Error|=" << angular_err << std::endl;
+        std::cout << " |Hardcoded Err|=" << hc_err << "  |Formula Err|=" << err << "  Angular |Error|=" << angular_err << std::endl;
 
         // ===================== Comparación de efecto sobre COXA =====================
         // En OpenSHC, la parte angular del stride representa la traslación tangencial de la punta
@@ -549,7 +587,7 @@ int main() {
                   << " deg  coxaΔgot=" << coxa_delta_deg_got << " deg" << std::endl;
 
         bool tangential_ok = (!coxa_delta_valid) || (tangential_dot_abs <= TOL * std::max(1.0, radius_norm) && std::fabs(got_arc_len - expected_arc_len) <= TOL * std::max(1.0, radius_norm));
-        bool pass = (err <= TOL && angular_err <= TOL && (!coxa_delta_valid || coxa_err <= TOL) && tangential_ok);
+        bool pass = (hc_err <= TOL && err <= TOL && angular_err <= TOL && (!coxa_delta_valid || coxa_err <= TOL) && tangential_ok);
         if (!pass) {
             std::cout << "  ❌ Mismatch supera tolerancia." << std::endl;
             all_passed = false;
@@ -573,6 +611,7 @@ int main() {
             if (!frame_ok)
                 all_passed = false;
         }
+        ++case_idx;
     }
 
     std::cout << "\nResultado Global: " << (all_passed ? "✓ TODOS LOS CASOS OK" : "❌ FALLÓ ALGÚN CASO") << std::endl;

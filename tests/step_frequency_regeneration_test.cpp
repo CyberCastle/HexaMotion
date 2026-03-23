@@ -1,4 +1,5 @@
 #include "gait_config_factory.h"
+#include "math_utils.h"
 #include "robot_model.h"
 #include <cassert>
 #include <cmath>
@@ -30,14 +31,28 @@ static void validateCycle(const GaitConfiguration &cfg, const char *label) {
     StepCycle sc = cfg.generateStepCycle();
     int base = cfg.phase_config.stance_phase + cfg.phase_config.swing_phase;
     assert(base > 0);
+
+    /** Independently compute expected normaliser from config inputs (not from SUT output).
+     *  Formula from generateStepCycle():
+     *    swing_ratio = swing_phase / base
+     *    raw_step_period = (1 / step_frequency) / time_delta / swing_ratio
+     *    even_normaliser = roundToEvenInt(raw_step_period / base)  clamped >= 1  */
+    double expected_swing_ratio = double(cfg.phase_config.swing_phase) / double(base);
+    double raw_step_period = ((1.0 / cfg.step_frequency) / cfg.time_delta) / expected_swing_ratio;
+    int expected_normaliser = math_utils::roundToEvenInt(raw_step_period / base);
+    if (expected_normaliser < 1)
+        expected_normaliser = 1;
+
     /** Period must be a positive multiple of base. */
     assert(sc.period_ % base == 0);
     int normaliser = sc.period_ / base;
     assert(normaliser >= 1);
-    /** Stance/swing partitions. */
+    /** Verify normaliser matches independently computed value. */
+    assert(normaliser == expected_normaliser);
+    /** Stance/swing partitions (using independently computed normaliser). */
     assert(sc.stance_period_ + sc.swing_period_ == sc.period_);
-    assert(sc.stance_period_ == cfg.phase_config.stance_phase * normaliser);
-    assert(sc.swing_period_ == cfg.phase_config.swing_phase * normaliser);
+    assert(sc.stance_period_ == cfg.phase_config.stance_phase * expected_normaliser);
+    assert(sc.swing_period_ == cfg.phase_config.swing_phase * expected_normaliser);
     /** Frequency recomputed from period/time_delta must match stored frequency_ (within tolerance). */
     double recomputed_freq = 1.0 / (sc.period_ * cfg.time_delta);
     double rel_err = std::fabs(recomputed_freq - sc.frequency_) / std::max(1e-9, sc.frequency_);
