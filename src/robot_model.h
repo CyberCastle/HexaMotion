@@ -38,6 +38,9 @@ struct Parameters {
         for (int i = 0; i < NUM_LEGS; ++i) {
             packed_pose_joints[i] = {-1.571, 1.900, 1.200};
             unpacked_pose_joints[i] = {0.000, 0.785, -1.138};
+            for (int s = 0; s < MAX_PACK_STEPS; ++s) {
+                packed_pose_steps[i][s] = packed_pose_joints[i];
+            }
             for (int j = 0; j < DOF_PER_LEG; ++j) {
                 joint_angle_offset_deg[i][j] = 0.0;
                 joint_max_angular_speed_deg_s[i][j] = 0.0;
@@ -80,8 +83,15 @@ struct Parameters {
     // Configured packed/unpacked joint poses (OpenSHC YAML parity moved to Parameters).
     // All values are in radians in the robot model frame.
     bool use_configured_packed_unpacked_poses = true; //< Enable explicit packed/unpacked joint pose targets
-    JointPoseAngles packed_pose_joints[NUM_LEGS];     //< Packed target pose per leg
+    JointPoseAngles packed_pose_joints[NUM_LEGS];     //< Packed target pose per leg (= step 0 shortcut)
     JointPoseAngles unpacked_pose_joints[NUM_LEGS];   //< Unpacked (ready) target pose per leg
+
+    // Multi-step packed positions (OpenSHC Joint::packed_positions_ vector equivalent).
+    // packed_pose_steps[leg][step] gives the target joint angles for packing step `step`.
+    // Step 0 is always identical to packed_pose_joints[leg] (backward-compatible single-step).
+    // num_pack_steps defines how many entries per leg are valid (1 = single step, default).
+    JointPoseAngles packed_pose_steps[NUM_LEGS][MAX_PACK_STEPS];
+    int num_pack_steps = 1; //< Number of valid multi-step pack stages (1 = backward-compatible)
 
     /**
      * @brief DH parameter table for each leg.
@@ -103,6 +113,10 @@ struct Parameters {
     double overshoot_stride_fraction = DEFAULT_OVERSHOOT_STRIDE_FRACTION;   //< Max fraction of stride dedicated to overshoot damping
     double min_effective_stride_ratio = DEFAULT_MIN_EFFECTIVE_STRIDE_RATIO; //< Minimum stride fraction preserved after overshoot deduction
     double stability_margin;
+
+    // Scales all body velocity inputs (OpenSHC: body_velocity_scaler, default 1.0).
+    // Applied at the velocity command entry point before walk controller processing.
+    double body_velocity_scaler = 1.0;
 
     // Global gait tempo (Hz). Used by GaitConfiguration::generateStepCycle() to derive the
     // nominal (pre‑normalization) cycle duration: raw_iterations ≈ (1 / step_frequency) / time_delta.

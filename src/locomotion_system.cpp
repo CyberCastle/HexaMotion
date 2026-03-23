@@ -378,10 +378,11 @@ bool LocomotionSystem::setGaitConfiguration(const GaitConfiguration &gait_config
 
 /** Gait sequence planning - use WalkController with LegStepper (OpenSHC pattern). */
 bool LocomotionSystem::planGaitSequence(double velocity_x, double velocity_y, double angular_velocity) {
-    /** Store persistent velocities (OpenSHC pattern). */
-    commanded_linear_velocity_x_ = velocity_x;
-    commanded_linear_velocity_y_ = velocity_y;
-    commanded_angular_velocity_ = angular_velocity;
+    /** Apply body velocity scaler (OpenSHC: body_velocity_scaler applied in bodyVelocityCallback). */
+    const double scaler = params.body_velocity_scaler;
+    commanded_linear_velocity_x_ = velocity_x * scaler;
+    commanded_linear_velocity_y_ = velocity_y * scaler;
+    commanded_angular_velocity_ = angular_velocity * scaler;
     /** Defer stride recomputation to per-cycle update() after ramp/limit applied. */
     return true;
 }
@@ -1009,11 +1010,23 @@ bool LocomotionSystem::runControlPipelineStep() {
     }
 
     /**
+     * @brief Body pose composition (OpenSHC 1:1 pipeline position).
+     *
+     * In OpenSHC loop(), updateCurrentPose() runs BEFORE admittance for any
+     * robot_state != UNKNOWN. Placing it here ensures the composed body pose
+     * is available when the admittance ODE integrates tip forces.
+     */
+    if (body_pose_ctrl && state_controller_ &&
+        state_controller_->getRobotState() != RobotState::ROBOT_UNKNOWN) {
+        int robot_state = static_cast<int>(state_controller_->getRobotState());
+        body_pose_ctrl->updateCurrentPose(robot_state, legs);
+    }
+
+    /**
      * @brief Admittance control (OpenSHC 1:1 pipeline position).
      *
-     * In OpenSHC this runs in StateController::loop() before the state machine,
-     * as long as robot_state_ != UNKNOWN. Here it runs every tick in the pipeline,
-     * which is the equivalent position since runControlPipelineStep() is always called.
+     * In OpenSHC this runs in StateController::loop() after updateCurrentPose
+     * but before the state machine, as long as robot_state_ != UNKNOWN.
      */
     if (params.admittance.enable && admittance_ctrl) {
         /** Dynamic stiffness: only when actively walking and dynamic_stiffness enabled. */
@@ -1091,10 +1104,8 @@ bool LocomotionSystem::runControlPipelineStep() {
             }
         }
 
-        /** Step 2a: update composed body pose (OpenSHC PoseController::updateCurrentPose equivalent). */
+        /** Step 2a: update stance with composed body pose (OpenSHC PoseController::updateStance equivalent). */
         if (body_pose_ctrl) {
-            int robot_state = state_controller_ ? static_cast<int>(state_controller_->getRobotState()) : 0;
-            body_pose_ctrl->updateCurrentPose(robot_state, legs);
             body_pose_ctrl->updateStance(legs);
         }
 

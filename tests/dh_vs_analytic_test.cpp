@@ -91,7 +91,8 @@ int main() {
 
         std::cout << "Leg " << leg << " Jacobian max_error=" << max_error << std::endl;
 
-        if (max_error > 1e-6) {
+        /** O(h²) truncation with h=0.001 yields ~1e-5 residual. */
+        if (max_error > 1e-4) {
             ok = false;
         }
     }

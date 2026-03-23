@@ -15,6 +15,11 @@
 #define DOF_PER_LEG 3
 #define TOTAL_DOF (NUM_LEGS * DOF_PER_LEG)
 
+// Maximum number of intermediate packed position steps per leg (OpenSHC multi-step packing).
+// The default YAML defines a single "packed" step; additional steps ("packed_0", "packed_1", ...)
+// can be configured for morphologies that need multi-stage folding.
+#define MAX_PACK_STEPS 4
+
 // Numerical differentiation step for Jacobians
 #define JACOBIAN_DELTA 0.001f
 

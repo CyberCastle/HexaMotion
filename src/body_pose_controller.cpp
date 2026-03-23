@@ -959,47 +959,76 @@ int BodyPoseController::directStartup(Leg legs[NUM_LEGS]) {
 }
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-// OpenSHC PoseController::packLegs() equivalent
+// OpenSHC PoseController::packLegs() equivalent — multi-step support
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 int BodyPoseController::packLegs(double time_to_pack, Leg legs[NUM_LEGS]) {
     if (!getLegPoser(0)) {
         initializeLegPosers(legs);
     }
+    const Parameters &params = model.getParams();
+    const int number_pack_steps = params.num_pack_steps;
+
     int progress = 0;
+    if (!executing_transition_) {
+        for (int i = 0; i < NUM_LEGS; ++i) {
+            if (!leg_posers_[i]) {
+                continue;
+            }
+            const JointPoseAngles &packed = params.packed_pose_steps[i][pack_step_];
+            leg_posers_[i]->get()->setDesiredConfiguration(packed.coxa, packed.femur, packed.tibia);
+        }
+    }
     for (int i = 0; i < NUM_LEGS; ++i) {
         if (!leg_posers_[i]) {
             continue;
         }
-        const JointPoseAngles &packed = model.getParams().packed_pose_joints[i];
-        leg_posers_[i]->get()->setDesiredConfiguration(packed.coxa, packed.femur, packed.tibia);
         progress = leg_posers_[i]->get()->transitionConfiguration(time_to_pack);
     }
     executing_transition_ = (progress != 0 && progress != PROGRESS_COMPLETE);
-    if (progress == PROGRESS_COMPLETE) {
-        pack_step_ = std::min(pack_step_ + 1, 1);
+    if (progress == PROGRESS_COMPLETE && pack_step_ < number_pack_steps - 1) {
+        executing_transition_ = false;
+        pack_step_++;
+        progress = 0;
     }
     return progress;
 }
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-// OpenSHC PoseController::unpackLegs() equivalent
+// OpenSHC PoseController::unpackLegs() equivalent — multi-step support
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 int BodyPoseController::unpackLegs(double time_to_unpack, Leg legs[NUM_LEGS]) {
     if (!getLegPoser(0)) {
         initializeLegPosers(legs);
     }
+    const Parameters &params = model.getParams();
+
     int progress = 0;
+    if (!executing_transition_) {
+        for (int i = 0; i < NUM_LEGS; ++i) {
+            if (!leg_posers_[i]) {
+                continue;
+            }
+            // Reverse through pack steps: go to step (pack_step_ - 1), or unpacked if pack_step_ == 0.
+            if (pack_step_ > 0) {
+                const JointPoseAngles &target = params.packed_pose_steps[i][pack_step_ - 1];
+                leg_posers_[i]->get()->setDesiredConfiguration(target.coxa, target.femur, target.tibia);
+            } else {
+                const JointPoseAngles &unpacked = params.unpacked_pose_joints[i];
+                leg_posers_[i]->get()->setDesiredConfiguration(unpacked.coxa, unpacked.femur, unpacked.tibia);
+            }
+        }
+    }
     for (int i = 0; i < NUM_LEGS; ++i) {
         if (!leg_posers_[i]) {
             continue;
         }
-        const JointPoseAngles &unpacked = model.getParams().unpacked_pose_joints[i];
-        leg_posers_[i]->get()->setDesiredConfiguration(unpacked.coxa, unpacked.femur, unpacked.tibia);
         progress = leg_posers_[i]->get()->transitionConfiguration(time_to_unpack);
     }
     executing_transition_ = (progress != 0 && progress != PROGRESS_COMPLETE);
-    if (progress == PROGRESS_COMPLETE) {
-        pack_step_ = std::max(pack_step_ - 1, 0);
+    if (progress == PROGRESS_COMPLETE && pack_step_ != 0) {
+        executing_transition_ = false;
+        pack_step_--;
+        progress = 0;
     }
     return progress;
 }

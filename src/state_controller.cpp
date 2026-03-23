@@ -170,10 +170,12 @@ bool StateController::initialize(const BodyPoseConfiguration &body_pose_config) 
     const Parameters &params = context_.getParams();
     for (int i = 0; i < NUM_LEGS; ++i) {
         if (params.use_configured_packed_unpacked_poses) {
+            // Use last pack step for packed detection (OpenSHC: packed_positions_.back())
+            const int last_step = std::max(0, params.num_pack_steps - 1);
             packed_target_angles_[i] = JointAngles(
-                params.packed_pose_joints[i].coxa,
-                params.packed_pose_joints[i].femur,
-                params.packed_pose_joints[i].tibia);
+                params.packed_pose_steps[i][last_step].coxa,
+                params.packed_pose_steps[i][last_step].femur,
+                params.packed_pose_steps[i][last_step].tibia);
             ready_target_angles_[i] = JointAngles(
                 params.unpacked_pose_joints[i].coxa,
                 params.unpacked_pose_joints[i].femur,

@@ -294,7 +294,11 @@ inline void enableConfiguredPackedUnpackedPoses(Parameters &params) {
         params.packed_pose_joints[i].coxa = TEST_PACKED_COXA_RAD;
         params.packed_pose_joints[i].femur = TEST_PACKED_FEMUR_RAD;
         params.packed_pose_joints[i].tibia = TEST_PACKED_TIBIA_RAD;
+
+        // Sync multi-step pack step 0 with packed_pose_joints (backward-compatible)
+        params.packed_pose_steps[i][0] = params.packed_pose_joints[i];
     }
+    params.num_pack_steps = 1;
 }
 
 // Additional aliases for terrain adaptation tests

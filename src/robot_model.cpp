@@ -444,33 +444,38 @@ Eigen::Matrix4d RobotModel::legTransform(int leg, const JointAngles &q) const {
 }
 
 Eigen::Matrix3d RobotModel::calculateJacobian(int leg, const JointAngles &q, const Point3D &) const {
-    /** Numerical Jacobian computation using DH-based forward kinematics. */
-    const double delta = JACOBIAN_DELTA;
+    /**
+     * Analytical Jacobian computation from DH transform chain.
+     * OpenSHC equivalent: z_i × (pe - p_i) for the linear velocity rows.
+     *
+     * Joint 0 (coxa)  rotates about Z-axis → rotation axis = transform[0].col(2)
+     * Joint 1 (femur)  rotates about Y-axis → rotation axis = transform[1].col(1)
+     * Joint 2 (tibia) rotates about Y-axis → rotation axis = transform[2].col(1)
+     *
+     * Ref: robotics.stackexchange.com/questions/2760/
+     *      computing-inverse-kinematic-with-jacobian-matrices-for-6-dof-manipulator
+     */
+    std::vector<Eigen::Matrix4d> T = buildDHTransforms(leg, q);
 
-    Point3D base = forwardKinematicsGlobalCoordinates(leg, q);
-
-    JointAngles qd = q;
-    qd.coxa += delta;
-    Point3D p_dx = forwardKinematicsGlobalCoordinates(leg, qd);
-
-    qd = q;
-    qd.femur += delta;
-    Point3D p_dy = forwardKinematicsGlobalCoordinates(leg, qd);
-
-    qd = q;
-    qd.tibia += delta;
-    Point3D p_dz = forwardKinematicsGlobalCoordinates(leg, qd);
+    /** End-effector position from the final transform. */
+    Eigen::Vector3d pe = T[DOF_PER_LEG].block<3, 1>(0, 3);
 
     Eigen::Matrix3d jacobian;
-    jacobian.col(0) = Eigen::Vector3d((p_dx.x - base.x) / delta,
-                                      (p_dx.y - base.y) / delta,
-                                      (p_dx.z - base.z) / delta);
-    jacobian.col(1) = Eigen::Vector3d((p_dy.x - base.x) / delta,
-                                      (p_dy.y - base.y) / delta,
-                                      (p_dy.z - base.z) / delta);
-    jacobian.col(2) = Eigen::Vector3d((p_dz.x - base.x) / delta,
-                                      (p_dz.y - base.y) / delta,
-                                      (p_dz.z - base.z) / delta);
+
+    /** Joint 0 (coxa): Z-axis revolute at base frame. */
+    Eigen::Vector3d z0 = T[0].block<3, 1>(0, 2);
+    Eigen::Vector3d p0 = T[0].block<3, 1>(0, 3);
+    jacobian.col(0) = z0.cross(pe - p0);
+
+    /** Joint 1 (femur): Y-axis revolute. */
+    Eigen::Vector3d z1 = T[1].block<3, 1>(0, 1);
+    Eigen::Vector3d p1 = T[1].block<3, 1>(0, 3);
+    jacobian.col(1) = z1.cross(pe - p1);
+
+    /** Joint 2 (tibia): Y-axis revolute. */
+    Eigen::Vector3d z2 = T[2].block<3, 1>(0, 1);
+    Eigen::Vector3d p2 = T[2].block<3, 1>(0, 3);
+    jacobian.col(2) = z2.cross(pe - p2);
 
     return jacobian;
 }
