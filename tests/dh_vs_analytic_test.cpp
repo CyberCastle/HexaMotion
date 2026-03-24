@@ -22,7 +22,7 @@ int main() {
     p.tibia_angle_limits[1] = 45;
 
     RobotModel model(p);
-    model.workspaceAnalyzerInitializer(); // Inicializar WorkspaceAnalyzer
+    model.workspaceAnalyzerInitializer(); // Initialize WorkspaceAnalyzer
     AnalyticRobotModel analytic_model(p);
 
     std::cout << std::fixed << std::setprecision(6);

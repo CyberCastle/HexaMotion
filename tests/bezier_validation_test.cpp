@@ -139,7 +139,7 @@ bool testSwingTrajectoryEquivalence() {
 
     Parameters params = createDefaultParameters();
     RobotModel model(params);
-    model.workspaceAnalyzerInitializer(); // Inicializar WorkspaceAnalyzer
+    model.workspaceAnalyzerInitializer(); // Initialize WorkspaceAnalyzer
 
     // Test parameters matching OpenSHC usage
     int leg_index = 0;
@@ -330,7 +330,7 @@ bool testOpenSHCCompatibility() {
 
     Parameters params = createDefaultParameters();
     RobotModel model(params);
-    model.workspaceAnalyzerInitializer(); // Inicializar WorkspaceAnalyzer
+    model.workspaceAnalyzerInitializer(); // Initialize WorkspaceAnalyzer
 
     // Test that swing trajectory has proper bell curve shape
     double max_height = -1000.0f;

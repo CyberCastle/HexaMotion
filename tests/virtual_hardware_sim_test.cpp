@@ -873,7 +873,7 @@ int main(int argc, char **argv) {
     std::cout << "\n🔄 TRAJECTORY TIMING SYNCHRONIZATION:" << std::endl;
     std::cout << "  ✅ Both tests use identical LocomotionSystem configuration" << std::endl;
     std::cout << "  ✅ Both tests execute the same WalkController → LegStepper trajectory sequence" << std::endl;
-    std::cout << "  ✅ Both tests use the same StepCycle timing (iteraciones derivadas dinámicamente por fase)" << std::endl;
+    std::cout << "  ✅ Both tests use the same StepCycle timing (iterations dynamically derived per phase)" << std::endl;
     std::cout << "  ✅ Both tests call sys.update() with identical frequency" << std::endl;
 
     std::cout << "\n🎯 EXPECTED RESULT:" << std::endl;

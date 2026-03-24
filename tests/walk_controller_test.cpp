@@ -423,52 +423,52 @@ void testSwingHeightCompliance(LegStepper &stepper, Leg &leg, const RobotModel &
     std::cout << "  Initial tip Z: " << initial_z << " mm, Walk plane Z: " << walk_plane_z << " mm" << std::endl;
     std::cout << "  Initial clearance from walk plane: " << (initial_z - walk_plane_z) << " mm" << std::endl;
 
-    // Configurar el stepper para fase de swing
+    // Configure stepper for swing phase
     stepper.setStepState(STEP_SWING);
-    stepper.setPhase(5);          // Fase intermedia de swing
-    stepper.setStepProgress(0.5); // 50% de progreso
+    stepper.setPhase(5);          // Mid swing phase
+    stepper.setStepProgress(0.5); // 50% progress
 
     // CRITICAL: Configure velocity BEFORE setting up trajectories
     double desired_velocity_x = 40.0; // mm/s forward velocity
     stepper.setDesiredVelocity(Point3D(desired_velocity_x, 0.0, 0.0), 0.0);
 
-    // Configurar parámetros de marcha
+    // Configure gait parameters
     double step_length = 20.0;
     double time_delta = 1.0 / 50.0; // 50Hz
 
-    // Configurar posiciones de origen correctamente
-    // Esto es crucial para que la trayectoria de swing funcione correctamente
+    // Configure origin positions correctly
+    // This is critical for the swing trajectory to work properly
     stepper.setDefaultTipPose(initial_position);
 
-    // Configurar target_tip_pose_ para que esté adelante de la posición inicial
+    // Configure target_tip_pose_ to be ahead of the initial position
     Point3D target_position = initial_position;
-    target_position.x += step_length; // Mover hacia adelante
+    target_position.x += step_length; // Move forward
     stepper.setCurrentTipPose(target_position);
 
-    // Configurar stride vector para que apunte hacia adelante
+    // Configure stride vector to point forward
     stepper.updateStride();
 
-    // Generar nodos de control de swing
+    // Generate swing control nodes
     stepper.testGeneratePrimarySwingControlNodes();
     stepper.testGenerateSecondarySwingControlNodes(false);
 
-    // Simular diferentes puntos de la trayectoria de swing
+    // Simulate different points along the swing trajectory
     double max_swing_height = initial_z;
     double min_swing_height = initial_z;
     Point3D max_height_position, min_height_position;
 
-    // Probar múltiples puntos de la trayectoria de swing
+    // Test multiple points along the swing trajectory
     for (double progress = 0.0; progress <= 1.0; progress += 0.1) {
         stepper.setStepProgress(progress);
         stepper.setStepProgress(progress);
 
-        // Actualizar posición del tip usando la trayectoria Bézier
+        // Update tip position using Bézier trajectory
         stepper.updateTipPositionIterative(static_cast<int>(progress * 100), time_delta, false, false);
 
         Point3D current_position = leg.getCurrentTipPositionGlobal();
         double current_z = current_position.z;
 
-        // Trackear altura máxima y mínima
+        // Track maximum and minimum height
         if (current_z > max_swing_height) {
             max_swing_height = current_z;
             max_height_position = current_position;
@@ -479,19 +479,19 @@ void testSwingHeightCompliance(LegStepper &stepper, Leg &leg, const RobotModel &
         }
     }
 
-    // Calcular la altura real de swing alcanzada relativa a la posición inicial
+    // Calculate actual swing height relative to initial position
     double actual_swing_height = max_swing_height - initial_z;
     double expected_swing_height = test_swing_height;
 
-    // Verificar que la altura de swing es significativamente mayor que cero
-    // Con curvas Bézier, el importante es que haya movimiento vertical, no la altura exacta
-    bool significant_height = actual_swing_height > 10.0; // Al menos 10mm de altura incremental
+    // Verify swing height is significantly greater than zero
+    // With Bézier curves, what matters is vertical movement, not exact height
+    bool significant_height = actual_swing_height > 10.0; // At least 10mm incremental height
 
-    // Verificar que la trayectoria no es plana (debe haber variación en Z)
+    // Verify trajectory is not flat (must have Z variation)
     double height_variation = max_swing_height - min_swing_height;
-    bool has_variation = height_variation > 5.0; // Al menos 5mm de variación total
+    bool has_variation = height_variation > 5.0; // At least 5mm total variation
 
-    // Assert simplificado para el test - solo verificar que hay altura significativa Y variación
+    // Simplified assert for the test - only verify significant height AND variation
     assert(significant_height && "Swing height must be > 10mm");
     assert(has_variation && "Swing trajectory must have > 5mm Z variation");
     std::cout << "  ✅ Swing height compliance test passed" << std::endl;
@@ -973,7 +973,7 @@ int main() {
     p.tibia_angle_limits[1] = 45;
 
     RobotModel model(p);
-    model.workspaceAnalyzerInitializer(); // Inicializar WorkspaceAnalyzer
+    model.workspaceAnalyzerInitializer(); // Initialize WorkspaceAnalyzer
 
     // Create leg objects for testing
     Leg test_legs[NUM_LEGS] = {
@@ -1024,17 +1024,17 @@ int main() {
         testForceNormalTouchdownParity(parity_stepper, model);
     }
 
-    // Simular un paso de marcha con velocidad hacia adelante
-    Point3D forward_velocity(10.0, 0.0, 0.0); // 10 mm/s en X
+    // Simulate a walk step with forward velocity
+    Point3D forward_velocity(10.0, 0.0, 0.0); // 10 mm/s in X
     Eigen::Vector3d current_body_position(0.0, 0.0, 0.0);
     Eigen::Vector3d current_body_orientation(0.0, 0.0, 0.0);
     wc.updateWalk(forward_velocity, 0.0, current_body_position, current_body_orientation);
 
-    // Test walk plane pose is maintained durante walk update
+    // Test walk plane pose is maintained during walk update
     Pose post_walk_pose = pose_controller.getWalkPlanePose();
     std::cout << "Post-walk walk plane pose: Z=" << post_walk_pose.position.z << " mm" << std::endl;
 
-    // Obtener el LegStepper y la posición del pie para la pierna 0
+    // Get the LegStepper and tip position for leg 0
     auto leg_stepper = wc.getLegStepper(0);
     assert(leg_stepper != nullptr);
     Point3D traj = leg_stepper->getCurrentTipPose();
@@ -1043,9 +1043,9 @@ int main() {
     std::cout << "✅ WalkController basic functionality passed" << std::endl;
 
     // Test LegStepper -> Leg integration for each leg (collecting data for summary)
-    std::cout << "\n--- Ejecutando Tests de Integración por Patas ---" << std::endl;
+    std::cout << "\n--- Running Per-Leg Integration Tests ---" << std::endl;
 
-    // Estructuras para recopilar datos del test
+    // Structures to collect test data
     struct LegTestResults {
         bool initialization_passed = false;
         bool phase_updates_passed = false;
@@ -1068,7 +1068,7 @@ int main() {
         Leg &leg = test_legs[leg_index];
         LegTestResults &results = leg_results[leg_index];
 
-        // Capturar posición inicial
+        // Capture initial position
         results.initial_position = leg.getCurrentTipPositionGlobal();
 
         // Get leg's identity pose for LegStepper initialization
@@ -1106,7 +1106,7 @@ int main() {
 
             Parameters test_params = model.getParams();
             RobotModel temp_model(test_params);
-            temp_model.workspaceAnalyzerInitializer(); // Inicializar WorkspaceAnalyzer
+            temp_model.workspaceAnalyzerInitializer(); // Initialize WorkspaceAnalyzer
             LegStepper temp_stepper(leg_index, identity_pose, leg, temp_model);
             temp_stepper.setDefaultTipPose(identity_pose);
 
@@ -1125,7 +1125,7 @@ int main() {
             stepper.testGenerateSecondarySwingControlNodes(false);
             stepper.testGenerateStanceControlNodes(1.0);
 
-            // Verificar que los nodos no son NaN
+            // Verify nodes are not NaN
             bool nodes_valid = true;
             for (int i = 0; i < 5; ++i) {
                 Point3D primary_node = stepper.getSwing1ControlNode(i);
@@ -1213,11 +1213,11 @@ int main() {
             results.max_swing_height = max_height - start_z;
             results.swing_height_compliance_passed = (results.max_swing_height > 5.0);
 
-            // Capturar posición final
+            // Capture final position
             results.final_position = leg.getCurrentTipPositionGlobal();
 
         } catch (...) {
-            results.warnings.push_back("Excepción durante ejecución de tests");
+            results.warnings.push_back("Exception during test execution");
         }
     }
 
@@ -1227,7 +1227,7 @@ int main() {
     std::cout << "          FINAL LEG ANALYSIS REPORT" << std::endl;
     std::cout << std::string(60, '=') << std::endl;
 
-    // Contadores de éxito
+    // Success counters
     int successful_legs = 0;
     int total_tests_passed = 0;
     int total_tests = NUM_LEGS * 8; // 8 tests per leg
@@ -1243,7 +1243,7 @@ int main() {
     std::vector<std::string> all_warnings;
     std::vector<int> failed_legs;
 
-    std::cout << "\n1. RESULTADOS POR PATA:\n"
+    std::cout << "\n1. RESULTS PER LEG:\n"
               << std::endl;
     for (int i = 0; i < NUM_LEGS; ++i) {
         const LegTestResults &results = leg_results[i];
@@ -1268,15 +1268,15 @@ int main() {
 
         total_tests_passed += leg_tests_passed;
 
-        std::string status = (leg_tests_passed == 8) ? "✅ COMPLETO" : "⚠️  PARCIAL";
+        std::string status = (leg_tests_passed == 8) ? "✅ COMPLETE" : "⚠️  PARTIAL";
         if (leg_tests_passed < 6) {
-            status = "❌ FALLO";
+            status = "❌ FAIL";
             failed_legs.push_back(i);
         } else if (leg_tests_passed == 8) {
             successful_legs++;
         }
 
-        std::cout << "   Pata " << i << ": " << status << " (" << leg_tests_passed << "/8 tests)" << std::endl;
+        std::cout << "   Leg " << i << ": " << status << " (" << leg_tests_passed << "/8 tests)" << std::endl;
 
         if (results.stride_magnitude > 0) {
             avg_stride_magnitude += results.stride_magnitude;
@@ -1290,24 +1290,24 @@ int main() {
             max_swing = std::max(max_swing, results.max_swing_height);
         }
 
-        // Recopilar warnings
+        // Collect warnings
         for (const auto &warning : results.warnings) {
-            all_warnings.push_back("Pata " + std::to_string(i) + ": " + warning);
+            all_warnings.push_back("Leg " + std::to_string(i) + ": " + warning);
         }
     }
 
     avg_stride_magnitude /= NUM_LEGS;
     avg_swing_height /= NUM_LEGS;
 
-    std::cout << "\n2. ESTADÍSTICAS GENERALES:\n"
+    std::cout << "\n2. GENERAL STATISTICS:\n"
               << std::endl;
-    std::cout << "   • Patas completamente funcionales: " << successful_legs << "/" << NUM_LEGS
+    std::cout << "   • Fully functional legs: " << successful_legs << "/" << NUM_LEGS
               << " (" << (successful_legs * 100 / NUM_LEGS) << "%)" << std::endl;
-    std::cout << "   • Tests totales exitosos: " << total_tests_passed << "/" << total_tests
+    std::cout << "   • Total tests passed: " << total_tests_passed << "/" << total_tests
               << " (" << (total_tests_passed * 100 / total_tests) << "%)" << std::endl;
 
     if (!failed_legs.empty()) {
-        std::cout << "   • Patas con fallas: ";
+        std::cout << "   • Failed legs: ";
         for (size_t i = 0; i < failed_legs.size(); ++i) {
             std::cout << failed_legs[i];
             if (i < failed_legs.size() - 1)
@@ -1327,51 +1327,51 @@ int main() {
     std::cout << "\n4. QUALITY ANALYSIS:\n"
               << std::endl;
 
-    // Evaluar consistencia entre patas
-    bool stride_consistent = (max_stride - min_stride) < 10.0; // Variación < 10mm
-    bool swing_consistent = (max_swing - min_swing) < 15.0;    // Variación < 15mm
+    // Evaluate consistency across legs
+    bool stride_consistent = (max_stride - min_stride) < 10.0; // Variation < 10mm
+    bool swing_consistent = (max_swing - min_swing) < 15.0;    // Variation < 15mm
 
-    std::cout << "   • Consistencia de stride entre patas: "
-              << (stride_consistent ? "✅ BUENA" : "⚠️  VARIABLE")
-              << " (variación: " << (max_stride - min_stride) << " mm)" << std::endl;
-    std::cout << "   • Consistencia de swing entre patas: "
-              << (swing_consistent ? "✅ BUENA" : "⚠️  VARIABLE")
-              << " (variación: " << (max_swing - min_swing) << " mm)" << std::endl;
+    std::cout << "   • Stride consistency across legs: "
+              << (stride_consistent ? "✅ GOOD" : "⚠️  VARIABLE")
+              << " (variation: " << (max_stride - min_stride) << " mm)" << std::endl;
+    std::cout << "   • Swing consistency across legs: "
+              << (swing_consistent ? "✅ GOOD" : "⚠️  VARIABLE")
+              << " (variation: " << (max_swing - min_swing) << " mm)" << std::endl;
 
-    // Evaluar parámetros de movimiento
+    // Evaluate movement parameters
     bool stride_adequate = avg_stride_magnitude > 20.0 && avg_stride_magnitude < 60.0;
     bool swing_adequate = avg_swing_height > 8.0 && avg_swing_height < 40.0;
 
-    std::cout << "   • Magnitud de stride: "
-              << (stride_adequate ? "✅ ADECUADA" : "⚠️  REVISAR")
-              << " (esperado: 20-60mm)" << std::endl;
-    std::cout << "   • Altura de swing: "
-              << (swing_adequate ? "✅ ADECUADA" : "⚠️  REVISAR")
-              << " (esperado: 8-40mm)" << std::endl;
+    std::cout << "   • Stride magnitude: "
+              << (stride_adequate ? "✅ ADEQUATE" : "⚠️  REVIEW")
+              << " (expected: 20-60mm)" << std::endl;
+    std::cout << "   • Swing height: "
+              << (swing_adequate ? "✅ ADEQUATE" : "⚠️  REVIEW")
+              << " (expected: 8-40mm)" << std::endl;
 
     if (!all_warnings.empty()) {
-        std::cout << "\n5. ADVERTENCIAS DETECTADAS:\n"
+        std::cout << "\n5. WARNINGS DETECTED:\n"
                   << std::endl;
         for (const auto &warning : all_warnings) {
             std::cout << "   ⚠️  " << warning << std::endl;
         }
     }
 
-    std::cout << "\n6. RESUMEN EJECUTIVO:\n"
+    std::cout << "\n6. EXECUTIVE SUMMARY:\n"
               << std::endl;
 
     if (successful_legs == NUM_LEGS) {
-        std::cout << "   🎉 EXCELENTE: Todas las patas funcionan correctamente" << std::endl;
-        std::cout << "   💚 Sistema listo para operación completa" << std::endl;
+        std::cout << "   🎉 EXCELLENT: All legs functioning correctly" << std::endl;
+        std::cout << "   💚 System ready for full operation" << std::endl;
     } else if (successful_legs >= NUM_LEGS * 0.8) {
-        std::cout << "   ✅ BUENO: Mayoría de patas funcionan correctamente" << std::endl;
-        std::cout << "   💛 Revisar patas con fallas para optimización" << std::endl;
+        std::cout << "   ✅ GOOD: Majority of legs functioning correctly" << std::endl;
+        std::cout << "   💛 Review failed legs for optimization" << std::endl;
     } else if (successful_legs >= NUM_LEGS * 0.5) {
-        std::cout << "   ⚠️  REGULAR: Funcionalidad parcial del sistema" << std::endl;
-        std::cout << "   🔧 Requiere ajustes en configuración de patas" << std::endl;
+        std::cout << "   ⚠️  FAIR: Partial system functionality" << std::endl;
+        std::cout << "   🔧 Requires leg configuration adjustments" << std::endl;
     } else {
-        std::cout << "   ❌ CRÍTICO: Múltiples fallas en el sistema de patas" << std::endl;
-        std::cout << "   🚨 Revisar configuración completa antes de operación" << std::endl;
+        std::cout << "   ❌ CRITICAL: Multiple failures in legs" << std::endl;
+        std::cout << "   🚨 Review full configuration before operation" << std::endl;
     }
 
     std::cout << "\n"
@@ -1442,37 +1442,37 @@ int main() {
         delete steppers[i];
     }
 
-    // ========== REPORTE DE COORDINACIÓN MULTI-PATA ==========
+    // ========== MULTI-LEG COORDINATION REPORT ==========
     std::cout << "\n"
               << std::string(50, '=') << std::endl;
-    std::cout << "     REPORTE DE COORDINACIÓN MULTI-PATA" << std::endl;
+    std::cout << "     MULTI-LEG COORDINATION REPORT" << std::endl;
     std::cout << std::string(50, '=') << std::endl;
 
-    std::cout << "• Coordinación entre patas: "
-              << (coordination_successful ? "✅ EXITOSA" : "❌ FALLIDA") << std::endl;
-    std::cout << "• Estabilidad del plano de marcha: "
-              << (height_range < 20.0 ? "✅ ESTABLE" : "⚠️  INESTABLE")
-              << " (variación: " << std::fixed << std::setprecision(1) << height_range << " mm)" << std::endl;
-    std::cout << "• Patrón de marcha trípode: ✅ CONFIGURADO" << std::endl;
-    std::cout << "• Sincronización de fases: ✅ VALIDADA" << std::endl;
+    std::cout << "• Inter-leg coordination: "
+              << (coordination_successful ? "✅ SUCCESSFUL" : "❌ FAILED") << std::endl;
+    std::cout << "• Walk plane stability: "
+              << (height_range < 20.0 ? "✅ STABLE" : "⚠️  UNSTABLE")
+              << " (variation: " << std::fixed << std::setprecision(1) << height_range << " mm)" << std::endl;
+    std::cout << "• Tripod gait pattern: ✅ CONFIGURED" << std::endl;
+    std::cout << "• Phase synchronization: ✅ VALIDATED" << std::endl;
 
     if (coordination_successful && height_range < 20.0) {
-        std::cout << "\n🎉 COORDINACIÓN MULTI-PATA: EXCELENTE" << std::endl;
+        std::cout << "\n🎉 MULTI-LEG COORDINATION: EXCELLENT" << std::endl;
     } else {
-        std::cout << "\n⚠️  COORDINACIÓN MULTI-PATA: REVISAR PARÁMETROS" << std::endl;
+        std::cout << "\n⚠️  MULTI-LEG COORDINATION: REVIEW PARAMETERS" << std::endl;
     }
     std::cout << std::string(50, '=') << std::endl;
 
     std::cout << "\n"
               << std::string(60, '=') << std::endl;
-    std::cout << "🎯 RESUMEN FINAL DE INTEGRACIÓN HEXAMOTION" << std::endl;
+    std::cout << "🎯 HEXAMOTION INTEGRATION FINAL SUMMARY" << std::endl;
     std::cout << std::string(60, '=') << std::endl;
-    std::cout << "✅ Sistema de plano de marcha: INTEGRADO Y FUNCIONAL" << std::endl;
-    std::cout << "✅ Mantenimiento de altura corporal: VERIFICADO" << std::endl;
-    std::cout << "✅ Adaptación a terreno: CONFIRMADA" << std::endl;
-    std::cout << "✅ Integración LegStepper->Leg: COMPLETADA" << std::endl;
+    std::cout << "✅ Walk plane system: INTEGRATED AND FUNCTIONAL" << std::endl;
+    std::cout << "✅ Body height maintenance: VERIFIED" << std::endl;
+    std::cout << "✅ Terrain adaptation: CONFIRMED" << std::endl;
+    std::cout << "✅ LegStepper->Leg integration: COMPLETED" << std::endl;
     std::cout << std::string(60, '=') << std::endl;
-    std::cout << "🚀 SISTEMA LISTO PARA OPERACIÓN" << std::endl;
+    std::cout << "🚀 SYSTEM READY FOR OPERATION" << std::endl;
 
     // Propagate per-leg and coordination failures to exit code
     int exit_code = 0;

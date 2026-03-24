@@ -1,17 +1,17 @@
 /**
  * @file coxa_phase_transition_test.cpp
- * @brief Test equivalente a tripod_walk_visualization_test enfocado en coxas.
+ * @brief Test equivalent to tripod_walk_visualization_test focused on coxas.
  *
- * Este test es equivalente al tripod_walk_visualization_test pero muestra
- * únicamente el movimiento de las articulaciones COXA durante las transiciones
- * de fase swing/stance en gait tripod.
+ * This test is equivalent to tripod_walk_visualization_test but shows
+ * only the movement of COXA joints during swing/stance phase transitions
+ * in tripod gait.
  *
- * El test:
- * 1. Inicializa el LocomotionSystem igual que tripod_walk_visualization_test
- * 2. Ejecuta la secuencia de startup completa
- * 3. Monitorea solo los ángulos de coxa durante las transiciones
- * 4. Usa el timing derivado dinámicamente del StepCycle (iteraciones por fase calculadas)
- * 5. Termina cuando todas las patas completan las transiciones requeridas
+ * The test:
+ * 1. Initializes the LocomotionSystem the same as tripod_walk_visualization_test
+ * 2. Runs the full startup sequence
+ * 3. Monitors only coxa angles during transitions
+ * 4. Uses timing dynamically derived from StepCycle (iterations per phase computed)
+ * 5. Finishes when all legs complete the required transitions
  *
  * @author HexaMotion Team
  * @version 2.0
@@ -31,31 +31,31 @@
 #include <vector>
 
 // --------------------------------------------------------------------------------------
-// Parámetros por defecto (pueden sobre-escribirse por CLI)
+// Default parameters (can be overridden by CLI)
 // --------------------------------------------------------------------------------------
 static double g_test_velocity = 300.0;        // mm/s
-static int g_required_swing_transitions = 20; // Transiciones STANCE->SWING por pata
+static int g_required_swing_transitions = 20; // STANCE->SWING transitions per leg
 // Default needs to accommodate the configured transitions.
 // With StepCycle period=104, 20 transitions need ~20*104=2080 steps.
-static int g_max_steps = 2600;                    // Límite de seguridad
-static bool g_show_only_phase_transitions = true; // Modo compacto por defecto
-static double g_sym_threshold_stance_deg = 3.0;   // |sum(delta)| máximo permitido en STANCE
-static double g_sym_threshold_swing_deg = 4.0;    // |sum(delta)| máximo permitido en SWING (más tolerancia)
+static int g_max_steps = 2600;                    // Safety limit
+static bool g_show_only_phase_transitions = true; // Compact mode by default
+static double g_sym_threshold_stance_deg = 3.0;   // |sum(delta)| maximum allowed in STANCE
+static double g_sym_threshold_swing_deg = 4.0;    // |sum(delta)| maximum allowed in SWING (more tolerant)
 
-// Acumuladores globales de métricas (máximos absolutos observados)
-static double g_max_abs_sum_stance_pair[3] = {0, 0, 0}; // pares (0,5) (1,4) (2,3)
+// Global metric accumulators (maximum absolute values observed)
+static double g_max_abs_sum_stance_pair[3] = {0, 0, 0}; // pairs (0,5) (1,4) (2,3)
 static double g_max_abs_sum_swing_pair[3] = {0, 0, 0};
 static int g_sym_violations_stance = 0;
 static int g_sym_violations_swing = 0;
 
 static void printHelpAndExit() {
-    std::cout << "Uso: ./coxa_phase_transition_test [opciones]\n"
-              << "  --transitions N    Nº transiciones STANCE->SWING por pata (default 20)\n"
-              << "  --velocity V       Velocidad lineal mm/s (default 300)\n"
-              << "  --max-steps M      Máx pasos simulación (default 2600)\n"
-              << "  --full             Mostrar TODAS las iteraciones\n"
-              << "  --phases-only      Solo transiciones de fase (default)\n"
-              << "  --help             Esta ayuda\n";
+    std::cout << "Usage: ./coxa_phase_transition_test [options]\n"
+              << "  --transitions N    Number of STANCE->SWING transitions per leg (default 20)\n"
+              << "  --velocity V       Linear velocity mm/s (default 300)\n"
+              << "  --max-steps M      Max simulation steps (default 2600)\n"
+              << "  --full             Show ALL iterations\n"
+              << "  --phases-only      Phase transitions only (default)\n"
+              << "  --help             This help\n";
     std::exit(0);
 }
 
@@ -64,7 +64,7 @@ static void parseArgs(int argc, char **argv) {
         std::string a = argv[i];
         auto needVal = [&](const char *flag) {
             if (i + 1 >= argc) {
-                std::cerr << "Falta valor para " << flag << std::endl;
+                std::cerr << "Missing value for " << flag << std::endl;
                 std::exit(1);
             }
         };
@@ -90,31 +90,31 @@ static void parseArgs(int argc, char **argv) {
             needVal("--sym-thr-swing");
             g_sym_threshold_swing_deg = std::atof(argv[++i]);
         } else {
-            std::cerr << "Argumento desconocido: " << a << std::endl;
+            std::cerr << "Unknown argument: " << a << std::endl;
             printHelpAndExit();
         }
     }
     if (g_required_swing_transitions < 1)
         g_required_swing_transitions = 1;
     if (g_max_steps < 200)
-        g_max_steps = 200; // seguridad mínima
+        g_max_steps = 200; // minimum safety
 }
 
 /**
- * @brief Imprime el encabezado del test.
+ * @brief Prints the test header.
  */
 static void printTestHeader() {
     std::cout << "=======================================================================================================" << std::endl;
     std::cout << "                      TRIPOD GAIT COXA MOVEMENT VALIDATION TEST" << std::endl;
     std::cout << "=======================================================================================================" << std::endl;
     if (g_show_only_phase_transitions) {
-        std::cout << "Modo: SOLO TRANSICIONES (estado inicial + S->W / W->S)." << std::endl;
+        std::cout << "Mode: TRANSITIONS ONLY (initial state + S->W / W->S)." << std::endl;
     } else {
-        std::cout << "Modo: TODAS LAS ITERACIONES (detalle completo)." << std::endl;
+        std::cout << "Mode: ALL ITERATIONS (full detail)." << std::endl;
     }
-    std::cout << "Con timing OpenSHC: Cada fase (stance/swing) usa iteraciones normalizadas dinámicas (no fijo a 52)." << std::endl;
-    std::cout << "Objetivo: " << g_required_swing_transitions << " transiciones STANCE->SWING por pata." << std::endl;
-    std::cout << "Duración estimada (aprox): ~" << (g_required_swing_transitions * 104) << " pasos (solo referencia)." << std::endl;
+    std::cout << "With OpenSHC timing: Each phase (stance/swing) uses dynamic normalized iterations (not fixed at 52)." << std::endl;
+    std::cout << "Goal: " << g_required_swing_transitions << " STANCE->SWING transitions per leg." << std::endl;
+    std::cout << "Estimated duration (approx): ~" << (g_required_swing_transitions * 104) << " steps (reference only)." << std::endl;
     std::cout << "Velocidad: " << g_test_velocity << " mm/s" << std::endl;
 
     std::cout << std::left << std::setw(8) << "Step"
@@ -126,18 +126,18 @@ static void printTestHeader() {
               << std::setw(6) << "AL"
               << std::setw(12) << "Phases"
               << "Transitions + Metrics" << std::endl;
-    std::cout << "       (Coxa angles in degrees)                                    R(S/W)=Radio Stance/Swing  Sym=Simetría(sum,diff)" << std::endl;
+    std::cout << "       (Coxa angles in degrees)                                    R(S/W)=Radius Stance/Swing  Sym=Symmetry(sum,diff)" << std::endl;
     std::cout << "-------------------------------------------------------------------------------------------------------" << std::endl;
 }
 
 /**
- * @brief Imprime el estado de las coxas de todas las patas en un paso.
- * @param sys El sistema LocomotionSystem.
- * @param step El número de paso actual.
- * @param transition_counts Array con conteos de transiciones de cada pata.
- * @param leg_phase_iterations Array con iteraciones actuales de fase de cada pata.
- * @param swing_iterations_per_cycle Iteraciones de swing esperadas por ciclo.
- * @param stance_iterations_per_cycle Iteraciones de stance esperadas por ciclo.
+ * @brief Prints the coxa states of all legs in one step.
+ * @param sys The LocomotionSystem instance.
+ * @param step The current step number.
+ * @param transition_counts Array with transition counts for each leg.
+ * @param leg_phase_iterations Array with current phase iterations for each leg.
+ * @param swing_iterations_per_cycle Expected swing iterations per cycle.
+ * @param stance_iterations_per_cycle Expected stance iterations per cycle.
  */
 static void printCoxaStates(const LocomotionSystem &sys, int step, const int transition_counts[NUM_LEGS],
                             const int leg_phase_iterations[NUM_LEGS], int swing_iterations_per_cycle,
@@ -147,7 +147,7 @@ static void printCoxaStates(const LocomotionSystem &sys, int step, const int tra
 
     std::cout << std::left << std::setw(8) << step;
 
-    // Imprimir ángulos de coxa para cada pata
+    // Print coxa angles for each leg
     const char *LEG_NAMES[NUM_LEGS] = {"AR", "BR", "CR", "CL", "BL", "AL"};
     double coxa_deg[NUM_LEGS];               // Absolute coxa angle (deg)
     double coxa_delta_initial_deg[NUM_LEGS]; // Delta from initial baseline (deg)
@@ -161,19 +161,19 @@ static void printCoxaStates(const LocomotionSystem &sys, int step, const int tra
         coxa_deg[i] = math_utils::radiansToDegrees(coxa_angle);
         coxa_delta_initial_deg[i] = math_utils::radiansToDegrees(coxa_angle - initial_coxa_rad[i]);
         coxa_delta_stance_deg[i] = math_utils::radiansToDegrees(coxa_angle - stance_start_coxa_rad[i]);
-        // Radio planar desde la base de la pierna al pie actual (para estimar arco tangencial teórico)
+        // Planar radius from the leg base to current tip (to estimate theoretical tangential arc)
         Point3D base = leg.getBasePosition();
         Point3D tip = leg.getCurrentTipPositionGlobal();
         double dx = tip.x - base.x;
         double dy = tip.y - base.y;
         double r = std::sqrt(dx * dx + dy * dy);
         radius_mm[i] = r;
-        double delta_since_stance = coxa_angle - stance_start_coxa_rad[i]; // rad dentro de la fase stance actual (aprox)
-        arc_mm[i] = r * delta_since_stance;                                // longitud de arco aproximada
+        double delta_since_stance = coxa_angle - stance_start_coxa_rad[i]; // rad within the current stance phase (approx)
+        arc_mm[i] = r * delta_since_stance;                                // approximate arc length
         std::cout << std::setw(6) << std::fixed << std::setprecision(1) << coxa_deg[i];
     }
 
-    // Imprimir fases actuales compactas
+    // Print current phases (compact)
     std::cout << std::setw(12);
     std::string phases = "";
     for (int i = 0; i < NUM_LEGS; ++i) {
@@ -182,14 +182,14 @@ static void printCoxaStates(const LocomotionSystem &sys, int step, const int tra
     }
     std::cout << phases;
 
-    // Imprimir conteos de transiciones
+    // Print transition counts
     std::cout << " ";
     for (int i = 0; i < NUM_LEGS; ++i) {
         std::cout << LEG_NAMES[i] << ":" << transition_counts[i] << " ";
     }
 
-    // Añadir métricas adicionales en la misma línea
-    // Radios promedio de las patas en stance/swing
+    // Add additional metrics on the same line
+    // Average radii of legs in stance/swing
     double avg_radius_stance = 0, avg_radius_swing = 0;
     int stance_count = 0, swing_count = 0;
     for (int i = 0; i < NUM_LEGS; ++i) {
@@ -207,10 +207,10 @@ static void printCoxaStates(const LocomotionSystem &sys, int step, const int tra
     if (swing_count > 0)
         avg_radius_swing /= swing_count;
 
-    // Métricas de simetría por pares opuestos (0,5) (1,4) (2,3)
-    // Nota: Las métricas originales usaban ángulos absolutos; aunque ahora los offsets opuestos se cancelan,
-    // preferimos usar métricas basadas en deltas respecto al ángulo inicial (baseline) y solo las mostramos
-    // cuando AMBAS patas están en la misma fase STANCE para aislar desviaciones de trayectoria.
+    // Symmetry metrics for opposite pairs (0,5) (1,4) (2,3)
+    // Note: The original metrics used absolute angles; even though opposite offsets now cancel out,
+    // we prefer using delta-based metrics relative to the initial angle (baseline) and only display them
+    // when BOTH legs are in the same STANCE phase to isolate trajectory deviations.
     auto pairMetricsAbs = [&](int a, int b) {
         double sum = coxa_deg[a] + coxa_deg[b];
         double diff = coxa_deg[a] - coxa_deg[b];
@@ -226,7 +226,7 @@ static void printCoxaStates(const LocomotionSystem &sys, int step, const int tra
     auto p14_abs = pairMetricsAbs(1, 4);
     auto p23_abs = pairMetricsAbs(2, 3);
 
-    // Delta (baseline) metrics – stance y swing se evalúan por separado
+    // Delta (baseline) metrics – stance and swing evaluated separately
     auto bothStance = [&](int a, int b) {
         return sys.getLeg(a).getStepPhase() == STANCE_PHASE && sys.getLeg(b).getStepPhase() == STANCE_PHASE;
     };
@@ -316,9 +316,9 @@ static void printCoxaStates(const LocomotionSystem &sys, int step, const int tra
 }
 
 /**
- * @brief Verifica si todas las patas han completado las transiciones requeridas.
- * @param transition_counts Array con conteos de transiciones de cada pata.
- * @return True si se cumple el objetivo del test, false en caso contrario.
+ * @brief Checks if all legs have completed the required transitions.
+ * @param transition_counts Array with transition counts for each leg.
+ * @return True if the test goal is met, false otherwise.
  */
 static bool allLegsCompletedTransitions(const int transition_counts[NUM_LEGS]) {
     for (int i = 0; i < NUM_LEGS; ++i) {
@@ -331,11 +331,11 @@ static bool allLegsCompletedTransitions(const int transition_counts[NUM_LEGS]) {
 
 int main(int argc, char **argv) {
     parseArgs(argc, argv);
-    std::cout << "=== Coxa Phase Transition Test (Equivalente a Tripod Walk Visualization) ===" << std::endl;
+    std::cout << "=== Coxa Phase Transition Test (Equivalent to Tripod Walk Visualization) ===" << std::endl;
 
-    // 1. Inicialización básica
+    // 1. Basic initialization
     Parameters p = createDefaultParameters();
-    p.max_velocity = 1000.0; // mm/s (límite alto para no interferir)
+    p.max_velocity = 1000.0; // mm/s (high limit to avoid interference)
     enableConfiguredPackedUnpackedPoses(p);
     LocomotionSystem sys(p);
     DummyIMU imu;
@@ -349,16 +349,16 @@ int main(int argc, char **argv) {
         return 1;
     }
 
-    // 2. Iniciar en Standing Pose
+    // 2. Start in Standing Pose
     if (!sys.setStandingPose()) {
         std::cerr << "ERROR: Failed to set standing pose." << std::endl;
         return 1;
     }
-    std::cout << "Robot en standing pose. Todas las patas en fase STANCE." << std::endl;
+    std::cout << "Robot in standing pose. All legs in STANCE phase." << std::endl;
 
-    // Verificar pose inicial (solo coxas)
-    std::cout << "\nVERIFICACIÓN POSE INICIAL (solo ángulos coxa):" << std::endl;
-    std::cout << "Pata   Fase   Coxa (grados)" << std::endl;
+    // Verify initial pose (coxa only)
+    std::cout << "\nINITIAL POSE VERIFICATION (coxa angles only):" << std::endl;
+    std::cout << "Leg    Phase  Coxa (degrees)" << std::endl;
     std::cout << "-----------------------------" << std::endl;
     const char *LEG_NAMES[NUM_LEGS] = {"AR", "BR", "CR", "CL", "BL", "AL"};
     for (int i = 0; i < NUM_LEGS; ++i) {
@@ -373,7 +373,7 @@ int main(int argc, char **argv) {
     std::cout << "-----------------------------\n"
               << std::endl;
 
-    // 3. Configurar y iniciar Tripod Gait (idéntico a tripod_walk_visualization_test)
+    // 3. Configure and start Tripod Gait (identical to tripod_walk_visualization_test)
     GaitConfiguration tripod_gait = createGaitConfig(TRIPOD_GAIT, p);
 
     double leg_reach = RobotModel::computeStandingHorizontalReach(p);
@@ -390,8 +390,8 @@ int main(int argc, char **argv) {
         return 1;
     }
 
-    // Ejecutar secuencia de startup
-    std::cout << "Ejecutando secuencia de startup..." << std::endl;
+    // Run startup sequence
+    std::cout << "Running startup sequence..." << std::endl;
 
     int startup_sequence_attempts = 0;
     const int MAX_STARTUP_SEQUENCE_ATTEMPTS = 2000;
@@ -401,56 +401,56 @@ int main(int argc, char **argv) {
         startup_sequence_attempts++;
 
         if (startup_sequence_attempts % 25 == 0) {
-            std::cout << "Intento startup " << startup_sequence_attempts
+            std::cout << "Startup attempt " << startup_sequence_attempts
                       << "  Progreso=" << sys.getStartupProgressPercent() << "%" << std::endl;
         }
     }
 
     if (sys.getRobotState() != ROBOT_RUNNING) {
-        std::cerr << "ERROR: Secuencia de startup falló tras " << startup_sequence_attempts << " intentos." << std::endl;
+        std::cerr << "ERROR: Startup sequence failed after " << startup_sequence_attempts << " attempts." << std::endl;
         return 1;
     }
-    std::cout << "Secuencia de startup completada tras " << startup_sequence_attempts << " intentos." << std::endl;
+    std::cout << "Startup sequence completed after " << startup_sequence_attempts << " attempts." << std::endl;
 
-    std::cout << "Iniciando análisis de movimiento de coxas..." << std::endl;
+    std::cout << "Starting coxa movement analysis..." << std::endl;
     printTestHeader();
 
-    // 4. Loop principal de simulación con verificación de timing
-    std::cout << "=== VERIFICACIÓN DE SINCRONIZACIÓN CON trajectory_tip_position_test ===" << std::endl;
+    // 4. Main simulation loop with timing verification
+    std::cout << "=== SYNCHRONIZATION VERIFICATION WITH trajectory_tip_position_test ===" << std::endl;
 
     auto first_leg_stepper = sys.getWalkController()->getLegStepper(0);
     if (!first_leg_stepper) {
-        std::cerr << "ERROR: No se pudo obtener el LegStepper." << std::endl;
+        std::cerr << "ERROR: Could not get the LegStepper." << std::endl;
         return 1;
     }
 
     StepCycle actual_step_cycle = first_leg_stepper->getStepCycle();
     double time_delta = sys.getRobotModel().getTimeDelta();
 
-    // Usar exactamente la misma fórmula que trajectory_tip_position_test
+    // Use exactly the same formula as trajectory_tip_position_test
     int swing_iterations_per_cycle = (int)((double(actual_step_cycle.swing_period_) / actual_step_cycle.period_) / (actual_step_cycle.frequency_ * time_delta));
     int stance_iterations_per_cycle = (int)((double(actual_step_cycle.stance_period_) / actual_step_cycle.period_) / (actual_step_cycle.frequency_ * time_delta));
     int total_iterations_per_cycle = swing_iterations_per_cycle + stance_iterations_per_cycle;
 
-    std::cout << "StepCycle activo:" << std::endl;
+    std::cout << "Active StepCycle:" << std::endl;
     std::cout << "  swing_iterations_per_cycle: " << swing_iterations_per_cycle << std::endl;
     std::cout << "  stance_iterations_per_cycle: " << stance_iterations_per_cycle << std::endl;
     std::cout << "  total_iterations_per_cycle: " << total_iterations_per_cycle << std::endl;
 
-    // Validación de coherencia interna: las iteraciones derivadas deben sumar el periodo
+    // Internal coherence validation: derived iterations must sum to the period
     if (swing_iterations_per_cycle + stance_iterations_per_cycle != actual_step_cycle.period_) {
-        std::cerr << "ERROR: Inconsistencia de timing: swing(" << swing_iterations_per_cycle << ") + stance("
+        std::cerr << "ERROR: Timing inconsistency: swing(" << swing_iterations_per_cycle << ") + stance("
                   << stance_iterations_per_cycle << ") != period(" << actual_step_cycle.period_ << ")" << std::endl;
-        return 1; // Fallar el test: estado interno incoherente
+        return 1; // Fail the test: inconsistent internal state
     }
 
-    std::cout << "Iteraciones derivadas: swing=" << swing_iterations_per_cycle << ", stance=" << stance_iterations_per_cycle << std::endl;
+    std::cout << "Derived iterations: swing=" << swing_iterations_per_cycle << ", stance=" << stance_iterations_per_cycle << std::endl;
     if (swing_iterations_per_cycle != stance_iterations_per_cycle) {
-        std::cout << "INFO: swing y stance difieren; esto es permitido si las fases tienen distinta duración." << std::endl;
+        std::cout << "INFO: swing and stance differ; this is allowed if phases have different durations." << std::endl;
     }
-    std::cout << "(Referencia previa de 52 eliminada; ahora se valida contra StepCycle real)." << std::endl;
+    std::cout << "(Previous reference of 52 removed; now validated against actual StepCycle)." << std::endl;
 
-    // DEBUG: Mostrar offset multipliers del tripod gait
+    // DEBUG: Show offset multipliers of the tripod gait
     std::cout << "\n=== DEBUG: Tripod Gait Offset Multipliers ===" << std::endl;
     auto gait_config = sys.getWalkController()->getCurrentGaitConfig();
     const char *leg_names[] = {"AR", "BR", "CR", "CL", "BL", "AL"};
@@ -468,21 +468,21 @@ int main(int argc, char **argv) {
         previous_phases[i] = sys.getLeg(i).getStepPhase();
     }
 
-    // Contador de iteraciones para cada fase por pata
+    // Phase iteration counter per leg
     int leg_phase_iterations[NUM_LEGS] = {0};
     StepPhase leg_current_phases[NUM_LEGS];
     for (int i = 0; i < NUM_LEGS; ++i) {
         leg_current_phases[i] = sys.getLeg(i).getStepPhase();
     }
 
-    // Mostrar estado inicial
-    // Track inicio de stance para estimar arco de yaw: se inicializa en la pose inicial
+    // Show initial state
+    // Track stance start to estimate yaw arc: initialized at the initial pose
     double stance_start_coxa_rad[NUM_LEGS];
     for (int i = 0; i < NUM_LEGS; ++i) {
         stance_start_coxa_rad[i] = sys.getLeg(i).getJointAngles().coxa;
     }
 
-    // Capturar baseline inicial de coxas (para simetría por delta)
+    // Capture initial coxa baseline (for delta symmetry)
     double initial_coxa_rad[NUM_LEGS];
     for (int i = 0; i < NUM_LEGS; ++i) {
         initial_coxa_rad[i] = sys.getLeg(i).getJointAngles().coxa;
@@ -491,38 +491,38 @@ int main(int argc, char **argv) {
     printCoxaStates(sys, step, transition_counts, leg_phase_iterations, swing_iterations_per_cycle, stance_iterations_per_cycle, stance_start_coxa_rad, initial_coxa_rad);
 
     while (step < g_max_steps) {
-        // Actualizar sistema
+        // Update system
         if (!sys.update()) {
             std::cerr << "ERROR: System update failed at step " << step << std::endl;
             return 1;
         }
 
-        // Verificar transiciones y detectar si hay algún cambio de fase
+        // Check transitions and detect any phase change
         bool phase_transition_occurred = false;
 
         for (int i = 0; i < NUM_LEGS; ++i) {
             StepPhase current_phase = sys.getLeg(i).getStepPhase();
 
-            // Detectar transiciones STANCE -> SWING
+            // Detect STANCE -> SWING transitions
             if (previous_phases[i] == STANCE_PHASE && current_phase == SWING_PHASE) {
                 transition_counts[i]++;
                 leg_phase_iterations[i] = 1;
                 leg_current_phases[i] = current_phase;
                 phase_transition_occurred = true;
             }
-            // Detectar transiciones SWING -> STANCE
+            // Detect SWING -> STANCE transitions
             else if (previous_phases[i] == SWING_PHASE && current_phase == STANCE_PHASE) {
                 leg_phase_iterations[i] = 1;
                 leg_current_phases[i] = current_phase;
                 phase_transition_occurred = true;
-                // Reiniciar referencia de inicio de stance para esta pata
+                // Reset stance start reference for this leg
                 stance_start_coxa_rad[i] = sys.getLeg(i).getJointAngles().coxa;
             }
-            // Si estamos en la misma fase, incrementar contador
+            // If in the same phase, increment counter
             else if (leg_current_phases[i] == current_phase) {
                 leg_phase_iterations[i]++;
             }
-            // Si hay cambio de fase sin ser transición detectada arriba
+            // If phase changed without being detected above
             else {
                 leg_phase_iterations[i] = 1;
                 leg_current_phases[i] = current_phase;
@@ -540,9 +540,9 @@ int main(int argc, char **argv) {
             printCoxaStates(sys, step, transition_counts, leg_phase_iterations, swing_iterations_per_cycle, stance_iterations_per_cycle, stance_start_coxa_rad, initial_coxa_rad);
         }
 
-        // Verificar completación
+        // Check completion
         if (allLegsCompletedTransitions(transition_counts)) {
-            std::cout << "\nÉXITO: Todas las patas completaron " << g_required_swing_transitions << " transiciones swing." << std::endl;
+            std::cout << "\nSUCCESS: All legs completed " << g_required_swing_transitions << " swing transitions." << std::endl;
             break;
         }
 
@@ -550,12 +550,12 @@ int main(int argc, char **argv) {
     }
 
     if (step == g_max_steps) {
-        std::cerr << "\nERROR: Test alcanzó máximo de pasos (" << g_max_steps << ") antes de completarse." << std::endl;
+        std::cerr << "\nERROR: Test reached maximum steps (" << g_max_steps << ") before completion." << std::endl;
         return 1;
     }
 
-    // 5. Parar y volver a stance
-    std::cout << "\nParando caminar y volviendo a pose de pie..." << std::endl;
+    // 5. Stop and return to stance
+    std::cout << "\nStopping walking and returning to standing pose..." << std::endl;
     if (!sys.stopWalking()) {
         std::cerr << "ERROR: Failed to initiate stop walking." << std::endl;
         return 1;
@@ -569,40 +569,40 @@ int main(int argc, char **argv) {
         shutdown_attempts++;
     }
     if (sys.getRobotState() == ROBOT_READY) {
-        std::cout << "Shutdown completado tras " << shutdown_attempts << " iteraciones." << std::endl;
+        std::cout << "Shutdown completed after " << shutdown_attempts << " iterations." << std::endl;
     } else {
-        std::cerr << "ERROR: Shutdown no completó tras " << shutdown_attempts << " iteraciones." << std::endl;
+        std::cerr << "ERROR: Shutdown did not complete after " << shutdown_attempts << " iterations." << std::endl;
         return 1;
     }
 
-    // Resumen final
-    std::cout << "\n=== RESUMEN FINAL DEL TEST ===" << std::endl;
-    std::cout << "Pasos totales ejecutados: " << step << std::endl;
-    std::cout << "Transiciones STANCE->SWING completadas:" << std::endl;
+    // Final summary
+    std::cout << "\n=== FINAL TEST SUMMARY ===" << std::endl;
+    std::cout << "Total steps executed: " << step << std::endl;
+    std::cout << "STANCE->SWING transitions completed:" << std::endl;
     for (int i = 0; i < NUM_LEGS; ++i) {
         std::cout << "  " << LEG_NAMES[i] << ": " << transition_counts[i] << "/" << g_required_swing_transitions << std::endl;
     }
 
     bool success = allLegsCompletedTransitions(transition_counts);
 
-    // Evaluar simetría global PASS/FAIL
+    // Evaluate global symmetry PASS/FAIL
     bool symmetry_ok = (g_sym_violations_stance == 0 && g_sym_violations_swing == 0);
     if (!symmetry_ok) {
-        std::cout << "\n[SIMETRIA] Violaciones detectadas:" << std::endl;
+        std::cout << "\n[SYMMETRY] Violations detected:" << std::endl;
         if (g_sym_violations_stance)
-            std::cout << "  STANCE: violaciones=" << g_sym_violations_stance << " (max abs sum pares: ["
+            std::cout << "  STANCE: violations=" << g_sym_violations_stance << " (max abs sum pairs: ["
                       << g_max_abs_sum_stance_pair[0] << ", " << g_max_abs_sum_stance_pair[1] << ", " << g_max_abs_sum_stance_pair[2] << "]) threshold=" << g_sym_threshold_stance_deg << "°" << std::endl;
         if (g_sym_violations_swing)
-            std::cout << "  SWING: violaciones=" << g_sym_violations_swing << " (max abs sum pares: ["
+            std::cout << "  SWING: violations=" << g_sym_violations_swing << " (max abs sum pairs: ["
                       << g_max_abs_sum_swing_pair[0] << ", " << g_max_abs_sum_swing_pair[1] << ", " << g_max_abs_sum_swing_pair[2] << "]) threshold=" << g_sym_threshold_swing_deg << "°" << std::endl;
     } else {
-        std::cout << "\n[SIMETRIA] PASS: STANCE max=[" << g_max_abs_sum_stance_pair[0] << ", " << g_max_abs_sum_stance_pair[1] << ", " << g_max_abs_sum_stance_pair[2]
+        std::cout << "\n[SYMMETRY] PASS: STANCE max=[" << g_max_abs_sum_stance_pair[0] << ", " << g_max_abs_sum_stance_pair[1] << ", " << g_max_abs_sum_stance_pair[2]
                   << "] SWING max=[" << g_max_abs_sum_swing_pair[0] << ", " << g_max_abs_sum_swing_pair[1] << ", " << g_max_abs_sum_swing_pair[2]
                   << "]" << std::endl;
     }
     success = success && symmetry_ok;
-    std::cout << "\nResultado: " << (success ? "ÉXITO" : "FALLO") << std::endl;
-    std::cout << "Test finalizado." << std::endl;
+    std::cout << "\nResult: " << (success ? "SUCCESS" : "FAIL") << std::endl;
+    std::cout << "Test finished." << std::endl;
 
     return success ? 0 : 1;
 }

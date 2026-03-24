@@ -69,7 +69,7 @@ static void validateSwingHeights(LocomotionSystem &sys, TestReport &rep) {
         double avg_progress = 0.0;
         double min_progress = 1.0;
         double max_progress = 0.0;
-        double clearance_z = 0.0; // dinámica: tomar de primer stepper
+        double clearance_z = 0.0; // dynamic: take from first stepper
         if (wc) {
             std::cout << "Swing progress: ";
             for (int id : swing) {
@@ -90,19 +90,19 @@ static void validateSwingHeights(LocomotionSystem &sys, TestReport &rep) {
             avg_progress /= (progresses.empty() ? 1.0 : (double)progresses.size());
         }
 
-        // Gate: no validar alturas estrictas antes de que la progresión media alcance 0.15
+        // Gate: do not validate strict heights before average progress reaches 0.15
         if (avg_progress < 0.15) {
             // Deferred: early swing phase — skip height validation (does not count as pass or fail).
             std::cout << "(Deferred) Early swing phase (<0.15) height check skipped" << std::endl;
             return;
         }
 
-        // Umbral dinámico: baseline -150 + porcentaje de clearance escalado por progreso (limitado a 60% de la elevación teórica en primeras fases)
-        double baseline_z = -150.0; // altura de referencia (standing)
+        // Dynamic threshold: baseline -150 + clearance percentage scaled by progress (capped at 60% of theoretical elevation in early phases)
+        double baseline_z = -150.0; // reference height (standing)
         if (clearance_z <= 0.0)
-            clearance_z = 45.0;                                               // fallback basado en GAIT_TRIPOD_HEIGHT_FACTOR*standing
-        double dynamic_factor = std::min(0.60, avg_progress);                 // limita crecimiento inicial
-        double required_z = baseline_z + clearance_z * dynamic_factor * 0.30; // 30% de la elevación esperada escalada por progreso
+            clearance_z = 45.0;                                               // fallback based on GAIT_TRIPOD_HEIGHT_FACTOR*standing
+        double dynamic_factor = std::min(0.60, avg_progress);                 // cap initial growth
+        double required_z = baseline_z + clearance_z * dynamic_factor * 0.30; // 30% of expected elevation scaled by progress
         for (size_t idx = 0; idx < swing.size(); ++idx) {
             double zi = sys.getLeg(swing[idx]).getCurrentTipPositionGlobal().z;
             if (idx > 0 && std::abs(zi - z_ref) > 1.5)
@@ -112,7 +112,7 @@ static void validateSwingHeights(LocomotionSystem &sys, TestReport &rep) {
             addResult(rep, zi >= baseline_z - 5.0,
                       "Swing leg Z floor for leg " + std::to_string(swing[idx]), sys);
         }
-        // Igualdad de alturas sólo cuando la progresión mínima supera 0.25 (las curvas ya se separaron y convergen)
+        // Height equality only when minimum progress exceeds 0.25 (curves have already diverged and converge)
         if (min_progress >= 0.25)
             addResult(rep, equal, "Swing legs equal height", sys);
         else
@@ -155,7 +155,7 @@ static void validateTrajectorySimilarity(const LocomotionSystem &sys,
         if (counted > 0)
             avg_progress /= counted;
 
-        // Gate: sólo evaluar similitud cuando estamos en la ventana estable (0.30 - 0.80)
+        // Gate: only evaluate similarity when within the stable window (0.30 - 0.80)
         if (avg_progress < 0.30 || avg_progress > 0.80) {
             std::cout << "(Deferred) Swing leg trajectories similar — outside stable window" << std::endl;
             return;
@@ -163,7 +163,7 @@ static void validateTrajectorySimilarity(const LocomotionSystem &sys,
 
         Point3D p0 = sys.getLeg(swing[0]).getCurrentTipPositionGlobal();
         bool ok = true;
-        double tolerance = 6.0; // tolerancia ligeramente relajada en modo estable
+        double tolerance = 6.0; // slightly relaxed tolerance in stable mode
         for (int i = 1; i < 3; ++i) {
             Point3D pi = sys.getLeg(swing[i]).getCurrentTipPositionGlobal();
             double dx = pi.x - p0.x;

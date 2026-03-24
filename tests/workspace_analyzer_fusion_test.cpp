@@ -117,9 +117,9 @@ int main() {
      */
     std::cout << "Testing workspace generation..." << std::endl;
     /** Acceptance criteria:
-     *  AC1.1 walkspace_map no vacío
-     *  AC1.2 bearings canónicos (0/90/180/270/360) presentes
-     *  AC1.3 periodicidad: radius(0°) == radius(360°)
+     *  AC1.1 walkspace_map not empty
+     *  AC1.2 canonical bearings (0/90/180/270/360) present
+     *  AC1.3 periodicity: radius(0°) == radius(360°)
      */
     try {
         analyzer.generateWorkspace();
@@ -138,7 +138,7 @@ int main() {
                     std::cout << "  Bearing " << bearing << "°: radius = " << it->second << " mm" << std::endl;
                 } else {
                     std::cout << "❌ Missing bearing " << bearing << "° in walkspace map" << std::endl;
-                    markFailure("AC1.2", "bearing canónico ausente en walkspace_map");
+                    markFailure("AC1.2", "canonical bearing missing from walkspace_map");
                 }
             }
 
@@ -154,15 +154,15 @@ int main() {
                 }
             } else {
                 std::cout << "❌ Missing 0° or 360° bearing for symmetry check" << std::endl;
-                markFailure("AC1.3", "no se pudo evaluar periodicidad (faltan 0°/360°)");
+                markFailure("AC1.3", "could not evaluate periodicity (missing 0°/360°)");
             }
         } else {
             std::cout << "❌ Walkspace map is empty" << std::endl;
-            markFailure("AC1.1", "walkspace_map vacío tras generateWorkspace()");
+            markFailure("AC1.1", "walkspace_map empty after generateWorkspace()");
         }
     } catch (const std::exception &e) {
         std::cout << "❌ Workspace generation failed: " << e.what() << std::endl;
-        markFailure("AC1.1", "generateWorkspace lanzó excepción");
+        markFailure("AC1.1", "generateWorkspace threw exception");
     }
 
     /**
@@ -185,13 +185,13 @@ int main() {
         BodyPoseController pose_controller(model, pose_config);
         pose_controller.initializeLegPosers(wc_legs);
         /** Acceptance criteria:
-         *  AC2.1 BodyPoseController aplica standing pose
-         *  AC2.2 WalkController walkspace coincide 1:1 por bearing con WorkspaceAnalyzer
-         *  AC2.3 periodicidad en WalkController (0° == 360°)
+         *  AC2.1 BodyPoseController applies standing pose
+         *  AC2.2 WalkController walkspace matches 1:1 per bearing with WorkspaceAnalyzer
+         *  AC2.3 periodicity in WalkController (0° == 360°)
          */
         if (!testSetStandingPose(pose_controller, model, wc_legs)) {
             std::cout << "❌ BodyPoseController failed to apply standing pose" << std::endl;
-            markFailure("AC2.1", "no se pudo aplicar standing pose en controlador de pose");
+            markFailure("AC2.1", "could not apply standing pose in pose controller");
         } else {
             WalkController walk_controller(model, wc_legs, pose_config);
             walk_controller.setBodyPoseController(&pose_controller);
@@ -256,7 +256,7 @@ int main() {
                 std::cout << "✅ WalkController::generateWalkspace() matches WorkspaceAnalyzer output" << std::endl;
             } else {
                 std::cout << "❌ WalkController::generateWalkspace() validation failed" << std::endl;
-                markFailure("AC2.2", "walkspace de WalkController no coincide con WorkspaceAnalyzer");
+                markFailure("AC2.2", "WalkController walkspace does not match WorkspaceAnalyzer");
             }
         }
     }
@@ -274,17 +274,17 @@ int main() {
     std::cout << "Point (" << test_point.x << ", " << test_point.y << ", " << test_point.z
               << ") reachable for leg 0: " << (is_reachable ? "YES" : "NO") << std::endl;
     /** Acceptance criteria:
-     *  AC3.1 Punto alcanzable debe permanecer inalterado tras makeReachable()
+     *  AC3.1 Reachable point must remain unchanged after makeReachable()
      */
     if (!is_reachable) {
         std::cout << "❌ makeReachable altered a nominally reachable point" << std::endl;
-        markFailure("AC3.1", "makeReachable modificó un punto esperado como alcanzable");
+        markFailure("AC3.1", "makeReachable modified a point expected to be reachable");
     } else {
         std::cout << "✅ makeReachable preserves reachable point" << std::endl;
     }
 
     /** Missing validation now implemented:
-     *  AC3.2 Punto inalcanzable debe contraerse y AC3.3 makeReachable debe ser idempotente.
+     *  AC3.2 Unreachable point must be contracted and AC3.3 makeReachable must be idempotent.
      */
     Point3D far_point(800, 600, -150);
     Point3D constrained_once = analyzer.makeReachable(0, far_point);
@@ -296,11 +296,11 @@ int main() {
     } else {
         if (!contraction_ok) {
             std::cout << "❌ makeReachable contraction failed" << std::endl;
-            markFailure("AC3.2", "punto inalcanzable no fue contraído");
+            markFailure("AC3.2", "unreachable point was not contracted");
         }
         if (!idempotence_ok) {
             std::cout << "❌ makeReachable idempotence failed" << std::endl;
-            markFailure("AC3.3", "makeReachable no es idempotente");
+            markFailure("AC3.3", "makeReachable is not idempotent");
         }
     }
 
@@ -311,10 +311,10 @@ int main() {
      */
     std::cout << "\nTesting getWorkplane() function..." << std::endl;
     /** Acceptance criteria:
-     *  AC4.1 getWorkplane devuelve capas no vacías para alturas válidas
-     *  AC4.2 periodicidad por capa: radius(0°) == radius(360°)
-     *  AC4.3 interpolación en altura consistente entre capas adyacentes
-     *  AC4.4 índice de pata inválido retorna capa vacía
+     *  AC4.1 getWorkplane returns non-empty layers for valid heights
+     *  AC4.2 per-layer periodicity: radius(0°) == radius(360°)
+     *  AC4.3 consistent height interpolation between adjacent layers
+     *  AC4.4 invalid leg index returns empty layer
      */
     try {
         /** Test workplane at different heights for leg 0. */
@@ -347,7 +347,7 @@ int main() {
                         std::cout << "    ✅ Workplane symmetry OK" << std::endl;
                     } else {
                         std::cout << "    ❌ Workplane symmetry failed" << std::endl;
-                        markFailure("AC4.2", "workplane no periódico en 0°/360°");
+                        markFailure("AC4.2", "workplane not periodic at 0°/360°");
                     }
                 }
             } else {
@@ -387,13 +387,13 @@ int main() {
                     } else {
                         std::cout << "❌ Workplane interpolation accuracy failed (expected: "
                                   << expected << ", actual: " << actual << ")" << std::endl;
-                        markFailure("AC4.3", "interpolación fuera de tolerancia");
+                        markFailure("AC4.3", "interpolation outside tolerance");
                     }
                 }
             }
         } else {
             std::cout << "❌ Workplane interpolation failed" << std::endl;
-            markFailure("AC4.3", "no se pudo obtener workplane interpolado");
+            markFailure("AC4.3", "could not obtain interpolated workplane");
         }
 
         /** Test invalid leg index. */
@@ -402,12 +402,12 @@ int main() {
             std::cout << "✅ getWorkplane() correctly handles invalid leg index" << std::endl;
         } else {
             std::cout << "❌ getWorkplane() should return empty workplane for invalid leg" << std::endl;
-            markFailure("AC4.4", "índice inválido no retorna workplane vacío");
+            markFailure("AC4.4", "invalid index does not return empty workplane");
         }
 
     } catch (const std::exception &e) {
         std::cout << "❌ getWorkplane() test failed: " << e.what() << std::endl;
-        markFailure("AC4.1", "fallo inesperado al evaluar workplanes");
+        markFailure("AC4.1", "unexpected failure evaluating workplanes");
     }
 
     /**
@@ -422,7 +422,7 @@ int main() {
     std::cout << "  Min height: " << bounds.min_height << " mm" << std::endl;
     std::cout << "  Max height: " << bounds.max_height << " mm" << std::endl;
     /** Acceptance criteria:
-     *  AC5.1 bounds finitos y ordenados (min <= max) para reach y height.
+     *  AC5.1 finite and ordered bounds (min <= max) for reach and height.
      */
     bool bounds_ok = std::isfinite(bounds.min_reach) && std::isfinite(bounds.max_reach) &&
                      std::isfinite(bounds.min_height) && std::isfinite(bounds.max_height) &&
@@ -430,7 +430,7 @@ int main() {
                      bounds.min_height <= bounds.max_height;
     if (!bounds_ok) {
         std::cout << "❌ Invalid reconstructed workspace bounds" << std::endl;
-        markFailure("AC5.1", "bounds reconstruidos no finitos u ordenados");
+        markFailure("AC5.1", "reconstructed bounds not finite or ordered");
     } else {
         std::cout << "✅ Reconstructed workspace bounds are valid" << std::endl;
     }
@@ -498,7 +498,7 @@ int main() {
         std::cout << "✅ OpenSHC generateWorkspace() + getWorkplane() integration successful" << std::endl;
     } else {
         std::cout << "❌ OpenSHC integration has issues" << std::endl;
-        markFailure("AC6.1", "integración generateWorkspace/getWorkplane no consistente en todas las patas");
+        markFailure("AC6.1", "generateWorkspace/getWorkplane integration not consistent across all legs");
     }
 
     /**
@@ -517,11 +517,11 @@ int main() {
         std::cout << "  Height range: " << min_height << " to " << max_height << " mm" << std::endl;
         if (leg_workspace.size() < 2) {
             std::cout << "❌ 3D workspace has insufficient height layers for interpolation" << std::endl;
-            markFailure("AC6.2", "workspace 3D con capas insuficientes");
+            markFailure("AC6.2", "3D workspace with insufficient layers");
         }
     } else {
         std::cout << "❌ 3D workspace data not available" << std::endl;
-        markFailure("AC6.2", "workspace 3D vacío");
+        markFailure("AC6.2", "3D workspace empty");
     }
 
     std::cout << "=== All WorkspaceAnalyzer functions tested successfully! ===" << std::endl;
@@ -592,7 +592,7 @@ int main() {
             std::cout << "✅ VelocityLimits tests passed" << std::endl;
         } else {
             std::cout << "❌ VelocityLimits tests encountered failures" << std::endl;
-            markFailure("AC7.1", "mapas de límites no válidos para walkspace positivo");
+            markFailure("AC7.1", "limit maps not valid for positive walkspace");
         }
     }
 
@@ -616,7 +616,7 @@ int main() {
         Workplane standing_plane = analyzer.getWorkplane(0, target_workplane_height);
         if (standing_plane.empty()) {
             std::cout << "❌ Standing workplane not found at height " << target_workplane_height << " mm" << std::endl;
-            markFailure("AC8.1", "no existe workplane en altura de standing");
+            markFailure("AC8.1", "no workplane at standing height");
         } else {
             std::cout << "✅ Standing workplane found (" << standing_plane.size() << " bearings)" << std::endl;
             /** Basic semantic check: bearing 0 and 180 radii should be non-zero and consistent with walkspace map bounds. */
@@ -641,10 +641,10 @@ int main() {
                 ok = false;
             if (!ok || r0 <= 0 || r180 <= 0) {
                 std::cout << "❌ Invalid radii in standing plane (r0=" << r0 << ", r180=" << r180 << ")" << std::endl;
-                markFailure("AC8.2", "radios inválidos en standing plane");
+                markFailure("AC8.2", "invalid radii in standing plane");
             } else if (std::abs(r0 - r360) > 1e-6) {
                 std::cout << "❌ Standing plane symmetry failed (r0 != r360)" << std::endl;
-                markFailure("AC8.2", "standing plane no periódico en 0°/360°");
+                markFailure("AC8.2", "standing plane not periodic at 0°/360°");
             } else {
                 std::cout << "✅ Standing plane radii valid (r0=" << r0 << ", r180=" << r180 << ")" << std::endl;
             }
@@ -652,7 +652,7 @@ int main() {
             WorkspaceBoundsLocal wb = computeWorkspaceBounds(analyzer.getLegWorkspace(0));
             if (target_workplane_height < wb.min_height - 1e-3 || target_workplane_height > wb.max_height + 1e-3) {
                 std::cout << "❌ Standing height outside reported bounds (" << wb.min_height << ", " << wb.max_height << ")" << std::endl;
-                markFailure("AC8.3", "altura de standing fuera de bounds reconstruidos");
+                markFailure("AC8.3", "standing height outside reconstructed bounds");
             } else {
                 std::cout << "✅ Standing height within workspace bounds" << std::endl;
             }

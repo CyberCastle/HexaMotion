@@ -599,7 +599,7 @@ int main() {
     /** generateStepCycle() uses internally stored step_frequency (params.step_frequency) and time_delta. */
     StepCycle step_cycle = tripod_config.generateStepCycle();
     stepper.setStepCycle(step_cycle);
-    std::cout << "StepCycle configurado desde tripod gait: frequency=" << step_cycle.frequency_ << "Hz, period=" << step_cycle.period_ << std::endl;
+    std::cout << "StepCycle configured from tripod gait: frequency=" << step_cycle.frequency_ << "Hz, period=" << step_cycle.period_ << std::endl;
     std::cout << "Using configured step frequency: " << step_cycle.frequency_ << "Hz (OpenSHC default expected 1.0)" << std::endl;
 
     /** Note: all other gait parameters are configured through the StepCycle structure. */
@@ -666,8 +666,8 @@ int main() {
         std::cout << "⚠ WARNING: Using >95% of leg reach - may cause precision issues" << std::endl;
     }
 
-    std::cout << "Velocidad configurada: (" << desired_velocity_x << ", " << desired_velocity_y << ", 0) mm/s para movimiento en plano XY" << std::endl;
-    std::cout << "Stride vector calculado: (" << calculated_stride.x << ", " << calculated_stride.y << ", " << calculated_stride.z << ")" << std::endl;
+    std::cout << "Configured velocity: (" << desired_velocity_x << ", " << desired_velocity_y << ", 0) mm/s for XY plane movement" << std::endl;
+    std::cout << "Calculated stride vector: (" << calculated_stride.x << ", " << calculated_stride.y << ", " << calculated_stride.z << ")" << std::endl;
 
     /** Configure timing parameters from tripod gait. */
     /** Use stance and swing ratios for phase calculations. */
@@ -675,7 +675,7 @@ int main() {
     int total_iterations = 30;
     int swing_iterations = (int)(total_iterations * tripod_config.getSwingRatio());
     int stance_iterations = total_iterations - swing_iterations;
-    std::cout << "Timing configurado - Total: " << total_iterations << ", Swing: " << swing_iterations << ", Stance: " << stance_iterations << std::endl;
+    std::cout << "Timing configured - Total: " << total_iterations << ", Swing: " << swing_iterations << ", Stance: " << stance_iterations << std::endl;
 
     /** Show gait configuration being used. */
     std::cout << "\nUsing configuration " << tripod_config.gait_name << ":" << std::endl;
