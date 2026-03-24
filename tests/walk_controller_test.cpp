@@ -61,11 +61,10 @@ void testStepCyclePhaseUpdates(LegStepper &stepper, const StepCycle &step_cycle)
         // Verify step state changes correctly based on iteration
         StepState current_state = stepper.getStepState();
 
-        // Silent validation - only log major issues
         if (iteration >= step_cycle.swing_start_ && iteration < step_cycle.swing_end_) {
-            // Expected STEP_SWING - don't assert for now
+            assert(current_state == STEP_SWING && "Expected STEP_SWING during swing interval");
         } else {
-            // Expected STEP_STANCE - don't assert for now
+            assert(current_state == STEP_STANCE && "Expected STEP_STANCE during stance interval");
         }
     }
 
@@ -360,7 +359,7 @@ void testKinematicConsistency(LegStepper &stepper, Leg &leg, const RobotModel &m
     // FK should be very accurate since it's direct calculation
     assert(fk_error < 1.0); // Strict tolerance for FK
     // IK tolerance should be more relaxed due to numerical precision and multiple solutions
-    assert(ik_error < 200.0); // Relaxed tolerance for IK
+    assert(ik_error < 5.0); // Tight tolerance for IK round-trip
 
     // Log high errors for analysis
     if (fk_error > 10.0) {
@@ -493,11 +492,9 @@ void testSwingHeightCompliance(LegStepper &stepper, Leg &leg, const RobotModel &
     bool has_variation = height_variation > 5.0; // Al menos 5mm de variación total
 
     // Assert simplificado para el test - solo verificar que hay altura significativa Y variación
-    if (significant_height && has_variation) {
-        std::cout << "  ✅ Swing height compliance test passed" << std::endl;
-    } else {
-        std::cout << "  ⚠️  Limited swing variation - acceptable for test scenario" << std::endl;
-    }
+    assert(significant_height && "Swing height must be > 10mm");
+    assert(has_variation && "Swing trajectory must have > 5mm Z variation");
+    std::cout << "  ✅ Swing height compliance test passed" << std::endl;
 }
 
 void testWalkPlanePoseBasicFunctionality(BodyPoseController &pose_controller, const RobotModel &model) {
@@ -1233,7 +1230,7 @@ int main() {
     // Contadores de éxito
     int successful_legs = 0;
     int total_tests_passed = 0;
-    int total_tests = NUM_LEGS * 9; // 9 tests por pata
+    int total_tests = NUM_LEGS * 8; // 8 tests per leg
 
     // Statistical analysis
     double avg_stride_magnitude = 0.0;
@@ -1476,5 +1473,19 @@ int main() {
     std::cout << "✅ Integración LegStepper->Leg: COMPLETADA" << std::endl;
     std::cout << std::string(60, '=') << std::endl;
     std::cout << "🚀 SISTEMA LISTO PARA OPERACIÓN" << std::endl;
-    return 0;
+
+    // Propagate per-leg and coordination failures to exit code
+    int exit_code = 0;
+    if (total_tests_passed < total_tests) {
+        std::cerr << "\n✗ Per-leg tests: " << total_tests_passed << "/" << total_tests << " passed." << std::endl;
+        exit_code = 1;
+    }
+    if (!coordination_successful) {
+        std::cerr << "\n✗ Multi-leg coordination failed." << std::endl;
+        exit_code = 1;
+    }
+    if (exit_code == 0) {
+        std::cout << "\n✓ All walk controller tests passed." << std::endl;
+    }
+    return exit_code;
 }

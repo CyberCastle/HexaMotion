@@ -81,7 +81,7 @@ int main() {
     }
 
     /** Test 3: coordinate transformation validation (using RobotModel functions). */
-    std::cout << "\n--- Test 3: Global-Local Coordinate Transformation (RobotModel) ---" << std::endl;
+    std::cout << "\n--- Test 3: Consistency test — Global-Local Coordinate Round-Trip (RobotModel) ---" << std::endl;
     JointAngles zero_angles(0, 0, 0);
     for (int leg = 0; leg < NUM_LEGS; ++leg) {
         /** Get global position from FK. */
@@ -109,7 +109,7 @@ int main() {
     }
 
     /** Test 3B: compare manual vs RobotModel coordinate transformations. */
-    std::cout << "\n--- Test 3B: Manual vs RobotModel Coordinate Transformation Comparison ---" << std::endl;
+    std::cout << "\n--- Test 3B: Consistency test — Manual vs RobotModel Coordinate Transformation ---" << std::endl;
     for (int leg = 0; leg < NUM_LEGS; ++leg) {
         Point3D global_pos = model.forwardKinematicsGlobalCoordinates(leg, zero_angles);
 
@@ -144,7 +144,7 @@ int main() {
     }
 
     /** Test 4: consistency between local FK and transformed global FK. */
-    std::cout << "\n--- Test 4: Local FK vs Transformed Global FK Consistency ---" << std::endl;
+    std::cout << "\n--- Test 4: Consistency test — Local FK vs Transformed Global FK ---" << std::endl;
     for (int leg = 0; leg < NUM_LEGS; ++leg) {
         Point3D global_pos = model.forwardKinematicsGlobalCoordinates(leg, q);
         Point3D local_from_transform = transformGlobalToLocal(model, leg, global_pos);
@@ -164,7 +164,7 @@ int main() {
     }
 
     /** Test 5: test with non-zero joint angles. */
-    std::cout << "\n--- Test 5: Testing with Non-Zero Joint Angles ---" << std::endl;
+    std::cout << "\n--- Test 5: Consistency test — Round-Trip with Non-Zero Joint Angles ---" << std::endl;
     /** Coxa=15 degrees, Femur=-30 degrees, Tibia=20 degrees. */
     JointAngles test_angles(15.0, -30.0, 20.0);
 

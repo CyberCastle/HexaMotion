@@ -176,6 +176,72 @@ int main() {
         }
     }
 
+    /** Test 6: Canonical geometric oracle — independent FK position check.
+     *
+     *  At zero joint angles the tip position is derived from pure geometry,
+     *  without any DH matrix:
+     *    reach = hexagon_radius + coxa + femur = 200 + 50 + 101 = 351 mm
+     *    global_x = reach * cos(base_angle)
+     *    global_y = reach * sin(base_angle)
+     *    global_z = -tibia = -208 mm
+     */
+    std::cout << "\n--- Test 6: Canonical Geometric Oracle (Independent FK Position) ---" << std::endl;
+    {
+        const double base_angles_deg[NUM_LEGS] = {-30.0, -90.0, -150.0, 150.0, 90.0, 30.0};
+        const double reach = p.hexagon_radius + p.coxa_length + p.femur_length; // 351 mm
+        const double z_expected = -p.tibia_length;                              // -208 mm
+
+        for (int leg = 0; leg < NUM_LEGS; ++leg) {
+            double theta = math_utils::degreesToRadians(base_angles_deg[leg]);
+            double x_expected = reach * std::cos(theta);
+            double y_expected = reach * std::sin(theta);
+
+            JointAngles zero_angles(0, 0, 0);
+            Point3D fk_pos = model.forwardKinematicsGlobalCoordinates(leg, zero_angles);
+
+            double err = std::sqrt(std::pow(fk_pos.x - x_expected, 2) +
+                                   std::pow(fk_pos.y - y_expected, 2) +
+                                   std::pow(fk_pos.z - z_expected, 2));
+
+            std::cout << "Leg " << leg << ": expected(" << x_expected << ", " << y_expected
+                      << ", " << z_expected << ") FK(" << fk_pos.x << ", " << fk_pos.y
+                      << ", " << fk_pos.z << ") error=" << err << std::endl;
+
+            if (err > 0.5) {
+                std::cout << "  *** FAIL: FK at zero angles deviates from independent geometry ***" << std::endl;
+                ok = false;
+            }
+        }
+    }
+
+    /** Test 7: Unreachable target detection.
+     *
+     *  A target far outside the workspace should yield a large FK residual
+     *  after IK, confirming the solver does not silently succeed.
+     */
+    std::cout << "\n--- Test 7: Unreachable Target Detection ---" << std::endl;
+    {
+        const double max_reach = p.hexagon_radius + p.coxa_length + p.femur_length + p.tibia_length; // 559 mm
+        Point3D far_target(max_reach * 3.0, 0.0, 0.0);                                               // well beyond workspace
+
+        for (int leg = 0; leg < NUM_LEGS; ++leg) {
+            JointAngles ik = model.inverseKinematicsGlobalCoordinates(leg, far_target);
+            Point3D fk = model.forwardKinematicsGlobalCoordinates(leg, ik);
+            double residual = std::sqrt(std::pow(fk.x - far_target.x, 2) +
+                                        std::pow(fk.y - far_target.y, 2) +
+                                        std::pow(fk.z - far_target.z, 2));
+
+            std::cout << "Leg " << leg << ": far_target(" << far_target.x << ", " << far_target.y
+                      << ", " << far_target.z << ") IK residual=" << residual << std::endl;
+
+            /** Residual must be large — the solver cannot reach this point. */
+            if (residual < 100.0) {
+                std::cout << "  *** FAIL: IK claims to reach an unreachable target ***" << std::endl;
+                ok = false;
+            }
+        }
+    }
+
     if (ok) {
         std::cout << "\n✓ All inverse kinematics tests passed!" << std::endl;
         return 0;

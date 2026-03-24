@@ -92,8 +92,8 @@ static void validateSwingHeights(LocomotionSystem &sys, TestReport &rep) {
 
         // Gate: no validar alturas estrictas antes de que la progresión media alcance 0.15
         if (avg_progress < 0.15) {
-            // Consideramos esto como una comprobación diferida (no cuenta como fallo). Marcamos pass neutral.
-            addResult(rep, true, "(Deferred) Early swing phase (<0.15) height check skipped", sys);
+            // Deferred: early swing phase — skip height validation (does not count as pass or fail).
+            std::cout << "(Deferred) Early swing phase (<0.15) height check skipped" << std::endl;
             return;
         }
 
@@ -108,12 +108,15 @@ static void validateSwingHeights(LocomotionSystem &sys, TestReport &rep) {
             if (idx > 0 && std::abs(zi - z_ref) > 1.5)
                 equal = false;
             addResult(rep, zi > required_z - 0.5, "Swing leg height (dynamic)", sys);
+            // Absolute Z floor: swing leg must never descend below standing height - 5mm
+            addResult(rep, zi >= baseline_z - 5.0,
+                      "Swing leg Z floor for leg " + std::to_string(swing[idx]), sys);
         }
         // Igualdad de alturas sólo cuando la progresión mínima supera 0.25 (las curvas ya se separaron y convergen)
         if (min_progress >= 0.25)
             addResult(rep, equal, "Swing legs equal height", sys);
         else
-            addResult(rep, true, "(Deferred) Swing legs equal height", sys);
+            std::cout << "(Deferred) Swing legs equal height — min_progress < 0.25" << std::endl;
     }
 }
 
@@ -154,7 +157,7 @@ static void validateTrajectorySimilarity(const LocomotionSystem &sys,
 
         // Gate: sólo evaluar similitud cuando estamos en la ventana estable (0.30 - 0.80)
         if (avg_progress < 0.30 || avg_progress > 0.80) {
-            addResult(rep, true, "(Deferred) Swing leg trajectories similar", sys);
+            std::cout << "(Deferred) Swing leg trajectories similar — outside stable window" << std::endl;
             return;
         }
 

@@ -165,7 +165,7 @@ class KinematicsValidator {
                   << ", tibia=" << params.tibia_length << std::endl;
     }
 
-    void validateVerticalReach() {
+    bool validateVerticalReach() {
         std::cout << "\n=== VALIDATION: FEMUR & TIBIA SERVO ANGLES ===" << std::endl;
         std::cout << "Comparing: brute-force DH sweep vs calculateServoAnglesForHeight" << std::endl;
         std::cout << std::string(100, '-') << std::endl;
@@ -226,9 +226,10 @@ class KinematicsValidator {
         std::cout << std::string(100, '-') << std::endl;
         std::cout << "Results: " << passed << "/" << total << " tests match ("
                   << std::fixed << std::setprecision(1) << (100.0 * passed / total) << "%)" << std::endl;
+        return passed == total;
     }
 
-    void validateAngleConsistency() {
+    bool validateAngleConsistency() {
         std::cout << "\n=== VALIDATION: FK/IK ROUND-TRIP CONSISTENCY ===" << std::endl;
         std::cout << "Testing that FK(IK(target)) = target using DH model" << std::endl;
         std::cout << std::string(80, '-') << std::endl;
@@ -282,9 +283,10 @@ class KinematicsValidator {
         std::cout << std::string(80, '-') << std::endl;
         std::cout << "Results: " << passed << "/" << total << " tests passed ("
                   << std::fixed << std::setprecision(1) << (100.0 * passed / total) << "%)" << std::endl;
+        return passed == total;
     }
 
-    void validateWorkspaceComparison() {
+    bool validateWorkspaceComparison() {
         std::cout << "\n=== VALIDATION: WORKSPACE COVERAGE ===" << std::endl;
         std::cout << "Analyzing height range achievable by calculateServoAnglesForHeight" << std::endl;
         std::cout << std::string(60, '-') << std::endl;
@@ -327,9 +329,10 @@ class KinematicsValidator {
         std::cout << "\nFK verification:" << std::endl;
         std::cout << "  FK-matched solutions: " << valid_fk_match << "/" << valid_analytical << std::endl;
         std::cout << "  FK coverage: " << std::fixed << std::setprecision(1) << coverage << "%" << std::endl;
+        return valid_fk_match == valid_analytical;
     }
 
-    void runFullValidation() {
+    bool runFullValidation() {
         std::cout << "===== FULL VALIDATION: calculateServoAnglesForHeight =====" << std::endl;
         std::cout << "Robot dimensions:" << std::endl;
         std::cout << "  Coxa: " << A_COXA << " mm" << std::endl;
@@ -337,16 +340,18 @@ class KinematicsValidator {
         std::cout << "  Tibia: " << C_TIBIA << " mm" << std::endl;
         std::cout << "  Hexagon radius: " << params.hexagon_radius << " mm" << std::endl;
 
-        validateVerticalReach();
-        validateAngleConsistency();
-        validateWorkspaceComparison();
+        bool v1 = validateVerticalReach();
+        bool v2 = validateAngleConsistency();
+        bool v3 = validateWorkspaceComparison();
 
-        std::cout << "\n===== VALIDATION COMPLETE =====" << std::endl;
+        bool all_passed = v1 && v2 && v3;
+        std::cout << "\n===== VALIDATION " << (all_passed ? "PASSED" : "FAILED") << " =====" << std::endl;
+        return all_passed;
     }
 };
 
 int main() {
     KinematicsValidator validator;
-    validator.runFullValidation();
-    return 0;
+    bool passed = validator.runFullValidation();
+    return passed ? 0 : 1;
 }
