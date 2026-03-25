@@ -539,7 +539,7 @@ bool LocomotionSystem::walkForward(double velocity) {
         last_error = STATE_ERROR;
         return false;
     }
-    state_controller_->setDesiredVelocity(Eigen::Vector2d(velocity, 0.0), 0.0);
+    setDesiredVelocity(velocity, 0.0, 0.0);
     return true;
 }
 
@@ -549,7 +549,7 @@ bool LocomotionSystem::walkBackward(double velocity) {
         last_error = STATE_ERROR;
         return false;
     }
-    state_controller_->setDesiredVelocity(Eigen::Vector2d(-velocity, 0.0), 0.0);
+    setDesiredVelocity(-velocity, 0.0, 0.0);
     return true;
 }
 
@@ -559,7 +559,7 @@ bool LocomotionSystem::turnInPlace(double angular_velocity) {
         last_error = STATE_ERROR;
         return false;
     }
-    state_controller_->setDesiredVelocity(Eigen::Vector2d::Zero(), angular_velocity);
+    setDesiredVelocity(0.0, 0.0, angular_velocity);
     return true;
 }
 
@@ -571,7 +571,7 @@ bool LocomotionSystem::walkSideways(double velocity, bool right_direction) {
         last_error = STATE_ERROR;
         return false;
     }
-    state_controller_->setDesiredVelocity(Eigen::Vector2d(0.0, lateral_velocity), 0.0);
+    setDesiredVelocity(0.0, lateral_velocity, 0.0);
     return true;
 }
 
@@ -1614,14 +1614,9 @@ double LocomotionSystem::getCurrentServoSpeed(int leg_index, int joint_index) co
     return params.default_servo_speed;
 }
 
-/** Execute startup sequence (READY -> RUNNING transition). */
-/** Start walking with specified gait type. */
+/** Start walking (delegates to setRobotState for RUNNING transition). */
 bool LocomotionSystem::startWalking() {
-    if (!state_controller_ || !state_controller_->isInitialized()) {
-        last_error = STATE_ERROR;
-        return false;
-    }
-    return state_controller_->requestRobotState(RobotState::ROBOT_RUNNING);
+    return setRobotState(RobotState::ROBOT_RUNNING);
 }
 
 /** Stop walking without shutdown; ensure all feet on ground. Mode controls stance behavior. */
@@ -1631,10 +1626,10 @@ bool LocomotionSystem::stopWalking(StopMode mode) {
         return false;
     }
     /** Zero velocity lets WalkController transition STOPPING → STOPPED naturally. */
-    state_controller_->setDesiredVelocity(Eigen::Vector2d::Zero(), 0.0);
+    setDesiredVelocity(0.0, 0.0, 0.0);
     if (mode == STOP_UNIFORM) {
         /** Also request RUNNING → READY transition for a full stop. */
-        state_controller_->requestRobotState(RobotState::ROBOT_READY);
+        setRobotState(RobotState::ROBOT_READY);
     }
     return true;
 }
@@ -1840,6 +1835,347 @@ bool LocomotionSystem::stepInitialStandingPose() {
         shutdown_in_progress = false;
     }
     return true;
+}
+
+/* ===================================================================
+ *  ROS-equivalent subscription accessors (input setters).
+ *
+ *  Each method mirrors one OpenSHC ROS subscriber callback, translating
+ *  external commands into the internal control pipeline.
+ * =================================================================== */
+
+bool LocomotionSystem::setSystemState(SystemState state) {
+    if (!state_controller_ || !state_controller_->isInitialized()) {
+        last_error = STATE_ERROR;
+        return false;
+    }
+    return state_controller_->requestSystemState(state);
+}
+
+bool LocomotionSystem::setRobotState(RobotState state) {
+    if (!state_controller_ || !state_controller_->isInitialized()) {
+        last_error = STATE_ERROR;
+        return false;
+    }
+    return state_controller_->requestRobotState(state);
+}
+
+void LocomotionSystem::setDesiredVelocity(double linear_x, double linear_y, double angular_z) {
+    /** Route through StateController so updateVelocityControl() → planGaitSequence()
+     *  applies body_velocity_scaler and writes commanded_* in the pipeline. */
+    if (state_controller_) {
+        state_controller_->setDesiredVelocity(Eigen::Vector2d(linear_x, linear_y), angular_z);
+    }
+}
+
+void LocomotionSystem::setDesiredPose(const Eigen::Vector3d &position, const Eigen::Vector3d &orientation) {
+    if (!state_controller_ || !state_controller_->isInitialized()) {
+        return;
+    }
+    state_controller_->setDesiredPose(position, orientation);
+}
+
+bool LocomotionSystem::setPosingMode(PosingMode mode) {
+    if (!state_controller_ || !state_controller_->isInitialized()) {
+        last_error = STATE_ERROR;
+        return false;
+    }
+    return state_controller_->setPosingMode(mode);
+}
+
+bool LocomotionSystem::setPoseResetMode(PoseResetMode mode) {
+    if (!state_controller_ || !state_controller_->isInitialized()) {
+        last_error = STATE_ERROR;
+        return false;
+    }
+    return state_controller_->setPoseResetMode(mode);
+}
+
+bool LocomotionSystem::selectGait(GaitType gait) {
+    if (!state_controller_ || !state_controller_->isInitialized()) {
+        last_error = STATE_ERROR;
+        return false;
+    }
+    return state_controller_->changeGait(gait);
+}
+
+bool LocomotionSystem::setPrimaryLegSelection(int leg_index) {
+    if (leg_index < -1 || leg_index >= NUM_LEGS) {
+        return false;
+    }
+    primary_leg_selection_ = leg_index;
+    return true;
+}
+
+bool LocomotionSystem::setSecondaryLegSelection(int leg_index) {
+    if (leg_index < -1 || leg_index >= NUM_LEGS) {
+        return false;
+    }
+    secondary_leg_selection_ = leg_index;
+    return true;
+}
+
+bool LocomotionSystem::setPrimaryLegState(LegState state) {
+    if (!state_controller_ || !state_controller_->isInitialized()) {
+        last_error = STATE_ERROR;
+        return false;
+    }
+    if (primary_leg_selection_ < 0 || primary_leg_selection_ >= NUM_LEGS) {
+        return false;
+    }
+    return state_controller_->setLegState(primary_leg_selection_, state);
+}
+
+bool LocomotionSystem::setSecondaryLegState(LegState state) {
+    if (!state_controller_ || !state_controller_->isInitialized()) {
+        last_error = STATE_ERROR;
+        return false;
+    }
+    if (secondary_leg_selection_ < 0 || secondary_leg_selection_ >= NUM_LEGS) {
+        return false;
+    }
+    return state_controller_->setLegState(secondary_leg_selection_, state);
+}
+
+void LocomotionSystem::setPrimaryTipVelocity(const Eigen::Vector3d &velocity) {
+    if (!state_controller_ || primary_leg_selection_ < 0) {
+        return;
+    }
+    state_controller_->setLegTipVelocity(primary_leg_selection_, velocity);
+}
+
+void LocomotionSystem::setSecondaryTipVelocity(const Eigen::Vector3d &velocity) {
+    if (!state_controller_ || secondary_leg_selection_ < 0) {
+        return;
+    }
+    state_controller_->setLegTipVelocity(secondary_leg_selection_, velocity);
+}
+
+void LocomotionSystem::setPrimaryTipPose(const Point3D &pose) {
+    if (!state_controller_ || primary_leg_selection_ < 0) {
+        return;
+    }
+    state_controller_->setLegTipPose(primary_leg_selection_, pose);
+}
+
+void LocomotionSystem::setSecondaryTipPose(const Point3D &pose) {
+    if (!state_controller_ || secondary_leg_selection_ < 0) {
+        return;
+    }
+    state_controller_->setLegTipPose(secondary_leg_selection_, pose);
+}
+
+/* ===================================================================
+ *  ROS-equivalent publication accessors (output getters).
+ *
+ *  Each method mirrors one OpenSHC ROS publisher topic, exposing
+ *  internal state that external software would have obtained through
+ *  topic subscription in OpenSHC.
+ * =================================================================== */
+
+LocomotionSystem::VelocityCommand LocomotionSystem::getDesiredVelocityCommand() const {
+    VelocityCommand cmd;
+    cmd.linear_x = commanded_linear_velocity_x_;
+    cmd.linear_y = commanded_linear_velocity_y_;
+    cmd.angular_z = commanded_angular_velocity_;
+    return cmd;
+}
+
+LocomotionSystem::BodyPoseCommand LocomotionSystem::getDesiredBodyPoseCommand() const {
+    BodyPoseCommand cmd;
+    if (body_pose_ctrl) {
+        const Pose &current = body_pose_ctrl->getCurrentBodyPose();
+        cmd.position_x = current.position.x;
+        cmd.position_y = current.position.y;
+        cmd.position_z = current.position.z;
+        /** Extract Euler angles from the quaternion (roll, pitch, yaw). */
+        Eigen::Vector3d euler = current.rotation.toRotationMatrix().canonicalEulerAngles(0, 1, 2);
+        cmd.roll = euler.x();
+        cmd.pitch = euler.y();
+        cmd.yaw = euler.z();
+    } else {
+        cmd.position_x = body_position.x();
+        cmd.position_y = body_position.y();
+        cmd.position_z = body_position.z();
+        cmd.roll = body_orientation.x();
+        cmd.pitch = body_orientation.y();
+        cmd.yaw = body_orientation.z();
+    }
+    return cmd;
+}
+
+LocomotionSystem::WalkspaceInfo LocomotionSystem::getWalkspaceInfo() const {
+    WalkspaceInfo info;
+    info.average_radius = 0.0;
+    info.min_radius = 0.0;
+    info.max_radius = 0.0;
+
+    if (!walk_ctrl) {
+        return info;
+    }
+
+    std::map<int, double> walkspace = walk_ctrl->getWalkspace();
+    if (walkspace.empty()) {
+        return info;
+    }
+
+    double sum = 0.0;
+    double min_val = std::numeric_limits<double>::max();
+    double max_val = std::numeric_limits<double>::lowest();
+    for (const auto &entry : walkspace) {
+        sum += entry.second;
+        if (entry.second < min_val)
+            min_val = entry.second;
+        if (entry.second > max_val)
+            max_val = entry.second;
+    }
+    info.average_radius = sum / static_cast<double>(walkspace.size());
+    info.min_radius = min_val;
+    info.max_radius = max_val;
+    return info;
+}
+
+LocomotionSystem::RotationPoseError LocomotionSystem::getRotationPoseError() const {
+    RotationPoseError err;
+    err.absement_error = Eigen::Vector3d::Zero();
+    err.position_error = Eigen::Vector3d::Zero();
+    err.velocity_error = Eigen::Vector3d::Zero();
+
+    if (body_pose_ctrl) {
+        err.absement_error = body_pose_ctrl->getRotationAbsementError();
+        err.position_error = body_pose_ctrl->getRotationPositionError();
+        err.velocity_error = body_pose_ctrl->getRotationVelocityError();
+    }
+    return err;
+}
+
+bool LocomotionSystem::getDesiredJointStates(JointAngles positions[NUM_LEGS],
+                                             JointAngles velocities[NUM_LEGS],
+                                             JointAngles efforts[NUM_LEGS]) const {
+    if (!system_enabled) {
+        return false;
+    }
+
+    for (int i = 0; i < NUM_LEGS; ++i) {
+        DesiredJointCommandState coxa_state, femur_state, tibia_state;
+        getDesiredJointCommandState(i, 0, coxa_state);
+        getDesiredJointCommandState(i, 1, femur_state);
+        getDesiredJointCommandState(i, 2, tibia_state);
+
+        positions[i].coxa = coxa_state.desired_position_rad;
+        positions[i].femur = femur_state.desired_position_rad;
+        positions[i].tibia = tibia_state.desired_position_rad;
+
+        velocities[i].coxa = coxa_state.desired_velocity_rad_s;
+        velocities[i].femur = femur_state.desired_velocity_rad_s;
+        velocities[i].tibia = tibia_state.desired_velocity_rad_s;
+
+        efforts[i].coxa = coxa_state.desired_effort;
+        efforts[i].femur = femur_state.desired_effort;
+        efforts[i].tibia = tibia_state.desired_effort;
+    }
+    return true;
+}
+
+LocomotionSystem::LegStateInfo LocomotionSystem::getLegStateInfo(int leg_index) const {
+    LegStateInfo info;
+    info.walker_tip_pose = Point3D();
+    info.target_tip_pose = Point3D();
+    info.model_tip_pose = Point3D();
+    info.joint_positions = JointAngles();
+    info.joint_velocities = JointAngles();
+    info.joint_efforts = JointAngles();
+    info.step_progress = 0.0;
+    info.step_phase = STANCE_PHASE;
+    info.leg_state = LEG_WALKING;
+    info.contact_force = 0.0;
+    info.admittance_delta = Eigen::Vector3d::Zero();
+    info.virtual_stiffness = 0.0;
+    info.tip_force = Eigen::Vector3d::Zero();
+    info.stride_vector = Point3D();
+    info.tip_velocity = Point3D();
+
+    if (leg_index < 0 || leg_index >= NUM_LEGS) {
+        return info;
+    }
+
+    const Leg &leg = legs[leg_index];
+
+    /** Walker tip pose from LegStepper trajectory. */
+    if (walk_ctrl) {
+        auto stepper = walk_ctrl->getLegStepper(leg_index);
+        if (stepper) {
+            info.walker_tip_pose = stepper->getCurrentTipPose();
+            info.step_progress = stepper->getStepProgress();
+            info.stride_vector = stepper->getStrideVector();
+            info.tip_velocity = stepper->getCurrentTipVelocity();
+        }
+    }
+
+    /** Target tip pose and model (IK-solved) tip pose from Leg. */
+    info.target_tip_pose = leg.getDesiredTipPosition();
+    info.model_tip_pose = leg.getCurrentTipPositionGlobal();
+
+    /** Joint state. */
+    info.joint_positions = leg.getJointAngles();
+    info.joint_velocities = leg.getCurrentJointVelocity();
+    info.joint_efforts = leg.getCurrentJointEffort();
+
+    /** Phase and state. */
+    info.step_phase = leg.getStepPhase();
+    info.leg_state = leg.getLegState();
+
+    /** Force and admittance. */
+    info.contact_force = leg.getContactForce();
+    info.admittance_delta = leg.getAdmittanceDelta();
+    info.virtual_stiffness = leg.getVirtualStiffness();
+    info.tip_force = leg.getCalculatedTipForce();
+
+    return info;
+}
+
+Pose LocomotionSystem::getOdometry() const {
+    if (walk_ctrl) {
+        return walk_ctrl->getOdometryIdeal();
+    }
+    return Pose(Point3D(body_position.x(), body_position.y(), body_position.z()),
+                Eigen::Quaterniond::Identity());
+}
+
+WalkState LocomotionSystem::getWalkState() const {
+    if (walk_ctrl) {
+        return walk_ctrl->getWalkState();
+    }
+    return WALK_STOPPED;
+}
+
+PosingMode LocomotionSystem::getPosingMode() const {
+    if (state_controller_) {
+        return state_controller_->getPosingMode();
+    }
+    return POSING_NONE;
+}
+
+PoseResetMode LocomotionSystem::getPoseResetMode() const {
+    if (state_controller_) {
+        return state_controller_->getPoseResetMode();
+    }
+    return NO_RESET;
+}
+
+GaitType LocomotionSystem::getCurrentGaitType() const {
+    if (walk_ctrl) {
+        return walk_ctrl->getCurrentGaitConfig().gait_type;
+    }
+    return NO_GAIT;
+}
+
+int LocomotionSystem::getPrimaryLegSelection() const {
+    return primary_leg_selection_;
+}
+
+int LocomotionSystem::getSecondaryLegSelection() const {
+    return secondary_leg_selection_;
 }
 
 #ifdef TESTING_ENABLED

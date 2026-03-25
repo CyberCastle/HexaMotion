@@ -48,6 +48,73 @@ class LocomotionSystem : public StateControllerContext {
         double prev_desired_effort = 0.0;
     };
 
+    /**
+     * @brief Velocity command snapshot (OpenSHC shc/velocity publisher equivalent).
+     */
+    struct VelocityCommand {
+        double linear_x;  /**< Forward velocity (mm/s). */
+        double linear_y;  /**< Lateral velocity (mm/s). */
+        double angular_z; /**< Rotational velocity (deg/s). */
+    };
+
+    /**
+     * @brief Body pose snapshot (OpenSHC shc/pose publisher equivalent).
+     *
+     * Position in mm, orientation in radians.
+     */
+    struct BodyPoseCommand {
+        double position_x; /**< X translation (mm). */
+        double position_y; /**< Y translation (mm). */
+        double position_z; /**< Z translation (mm). */
+        double roll;       /**< Roll (rad). */
+        double pitch;      /**< Pitch (rad). */
+        double yaw;        /**< Yaw (rad). */
+    };
+
+    /**
+     * @brief Walkspace radius data (OpenSHC shc/walkspace publisher equivalent).
+     */
+    struct WalkspaceInfo {
+        double average_radius; /**< Average walkspace radius (mm). */
+        double min_radius;     /**< Minimum walkspace radius (mm). */
+        double max_radius;     /**< Maximum walkspace radius (mm). */
+    };
+
+    /**
+     * @brief IMU rotation pose error (OpenSHC shc/rotation_pose_error publisher equivalent).
+     *
+     * Contains PID error terms used by IMU-based body pose compensation.
+     */
+    struct RotationPoseError {
+        Eigen::Vector3d absement_error; /**< Integral of position error. */
+        Eigen::Vector3d position_error; /**< Current rotation error. */
+        Eigen::Vector3d velocity_error; /**< Derivative of rotation error. */
+    };
+
+    /**
+     * @brief Comprehensive per-leg state (OpenSHC shc/{leg_id}/state publisher equivalent).
+     *
+     * Aggregates tip poses from each pipeline stage, joint state, gait progress,
+     * and force/admittance data for a single leg.
+     */
+    struct LegStateInfo {
+        Point3D walker_tip_pose;          /**< Tip from LegStepper trajectory. */
+        Point3D target_tip_pose;          /**< Desired tip position. */
+        Point3D model_tip_pose;           /**< Tip after IK (model position). */
+        JointAngles joint_positions;      /**< Current joint angles (rad). */
+        JointAngles joint_velocities;     /**< Current joint velocities (rad/s). */
+        JointAngles joint_efforts;        /**< Current joint efforts (driver units). */
+        double step_progress;             /**< Phase progress (0-1). */
+        StepPhase step_phase;             /**< Current step phase. */
+        LegState leg_state;               /**< Leg state (WALKING/MANUAL/transitioning). */
+        double contact_force;             /**< Contact force magnitude. */
+        Eigen::Vector3d admittance_delta; /**< Compliance offset (mm). */
+        double virtual_stiffness;         /**< Dynamically scaled stiffness. */
+        Eigen::Vector3d tip_force;        /**< Calculated tip force. */
+        Point3D stride_vector;            /**< Current stride vector. */
+        Point3D tip_velocity;             /**< Tip velocity (mm/s). */
+    };
+
     /** Stop behavior options for stopWalking(). */
     enum StopMode {
         STOP_UNIFORM, /**< Force identical stance (phase reset, identity pose) for all legs. */
@@ -145,6 +212,10 @@ class LocomotionSystem : public StateControllerContext {
     double commanded_linear_velocity_x_ = 0.0; /**< X component. */
     double commanded_linear_velocity_y_ = 0.0; /**< Y component. */
     double commanded_angular_velocity_ = 0.0;
+
+    /** OpenSHC-style primary/secondary leg selection (syropod_remote/{primary,secondary}_leg_selection). */
+    int primary_leg_selection_ = -1;
+    int secondary_leg_selection_ = -1;
 
     /** Cached manual leg inputs to enforce OpenSHC update order: walk first, manual second. */
     int pending_primary_leg_index_ = -1;
@@ -607,6 +678,218 @@ class LocomotionSystem : public StateControllerContext {
     /** Direct access to BodyPoseController (tests and advanced instrumentation). */
     BodyPoseController *getBodyPoseController() override { return body_pose_ctrl; }
     const BodyPoseController *getBodyPoseController() const { return body_pose_ctrl; }
+
+    /** @name ROS-equivalent subscription accessors (input setters).
+     *
+     *  These methods mirror OpenSHC ROS subscriber callbacks, translating
+     *  external commands into the internal control pipeline without ROS
+     *  transport.  Each setter is named after the conceptual OpenSHC topic
+     *  it replaces (see AGENTS.md).
+     *  @{ */
+
+    /**
+     * @brief Set system state (OpenSHC syropod_remote/system_state subscriber equivalent).
+     * @param state Desired system state.
+     * @return True if the state transition was accepted.
+     */
+    bool setSystemState(SystemState state);
+
+    /**
+     * @brief Set robot state (OpenSHC syropod_remote/robot_state subscriber equivalent).
+     * @param state Desired robot state.
+     * @return True if the state transition was accepted.
+     */
+    bool setRobotState(RobotState state);
+
+    /**
+     * @brief Set desired body velocity (OpenSHC syropod_remote/desired_velocity subscriber equivalent).
+     *
+     * Stores input velocity in StateController; body_velocity_scaler is applied
+     * during the internal pipeline (planGaitSequence), matching OpenSHC semantics.
+     *
+     * @param linear_x  Forward velocity (mm/s).
+     * @param linear_y  Lateral velocity (mm/s).
+     * @param angular_z Rotational velocity (deg/s).
+     */
+    void setDesiredVelocity(double linear_x, double linear_y, double angular_z);
+
+    /**
+     * @brief Set desired body pose (OpenSHC syropod_remote/desired_pose subscriber equivalent).
+     *
+     * Position in mm, orientation in radians.
+     *
+     * @param position    Body translation (mm).
+     * @param orientation Body rotation (roll, pitch, yaw in radians).
+     */
+    void setDesiredPose(const Eigen::Vector3d &position, const Eigen::Vector3d &orientation);
+
+    /**
+     * @brief Set posing mode (OpenSHC syropod_remote/posing_mode subscriber equivalent).
+     * @param mode Desired posing mode.
+     * @return True if mode change was accepted.
+     */
+    bool setPosingMode(PosingMode mode);
+
+    /**
+     * @brief Set pose reset mode (OpenSHC syropod_remote/pose_reset_mode subscriber equivalent).
+     * @param mode Desired reset mode.
+     * @return True if mode change was accepted.
+     */
+    bool setPoseResetMode(PoseResetMode mode);
+
+    /**
+     * @brief Select active gait (OpenSHC syropod_remote/gait_selection subscriber equivalent).
+     * @param gait Desired gait type.
+     * @return True if gait change was accepted.
+     */
+    bool selectGait(GaitType gait);
+
+    /**
+     * @brief Select the primary leg for manual control (OpenSHC syropod_remote/primary_leg_selection subscriber equivalent).
+     * @param leg_index Leg index (0-5) or -1 to deselect.
+     * @return True if selection was accepted.
+     */
+    bool setPrimaryLegSelection(int leg_index);
+
+    /**
+     * @brief Select the secondary leg for manual control (OpenSHC syropod_remote/secondary_leg_selection subscriber equivalent).
+     * @param leg_index Leg index (0-5) or -1 to deselect.
+     * @return True if selection was accepted.
+     */
+    bool setSecondaryLegSelection(int leg_index);
+
+    /**
+     * @brief Toggle primary leg state (OpenSHC syropod_remote/primary_leg_state subscriber equivalent).
+     * @param state Desired leg state.
+     * @return True if state change was accepted.
+     */
+    bool setPrimaryLegState(LegState state);
+
+    /**
+     * @brief Toggle secondary leg state (OpenSHC syropod_remote/secondary_leg_state subscriber equivalent).
+     * @param state Desired leg state.
+     * @return True if state change was accepted.
+     */
+    bool setSecondaryLegState(LegState state);
+
+    /**
+     * @brief Set primary leg tip velocity (OpenSHC syropod_remote/primary_tip_velocity subscriber equivalent).
+     * @param velocity Tip velocity (mm/s).
+     */
+    void setPrimaryTipVelocity(const Eigen::Vector3d &velocity);
+
+    /**
+     * @brief Set secondary leg tip velocity (OpenSHC syropod_remote/secondary_tip_velocity subscriber equivalent).
+     * @param velocity Tip velocity (mm/s).
+     */
+    void setSecondaryTipVelocity(const Eigen::Vector3d &velocity);
+
+    /**
+     * @brief Set primary leg tip pose (OpenSHC syropod_manipulation/primary_tip_pose subscriber equivalent).
+     * @param pose Target tip position (mm).
+     */
+    void setPrimaryTipPose(const Point3D &pose);
+
+    /**
+     * @brief Set secondary leg tip pose (OpenSHC syropod_manipulation/secondary_tip_pose subscriber equivalent).
+     * @param pose Target tip position (mm).
+     */
+    void setSecondaryTipPose(const Point3D &pose);
+
+    /** @} */
+
+    /** @name ROS-equivalent publication accessors (output getters).
+     *
+     *  These methods mirror OpenSHC ROS publisher topics, exposing internal
+     *  state snapshots that external software would have obtained through
+     *  topic subscription in OpenSHC.
+     *  @{ */
+
+    /**
+     * @brief Get current desired velocity (OpenSHC shc/velocity publisher equivalent).
+     * @return Velocity command snapshot.
+     */
+    VelocityCommand getDesiredVelocityCommand() const;
+
+    /**
+     * @brief Get current desired body pose (OpenSHC shc/pose publisher equivalent).
+     * @return Body pose command snapshot.
+     */
+    BodyPoseCommand getDesiredBodyPoseCommand() const;
+
+    /**
+     * @brief Get walkspace radius data (OpenSHC shc/walkspace publisher equivalent).
+     * @return Walkspace info with average, min and max radii.
+     */
+    WalkspaceInfo getWalkspaceInfo() const;
+
+    /**
+     * @brief Get IMU rotation pose error (OpenSHC shc/rotation_pose_error publisher equivalent).
+     * @return Rotation pose error triple.
+     */
+    RotationPoseError getRotationPoseError() const;
+
+    /**
+     * @brief Get combined desired joint states for all legs (OpenSHC desired_joint_states publisher equivalent).
+     * @param[out] positions  Joint positions (rad) per leg.
+     * @param[out] velocities Joint velocities (rad/s) per leg.
+     * @param[out] efforts    Joint efforts (driver units) per leg.
+     * @return True if state was populated (false if system is not initialised).
+     */
+    bool getDesiredJointStates(JointAngles positions[NUM_LEGS],
+                               JointAngles velocities[NUM_LEGS],
+                               JointAngles efforts[NUM_LEGS]) const;
+
+    /**
+     * @brief Get comprehensive state for a single leg (OpenSHC shc/{leg_id}/state publisher equivalent).
+     * @param leg_index Leg index (0-5).
+     * @return Aggregated leg state info.
+     */
+    LegStateInfo getLegStateInfo(int leg_index) const;
+
+    /**
+     * @brief Get ideal odometry pose (OpenSHC odom_ideal TF equivalent).
+     * @return Odometry pose (position + orientation).
+     */
+    Pose getOdometry() const;
+
+    /**
+     * @brief Get current walk state (OpenSHC walk state).
+     * @return Walk state.
+     */
+    WalkState getWalkState() const;
+
+    /**
+     * @brief Get current posing mode.
+     * @return Posing mode.
+     */
+    PosingMode getPosingMode() const;
+
+    /**
+     * @brief Get current pose reset mode.
+     * @return Pose reset mode.
+     */
+    PoseResetMode getPoseResetMode() const;
+
+    /**
+     * @brief Get current active gait type.
+     * @return Gait type.
+     */
+    GaitType getCurrentGaitType() const;
+
+    /**
+     * @brief Get primary selected leg index.
+     * @return Leg index (0-5) or -1 if none selected.
+     */
+    int getPrimaryLegSelection() const;
+
+    /**
+     * @brief Get secondary selected leg index.
+     * @return Leg index (0-5) or -1 if none selected.
+     */
+    int getSecondaryLegSelection() const;
+
+    /** @} */
 
   private:
     /** Helper methods. */
