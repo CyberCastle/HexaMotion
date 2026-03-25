@@ -21,19 +21,6 @@
 /** Throttle period for repeated messages. */
 #define THROTTLE_PERIOD 1.0f
 
-/** Designation for potential manual body posing input modes. */
-enum PosingMode {
-    POSING_NONE,       /**< No manual body posing. */
-    POSING_X_Y,        /**< Manual body posing via x/y translation. */
-    POSING_PITCH_ROLL, /**< Manual body posing via pitch/roll rotation. */
-    POSING_Z_YAW,      /**< Manual body posing via z translation and yaw rotation. */
-    POSING_EXTERNAL,   /**< Manual body posing from an external source. */
-    POSING_MODE_COUNT, /**< Number of posing modes. */
-};
-
-// PosingState, PoseResetMode, and SequenceSelection are defined in gait_types.h
-// (shared between BodyPoseController, StateController, and WalkController).
-
 /** Designations for potential legs within the robot model (up to 6 legs for hexapod). */
 enum LegDesignation {
     LEG_0,                 /**< 1st leg - front right most leg of the robot. */

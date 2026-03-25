@@ -6,7 +6,7 @@
 #include "gait_config.h"
 #include "gait_config_factory.h"
 /** Include for GaitType, LegState, WalkState definitions. */
-#include "gait_types.h"
+#include "locomotion_types.h"
 /** Include for LegStepper definition. */
 #include "leg_stepper.h"
 #include "math_utils.h"

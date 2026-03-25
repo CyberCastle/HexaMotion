@@ -1,6 +1,6 @@
-// Dedicated header for shared type enumerations to avoid circular dependencies
-#ifndef GAIT_TYPES_H
-#define GAIT_TYPES_H
+// Shared locomotion enumerations to avoid circular dependencies
+#ifndef LOCOMOTION_TYPES_H
+#define LOCOMOTION_TYPES_H
 
 /**
  * @brief Enumeration of supported gait types.
@@ -67,4 +67,14 @@ enum PoseResetMode {
     POSE_RESET_MODE_COUNT, /**< Number of pose reset modes. */
 };
 
-#endif // GAIT_TYPES_H
+/** @brief Designation for potential manual body posing input modes (OpenSHC equivalent). */
+enum PosingMode {
+    POSING_NONE,       /**< No manual body posing. */
+    POSING_X_Y,        /**< Manual body posing via x/y translation. */
+    POSING_PITCH_ROLL, /**< Manual body posing via pitch/roll rotation. */
+    POSING_Z_YAW,      /**< Manual body posing via z translation and yaw rotation. */
+    POSING_EXTERNAL,   /**< Manual body posing from an external source. */
+    POSING_MODE_COUNT, /**< Number of posing modes. */
+};
+
+#endif // LOCOMOTION_TYPES_H

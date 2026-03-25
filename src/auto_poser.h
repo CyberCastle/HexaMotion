@@ -5,10 +5,10 @@
 #include "robot_model.h"
 
 // Forward-declare PosingState so AutoPoser can use it without pulling in state_controller.h.
-// The canonical definition lives in gait_types.h (included via robot_model.h -> gait_types.h).
+// The canonical definition lives in locomotion_types.h (included via robot_model.h).
 // If PosingState is not yet visible, define a compatible fallback.
 #ifndef POSING_STATE_DEFINED
-// Will be resolved at link time – gait_types.h is the authoritative source.
+// Will be resolved at link time – locomotion_types.h is the authoritative source.
 #endif
 
 /**

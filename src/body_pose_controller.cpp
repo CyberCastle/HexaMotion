@@ -1,7 +1,7 @@
 #include "body_pose_controller.h"
 #include "body_pose_config_factory.h"
-#include "gait_types.h"
 #include "leg_poser.h"
+#include "locomotion_types.h"
 #include "math_utils.h"
 #include <algorithm>
 #include <climits>

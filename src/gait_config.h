@@ -1,8 +1,8 @@
 #ifndef GAIT_CONFIG_H
 #define GAIT_CONFIG_H
 
-#include "gait_types.h" // Centralized gait enum
 #include "hexamotion_constants.h"
+#include "locomotion_types.h"
 #include "math_utils.h"
 #include <array>
 #include <cassert>

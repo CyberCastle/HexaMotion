@@ -2,9 +2,9 @@
 #define GAIT_CONFIG_FACTORY_H
 
 #include "gait_config.h"
-#include "gait_types.h" /**< For GaitType enum. */
 #include "leg_stepper.h"
-#include "robot_model.h" /**< For model access. */
+#include "locomotion_types.h" /**< For GaitType enum. */
+#include "robot_model.h"      /**< For model access. */
 #include <string>
 #include <vector>
 

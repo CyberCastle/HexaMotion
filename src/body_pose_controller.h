@@ -22,7 +22,7 @@
  */
 class BodyPoseController {
   public:
-    // PosingState, SequenceSelection, and PoseResetMode enums are defined in gait_types.h
+    // PosingState, SequenceSelection, and PoseResetMode enums are defined in locomotion_types.h
     // (included via robot_model.h) as shared free enums, matching OpenSHC's convention.
 
     /**

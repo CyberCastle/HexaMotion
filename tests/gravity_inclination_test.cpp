@@ -29,8 +29,8 @@
 
 #include "../src/body_pose_config_factory.h"
 #include "../src/body_pose_controller.h"
-#include "../src/gait_types.h"
 #include "../src/hexamotion_constants.h"
+#include "../src/locomotion_types.h"
 #include "../src/math_utils.h"
 #include "../src/robot_model.h"
 #include "test_pose_helpers.h"

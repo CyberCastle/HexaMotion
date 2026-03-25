@@ -1,8 +1,8 @@
 #ifndef ROBOT_MODEL_H
 #define ROBOT_MODEL_H
 
-#include "gait_types.h" // Shared gait type enumeration
 #include "hexamotion_constants.h"
+#include "locomotion_types.h"
 #include "math_utils.h"
 #include "pose.h"
 #include "precision_config.h"

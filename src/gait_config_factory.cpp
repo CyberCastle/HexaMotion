@@ -1,7 +1,7 @@
 #include "gait_config_factory.h"
 #include "gait_config.h"
-#include "gait_types.h"
 #include "hexamotion_constants.h"
+#include "locomotion_types.h"
 #include "robot_model.h"
 #include <algorithm>
 #include <cmath>
