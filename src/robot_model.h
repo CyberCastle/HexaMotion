@@ -34,7 +34,7 @@ struct Parameters {
           robot_height(0),
           coxa_angle_limits{0, 0}, femur_angle_limits{0, 0}, tibia_angle_limits{0, 0},
           dh_parameters{},
-          max_velocity(0), max_angular_velocity(0), stability_margin(0) {
+          max_velocity(0), max_angular_velocity(0) {
         for (int i = 0; i < NUM_LEGS; ++i) {
             packed_pose_joints[i] = {-1.571, 1.900, 1.200};
             unpacked_pose_joints[i] = {0.000, 0.785, -1.138};
@@ -112,8 +112,6 @@ struct Parameters {
     double max_angular_velocity;
     double overshoot_stride_fraction = DEFAULT_OVERSHOOT_STRIDE_FRACTION;   //< Max fraction of stride dedicated to overshoot damping
     double min_effective_stride_ratio = DEFAULT_MIN_EFFECTIVE_STRIDE_RATIO; //< Minimum stride fraction preserved after overshoot deduction
-    double stability_margin;
-
     // Scales all body velocity inputs (OpenSHC: body_velocity_scaler, default 1.0).
     // Applied at the velocity command entry point before walk controller processing.
     double body_velocity_scaler = 1.0;

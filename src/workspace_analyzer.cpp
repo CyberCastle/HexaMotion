@@ -536,26 +536,3 @@ bool WorkspaceAnalyzer::detailedReachabilityCheck(int leg_index,
         return false;
     }
 }
-
-double WorkspaceAnalyzer::getWalkspaceRadius(double bearing_degrees) const {
-    while (bearing_degrees < 0)
-        bearing_degrees += 360;
-    while (bearing_degrees >= 360)
-        bearing_degrees -= 360;
-
-    int lower_bearing = static_cast<int>(bearing_degrees / BEARING_STEP) * BEARING_STEP;
-    int upper_bearing = lower_bearing + BEARING_STEP;
-
-    auto lower_it = walkspace_map_.find(lower_bearing);
-    auto upper_it = walkspace_map_.find(upper_bearing);
-    if (upper_it == walkspace_map_.end() && upper_bearing == 360) {
-        upper_it = walkspace_map_.find(0);
-    }
-
-    if (lower_it == walkspace_map_.end() || upper_it == walkspace_map_.end()) {
-        return 0.0;
-    }
-
-    double t = (bearing_degrees - lower_bearing) / BEARING_STEP;
-    return lower_it->second * (1.0 - t) + upper_it->second * t;
-}

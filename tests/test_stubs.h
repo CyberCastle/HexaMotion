@@ -322,7 +322,6 @@ inline Parameters createDefaultParameters() {
     params.tibia_angle_limits[1] = 45.0;
     params.max_velocity = 100.0;
     params.max_angular_velocity = 45.0;
-    params.stability_margin = 0.02;
     params.time_delta = 1.0 / 50.0;
     params.fsr_touchdown_threshold = 0.1;
     params.fsr_liftoff_threshold = 0.05;

@@ -32,8 +32,6 @@ analyzer.generateWorkspace();
 ```cpp
 analyzer.generateWorkspace();
 const std::map<int, double> &walkspace = analyzer.getWalkspaceMap();
-bool map_ready = analyzer.isWalkspaceMapGenerated();
-double radius_at_90 = analyzer.getWalkspaceRadius(90.0);
 ```
 
 ### Workplanes and bounds

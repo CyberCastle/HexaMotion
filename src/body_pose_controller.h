@@ -3,7 +3,6 @@
 
 #include "auto_poser.h"
 #include "body_pose_config.h"
-#include "imu_auto_pose.h"
 #include "leg.h"
 #include "leg_poser.h"
 #include "robot_model.h"

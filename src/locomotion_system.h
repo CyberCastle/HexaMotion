@@ -498,19 +498,6 @@ class LocomotionSystem : public StateControllerContext {
     /** Stop walking and keep all feet on ground without shutdown; behavior selectable. */
     bool stopWalking(StopMode mode = STOP_UNIFORM);
 
-    /** Stability analysis. */
-    /** Verify that current pose maintains stability margin. */
-    bool checkStabilityMargin();
-    /** Calculate center of pressure under the robot. */
-    Eigen::Vector2d calculateCenterOfPressure();
-    /** Compute a numeric stability index. */
-    double calculateStabilityIndex();
-
-    /** Enhanced stability calculation using absolute positioning data. */
-    double calculateDynamicStabilityIndex();
-    /** Check if the robot is statically stable. */
-    bool isStaticallyStable();
-
     /** Body pose control. */
     /** Set robot to standing pose. */
     bool setStandingPose() override;

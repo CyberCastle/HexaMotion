@@ -107,23 +107,6 @@ class WorkspaceAnalyzer {
     void setTipPositions(const Point3D identity_tips[NUM_LEGS],
                          const Point3D default_tips[NUM_LEGS]);
 
-    /**
-     * @brief Get walkspace radius for specific bearing
-     * @param bearing_degrees Bearing in degrees (0-360)
-     * @return Maximum walkspace radius at bearing
-     */
-    double getWalkspaceRadius(double bearing_degrees) const;
-
-    // ========================================================================
-    // CONFIGURATION
-    // ========================================================================
-
-    /**
-     * @brief Set computational precision level
-     * @param config New configuration
-     */
-    void setPrecisionConfig(const ComputeConfig &config) { config_ = config; }
-
     // ========================================================================
     // UTILITY AND TESTING METHODS
     // ========================================================================
@@ -133,12 +116,6 @@ class WorkspaceAnalyzer {
      * @return Map of bearing to radius values
      */
     const std::map<int, double> &getWalkspaceMap() const { return walkspace_map_; }
-
-    /**
-     * @brief Check if walkspace map has been generated
-     * @return True if walkspace map is available
-     */
-    bool isWalkspaceMapGenerated() const { return walkspace_map_generated_; }
 
   private:
     // ========================================================================

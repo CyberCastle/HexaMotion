@@ -11,7 +11,6 @@
 #include "leg_poser.h"
 #include "leg_stepper.h"
 #include "locomotion_system.h"
-#include "manual_body_pose_controller.h"
 #include "math_utils.h"
 #include "precision_config.h"
 #include "robot_model.h"
