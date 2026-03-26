@@ -22,23 +22,44 @@ const double TEST_TOLERANCE = 1e-6f;
 const int NUM_TEST_POINTS = 100;
 
 /**
- * @brief OpenSHC reference implementation for quartic Bezier
+ * @brief Independent reference: De Casteljau's algorithm for quartic Bezier.
+ *
+ * This is a fundamentally different computation than the direct polynomial
+ * expansion used in math_utils::quarticBezier. De Casteljau uses recursive
+ * linear interpolation, so shared implementation bugs are not possible.
  */
 template <class T>
-inline T openSHC_quarticBezier(const T *points, const double &t) {
+inline T deCasteljauQuarticBezier(const T *points, double t) {
     double s = 1.0 - t;
-    return points[0] * (s * s * s * s) + points[1] * (4.0 * t * s * s * s) + points[2] * (6.0 * t * t * s * s) +
-           points[3] * (4.0 * t * t * t * s) + points[4] * (t * t * t * t);
+    // Level 1: 4 intermediate points
+    T p01 = points[0] * s + points[1] * t;
+    T p12 = points[1] * s + points[2] * t;
+    T p23 = points[2] * s + points[3] * t;
+    T p34 = points[3] * s + points[4] * t;
+    // Level 2: 3 intermediate points
+    T p012 = p01 * s + p12 * t;
+    T p123 = p12 * s + p23 * t;
+    T p234 = p23 * s + p34 * t;
+    // Level 3: 2 intermediate points
+    T p0123 = p012 * s + p123 * t;
+    T p1234 = p123 * s + p234 * t;
+    // Level 4: final point
+    return p0123 * s + p1234 * t;
 }
 
 /**
- * @brief OpenSHC reference implementation for quartic Bezier derivative
+ * @brief Independent reference: numerical Bezier derivative via central finite differences.
+ *
+ * Uses the De Casteljau evaluator (not the SUT) and a small step h to approximate
+ * the derivative numerically. This is a different method than the analytical
+ * coefficient formula used in math_utils::quarticBezierDot.
  */
 template <class T>
-inline T openSHC_quarticBezierDot(const T *points, const double &t) {
-    double s = 1.0 - t;
-    return (4.0 * s * s * s * (points[1] - points[0]) + 12.0 * s * s * t * (points[2] - points[1]) +
-            12.0 * s * t * t * (points[3] - points[2]) + 4.0 * t * t * t * (points[4] - points[3]));
+inline T numericalBezierDerivative(const T *points, double t, double h = 1e-7) {
+    double t_plus = std::min(t + h, 1.0);
+    double t_minus = std::max(t - h, 0.0);
+    double actual_h = t_plus - t_minus;
+    return (deCasteljauQuarticBezier(points, t_plus) - deCasteljauQuarticBezier(points, t_minus)) * (1.0 / actual_h);
 }
 
 bool testBezierEquivalence() {
@@ -70,42 +91,44 @@ bool testBezierEquivalence() {
     for (int i = 0; i <= NUM_TEST_POINTS; i++) {
         double t = static_cast<double>(i) / NUM_TEST_POINTS;
 
-        // Test position
+        // Test position: SUT (polynomial expansion) vs De Casteljau (recursive lerp)
         Eigen::Vector3d hexamotion_pos = math_utils::quarticBezier(control_points, t);
-        Eigen::Vector3d openshc_pos = openSHC_quarticBezier(control_points, t);
+        Eigen::Vector3d decasteljau_pos = deCasteljauQuarticBezier(control_points, t);
 
-        double pos_error = (hexamotion_pos - openshc_pos).norm();
+        double pos_error = (hexamotion_pos - decasteljau_pos).norm();
         max_position_error = max(max_position_error, pos_error);
 
         if (pos_error > TEST_TOLERANCE) {
             cout << "❌ Position mismatch at t=" << t << endl;
-            cout << "  HexaMotion: (" << hexamotion_pos[0] << ", " << hexamotion_pos[1] << ", " << hexamotion_pos[2] << ")" << endl;
-            cout << "  OpenSHC:    (" << openshc_pos[0] << ", " << openshc_pos[1] << ", " << openshc_pos[2] << ")" << endl;
-            cout << "  Error:      " << pos_error << endl;
+            cout << "  HexaMotion (polynomial): (" << hexamotion_pos[0] << ", " << hexamotion_pos[1] << ", " << hexamotion_pos[2] << ")" << endl;
+            cout << "  De Casteljau (lerp):     (" << decasteljau_pos[0] << ", " << decasteljau_pos[1] << ", " << decasteljau_pos[2] << ")" << endl;
+            cout << "  Error:                   " << pos_error << endl;
             all_tests_passed = false;
         }
 
-        // Test velocity (derivative)
+        // Test velocity: SUT (analytical derivative) vs numerical finite differences over De Casteljau
         Eigen::Vector3d hexamotion_vel = math_utils::quarticBezierDot(control_points, t);
-        Eigen::Vector3d openshc_vel = openSHC_quarticBezierDot(control_points, t);
+        Eigen::Vector3d numerical_vel = numericalBezierDerivative(control_points, t);
 
-        double vel_error = (hexamotion_vel - openshc_vel).norm();
+        double vel_error = (hexamotion_vel - numerical_vel).norm();
         max_velocity_error = max(max_velocity_error, vel_error);
 
-        if (vel_error > TEST_TOLERANCE) {
+        // Slightly relaxed tolerance for numerical derivative (finite difference approximation)
+        double vel_tolerance = 1e-4;
+        if (vel_error > vel_tolerance) {
             cout << "❌ Velocity mismatch at t=" << t << endl;
-            cout << "  HexaMotion: (" << hexamotion_vel[0] << ", " << hexamotion_vel[1] << ", " << hexamotion_vel[2] << ")" << endl;
-            cout << "  OpenSHC:    (" << openshc_vel[0] << ", " << openshc_vel[1] << ", " << openshc_vel[2] << ")" << endl;
-            cout << "  Error:      " << vel_error << endl;
+            cout << "  HexaMotion (analytical):     (" << hexamotion_vel[0] << ", " << hexamotion_vel[1] << ", " << hexamotion_vel[2] << ")" << endl;
+            cout << "  Numerical (finite diff):     (" << numerical_vel[0] << ", " << numerical_vel[1] << ", " << numerical_vel[2] << ")" << endl;
+            cout << "  Error:                       " << vel_error << endl;
             all_tests_passed = false;
         }
     }
 
-    cout << "Maximum Position Error: " << scientific << setprecision(2) << max_position_error << endl;
-    cout << "Maximum Velocity Error: " << scientific << setprecision(2) << max_velocity_error << endl;
+    cout << "Maximum Position Error (vs De Casteljau): " << scientific << setprecision(2) << max_position_error << endl;
+    cout << "Maximum Velocity Error (vs numerical diff): " << scientific << setprecision(2) << max_velocity_error << endl;
 
     if (all_tests_passed) {
-        cout << "✓ Bezier implementation matches OpenSHC exactly!" << endl;
+        cout << "✓ Bezier implementation matches independent De Casteljau oracle!" << endl;
     }
 
     return all_tests_passed;
@@ -116,7 +139,7 @@ bool testSwingTrajectoryEquivalence() {
 
     Parameters params = createDefaultParameters();
     RobotModel model(params);
-    model.workspaceAnalyzerInitializer(); // Inicializar WorkspaceAnalyzer
+    model.workspaceAnalyzerInitializer(); // Initialize WorkspaceAnalyzer
 
     // Test parameters matching OpenSHC usage
     int leg_index = 0;
@@ -163,16 +186,26 @@ bool testSwingTrajectoryEquivalence() {
              << pos.z << "\t\t"
              << height_above_ground << endl;
 
-        // Validate trajectory properties
-        if (i == 0) {
-            // Start of swing should be at ground level
-            assert(abs(height_above_ground) < 1.0f);
-        } else if (i == 20) {
-            // End of swing should be at ground level
-            assert(abs(height_above_ground) < 1.0f);
-        } else {
+        // Validate trajectory against De Casteljau independent oracle
+        Point3D dc_pos = deCasteljauQuarticBezier(control_points, t);
+        double dc_error = sqrt(pow(pos.x - dc_pos.x, 2) + pow(pos.y - dc_pos.y, 2) + pow(pos.z - dc_pos.z, 2));
+        assert(dc_error < 1e-6);
+
+        // Validate physical trajectory properties
+        if (i > 0 && i < 20) {
             // Mid-swing should be above ground
             assert(height_above_ground > 0.0f);
+        }
+
+        // At midpoint (t=0.5) validate height against analytically-derived value.
+        // For these symmetric control points the quartic Bezier midpoint Z is:
+        // B(0.5).z = (1*P0.z + 4*P1.z + 6*P2.z + 4*P3.z + 1*P4.z) / 16
+        if (i == 10) {
+            double expected_mid_z = (1.0 * (-robot_height) + 4.0 * (-robot_height + step_height * 0.5) +
+                                     6.0 * (-robot_height + step_height) + 4.0 * (-robot_height + step_height * 0.5) +
+                                     1.0 * (-robot_height)) /
+                                    16.0;
+            assert(abs(pos.z - expected_mid_z) < 1e-6);
         }
     }
 
@@ -190,19 +223,28 @@ bool testContinuityAndSmoothness() {
         Eigen::Vector3d(95.0f, 0.0f, -70.0f),
         Eigen::Vector3d(100.0f, 0.0f, -80.0f)};
 
-    // Test C0 continuity (position continuity)
-    Eigen::Vector3d start_pos = math_utils::quarticBezier(control_points, 0.0);
-    Eigen::Vector3d end_pos = math_utils::quarticBezier(control_points, 1.0);
+    // Validate against De Casteljau at multiple points (independent oracle for interior)
+    double max_dc_error = 0.0;
+    for (int i = 0; i <= 50; i++) {
+        double t = static_cast<double>(i) / 50.0;
+        Eigen::Vector3d sut_pos = math_utils::quarticBezier(control_points, t);
+        Eigen::Vector3d dc_pos = deCasteljauQuarticBezier(control_points, t);
+        double err = (sut_pos - dc_pos).norm();
+        max_dc_error = max(max_dc_error, err);
+    }
+    cout << "De Casteljau cross-check max error: " << max_dc_error << endl;
+    assert(max_dc_error < TEST_TOLERANCE);
 
-    double start_error = (start_pos - control_points[0]).norm();
-    double end_error = (end_pos - control_points[4]).norm();
-
-    cout << "C0 Continuity Test:" << endl;
-    cout << "  Start position error: " << start_error << endl;
-    cout << "  End position error: " << end_error << endl;
-
-    assert(start_error < TEST_TOLERANCE);
-    assert(end_error < TEST_TOLERANCE);
+    // Validate midpoint B(0.5) against hand-computed value:
+    // B(0.5) = (P0 + 4*P1 + 6*P2 + 4*P3 + P4) / 16
+    Eigen::Vector3d expected_mid = (control_points[0] + control_points[1] * 4.0 +
+                                    control_points[2] * 6.0 + control_points[3] * 4.0 +
+                                    control_points[4]) /
+                                   16.0;
+    Eigen::Vector3d sut_mid = math_utils::quarticBezier(control_points, 0.5);
+    double mid_error = (sut_mid - expected_mid).norm();
+    cout << "Midpoint (analytic B(0.5)) error: " << mid_error << endl;
+    assert(mid_error < TEST_TOLERANCE);
 
     // Test C1 continuity (velocity continuity at endpoints)
     Eigen::Vector3d start_vel = math_utils::quarticBezierDot(control_points, 0.0);
@@ -253,39 +295,42 @@ bool testOpenSHCCompatibility() {
     cout << "Stance control nodes:" << endl;
     for (int i = 0; i < 5; i++) {
         cout << "  Node " << i << ": (" << stance_nodes[i][0] << ", " << stance_nodes[i][1] << ", " << stance_nodes[i][2] << ")" << endl;
-    } // Test that stance trajectory is linear
-    double max_stance_error = 0.0f;
+    }
+
+    // Validate stance trajectory: SUT must match De Casteljau (independent oracle)
+    double max_dc_stance_error = 0.0;
+    for (int i = 0; i <= 20; i++) {
+        double t = static_cast<double>(i) / 20.0;
+        Eigen::Vector3d sut_pos = math_utils::quarticBezier(stance_nodes, t);
+        Eigen::Vector3d dc_pos = deCasteljauQuarticBezier(stance_nodes, t);
+        double error = (sut_pos - dc_pos).norm();
+        max_dc_stance_error = max(max_dc_stance_error, error);
+    }
+    cout << "Stance De Casteljau cross-check error: " << max_dc_stance_error << endl;
+    assert(max_dc_stance_error < TEST_TOLERANCE);
+
+    // Verify linearity: for equally-spaced collinear control points, quartic Bezier
+    // IS exactly linear (all control points on a line with uniform spacing).
+    // This IS a meaningful check: it verifies the SUT handles this degenerate case.
+    double max_stance_linearity_error = 0.0;
     for (int i = 0; i <= 20; i++) {
         double t = static_cast<double>(i) / 20.0;
         Eigen::Vector3d pos = math_utils::quarticBezier(stance_nodes, t);
-        Eigen::Vector3d expected = start_pos + stride_vector * t;
-
-        double error = (pos - expected).norm();
-        max_stance_error = max(max_stance_error, error);
-
-        if (i <= 5) { // Debug first few points
-            cout << "  t=" << t << ": pos=(" << pos[0] << "," << pos[1] << "," << pos[2]
-                 << ") expected=(" << expected[0] << "," << expected[1] << "," << expected[2]
-                 << ") error=" << error << endl;
-        }
+        Eigen::Vector3d linear_expected = start_pos + stride_vector * t;
+        double error = (pos - linear_expected).norm();
+        max_stance_linearity_error = max(max_stance_linearity_error, error);
     }
-
-    cout << "Maximum stance trajectory error: " << max_stance_error << endl;
-
-    // Note: Quartic Bezier with equally spaced control points is not perfectly linear
-    // This is expected behavior - the curve approximates the linear trajectory
-    if (max_stance_error < 1.0f) { // More reasonable tolerance for quartic approximation
-        cout << "✓ Stance trajectory approximates linearity within tolerance" << endl;
-    } else {
-        cout << "⚠ Stance trajectory error exceeds tolerance (this may be expected for quartic Bezier)" << endl;
-    }
+    cout << "Maximum stance linearity error: " << max_stance_linearity_error << endl;
+    // Collinear equally-spaced quartic Bezier is exactly linear (within float precision)
+    assert(max_stance_linearity_error < 1e-10);
+    cout << "✓ Stance trajectory is exactly linear for uniformly-spaced collinear nodes" << endl;
 
     // Test swing trajectory shape matches OpenSHC characteristics
     cout << "Verifying swing trajectory characteristics..." << endl;
 
     Parameters params = createDefaultParameters();
     RobotModel model(params);
-    model.workspaceAnalyzerInitializer(); // Inicializar WorkspaceAnalyzer
+    model.workspaceAnalyzerInitializer(); // Initialize WorkspaceAnalyzer
 
     // Test that swing trajectory has proper bell curve shape
     double max_height = -1000.0f;
@@ -335,14 +380,12 @@ int main() {
 
         if (all_tests_passed) {
             cout << "🎉 VALIDATION SUCCESSFUL! 🎉" << endl;
-            cout << "HexaMotion Bezier implementation is equivalent to OpenSHC:" << endl;
-            cout << "  ✓ Quartic Bezier mathematics identical" << endl;
-            cout << "  ✓ Derivative calculations identical" << endl;
-            cout << "  ✓ Trajectory smoothness equivalent" << endl;
-            cout << "  ✓ Control node structure compatible" << endl;
-            cout << "  ✓ Swing trajectory characteristics match" << endl;
-            cout << "  ✓ Stance trajectory linearity preserved" << endl;
-            cout << "\nCONCLUSION: Our implementation IS equivalent to OpenSHC!" << endl;
+            cout << "HexaMotion Bezier validated against independent oracles:" << endl;
+            cout << "  ✓ Quartic Bezier matches De Casteljau (independent algorithm)" << endl;
+            cout << "  ✓ Derivative matches numerical finite differences" << endl;
+            cout << "  ✓ Midpoint values match hand-computed analytic expectation" << endl;
+            cout << "  ✓ Trajectory smoothness validated" << endl;
+            cout << "  ✓ Stance linearity verified for collinear control points" << endl;
         } else {
             cout << "❌ VALIDATION FAILED" << endl;
             cout << "Some tests did not pass - implementation differs from OpenSHC" << endl;

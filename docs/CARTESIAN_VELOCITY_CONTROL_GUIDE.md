@@ -8,31 +8,31 @@ The Cartesian Velocity Control system in HexaMotion provides equivalent function
 
 ### 1. Velocity-to-Speed Mapping
 
--   **Linear Velocity Scaling**: Higher linear velocities result in faster servo speeds
--   **Angular Velocity Compensation**: Rotation commands increase servo speeds for outer legs
--   **Combined Motion Handling**: Simultaneous linear and angular motion is properly balanced
+- **Linear Velocity Scaling**: Higher linear velocities result in faster servo speeds
+- **Angular Velocity Compensation**: Rotation commands increase servo speeds for outer legs
+- **Combined Motion Handling**: Simultaneous linear and angular motion is properly balanced
 
 ### 2. Gait-Specific Adjustments
 
--   **Tripod Gait**: 1.2x speed multiplier for fast locomotion
--   **Wave Gait**: 0.8x speed multiplier for stable, careful movement
--   **Ripple Gait**: 0.9x speed multiplier for balanced motion
--   **Metachronal Gait**: 1.0x speed multiplier for smooth operation
--   **Adaptive Gait**: 1.1x speed multiplier for terrain adaptation
+- **Tripod Gait**: 1.2x speed multiplier for fast locomotion
+- **Wave Gait**: 0.8x speed multiplier for stable, careful movement
+- **Ripple Gait**: 0.9x speed multiplier for balanced motion
+- **Metachronal Gait**: 1.0x speed multiplier for smooth operation
+- **Adaptive Gait**: 1.1x speed multiplier for terrain adaptation
 
 ### 3. Per-Leg Compensation
 
 Each leg's servo speeds are individually adjusted based on:
 
--   Distance from robot center (outer legs move faster during rotation)
--   Direction of motion relative to leg position
--   Velocity magnitude requirements for that specific leg
+- Distance from robot center (outer legs move faster during rotation)
+- Direction of motion relative to leg position
+- Velocity magnitude requirements for that specific leg
 
 ### 4. Joint-Specific Scaling
 
--   **Coxa Joint**: 0.9x scaling (lower speed requirements)
--   **Femur Joint**: 1.0x scaling (baseline speed)
--   **Tibia Joint**: 1.1x scaling (fine positioning, higher speeds)
+- **Coxa Joint**: 0.9x scaling (lower speed requirements)
+- **Femur Joint**: 1.0x scaling (baseline speed)
+- **Tibia Joint**: 1.1x scaling (fine positioning, higher speeds)
 
 ## Usage
 
@@ -41,10 +41,12 @@ Each leg's servo speeds are individually adjusted based on:
 ```cpp
 #include "locomotion_system.h"
 #include "cartesian_velocity_controller.h"
+#include "body_pose_config_factory.h"
 
 // Initialize locomotion system
 LocomotionSystem locomotion(parameters);
-locomotion.initialize(&imu, &fsr, &servo);
+BodyPoseConfiguration body_pose_config = getDefaultBodyPoseConfig(parameters);
+locomotion.initialize(&imu, &fsr, &servo, body_pose_config);
 
 // Get velocity controller reference
 CartesianVelocityController* velocity_ctrl = locomotion.getVelocityController();
@@ -87,13 +89,13 @@ locomotion.setGaitSpeedModifiers(modifiers);
 
 ```cpp
 // Forward motion - servo speeds automatically scale with velocity (values now in mm/s)
-locomotion.planGaitSequence(100.0f, 0.0f, 0.0f);  // 100 mm/s forward
+locomotion.planGaitSequence(100.0, 0.0, 0.0);  // 100 mm/s forward
 
 // Rotation - outer legs automatically get higher speeds (angular remains in rad/s)
-locomotion.planGaitSequence(0.0f, 0.0f, 0.5f);  // 0.5 rad/s rotation
+locomotion.planGaitSequence(0.0, 0.0, 0.5);  // 0.5 rad/s rotation
 
 // Combined motion - speeds balanced for both linear and angular
-locomotion.planGaitSequence(80.0f, 0.0f, 0.3f); // 80 mm/s + rotation
+locomotion.planGaitSequence(80.0, 0.0, 0.3); // 80 mm/s + rotation
 ```
 
 ### Get Current Servo Speeds
@@ -112,20 +114,20 @@ float coxa_effective = leg_speeds.coxa.getEffectiveSpeed();
 ## OpenSHC Equivalence
 
 This system provides equivalent functionality to OpenSHC's velocity control in REAL velocity mode only. HexaMotion core
-no implementa internamente el modo "throttle"; cualquier joystick o entrada normalizada debe convertirse fuera de la
-biblioteca a velocidades físicas (mm/s y rad/s) antes de llamar `planGaitSequence`.
+does not implement an internal "throttle" mode; any joystick or normalized input must be converted outside the
+library into physical velocities (mm/s and rad/s) before calling `planGaitSequence`.
 
 ### 1. Body Velocity Scaling
 
-Un efecto similar a `body_velocity_scaler` puede lograrse pre-escalando las velocidades o ajustando los factores de servo.
+An effect similar to `body_velocity_scaler` can be achieved by pre-scaling velocities or adjusting servo factors.
 
 ### 2. Joint Velocity Limits
 
-Equivalentes mediante escalado dinámico de velocidades de servos.
+Equivalent behavior is achieved through dynamic servo speed scaling.
 
 ### 3. Gait-Dependent Speed Control
 
-Factores específicos por gait replican el ajuste de OpenSHC.
+Gait-specific factors replicate OpenSHC's adjustment behavior.
 
 ## Technical Implementation
 
@@ -139,11 +141,11 @@ final_speed = base_speed × linear_scale × angular_scale × gait_factor × leg_
 
 Where:
 
--   `base_speed`: Robot's default servo speed parameter
--   `linear_scale`: Scaling based on linear velocity magnitude
--   `angular_scale`: Scaling based on angular velocity magnitude
--   `gait_factor`: Gait-specific speed multiplier
--   `leg_compensation`: Per-leg adjustment based on position and motion
+- `base_speed`: Robot's default servo speed parameter
+- `linear_scale`: Scaling based on linear velocity magnitude
+- `angular_scale`: Scaling based on angular velocity magnitude
+- `gait_factor`: Gait-specific speed multiplier
+- `leg_compensation`: Per-leg adjustment based on position and motion
 
 ### Velocity-to-Speed Mapping
 
@@ -165,32 +167,32 @@ angular_scale = 1.0 + angular_ratio × angular_scale_factor
 
 ### Default Values
 
--   **Linear Velocity Scale**: 2.0 (2x impact of linear velocity)
--   **Angular Velocity Scale**: 1.5 (1.5x impact of angular velocity)
--   **Minimum Speed Ratio**: 0.2 (20% minimum speed)
--   **Maximum Speed Ratio**: 1.8 (180% maximum speed)
--   **Tripod Speed Factor**: 1.2 (20% faster)
--   **Wave Speed Factor**: 0.8 (20% slower)
+- **Linear Velocity Scale**: 2.0 (2x impact of linear velocity)
+- **Angular Velocity Scale**: 1.5 (1.5x impact of angular velocity)
+- **Minimum Speed Ratio**: 0.2 (20% minimum speed)
+- **Maximum Speed Ratio**: 1.8 (180% maximum speed)
+- **Tripod Speed Factor**: 1.2 (20% faster)
+- **Wave Speed Factor**: 0.8 (20% slower)
 
 ### Tuning Recommendations
 
 **For Faster Response:**
 
--   Increase `linear_velocity_scale` and `angular_velocity_scale`
--   Increase `maximum_speed_ratio`
--   Use higher gait speed factors
+- Increase `linear_velocity_scale` and `angular_velocity_scale`
+- Increase `maximum_speed_ratio`
+- Use higher gait speed factors
 
 **For Smoother Motion:**
 
--   Decrease `linear_velocity_scale` and `angular_velocity_scale`
--   Increase `minimum_speed_ratio`
--   Use lower gait speed factors
+- Decrease `linear_velocity_scale` and `angular_velocity_scale`
+- Increase `minimum_speed_ratio`
+- Use lower gait speed factors
 
 **For Power Efficiency:**
 
--   Use moderate scaling factors
--   Set appropriate minimum speeds
--   Tune gait factors based on terrain
+- Use moderate scaling factors
+- Set appropriate minimum speeds
+- Tune gait factors based on terrain
 
 ## Example Applications
 

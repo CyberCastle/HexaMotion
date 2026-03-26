@@ -29,37 +29,38 @@ The HexaMotion library uses a standardized leg indexing system based on clockwis
 ```
      FRONT
         ┌─────┐
-   L5 ┌─┘     └─┐ L0  ← Front Right (Index 0)
+   L5 ┌─┘     └─┐ L0  ← AR (Index 0)
       │         │
-   L4 │    ●    │ L1  ← Middle Right (Index 1)
+   L4 │    ●    │ L1  ← BR (Index 1)
       │         │
-   L3 └─┐     ┌─┘ L2  ← Rear Right (Index 2)
+   L3 └─┐     ┌─┘ L2  ← CR (Index 2)
         └─────┘
      REAR
 ```
 
-**Leg Index Mapping:**
+**Leg Index Mapping (current HexaMotion/OpenSHC parity):**
 
--   **Leg 0**: Front Right (FR) - Starting position, 0° offset
--   **Leg 1**: Middle Right (MR) - 60° clockwise from Leg 0
--   **Leg 2**: Rear Right (RR) - 120° clockwise from Leg 0
--   **Leg 3**: Rear Left (RL) - 180° clockwise from Leg 0
--   **Leg 4**: Middle Left (ML) - 240° clockwise from Leg 0
--   **Leg 5**: Front Left (FL) - 300° clockwise from Leg 0
+- **Leg 0**: AR (Anterior Right), base theta = -30°
+- **Leg 1**: BR (Back Right), base theta = -90°
+- **Leg 2**: CR (Center Right), base theta = -150°
+- **Leg 3**: CL (Center Left), base theta = +150°
+- **Leg 4**: BL (Back Left), base theta = +90°
+- **Leg 5**: AL (Anterior Left), base theta = +30°
+
+> Note: the internal model uses `BASE_THETA_OFFSETS` from `hexamotion_constants.h`; leg 0 is **not** at 0°.
 
 ### Leg Base Position Calculation
 
 Each leg's base position is calculated relative to the robot's center:
 
 ```cpp
-// From locomotion_system.cpp - leg base position calculation
-Point3D LocomotionSystem::getLegBasePosition(int leg_index) {
-    float angle_deg = leg_index * 60.0f;  // 60° between legs
-    float angle_rad = angle_deg * M_PI / 180.0f;
+// Equivalent to RobotModel base placement using BASE_THETA_OFFSETS
+Point3D computeLegBasePosition(const Parameters& params, int leg_index) {
+    double angle_rad = BASE_THETA_OFFSETS[leg_index];
 
-    float x = params.hexagon_radius * cos(angle_rad);
-    float y = params.hexagon_radius * sin(angle_rad);
-    float z = 0.0f;  // Base level
+    double x = params.hexagon_radius * cos(angle_rad);
+    double y = params.hexagon_radius * sin(angle_rad);
+    double z = 0.0;  // Base level
 
     return Point3D(x, y, z);
 }
@@ -88,9 +89,9 @@ Each leg has 3 degrees of freedom (DOF) with standardized joint indexing:
 
 **Joint Index Convention:**
 
--   **Joint 0**: Coxa (Hip) - Horizontal rotation around vertical axis
--   **Joint 1**: Femur (Knee) - Vertical rotation, first leg segment
--   **Joint 2**: Tibia (Ankle) - Vertical rotation, second leg segment
+- **Joint 0**: Coxa (Hip) - Horizontal rotation around vertical axis
+- **Joint 1**: Femur (Knee) - Vertical rotation, first leg segment
+- **Joint 2**: Tibia (Ankle) - Vertical rotation, second leg segment
 
 ### Servo Address Calculation
 
@@ -101,34 +102,34 @@ The library uses a systematic approach to map logical joint indices to physical 
 int servo_address = leg_index * DOF_PER_LEG + joint_index;
 
 // Examples:
-// Leg 0, Joint 0 (Front Right Coxa): servo_address = 0 * 3 + 0 = 0
-// Leg 0, Joint 1 (Front Right Femur): servo_address = 0 * 3 + 1 = 1
-// Leg 0, Joint 2 (Front Right Tibia): servo_address = 0 * 3 + 2 = 2
-// Leg 1, Joint 0 (Middle Right Coxa): servo_address = 1 * 3 + 0 = 3
+// Leg 0 (AR), Joint 0 (Coxa): servo_address = 0 * 3 + 0 = 0
+// Leg 0 (AR), Joint 1 (Femur): servo_address = 0 * 3 + 1 = 1
+// Leg 0 (AR), Joint 2 (Tibia): servo_address = 0 * 3 + 2 = 2
+// Leg 1 (BR), Joint 0 (Coxa): servo_address = 1 * 3 + 0 = 3
 ```
 
 ### Complete Servo Mapping Table
 
-| Leg Index | Joint Name | Joint Index | Servo Address | Physical Location  |
-| --------- | ---------- | ----------- | ------------- | ------------------ |
-| 0         | Coxa       | 0           | 0             | Front Right Hip    |
-| 0         | Femur      | 1           | 1             | Front Right Knee   |
-| 0         | Tibia      | 2           | 2             | Front Right Ankle  |
-| 1         | Coxa       | 0           | 3             | Middle Right Hip   |
-| 1         | Femur      | 1           | 4             | Middle Right Knee  |
-| 1         | Tibia      | 2           | 5             | Middle Right Ankle |
-| 2         | Coxa       | 0           | 6             | Rear Right Hip     |
-| 2         | Femur      | 1           | 7             | Rear Right Knee    |
-| 2         | Tibia      | 2           | 8             | Rear Right Ankle   |
-| 3         | Coxa       | 0           | 9             | Rear Left Hip      |
-| 3         | Femur      | 1           | 10            | Rear Left Knee     |
-| 3         | Tibia      | 2           | 11            | Rear Left Ankle    |
-| 4         | Coxa       | 0           | 12            | Middle Left Hip    |
-| 4         | Femur      | 1           | 13            | Middle Left Knee   |
-| 4         | Tibia      | 2           | 14            | Middle Left Ankle  |
-| 5         | Coxa       | 0           | 15            | Front Left Hip     |
-| 5         | Femur      | 1           | 16            | Front Left Knee    |
-| 5         | Tibia      | 2           | 17            | Front Left Ankle   |
+| Leg Index | Joint Name | Joint Index | Servo Address | Physical Location |
+| --------- | ---------- | ----------- | ------------- | ----------------- |
+| 0         | Coxa       | 0           | 0             | AR Coxa           |
+| 0         | Femur      | 1           | 1             | AR Femur          |
+| 0         | Tibia      | 2           | 2             | AR Tibia          |
+| 1         | Coxa       | 0           | 3             | BR Coxa           |
+| 1         | Femur      | 1           | 4             | BR Femur          |
+| 1         | Tibia      | 2           | 5             | BR Tibia          |
+| 2         | Coxa       | 0           | 6             | CR Coxa           |
+| 2         | Femur      | 1           | 7             | CR Femur          |
+| 2         | Tibia      | 2           | 8             | CR Tibia          |
+| 3         | Coxa       | 0           | 9             | CL Coxa           |
+| 3         | Femur      | 1           | 10            | CL Femur          |
+| 3         | Tibia      | 2           | 11            | CL Tibia          |
+| 4         | Coxa       | 0           | 12            | BL Coxa           |
+| 4         | Femur      | 1           | 13            | BL Femur          |
+| 4         | Tibia      | 2           | 14            | BL Tibia          |
+| 5         | Coxa       | 0           | 15            | AL Coxa           |
+| 5         | Femur      | 1           | 16            | AL Femur          |
+| 5         | Tibia      | 2           | 17            | AL Tibia          |
 
 ## FSR Sensor Integration
 
@@ -141,9 +142,9 @@ Each leg has one FSR sensor located at the foot/tip. The FSR indexing follows th
 int fsr_sensor_id = leg_index;
 
 // Examples:
-// Leg 0 (Front Right): FSR 0
-// Leg 1 (Middle Right): FSR 1
-// Leg 2 (Rear Right): FSR 2
+// Leg 0 (AR): FSR 0
+// Leg 1 (BR): FSR 1
+// Leg 2 (CR): FSR 2
 // ... and so on
 ```
 
@@ -197,17 +198,17 @@ class HexapodServoController : public IServoInterface {
 private:
     // Servo pin mapping - adjust for your hardware
     int servo_pins[TOTAL_DOF] = {
-        // Leg 0 (Front Right)
+        // Leg 0 (AR)
         2, 3, 4,     // Coxa, Femur, Tibia
-        // Leg 1 (Middle Right)
+        // Leg 1 (BR)
         5, 6, 7,     // Coxa, Femur, Tibia
-        // Leg 2 (Rear Right)
+        // Leg 2 (CR)
         8, 9, 10,    // Coxa, Femur, Tibia
-        // Leg 3 (Rear Left)
+        // Leg 3 (CL)
         11, 12, 13,  // Coxa, Femur, Tibia
-        // Leg 4 (Middle Left)
+        // Leg 4 (BL)
         14, 15, 16,  // Coxa, Femur, Tibia
-        // Leg 5 (Front Left)
+        // Leg 5 (AL)
         17, 18, 19   // Coxa, Femur, Tibia
     };
 
@@ -259,11 +260,20 @@ private:
 
         float servo_angle = library_angle + 90.0f; // Offset to 0-180 range
 
-        // Apply per-servo corrections if needed
-        if (leg % 2 == 1) { // Right side legs
-            if (joint == 1 || joint == 2) {
-                servo_angle = 180.0f - servo_angle; // Invert for mirrored mounting
-            }
+        // Apply per-servo corrections if needed.
+        // IMPORTANT: Do not rely on odd/even leg index as a side detector.
+        // Use a hardware-calibrated per-leg/per-joint map instead.
+        static const int8_t sign_map[NUM_LEGS][DOF_PER_LEG] = {
+            {+1, +1, +1}, // Leg 0 (AR) example
+            {+1, +1, +1}, // Leg 1 (BR) example
+            {+1, +1, +1}, // Leg 2 (CR) example
+            {+1, -1, -1}, // Leg 3 (CL) example mirrored femur/tibia
+            {+1, -1, -1}, // Leg 4 (BL) example mirrored femur/tibia
+            {+1, -1, -1}  // Leg 5 (AL) example mirrored femur/tibia
+        };
+
+        if (sign_map[leg][joint] < 0) {
+            servo_angle = 180.0f - servo_angle;
         }
 
         return constrain(servo_angle, 0, 180);
@@ -427,8 +437,9 @@ void setup() {
         return;
     }
 
-    // Connect hardware to locomotion system
-    locomotion_system->initialize(&imu_controller, &fsr_controller, &servo_controller);
+    // Connect hardware to locomotion system (requires body pose configuration)
+    BodyPoseConfiguration body_pose_config = getDefaultBodyPoseConfig(robot_params);
+    locomotion_system->initialize(&imu_controller, &fsr_controller, &servo_controller, body_pose_config);
 
     // Calibrate system
     if (locomotion_system->calibrateSystem()) {
@@ -453,8 +464,7 @@ void initializeRobotParameters() {
 
     // Robot characteristics
     robot_params.robot_height = 80.0f;
-    robot_params.robot_weight = 2.5f;
-    robot_params.center_of_mass = Eigen::Vector3f(0.0f, 0.0f, 0.0f);
+    robot_params.center_of_mass = Eigen::Vector3d(0.0, 0.0, 0.0);
 
     // Joint limits (degrees)
     robot_params.coxa_angle_limits[0] = -90.0f;
@@ -469,7 +479,7 @@ void initializeRobotParameters() {
     robot_params.fsr_touchdown_threshold = 0.7f;           // Touchdown (enter contact)
     robot_params.fsr_liftoff_threshold = 0.3f;             // Liftoff (exit contact)
     // If migrating from legacy raw ADC configuration, map previous values to [0,1] range after filtering.
-    robot_params.fsr_max_pressure = 100.0f;       // Newtons
+    robot_params.fsr_max_pressure = 0.9f;       // Normalized upper bound (0-1)
 
     // Control parameters
     robot_params.max_velocity = 100.0f;         // mm/s
@@ -600,7 +610,7 @@ void validateHardwareMapping() {
     // Test 3: Coordinate system validation
     Serial.println("Testing coordinate system...");
     for (int leg = 0; leg < NUM_LEGS; leg++) {
-        Point3D base_pos = locomotion_system->getLegBasePosition(leg);
+        Point3D base_pos = computeLegBasePosition(params, leg);
         Serial.print("Leg ");
         Serial.print(leg);
         Serial.print(" base: (");
@@ -668,13 +678,13 @@ bool detectContact(int leg_index, float raw_pressure) {
 ```cpp
 void verifyCoordinateSystem() {
     // Test forward movement
-    locomotion_system->setDesiredVelocity(Point3D(50, 0, 0), 0); // Move forward
+    locomotion_system->planGaitSequence(50, 0, 0); // Move forward (+X)
 
     // Expected behavior: Front legs (0, 5) should step forward
     // If robot moves backward, coordinate system is inverted
 
     // Test rotation
-    locomotion_system->setDesiredVelocity(Point3D(0, 0, 0), 30); // Rotate CCW
+    locomotion_system->planGaitSequence(0, 0, 30); // Rotate CCW (+yaw)
 
     // Expected behavior: Right legs should step backward relative to center
     // If robot rotates CW, angular direction is inverted
@@ -698,9 +708,9 @@ This guide provides the complete framework for mapping hardware components to th
 
 **For additional information, see:**
 
--   `docs/HARDWARE_INTEGRATION_CONSIDERATIONS.md` - Hardware-specific implementation details
--   `docs/FSR_ADVANCED_ANALOG_INTEGRATION.md` - Advanced FSR integration
--   `examples/complete_state_machine_demo.ino` - Complete working example
+- `docs/HARDWARE_INTEGRATION_CONSIDERATIONS.md` - Hardware-specific implementation details
+- `docs/FSR_ADVANCED_ANALOG_INTEGRATION.md` - Advanced FSR integration
+- `examples/complete_state_machine_demo.ino` - Complete working example
 
 **Status**: ✅ Complete technical documentation
 **Implementation**: Ready for production hardware integration

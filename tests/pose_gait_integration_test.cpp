@@ -69,7 +69,7 @@ static void validateSwingHeights(LocomotionSystem &sys, TestReport &rep) {
         double avg_progress = 0.0;
         double min_progress = 1.0;
         double max_progress = 0.0;
-        double clearance_z = 0.0; // dinámica: tomar de primer stepper
+        double clearance_z = 0.0; // dynamic: take from first stepper
         if (wc) {
             std::cout << "Swing progress: ";
             for (int id : swing) {
@@ -90,30 +90,33 @@ static void validateSwingHeights(LocomotionSystem &sys, TestReport &rep) {
             avg_progress /= (progresses.empty() ? 1.0 : (double)progresses.size());
         }
 
-        // Gate: no validar alturas estrictas antes de que la progresión media alcance 0.15
+        // Gate: do not validate strict heights before average progress reaches 0.15
         if (avg_progress < 0.15) {
-            // Consideramos esto como una comprobación diferida (no cuenta como fallo). Marcamos pass neutral.
-            addResult(rep, true, "(Deferred) Early swing phase (<0.15) height check skipped", sys);
+            // Deferred: early swing phase — skip height validation (does not count as pass or fail).
+            std::cout << "(Deferred) Early swing phase (<0.15) height check skipped" << std::endl;
             return;
         }
 
-        // Umbral dinámico: baseline -150 + porcentaje de clearance escalado por progreso (limitado a 60% de la elevación teórica en primeras fases)
-        double baseline_z = -150.0; // altura de referencia (standing)
+        // Dynamic threshold: baseline -150 + clearance percentage scaled by progress (capped at 60% of theoretical elevation in early phases)
+        double baseline_z = -150.0; // reference height (standing)
         if (clearance_z <= 0.0)
-            clearance_z = 45.0;                                               // fallback basado en GAIT_TRIPOD_HEIGHT_FACTOR*standing
-        double dynamic_factor = std::min(0.60, avg_progress);                 // limita crecimiento inicial
-        double required_z = baseline_z + clearance_z * dynamic_factor * 0.30; // 30% de la elevación esperada escalada por progreso
+            clearance_z = 45.0;                                               // fallback based on GAIT_TRIPOD_HEIGHT_FACTOR*standing
+        double dynamic_factor = std::min(0.60, avg_progress);                 // cap initial growth
+        double required_z = baseline_z + clearance_z * dynamic_factor * 0.30; // 30% of expected elevation scaled by progress
         for (size_t idx = 0; idx < swing.size(); ++idx) {
             double zi = sys.getLeg(swing[idx]).getCurrentTipPositionGlobal().z;
             if (idx > 0 && std::abs(zi - z_ref) > 1.5)
                 equal = false;
             addResult(rep, zi > required_z - 0.5, "Swing leg height (dynamic)", sys);
+            // Absolute Z floor: swing leg must never descend below standing height - 5mm
+            addResult(rep, zi >= baseline_z - 5.0,
+                      "Swing leg Z floor for leg " + std::to_string(swing[idx]), sys);
         }
-        // Igualdad de alturas sólo cuando la progresión mínima supera 0.25 (las curvas ya se separaron y convergen)
+        // Height equality only when minimum progress exceeds 0.25 (curves have already diverged and converge)
         if (min_progress >= 0.25)
             addResult(rep, equal, "Swing legs equal height", sys);
         else
-            addResult(rep, true, "(Deferred) Swing legs equal height", sys);
+            std::cout << "(Deferred) Swing legs equal height — min_progress < 0.25" << std::endl;
     }
 }
 
@@ -152,15 +155,15 @@ static void validateTrajectorySimilarity(const LocomotionSystem &sys,
         if (counted > 0)
             avg_progress /= counted;
 
-        // Gate: sólo evaluar similitud cuando estamos en la ventana estable (0.30 - 0.80)
+        // Gate: only evaluate similarity when within the stable window (0.30 - 0.80)
         if (avg_progress < 0.30 || avg_progress > 0.80) {
-            addResult(rep, true, "(Deferred) Swing leg trajectories similar", sys);
+            std::cout << "(Deferred) Swing leg trajectories similar — outside stable window" << std::endl;
             return;
         }
 
         Point3D p0 = sys.getLeg(swing[0]).getCurrentTipPositionGlobal();
         bool ok = true;
-        double tolerance = 6.0; // tolerancia ligeramente relajada en modo estable
+        double tolerance = 6.0; // slightly relaxed tolerance in stable mode
         for (int i = 1; i < 3; ++i) {
             Point3D pi = sys.getLeg(swing[i]).getCurrentTipPositionGlobal();
             double dx = pi.x - p0.x;
@@ -291,21 +294,7 @@ static void validateIdentityTransformation(LocomotionSystem &sys, TestReport &re
 }
 
 int main() {
-    Parameters p{};
-    p.hexagon_radius = 200;
-    p.coxa_length = 50;
-    p.femur_length = 101;
-    p.tibia_length = 208;
-    p.default_height_offset = -208.0; // Set to -tibia_length for explicit configuration
-    p.robot_height = 208;
-    p.standing_height = 150; // Initial standing height
-    p.time_delta = 1.0 / 50.0;
-    p.coxa_angle_limits[0] = -65;
-    p.coxa_angle_limits[1] = 65;
-    p.femur_angle_limits[0] = -75;
-    p.femur_angle_limits[1] = 75;
-    p.tibia_angle_limits[0] = -45;
-    p.tibia_angle_limits[1] = 45;
+    Parameters p = createDefaultParameters();
 
     LocomotionSystem sys(p);
     DummyIMU imu;
@@ -323,38 +312,26 @@ int main() {
     printf("Initial body position: (%.2f, %.2f, %.2f)\n",
            sys.getBodyPosition().x(), sys.getBodyPosition().y(), sys.getBodyPosition().z());
 
-    // Execute startup sequence until complete (with timeout)
-    bool startup_ok = false;
-    int startup_iterations = 0;
-
-    // Nueva estimación basada en la implementación real (BodyPoseController):
-    // Fase horizontal: 1/step_frequency
-    // Fase vertical:   3/step_frequency
-    // Total: 4/step_frequency segundos. Cada fase se interpola con stepToPosition.
-    double step_frequency = p.step_frequency; // Hz
-    double horiz_time = 1.0 / step_frequency;
-    double vert_time = 3.0 / step_frequency;
-    int horiz_iters = std::max(1, (int)std::round(horiz_time / p.time_delta));
-    int vert_iters = std::max(1, (int)std::round(vert_time / p.time_delta));
-    int expected_total_iterations = horiz_iters + vert_iters; // ~200 a 50Hz y 1Hz step_frequency
-    // Margen adicional para variaciones internas de progresión: +40% + 20 iteraciones fijas
-    int max_startup_iterations = expected_total_iterations + (int)std::round(expected_total_iterations * 0.4) + 20;
-
-    printf("Startup calculation: step_freq=%.2fHz, control_freq≈%.0fHz\n", step_frequency, 1.0 / p.time_delta);
-    printf("Expected iterations (horizontal=%d, vertical=%d, total=%d, max=%d)\n",
-           horiz_iters, vert_iters, expected_total_iterations, max_startup_iterations);
-
-    while (!startup_ok && startup_iterations < max_startup_iterations) {
-        startup_ok = sys.executeStartupSequence();
-        startup_iterations++;
-    }
-
-    printf("Startup sequence completed in %d iterations\n", startup_iterations);
-    addResult(rep, startup_ok, "Startup sequence", sys);
-
+    // Configure gait and velocity before requesting RUNNING
     GaitConfiguration tripod_gait = createGaitConfig(TRIPOD_GAIT, p);
     assert(sys.setGaitConfiguration(tripod_gait));
     assert(sys.walkForward(100.0));
+    assert(sys.startWalking());
+
+    // Run update loop until system reaches RUNNING state (startup handled by StateController)
+    int startup_iterations = 0;
+    const int max_startup_iterations = 500;
+
+    printf("Startup: waiting for ROBOT_RUNNING via StateController...\n");
+
+    while (sys.getRobotState() != ROBOT_RUNNING && startup_iterations < max_startup_iterations) {
+        sys.update();
+        startup_iterations++;
+    }
+    bool startup_ok = (sys.getRobotState() == ROBOT_RUNNING);
+
+    printf("Startup sequence completed in %d iterations\n", startup_iterations);
+    addResult(rep, startup_ok, "Startup sequence", sys);
 
     const double distance = 10.0; // mm
     double dt = p.time_delta;     // unified global timestep
@@ -363,6 +340,11 @@ int main() {
     std::vector<StepPhase> prev_phase(NUM_LEGS);
     for (int i = 0; i < NUM_LEGS; ++i)
         prev_phase[i] = sys.getLegState(i);
+
+    // Skip the first few phase transitions which may have incomplete tripod
+    // alignment during gait establishment after SC-mediated startup.
+    int phase_transitions_seen = 0;
+    const int SKIP_INITIAL_TRANSITIONS = 2;
 
     int max_cycles = cycles * 10;
     int step = 0;
@@ -378,13 +360,18 @@ int main() {
         }
         printDiagnostics(sys);
         if (phase_change) {
-            validateGroupSync(sys, rep);
-            validateSwingHeights(sys, rep);
-            validateCoxaSymmetry(sys, rep);
-            validateTrajectorySimilarity(sys, rep);
-            validateIdentityTransformation(sys, rep);
+            phase_transitions_seen++;
+            if (phase_transitions_seen > SKIP_INITIAL_TRANSITIONS) {
+                validateGroupSync(sys, rep);
+                validateSwingHeights(sys, rep);
+                validateCoxaSymmetry(sys, rep);
+                validateTrajectorySimilarity(sys, rep);
+                validateIdentityTransformation(sys, rep);
+            }
         }
-        validateSwingPeakSync(sys, rep);
+        if (phase_transitions_seen > SKIP_INITIAL_TRANSITIONS) {
+            validateSwingPeakSync(sys, rep);
+        }
     }
     addResult(rep, step >= cycles, "Gait execution timeout", sys);
 

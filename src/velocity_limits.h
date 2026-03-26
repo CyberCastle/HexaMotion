@@ -1,139 +1,120 @@
 #ifndef VELOCITY_LIMITS_H
 #define VELOCITY_LIMITS_H
 
+#include "gait_config.h"
+#include "hexamotion_constants.h"
+#include "math_utils.h"
 #include "robot_model.h"
-#include <algorithm>
-#include <array>
-#include <cmath>
-#include <memory>
-#include <vector>
-
-// Forward declaration
-struct GaitConfiguration;
+#include <map>
 
 /**
- * Dynamic velocity limits system equivalent to OpenSHC's velocity limiting mechanism.
- * This system dynamically calculates maximum linear and angular velocities based on:
- * - Workspace constraints and geometry
- * - Gait parameters (frequency, stance ratio)
- * - Robot kinematics and leg positioning
- * - Bearing-based directional limits
- * - Acceleration constraints
+ * @brief Generates bearing-based velocity and acceleration limit maps and provides
+ *        runtime limit interpolation (OpenSHC equivalent).
+ *
+ * Computes per-bearing maximum linear/angular speeds and accelerations based on
+ * walkspace radii, gait parameters and step cycle timing.
+ *
+ * In OpenSHC, both generateLimits() and getLimit() live on WalkController.
+ * HexaMotion intentionally consolidates all velocity-limit logic here for
+ * architectural coherence; getLimit() receives per-leg tip positions as an
+ * explicit parameter instead of accessing leg steppers directly.
+ *
+ * @see OpenSHC_GAP_REPORT.md — "VelocityLimits::getLimit relocation"
  */
 class VelocityLimits {
   public:
-    /**
-     * @brief Velocity limits for a specific bearing.
-     */
-    struct LimitValues {
-        double linear_x;      // Maximum linear velocity in X direction (mm/s)
-        double linear_y;      // Maximum linear velocity in Y direction (mm/s)
-        double angular_z;     // Maximum angular velocity around Z axis (rad/s)
-        double acceleration;  // Maximum acceleration (mm/s²)
-        double angular_accel; // Maximum angular acceleration (rad/s²) - added for symmetry
+    typedef std::map<int, double> LimitMap;
 
-        LimitValues() : linear_x(0.0f), linear_y(0.0f), angular_z(0.0f), acceleration(0.0f), angular_accel(0.0f) {}
-        LimitValues(double lx, double ly, double az, double acc)
-            : linear_x(lx), linear_y(ly), angular_z(az), acceleration(acc), angular_accel(0.0f) {}
-    };
-
-    /**
-     * @brief Map of velocity limits for 0-359 degree bearings.
-     */
-    struct LimitMap {
-        std::array<LimitValues, 360> limits; // Limits for each degree (0-359)
-
-        LimitMap() {
-            // Initialize all limits to zero
-            for (auto &limit : limits) {
-                limit = LimitValues();
-            }
-        }
-    };
-
-    /**
-     * @brief Workspace parameters used for limit generation.
-     */
-    struct WorkspaceConfig {
-        double walkspace_radius;        // Effective workspace radius for walking (mm)
-        double stance_radius;           // Radius for angular velocity calculations (mm)
-        double scaled_walkspace_radius; // Walkspace radius after dynamic overshoot deductions (compat mode)
-        double overshoot_x;             // Overshoot compensation in X direction
-        double overshoot_y;             // Overshoot compensation in Y direction
-        double safety_margin;           // Safety factor for workspace limits
-        double reference_height;        // Physical reference height (z = getDefaultHeightOffset())
-
-        WorkspaceConfig() : walkspace_radius(0.0f), stance_radius(0.0f), scaled_walkspace_radius(0.0f),
-                            overshoot_x(0.0f), overshoot_y(0.0f), safety_margin(0.85f),
-                            reference_height(0.0f) {}
-    };
-
+    /** @brief Construct with a reference to the robot model. */
     explicit VelocityLimits(const RobotModel &model);
-    ~VelocityLimits(); // Needed for PIMPL idiom
 
-    // Main velocity limiting functions (equivalent to OpenSHC's generateLimits/getLimit)
-    void generateLimits(const GaitConfiguration &gait_config);
-    LimitValues getLimit(double bearing_degrees) const;
+    /** @brief Default destructor. */
+    ~VelocityLimits() = default;
 
-    // Angular acceleration map access (separate from general LimitValues for focused queries)
-    double getAngularAcceleration(double bearing_degrees) const; // Interpolated angular acceleration
-    std::array<double, 360> getAngularAccelerationMap() const;   // Raw per-bearing angular acceleration
+    /** @brief Set the walkspace map used for limit generation. */
+    void setWalkspace(const LimitMap &walkspace);
 
-    // Workspace generation and calculation
-    void calculateWorkspace(const GaitConfiguration &gait_config);
-    const WorkspaceConfig &getWorkspaceConfig() const;
+    /** @brief Set default tip reference used for stance radius in angular limits. */
+    void setReferenceTipPosition(const Point3D &reference_tip_position);
 
-    // Physical robot configuration
-    double getPhysicalReferenceHeight() const;
+    /**
+     * @brief Generate velocity limits for a given step cycle and gait configuration.
+     *
+     * When all four output pointers are NULL, the results are stored in the
+     * internal member maps (accessible via the getMax*Map() accessors).
+     *
+     * @param step          Pre-computed step cycle timing.
+     * @param gait_config   Active gait configuration.
+     * @param max_linear_speed_ptr        Output map for linear speed limits (may be NULL).
+     * @param max_angular_speed_ptr       Output map for angular speed limits (may be NULL).
+     * @param max_linear_acceleration_ptr Output map for linear acceleration limits (may be NULL).
+     * @param max_angular_acceleration_ptr Output map for angular acceleration limits (may be NULL).
+     */
+    void generateLimits(StepCycle step,
+                        const GaitConfiguration &gait_config,
+                        LimitMap *max_linear_speed_ptr = NULL,
+                        LimitMap *max_angular_speed_ptr = NULL,
+                        LimitMap *max_linear_acceleration_ptr = NULL,
+                        LimitMap *max_angular_acceleration_ptr = NULL);
 
-    // Velocity scaling and validation
-    LimitValues scaleVelocityLimits(const LimitValues &input_velocities,
-                                    double angular_velocity_percentage = 1.0f) const;
-    bool validateVelocityInputs(double vx, double vy, double omega) const;
+    /**
+     * @brief Convenience overload that generates a StepCycle from the gait configuration.
+     *
+     * @param gait_config   Active gait configuration (used to derive StepCycle internally).
+     * @param max_linear_speed_ptr        Output map for linear speed limits (may be NULL).
+     * @param max_angular_speed_ptr       Output map for angular speed limits (may be NULL).
+     * @param max_linear_acceleration_ptr Output map for linear acceleration limits (may be NULL).
+     * @param max_angular_acceleration_ptr Output map for angular acceleration limits (may be NULL).
+     */
+    void generateLimits(const GaitConfiguration &gait_config,
+                        LimitMap *max_linear_speed_ptr = NULL,
+                        LimitMap *max_angular_speed_ptr = NULL,
+                        LimitMap *max_linear_acceleration_ptr = NULL,
+                        LimitMap *max_angular_acceleration_ptr = NULL);
 
-    // Bearing-based interpolation (equivalent to OpenSHC's bearing interpolation)
-    LimitValues interpolateLimits(double bearing_degrees) const;
+    /**
+     * @brief Get interpolated limit for a velocity command from a bearing-based limit map
+     *        (OpenSHC WalkController::getLimit equivalent).
+     *
+     * Calculates per-leg stride bearing from combined linear + angular velocity,
+     * interpolates the limit map bounding that bearing, and returns the minimum
+     * across all legs.
+     *
+     * @note In OpenSHC this method lives on WalkController and accesses leg steppers
+     *       directly.  HexaMotion passes tip positions explicitly so that all
+     *       velocity-limit logic is co-located in VelocityLimits.
+     *
+     * @param linear_velocity_input  Desired linear body velocity (XY plane).
+     * @param angular_velocity_input Desired angular body velocity.
+     * @param limit                  Bearing-based limit map (e.g. max_linear_speed).
+     * @param tip_positions          Current tip pose for each leg (array of NUM_LEGS).
+     * @return Smallest interpolated limit across all legs.
+     */
+    double getLimit(const Eigen::Vector2d &linear_velocity_input,
+                    double angular_velocity_input,
+                    const LimitMap &limit,
+                    const Point3D tip_positions[NUM_LEGS]) const;
 
-    // Acceleration limiting
-    LimitValues applyAccelerationLimits(const LimitValues &target_velocities,
-                                        const LimitValues &current_velocities,
-                                        double dt) const;
+    /** @brief Read-only accessor for the generated linear speed limit map. */
+    const LimitMap &getMaxLinearSpeedMap() const { return max_linear_speed_; }
 
-    // Overshoot compensation
-    void calculateOvershoot(const GaitConfiguration &gait_config);
-    double getOvershootX() const;
-    double getOvershootY() const;
+    /** @brief Read-only accessor for the generated angular speed limit map. */
+    const LimitMap &getMaxAngularSpeedMap() const { return max_angular_speed_; }
 
-    // Configuration and parameter updates
-    void updateGaitParameters(const GaitConfiguration &gait_config);
-    void setSafetyMargin(double margin);
-    void setAngularVelocityScaling(double scaling);
+    /** @brief Read-only accessor for the generated linear acceleration limit map. */
+    const LimitMap &getMaxLinearAccelerationMap() const { return max_linear_acceleration_; }
 
-    // Debug and analysis functions
-    LimitValues getMaxLimits() const;
-    LimitValues getMinLimits() const;
-    std::vector<LimitValues> getAllLimits() const;
-
-    // Utility functions
-    static double normalizeBearing(double bearing_degrees);
-    static double calculateBearing(double vx, double vy);
+    /** @brief Read-only accessor for the generated angular acceleration limit map. */
+    const LimitMap &getMaxAngularAccelerationMap() const { return max_angular_acceleration_; }
 
   private:
-    // PIMPL idiom to hide WorkspaceValidator dependency
-    class Impl;
-    std::unique_ptr<Impl> pimpl_;
-
-    // Utility functions that don't require PIMPL access
-    double interpolateValue(double value1, double value2, double factor) const;
-    int getBearingIndex(double bearing_degrees) const;
-
-    // Internal calculation methods (now implemented via WorkspaceValidator)
-    // Use gait_config.step_length directly (already derived from standing horizontal reach)
-    double calculateMaxLinearSpeed(double walkspace_radius, const GaitConfiguration &gait_config) const;
-    double calculateMaxAngularSpeed(double max_linear_speed, double stance_radius) const;
-    double calculateMaxAcceleration(double max_speed, double time_to_max) const;
-    LimitValues calculateLimitsForBearing(double bearing_degrees,
-                                          const GaitConfiguration &gait_config) const;
+    const RobotModel &model_;
+    LimitMap walkspace_;
+    Point3D reference_tip_position_;
+    LimitMap max_linear_speed_;
+    LimitMap max_angular_speed_;
+    LimitMap max_linear_acceleration_;
+    LimitMap max_angular_acceleration_;
 };
 
 #endif // VELOCITY_LIMITS_H

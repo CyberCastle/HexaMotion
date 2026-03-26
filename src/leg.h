@@ -24,7 +24,7 @@
  *
  * Typical usage for kinematic control:
  *   1. leg.setDesiredTipPose(target_position);
- *   2. leg.applyIK(); // No need to pass RobotModel - it's stored as a reference
+ *   2. leg.applyIK(); (No need to pass RobotModel; it is stored as a reference.)
  *
  * ---
  *
@@ -54,7 +54,7 @@ class Leg {
      */
     ~Leg() = default;
 
-    // ===== IDENTIFICATION AND CONFIGURATION =====
+    /** Identification and configuration. */
 
     /**
      * @brief Get the leg identification number.
@@ -74,7 +74,7 @@ class Leg {
      */
     int getDOF() const { return DOF_PER_LEG; }
 
-    // ===== JOINT ANGLES AND POSITIONS =====
+    /** Joint angles and positions. */
 
     /**
      * @brief Get current joint angles.
@@ -91,16 +91,52 @@ class Leg {
     /**
      * @brief Get individual joint angle.
      * @param joint_index Joint index (0=coxa, 1=femur, 2=tibia)
-     * @return Joint angle in degrees
+     * @return Joint angle in radians
      */
     double getJointAngle(int joint_index) const;
 
     /**
      * @brief Set individual joint angle.
      * @param joint_index Joint index (0=coxa, 1=femur, 2=tibia)
-     * @param angle Joint angle in degrees
+     * @param angle Joint angle in radians
      */
     void setJointAngle(int joint_index, double angle);
+
+    /**
+     * @brief Set desired joint velocities (driver units or rad/s depending on interface).
+     * @param velocities Desired joint velocities
+     */
+    void setDesiredJointVelocity(const JointAngles &velocities) { desired_joint_velocity_ = velocities; }
+
+    /**
+     * @brief Get desired joint velocities.
+     * @return Desired joint velocities
+     */
+    JointAngles getDesiredJointVelocity() const { return desired_joint_velocity_; }
+
+    /**
+     * @brief Set current joint velocities (rad/s) if available from hardware.
+     * @param velocities Current joint velocities
+     */
+    void setCurrentJointVelocity(const JointAngles &velocities);
+
+    /**
+     * @brief Get current joint velocities.
+     * @return Current joint velocities
+     */
+    JointAngles getCurrentJointVelocity() const { return current_joint_velocity_; }
+
+    /**
+     * @brief Set current joint efforts/torques if available from hardware.
+     * @param efforts Current joint efforts
+     */
+    void setCurrentJointEffort(const JointAngles &efforts);
+
+    /**
+     * @brief Get current joint efforts/torques.
+     * @return Current joint efforts
+     */
+    JointAngles getCurrentJointEffort() const { return current_joint_effort_; }
 
     /**
      * @brief Get the current tip position in global coordinates
@@ -123,7 +159,7 @@ class Leg {
      */
     void updateTipPosition();
 
-    // ===== KINEMATIC STATE =====
+    /** Kinematic state. */
 
     /**
      * @brief Apply inverse kinematics to reach a target position and update joint angles & tip position.
@@ -155,7 +191,44 @@ class Leg {
      */
     Eigen::Matrix3d getJacobian() const;
 
-    // ===== GAIT AND CONTACT STATE =====
+    /**
+     * @brief Calculate tip force from joint efforts using Jacobian transpose (OpenSHC equivalent).
+     */
+    void calculateTipForce();
+
+    /**
+     * @brief Get calculated tip force (Cartesian) from joint effort estimation.
+     * @return Calculated tip force vector
+     */
+    Eigen::Vector3d getCalculatedTipForce() const { return tip_force_calculated_; }
+
+    /** Leg state (OpenSHC equivalent). */
+
+    /**
+     * @brief Get current leg state (walking, manual, transitioning).
+     * @return Current LegState
+     */
+    LegState getLegState() const { return leg_state_; }
+
+    /**
+     * @brief Set current leg state.
+     * @param state New LegState
+     */
+    void setLegState(LegState state) { leg_state_ = state; }
+
+    /**
+     * @brief Get swing progress for this leg (0.0 to 1.0 during swing, -1.0 if not swinging).
+     * @return Swing progress value
+     */
+    double getSwingProgress() const { return swing_progress_; }
+
+    /**
+     * @brief Set swing progress value.
+     * @param progress Swing progress (0.0 to 1.0, or -1.0 if not swinging)
+     */
+    void setSwingProgress(double progress) { swing_progress_ = progress; }
+
+    /** Gait and contact state. */
 
     /**
      * @brief Get current step phase.
@@ -205,7 +278,7 @@ class Leg {
      */
     void setContactForce(double force) { contact_force_ = force; }
 
-    // ===== OPENSHC-STYLE DESIRED POSITION MANAGEMENT =====
+    /** OpenSHC-style desired position management. */
 
     /**
      * @brief Set desired tip position for OpenSHC-style batch IK processing
@@ -219,7 +292,7 @@ class Leg {
      */
     Point3D getDesiredTipPosition() const { return desired_tip_position_; }
 
-    // ===== FSR CONTACT HISTORY =====
+    /** FSR contact history. */
 
     /**
      * @brief Update FSR contact history with new reading.
@@ -260,19 +333,19 @@ class Leg {
      */
     void resetFSRHistory();
 
-    // ===== GAIT PHASE OFFSET =====
+    /** Gait phase offset. */
 
     /**
      * @brief Set the phase offset for this leg in the gait cycle.
-     * @param offset Phase offset (0.0 to 1.0)
+     * @param offset Phase offset in iterations (0 to period-1).
      */
-    void setPhaseOffset(double offset);
+    void setPhaseOffset(int offset);
 
     /**
      * @brief Get the phase offset for this leg.
-     * @return Phase offset (0.0 to 1.0)
+     * @return Phase offset in iterations (0 to period-1).
      */
-    double getPhaseOffset() const { return leg_phase_offset_; }
+    int getPhaseOffset() const { return leg_phase_offset_; }
 
     /**
      * @brief Calculate the current phase for this leg given the global gait phase.
@@ -297,7 +370,7 @@ class Leg {
      */
     bool shouldBeInSwing(double global_gait_phase, double stance_duration) const;
 
-    // ===== INITIALIZATION =====
+    /** Initialization. */
 
     /**
      * @brief Initialize leg with default stance position.
@@ -310,7 +383,22 @@ class Leg {
      */
     void reset();
 
-    // ===== UTILITY FUNCTIONS =====
+    /**
+     * @brief Update default configuration from current achieved leg state.
+     *
+     * OpenSHC equivalent of Leg::updateDefaultConfiguration(): captures the
+     * current joint configuration and current tip position as the new default
+     * reference used by reset and stance-related workflows.
+     */
+    void updateDefaultConfiguration();
+
+    /**
+     * @brief Get default tip position (stance position).
+     * @return Default tip position in world coordinates
+     */
+    Point3D getDefaultTipPosition() const { return default_tip_position_; }
+
+    /** Utility functions. */
 
     /**
      * @brief Calculate distance from current tip to target.
@@ -332,38 +420,113 @@ class Leg {
      */
     bool isInDefaultStance(double tolerance = 5.0) const;
 
+    /** Admittance controller state (OpenSHC 1:1 per-leg parity). */
+
+    /**
+     * @brief Get admittance position delta applied to tip.
+     * @return Admittance delta vector (mm)
+     */
+    Eigen::Vector3d getAdmittanceDelta() const { return admittance_delta_; }
+
+    /**
+     * @brief Set admittance delta projected onto the tip axis (OpenSHC equivalent).
+     *
+     * OpenSHC projects compliance delta onto the tip X-axis. In HexaMotion 3DOF
+     * we approximate that axis with the current base-to-tip direction.
+     * @param delta Admittance compliance delta vector
+     */
+    void setAdmittanceDelta(const Eigen::Vector3d &delta) {
+        Eigen::Vector3d tip_axis = getLegDirection();
+        if (tip_axis.norm() <= 1e-9) {
+            admittance_delta_ = Eigen::Vector3d::Zero();
+            return;
+        }
+        admittance_delta_ = delta.dot(tip_axis) * tip_axis;
+    }
+
+    /**
+     * @brief Get virtual stiffness for this leg (dynamically scaled).
+     * @return Current virtual stiffness
+     */
+    double getVirtualStiffness() const { return virtual_stiffness_; }
+
+    /**
+     * @brief Set virtual stiffness for this leg.
+     * @param stiffness New stiffness value
+     */
+    void setVirtualStiffness(double stiffness) { virtual_stiffness_ = stiffness; }
+
+    /**
+     * @brief Get pointer to persistent ODE state for axis.
+     *
+     * Each axis has a 2-element state: [position, velocity].
+     * OpenSHC equivalent: Leg::getAdmittanceState().
+     * @param axis Axis index (0=X, 1=Y, 2=Z)
+     * @return Pointer to the 2-element state array for in-place integration
+     */
+    double *getAdmittanceState(int axis) {
+        if (axis >= 0 && axis < 3)
+            return admittance_state_[axis];
+        return admittance_state_[0];
+    }
+
+    /**
+     * @brief Reset admittance ODE state to zero for all axes.
+     */
+    void resetAdmittanceState() {
+        for (int i = 0; i < 3; ++i) {
+            admittance_state_[i][0] = 0.0;
+            admittance_state_[i][1] = 0.0;
+        }
+        admittance_delta_ = Eigen::Vector3d::Zero();
+    }
+
   private:
-    // ===== ROBOT MODEL REFERENCE =====
-    const RobotModel &model_; //< Reference to robot model for all calculations
+    /** Robot model reference. */
+    const RobotModel &model_; /**< Reference to robot model for all calculations. */
 
-    // ===== IDENTIFICATION =====
-    int leg_id_;      //< Leg identification number (0-5)
-    String leg_name_; //< Leg name string
+    /** Identification. */
+    int leg_id_;      /**< Leg identification number (0-5). */
+    String leg_name_; /**< Leg name string. */
 
-    // ===== JOINT STATE =====
-    JointAngles joint_angles_; //< Current joint angles (coxa, femur, tibia)
-    Point3D tip_position_;     //< Current tip position in world coordinates
-    Point3D base_position_;    //< Leg base position in world coordinates
+    /** Joint state. */
+    JointAngles joint_angles_;           /**< Current joint angles (coxa, femur, tibia). */
+    JointAngles desired_joint_velocity_; /**< Desired joint velocities (driver units or rad/s). */
+    JointAngles current_joint_velocity_; /**< Current joint velocities (rad/s). */
+    JointAngles current_joint_effort_;   /**< Current joint efforts/torques (driver units). */
+    bool has_effort_data_ = false;       /**< True when current_joint_effort_ is populated. */
+    Point3D tip_position_;               /**< Current tip position in world coordinates. */
+    Point3D base_position_;              /**< Leg base position in world coordinates. */
 
-    // ===== GAIT STATE =====
-    StepPhase step_phase_; //< Current step phase
-    double gait_phase_;    //< Gait phase (0.0 to 1.0)
-    bool in_contact_;      //< Contact state with ground
-    double contact_force_; //< Contact force reading
+    /** Leg state. */
+    LegState leg_state_;    /**< Current leg state (walking, manual, transitioning). */
+    double swing_progress_; /**< Swing progress (0.0-1.0 during swing, -1.0 otherwise). */
 
-    // ===== FSR CONTACT HISTORY =====
-    double fsr_contact_history_[3]; //< Circular buffer for FSR contact history (3 samples)
-    int fsr_history_index_;         //< Current index in the circular buffer
+    /** Gait state. */
+    StepPhase step_phase_;                 /**< Current step phase. */
+    double gait_phase_;                    /**< Gait phase (0.0 to 1.0). */
+    bool in_contact_;                      /**< Contact state with ground. */
+    double contact_force_;                 /**< Contact force reading. */
+    Eigen::Vector3d tip_force_calculated_; /**< Estimated tip force from joint effort. */
 
-    // ===== GAIT PHASE OFFSET =====
-    double leg_phase_offset_; //< Phase offset for this leg in gait cycle (0.0 to 1.0)
+    /** FSR contact history. */
+    double fsr_contact_history_[3]; /**< Circular buffer for FSR contact history (3 samples). */
+    int fsr_history_index_;         /**< Current index in the circular buffer. */
 
-    // ===== OPENSHC-STYLE DESIRED POSITION =====
-    Point3D desired_tip_position_; //< Desired tip position from Bézier trajectory (OpenSHC-style)
+    /** Gait phase offset. */
+    int leg_phase_offset_; /**< Phase offset for this leg in gait cycle (iterations, 0 to period-1). */
 
-    // ===== DEFAULT CONFIGURATION =====
-    JointAngles default_angles_;   //< Default joint angles
-    Point3D default_tip_position_; //< Default tip position
+    /** OpenSHC-style desired position. */
+    Point3D desired_tip_position_; /**< Desired tip position from Bezier trajectory (OpenSHC-style). */
+
+    /** Default configuration. */
+    JointAngles default_angles_;   /**< Default joint angles. */
+    Point3D default_tip_position_; /**< Default tip position. */
+
+    /** Admittance controller state (OpenSHC 1:1 per-leg parity). */
+    Eigen::Vector3d admittance_delta_ = Eigen::Vector3d::Zero(); /**< Position offset from admittance compliance (mm). */
+    double virtual_stiffness_ = 12.0;                            /**< Per-leg virtual stiffness (dynamically scaled). */
+    double admittance_state_[3][2] = {{0}};                      /**< Persistent ODE state per axis [X/Y/Z][position, velocity]. */
 };
 
-#endif // LEG_H
+#endif /**< LEG_H */

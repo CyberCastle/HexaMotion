@@ -4,8 +4,9 @@
 #include "gait_config.h" // For StepCycle definition
 #include "leg.h"
 #include "robot_model.h"
-#include "velocity_limits.h"
 #include "workspace_analyzer.h"
+
+class BodyPoseController;
 
 enum StepState {
     STEP_SWING,        //< The leg step cycle is in 'swing' state, the forward 'in air' progression of the step cycle
@@ -13,16 +14,6 @@ enum StepState {
     STEP_FORCE_STANCE, //< State used to force a 'stance' state in non-standard instances
     STEP_FORCE_STOP,   //< State used to force the step cycle to stop iterating
     STEP_STATE_COUNT,  //< Misc enum defining number of Step States
-};
-
-/**
- * @brief External target for leg positioning (OpenSHC equivalent)
- */
-struct LegStepperExternalTarget {
-    Point3D position;       //< Target position
-    double swing_clearance; //< Swing clearance height
-    std::string frame_id;   //< Reference frame ID
-    bool defined = false;   //< Whether target is defined
 };
 
 /**
@@ -53,15 +44,19 @@ class LegStepper {
 
     // Accessors
     int getLegIndex() const { return leg_index_; }
-    Point3D getCurrentTipPose() const { return current_tip_pose_; }
+    Point3D getCurrentTipPose() const { return current_tip_pose_pose_.position; }
+    Pose getCurrentTipPoseState() const { return current_tip_pose_pose_; }
     Point3D getCurrentTipVelocity() const { return current_tip_velocity_; }
     JointAngles getJointAngles() const { return leg_.getJointAngles(); }
-    Point3D getDefaultTipPose() const { return default_tip_pose_; }
-    Point3D getIdentityTipPose() const { return identity_tip_pose_; }
-    Point3D getTargetTipPose() const { return target_tip_pose_; }
+    Point3D getDefaultTipPose() const { return default_tip_pose_pose_.position; }
+    Pose getDefaultTipPoseState() const { return default_tip_pose_pose_; }
+    Point3D getIdentityTipPose() const { return identity_tip_pose_pose_.position; }
+    Pose getIdentityTipPoseState() const { return identity_tip_pose_pose_; }
+    Point3D getTargetTipPose() const { return target_tip_pose_pose_.position; }
+    Pose getTargetTipPoseState() const { return target_tip_pose_pose_; }
     StepState getStepState() const { return step_state_; }
     int getPhase() const { return phase_; }
-    double getPhaseOffset() const { return leg_.getPhaseOffset(); }
+    int getPhaseOffset() const { return leg_.getPhaseOffset(); }
     Point3D getStrideVector() const { return stride_vector_; }
     double getStepProgress() const { return step_progress_; }
 
@@ -73,6 +68,11 @@ class LegStepper {
     double getDriftEMANorm() const { return drift_ema_norm_; }
     double getPlanarDriftNorm() const { return planar_drift_norm_; }
     double getVerticalDrift() const { return vertical_drift_; }
+
+    // Phase boundary pose accessors - only available in testing builds
+    Point3D getSwingOriginTipPosition() const { return swing_origin_tip_position_; }
+    Point3D getStanceOriginTipPosition() const { return stance_origin_tip_position_; }
+    Point3D getFrozenTargetTipPose() const { return frozen_target_tip_pose_; }
 #endif
 
 #ifdef COXA_STRIDE_TESTING_ENABLED
@@ -123,17 +123,38 @@ class LegStepper {
         current_tip_pose_ = pose;
         leg_.setCurrentTipPositionGlobal(pose);
     }
-    void setDefaultTipPose(const Point3D &pose) { default_tip_pose_ = pose; }
-    void setTargetTipPose(const Point3D &pose) { target_tip_pose_ = pose; }
+    void setCurrentTipPose(const Pose &pose) {
+        current_tip_pose_pose_ = pose;
+        leg_.setCurrentTipPositionGlobal(pose.position);
+    }
+    void setDefaultTipPose(const Point3D &pose) {
+        default_tip_pose_ = pose;
+    }
+    void setDefaultTipPose(const Pose &pose) {
+        default_tip_pose_pose_ = pose;
+    }
+    void setTargetTipPose(const Point3D &pose) {
+        target_tip_pose_ = pose;
+    }
+    void setTargetTipPose(const Pose &pose) {
+        target_tip_pose_pose_ = pose;
+    }
     void setStepState(StepState state) { step_state_ = state; }
     void setPhase(int phase) { phase_ = phase; }
+    void setTouchdownDetection(bool enabled) { touchdown_detection_ = enabled; }
+    void setStepPlane(const Point3D &position, const Point3D &normal, bool valid) {
+        step_plane_position_ = position;
+        step_plane_normal_ = normal;
+        step_plane_valid_ = valid;
+    }
     void setStepProgress(double progress) { step_progress_ = progress; }
-    void setPhaseOffset(double offset) { leg_.setPhaseOffset(offset); }
+    void setPhaseOffset(int offset) { leg_.setPhaseOffset(offset); }
     void setSwingOriginTipVelocity(const Point3D &velocity) { swing_origin_tip_velocity_ = velocity; }
     void setCompletedFirstStep(bool completed) { completed_first_step_ = completed; }
     void setAtCorrectPhase(bool at_correct) { at_correct_phase_ = at_correct; }
     void setWalkPlaneNormal(const Point3D &walk_plane_normal) { walk_plane_normal_ = walk_plane_normal; }
     Point3D getWalkPlaneNormal() const { return walk_plane_normal_; }
+    void setBodyPoseController(BodyPoseController *controller) { body_pose_controller_ = controller; }
 
     // OpenSHC-style StepCycle interface
     void setStepCycle(const StepCycle &step_cycle) { step_cycle_ = step_cycle; }
@@ -144,6 +165,8 @@ class LegStepper {
     double getSwingWidth() const { return swing_width_; }
     void setStepClearanceHeight(double step_clearance_height) { step_clearance_height_ = step_clearance_height; }
     double getStepClearanceHeight() const { return step_clearance_height_; }
+    void setStepDepth(double step_depth) { step_depth_ = step_depth; }
+    double getStepDepth() const { return step_depth_; }
     // Stance span modifier (OpenSHC: stance_span_modifier) applied to default tip position lateral spread
     void setStanceSpanModifier(double m) { stance_span_modifier_ = m; }
     double getStanceSpanModifier() const { return stance_span_modifier_; }
@@ -160,6 +183,10 @@ class LegStepper {
     // Update step state from current phase (STANCE/SWING determination) – mirrors OpenSHC style.
     void updateStepStateFromPhase();
 
+    // Iterate phase and update step state (OpenSHC LegStepper::iteratePhase exact equivalent)
+    // Increments phase by 1 (wrapping at period) then updates step state atomically
+    void iteratePhase();
+
     // Freeze stride & target (OpenSHC philosophical alignment) called on state transitions
     void beginSwingPhase();
     void beginStancePhase();
@@ -171,9 +198,6 @@ class LegStepper {
 
     Point3D calculateSafeStride(const Point3D &desired_stride) const;
 
-    // VelocityLimits integration for enhanced safety
-    void setVelocityLimits(const VelocityLimits *velocity_limits) { velocity_limits_ = velocity_limits; }
-
     // Comprehensive safety validation (combines all 4 steps)
     bool validateCurrentTrajectory() const;
 
@@ -182,6 +206,7 @@ class LegStepper {
     void testGeneratePrimarySwingControlNodes() { generatePrimarySwingControlNodes(); }
     void testGenerateSecondarySwingControlNodes(bool ground_contact = false) { generateSecondarySwingControlNodes(ground_contact); }
     void testGenerateStanceControlNodes(double stride_scaler = 1.0) { generateStanceControlNodes(stride_scaler); }
+    void testForceNormalTouchdown() { forceNormalTouchdown(); }
 #endif
 
   private:
@@ -193,14 +218,15 @@ class LegStepper {
     void generateSecondarySwingControlNodes(bool ground_contact = false);
     void generateStanceControlNodes(double stride_scaler = 1.0);
 
+    /** @brief OpenSHC: Rewrites swing junction nodes so touchdown approach aligns with stance velocity. */
+    void forceNormalTouchdown();
+
     // Control node validation methods (Step 4 implementation)
     void validateAndFixControlNodes(Point3D nodes[5]) const;
 
     // Helpers for leg-frame projections and rectilinear detection used by stance drift mitigation.
     bool isRectilinearCommand() const;
-    double computeForwardComponent(const Point3D &vec) const;
     double computeLateralComponent(const Point3D &vec) const;
-    Point3D removeLateralComponent(const Point3D &vec) const;
 
     // OpenSHC-style stride scaler calculation
     double calculateStanceStrideScaler();
@@ -218,14 +244,20 @@ class LegStepper {
     RobotModel &robot_model_;
     // Cached immutable reference to RobotModel parameters to avoid repeated lookups
     const Parameters &params_;
-    Point3D identity_tip_pose_;
-    Point3D default_tip_pose_;
+    // Pose-centric tip state (OpenSHC parity-oriented): position + orientation.
+    Pose identity_tip_pose_pose_;
+    Pose default_tip_pose_pose_;
+    Pose target_tip_pose_pose_;
+    Pose current_tip_pose_pose_;
+
+    // Legacy Point3D identifiers retained as references (aliases) to Pose.position for internal compatibility.
+    Point3D &identity_tip_pose_;
+    Point3D &default_tip_pose_;
+    Point3D &target_tip_pose_;
+    Point3D &current_tip_pose_; //< Current tip position alias to current_tip_pose_pose_.position
     Point3D origin_tip_pose_;
-    Point3D target_tip_pose_;
-    Point3D current_tip_pose_; //< Current tip pose calculated by stepper
-    double base_angle_rad_;    //< DH base orientation for this leg (radians)
-    Point3D forward_unit_;     //< Unit vector pointing along the leg's forward axis in world frame
-    Point3D lateral_unit_;     //< Unit vector orthogonal to forward axis within the walking plane
+    double base_angle_rad_; //< DH base orientation for this leg (radians)
+    Point3D lateral_unit_;  //< Unit vector orthogonal to forward axis within the walking plane
 
     // Walking state
     Point3D desired_linear_velocity_;
@@ -249,6 +281,7 @@ class LegStepper {
     int phase_;
     double step_progress_;
     StepState step_state_;
+    StepState previous_step_state_;
 
     // OpenSHC timing parameters - use StepCycle instead of individual variables
     StepCycle step_cycle_; // Complete step cycle timing (OpenSHC exact)
@@ -261,13 +294,21 @@ class LegStepper {
     // Gait configuration parameters (not part of StepCycle)
     double swing_width_;                // Lateral shift at mid-swing (OpenSHC mid_lateral_shift)
     double step_clearance_height_;      // Step clearance height (equivalent to OpenSHC walker_->getStepClearance())
+    double step_depth_;                 // Step depth in mm for reactive terrain probing
     double stance_span_modifier_ = 0.0; // OpenSHC stance_span_modifier (range typically [-1.0, 1.0])
+
+    BodyPoseController *body_pose_controller_;
 
     // Swing state management (OpenSHC style)
     bool swing_initialized_;
     bool nodes_generated_;
     int last_swing_iteration_;
     int last_swing_start_iteration_;
+
+    bool touchdown_detection_ = false;
+    bool step_plane_valid_ = false;
+    Point3D step_plane_position_;
+    Point3D step_plane_normal_ = Point3D(0, 0, 1);
 
     // Additional swing trajectory variable (was missing)
     Point3D swing_clearance_; // Swing clearance vector (OpenSHC)
@@ -286,9 +327,6 @@ class LegStepper {
     Point3D swing_1_nodes_[5];
     Point3D swing_2_nodes_[5];
     Point3D stance_nodes_[5];
-
-    // Safety and validation systems
-    const VelocityLimits *velocity_limits_; // Optional velocity limits for enhanced validation
 
     // Variables for velocity tracking
     Point3D previous_tip_pose_;

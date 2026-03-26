@@ -1,365 +1,201 @@
 #include "admittance_controller.h"
-#include "hexamotion_constants.h"
-#include "workspace_analyzer.h" // Use unified analyzer for workspace utilities
-
-/**
- * @file admittance_controller.cpp
- * @brief Implements the admittance-based compliance controller.
- */
-
-#include "math_utils.h"
+#include "leg.h"
+#include "leg_stepper.h"
+#include "walk_controller.h"
 #include <algorithm>
 #include <cmath>
 
-namespace {
-// File-scope empty state to avoid static local initialization
-static const AdmittanceController::LegAdmittanceState EMPTY_LEG_STATE;
-} // namespace
+/**
+ * @file admittance_controller.cpp
+ * @brief OpenSHC 1:1 admittance controller implementation.
+ *
+ * Each leg is modelled as a mass-spring-damper system:
+ *   m*x'' + c*x' + k*x = -F
+ * where c = damping_ratio * 2 * sqrt(m * k).
+ *
+ * Integration uses RK4 with 30 sub-steps per integrator_step_time (default 0.5 s).
+ * Output per axis = -state[0] clamped ±0.2, with optional deadbanding.
+ */
 
-AdmittanceController::AdmittanceController(RobotModel &model, IIMUInterface *imu, IFSRInterface *fsr,
-                                           ComputeConfig config)
-    : model_(model), imu_(imu), fsr_(fsr), config_(config),
-      dynamic_stiffness_enabled_(false), swing_stiffness_scaler_(WORKSPACE_SCALING_FACTOR),
-      load_stiffness_scaler_(1.5f), step_clearance_(40.0f),
-      current_time_(0.0) {
+/** Deadband threshold (OpenSHC default: 0.0 — effectively disabled). */
+static constexpr double ADMITTANCE_DEADBAND = 0.0;
+/** Number of RK4 sub-steps per integration call (OpenSHC: step_time / 30). */
+static constexpr int INTEGRATION_SUBSTEPS = 30;
+/** Output clamp magnitude (OpenSHC: clamped(-state[0], -0.2, 0.2)). */
+static constexpr double ADMITTANCE_CLAMP = 0.2;
 
-    // Initialize workspace analyzer for position calculations
-    ValidationConfig validator_config;
-    validator_config.enable_collision_checking = false;   // Disable for performance in admittance control
-    validator_config.enable_joint_limit_checking = false; // Not needed for stiffness calculations
-    workspace_analyzer_ = std::make_unique<WorkspaceAnalyzer>(model_, ComputeConfig::low(), validator_config);
-
-    delta_time_ = config_.getDeltaTime();
-    selectIntegrationMethod();
-
-    // Initialize state vectors and external forces
-    for (int i = 0; i < NUM_LEGS; i++) {
-        leg_dynamics_state_[i] = math_utils::StateVector<Point3D>(Point3D(0, 0, 0), Point3D(0, 0, 0));
-        external_forces_[i] = Point3D(0, 0, 0);
-    }
+AdmittanceController::AdmittanceController(const Parameters &params)
+    : params_(params) {
 }
 
-AdmittanceController::~AdmittanceController() = default;
+void AdmittanceController::updateAdmittance(Leg legs[NUM_LEGS], IFSRInterface *fsr) {
+    const auto &ac = params_.admittance;
 
-void AdmittanceController::initialize() {
-    initializeDefaultParameters();
-    resetAllDynamics();
-}
+    for (int leg_idx = 0; leg_idx < NUM_LEGS; ++leg_idx) {
+        Leg &leg = legs[leg_idx];
+        Eigen::Vector3d admittance_delta = Eigen::Vector3d::Zero();
 
-void AdmittanceController::setLegAdmittance(int leg_index, double mass, double damping, double stiffness) {
-    if (leg_index >= 0 && leg_index < NUM_LEGS) {
-        leg_states_[leg_index].params.virtual_mass = mass;
-        leg_states_[leg_index].params.virtual_damping = damping;
-        leg_states_[leg_index].params.virtual_stiffness = stiffness;
-    }
-}
-
-Point3D AdmittanceController::applyForceAndIntegrate(int leg_index, const Point3D &applied_force) {
-    if (leg_index < 0 || leg_index >= NUM_LEGS)
-        return Point3D(0, 0, 0);
-
-    LegAdmittanceState &state = leg_states_[leg_index];
-    state.params.applied_force = applied_force;
-
-    // Store external force for derivative calculation
-    external_forces_[leg_index] = applied_force;
-
-    // Always use derivative-based integration with math_utils functions
-    Point3D position_delta = integrateDerivatives(leg_index);
-
-    state.params.position_delta = position_delta;
-    return position_delta;
-}
-
-void AdmittanceController::updateAllLegs(const Point3D forces[NUM_LEGS], Point3D position_deltas[NUM_LEGS]) {
-    for (int i = 0; i < NUM_LEGS; i++) {
-        position_deltas[i] = applyForceAndIntegrate(i, forces[i]);
-    }
-
-    // Update time for integration
-    current_time_ += delta_time_;
-}
-
-void AdmittanceController::setDynamicStiffness(bool enabled, double swing_scaler, double load_scaler) {
-    dynamic_stiffness_enabled_ = enabled;
-    swing_stiffness_scaler_ = swing_scaler;
-    load_stiffness_scaler_ = load_scaler;
-}
-
-void AdmittanceController::updateStiffness(const StepPhase leg_states[NUM_LEGS],
-                                           const Point3D leg_positions[NUM_LEGS],
-                                           double step_clearance) {
-    if (!dynamic_stiffness_enabled_)
-        return;
-
-    step_clearance_ = step_clearance;
-
-    // Reset all stiffness to default
-    for (int i = 0; i < NUM_LEGS; i++) {
-        leg_states_[i].stiffness_scale = 1.0f;
-    }
-
-    // Apply dynamic stiffness based on leg states
-    for (int i = 0; i < NUM_LEGS; i++) {
-        if (leg_states[i] == SWING_PHASE) {
-            // Calculate stiffness scaling for swing leg
-            double scale = calculateStiffnessScale(i, leg_states[i], leg_positions[i]);
-            leg_states_[i].stiffness_scale = scale * swing_stiffness_scaler_;
-
-            // Update adjacent legs with increased stiffness
-            updateAdjacentLegStiffness(i, load_stiffness_scaler_);
+        /** Get tip force: calculated from joint effort, or measured from FSR. */
+        Eigen::Vector3d tip_force;
+        if (ac.use_joint_effort) {
+            tip_force = leg.getCalculatedTipForce();
+        } else {
+            /** Measured tip force from FSR (Z-axis only for single-axis sensors). */
+            if (fsr) {
+                FSRData fsr_data = fsr->readFSR(leg_idx);
+                tip_force = Eigen::Vector3d(0.0, 0.0, fsr_data.pressure);
+            } else {
+                tip_force = Eigen::Vector3d::Zero();
+            }
         }
-    }
 
-    // Apply stiffness scaling to virtual stiffness
-    for (int i = 0; i < NUM_LEGS; i++) {
-        // Get base stiffness and apply scaling
-        double base_stiffness = leg_states_[i].params.virtual_stiffness / leg_states_[i].stiffness_scale;
-        leg_states_[i].params.virtual_stiffness = base_stiffness * leg_states_[i].stiffness_scale;
-    }
-}
+        /** Scale by force_gain (OpenSHC: tip_force *= params_.force_gain.current_value). */
+        tip_force *= ac.force_gain;
 
-const AdmittanceController::LegAdmittanceState &AdmittanceController::getLegState(int leg_index) const {
-    if (leg_index >= 0 && leg_index < NUM_LEGS) {
-        return leg_states_[leg_index];
-    }
-    return EMPTY_LEG_STATE;
-}
+        /** Per-axis integration (OpenSHC: for i in 0..2). */
+        for (int axis = 0; axis < 3; ++axis) {
+            /** Positive-clamp per axis (OpenSHC: std::max(tip_force[i], 0.0)). */
+            double force_input = std::max(tip_force[axis], 0.0);
 
-void AdmittanceController::resetLegDynamics(int leg_index) {
-    if (leg_index >= 0 && leg_index < NUM_LEGS) {
-        leg_states_[leg_index].params.velocity = Point3D(0, 0, 0);
-        leg_states_[leg_index].params.acceleration = Point3D(0, 0, 0);
-        leg_states_[leg_index].params.applied_force = Point3D(0, 0, 0);
-        leg_states_[leg_index].params.position_delta = Point3D(0, 0, 0);
-    }
-}
+            double mass = ac.virtual_mass;
+            double stiffness = leg.getVirtualStiffness();
+            /** Derive damping from ratio (OpenSHC: damping * 2 * sqrt(mass * stiffness)). */
+            double virtual_damping = ac.virtual_damping_ratio * 2.0 * std::sqrt(mass * stiffness);
+            double step_time = ac.integrator_step_time;
+            double sub_dt = step_time / INTEGRATION_SUBSTEPS;
 
-void AdmittanceController::resetAllDynamics() {
-    for (int i = 0; i < NUM_LEGS; i++) {
-        resetLegDynamics(i);
-    }
-}
+            /** Persistent per-axis ODE state [position, velocity]. */
+            double *state = leg.getAdmittanceState(axis);
 
-void AdmittanceController::setPrecisionConfig(const ComputeConfig &config) {
-    config_ = config;
-    delta_time_ = config_.getDeltaTime();
-    selectIntegrationMethod();
-}
+            /** RK4 integration: 30 sub-steps over step_time. */
+            for (int s = 0; s < INTEGRATION_SUBSTEPS; ++s) {
+                rk4Step(state, force_input, mass, virtual_damping, stiffness, sub_dt);
+            }
 
-void AdmittanceController::selectIntegrationMethod() {
-    switch (config_.precision) {
-    case PRECISION_LOW:
-        integration_method_ = EULER_METHOD;
-        break;
-    case PRECISION_MEDIUM:
-        integration_method_ = RUNGE_KUTTA_2;
-        break;
-    case PRECISION_HIGH:
-        integration_method_ = RUNGE_KUTTA_4;
-        break;
+            /** Output: negate position, clamp ±0.2 (OpenSHC: clamped(-state[0], -0.2, 0.2)). */
+            double delta = std::max(-ADMITTANCE_CLAMP, std::min(-state[0], ADMITTANCE_CLAMP));
+
+            /** Deadbanding (OpenSHC: ADMITTANCE_DEADBAND = 0.0, effectively disabled). */
+            if (ADMITTANCE_DEADBAND > 0.0 && std::abs(delta) > ADMITTANCE_DEADBAND) {
+                double sign = (delta > 0.0) ? 1.0 : -1.0;
+                admittance_delta[axis] = sign * (std::abs(delta) - ADMITTANCE_DEADBAND) /
+                                         (1.0 - ADMITTANCE_DEADBAND);
+            } else if (ADMITTANCE_DEADBAND <= 0.0) {
+                /** Deadband disabled; pass through directly. */
+                admittance_delta[axis] = delta;
+            }
+            /** else: within deadband, stays 0. */
+        }
+
+        /**
+         * OpenSHC projects admittance_delta onto the tip X-axis via:
+         *   admittance_delta_ = getProjection(delta, tip_rotation * UnitX)
+         * For 3DOF legs without explicit tip rotation tracking, the delta is
+         * stored directly (HexaMotion architectural simplification; functional
+         * outcome is equivalent for planar compliance).
+         */
+        leg.setAdmittanceDelta(admittance_delta);
     }
 }
 
-void AdmittanceController::initializeDefaultParameters() {
-    for (int i = 0; i < NUM_LEGS; i++) {
-        leg_states_[i].params.virtual_mass = WORKSPACE_SCALING_FACTOR;       // 500g virtual mass
-        leg_states_[i].params.virtual_damping = ANGULAR_ACCELERATION_FACTOR; // Critical damping
-        leg_states_[i].params.virtual_stiffness = 100.0f;                    // Medium stiffness
-        leg_states_[i].active = true;
-        leg_states_[i].stiffness_scale = DEFAULT_ANGULAR_SCALING;
+void AdmittanceController::updateStiffness(Leg legs[NUM_LEGS], WalkController *walker) {
+    const auto &ac = params_.admittance;
 
-        // Initialize state vectors for derivative-based integration
-        leg_dynamics_state_[i] = math_utils::StateVector<Point3D>(Point3D(0, 0, 0), Point3D(0, 0, 0));
-        external_forces_[i] = Point3D(0, 0, 0);
-    }
-    current_time_ = 0.0;
-}
-
-Point3D AdmittanceController::calculateAcceleration(const AdmittanceParams &params, const Point3D &position_error) {
-    // Admittance equation: M*a + D*v + K*x = F
-    // Solving for acceleration: a = (F - D*v - K*x) / M
-
-    Point3D spring_force = position_error * (-params.virtual_stiffness);
-    Point3D damping_force = params.velocity * (-params.virtual_damping);
-    Point3D total_force = params.applied_force + spring_force + damping_force;
-
-    return total_force * (DEFAULT_ANGULAR_SCALING / params.virtual_mass);
-}
-
-double AdmittanceController::calculateStiffnessScale(int leg_index, StepPhase leg_state,
-                                                     const Point3D &leg_position) {
-    if (leg_state != SWING_PHASE)
-        return 1.0f;
-
-    // Use WorkspaceAnalyzer for default position calculation
-    if (!workspace_analyzer_) {
-        return 1.0f; // Safety fallback
-    }
-
-    // Get workspace bounds for more accurate default position
-    auto bounds = workspace_analyzer_->getWorkspaceBounds(leg_index);
-    Point3D default_pos = bounds.center_position; // Use workspace center as reference
-
-    double z_diff = abs(leg_position.z - default_pos.z);
-
-    // Scale based on step clearance using workspace height range
-    double workspace_height_range = bounds.max_height - bounds.min_height;
-    double normalized_clearance = std::max(step_clearance_, workspace_height_range * 0.1f); // Min 10% of workspace
-
-    double step_reference = z_diff / normalized_clearance;
-    step_reference = math_utils::clamp<double>(step_reference, 0.0, 1.0);
-
-    return step_reference;
-}
-
-void AdmittanceController::updateAdjacentLegStiffness(int swing_leg_index, double load_scaling) {
-    int adjacent1 = (swing_leg_index + 1) % NUM_LEGS;
-    int adjacent2 = (swing_leg_index + NUM_LEGS - 1) % NUM_LEGS;
-
-    // Add load stiffness to adjacent legs (additive as per OpenSHC)
-    leg_states_[adjacent1].stiffness_scale += (load_scaling - 1.0f);
-    leg_states_[adjacent2].stiffness_scale += (load_scaling - 1.0f);
-}
-
-// Legacy compatibility methods
-Point3D AdmittanceController::orientationError(const Point3D &target) {
-    if (!imu_)
-        return Point3D(0, 0, 0);
-
-    IMUData imu_data = imu_->readIMU();
-    Point3D current(imu_data.roll, imu_data.pitch, imu_data.yaw);
-    return target - current;
-}
-
-bool AdmittanceController::maintainOrientation(const Point3D &target, Point3D &current, double time_delta) {
-    if (!imu_)
-        return false;
-
-    Point3D err = orientationError(target);
-    current = current + err * (time_delta * WORKSPACE_SCALING_FACTOR);
-    return true;
-}
-
-bool AdmittanceController::checkStability(const Point3D leg_pos[NUM_LEGS], const StepPhase leg_states[NUM_LEGS]) {
-    if (!fsr_)
-        return true;
-
-    int contacts = 0;
+    /** Reset all legs to default virtual stiffness each cycle (OpenSHC pattern). */
     for (int i = 0; i < NUM_LEGS; ++i) {
-        if (leg_states[i] == STANCE_PHASE) {
-            FSRData fsr_data = fsr_->readFSR(i);
-            if (fsr_data.in_contact)
-                contacts++;
+        legs[i].setVirtualStiffness(ac.virtual_stiffness);
+    }
+
+    /** Calculate dynamic virtual stiffness for swing legs. */
+    for (int i = 0; i < NUM_LEGS; ++i) {
+        auto leg_stepper = walker->getLegStepper(i);
+        if (!leg_stepper)
+            continue;
+
+        if (leg_stepper->getStepState() == STEP_SWING) {
+            /** Z difference between current swing position and default position. */
+            double z_diff = leg_stepper->getCurrentTipPose().z - leg_stepper->getDefaultTipPose().z;
+            double step_reference = std::abs(z_diff / walker->getStepClearance());
+
+            int adjacent_1 = ((i - 1) + NUM_LEGS) % NUM_LEGS;
+            int adjacent_2 = (i + 1) % NUM_LEGS;
+
+            double virtual_stiffness = ac.virtual_stiffness;
+            /** Swing leg: stiffness decreases (scaler < 1 => stiffness drops). */
+            double swing_stiffness = virtual_stiffness *
+                                     (step_reference * (ac.swing_stiffness_scaler - 1.0) + 1.0);
+            /** Load stiffness delta for adjacent legs (additive). */
+            double load_stiffness = virtual_stiffness *
+                                    (step_reference * (ac.load_stiffness_scaler - 1.0));
+
+            double current_s1 = legs[adjacent_1].getVirtualStiffness();
+            double current_s2 = legs[adjacent_2].getVirtualStiffness();
+
+            legs[i].setVirtualStiffness(swing_stiffness);
+            legs[adjacent_1].setVirtualStiffness(current_s1 + load_stiffness);
+            legs[adjacent_2].setVirtualStiffness(current_s2 + load_stiffness);
         }
     }
-    return contacts >= 3;
 }
 
-Point3D AdmittanceController::integrateDerivatives(int leg_index) {
-    if (leg_index < 0 || leg_index >= NUM_LEGS) {
-        return Point3D(0, 0, 0);
+void AdmittanceController::updateStiffness(Leg legs[NUM_LEGS], int leg_index,
+                                           double scale_reference) {
+    const auto &ac = params_.admittance;
+
+    int adjacent_1 = ((leg_index - 1) + NUM_LEGS) % NUM_LEGS;
+    int adjacent_2 = (leg_index + 1) % NUM_LEGS;
+
+    double virtual_stiffness = ac.virtual_stiffness;
+    double swing_stiffness = virtual_stiffness *
+                             (scale_reference * (ac.swing_stiffness_scaler - 1.0) + 1.0);
+    double load_stiffness = virtual_stiffness *
+                            (scale_reference * (ac.load_stiffness_scaler - 1.0) + 1.0);
+
+    legs[leg_index].setVirtualStiffness(swing_stiffness);
+
+    /** Only modify adjacent legs that are not in MANUAL state (OpenSHC check). */
+    if (legs[adjacent_1].getLegState() != LEG_MANUAL) {
+        legs[adjacent_1].setVirtualStiffness(load_stiffness);
     }
-
-    LegAdmittanceState &state = leg_states_[leg_index];
-
-    // For derivative-based integration, we work with position error from equilibrium
-    // In a full implementation, this would get current leg position from locomotion system
-    // For now, we'll use the tracked state position error
-    Point3D position_error = leg_dynamics_state_[leg_index].position;
-
-    // Setup parameters for derivative function
-    AdmittanceDerivativeParams params;
-    params.mass = state.params.virtual_mass;
-    params.damping = state.params.virtual_damping;
-    params.stiffness = state.params.virtual_stiffness * state.stiffness_scale;
-    params.external_force = external_forces_[leg_index];
-    params.equilibrium = state.equilibrium_position;
-
-    // Choose integration method based on precision configuration using math_utils functions
-    math_utils::StateVector<Point3D> new_state;
-
-    switch (config_.precision) {
-    case PRECISION_HIGH:
-        // Use RK4 for maximum accuracy
-        new_state = math_utils::rungeKutta4<Point3D>(
-            admittanceDerivatives,
-            leg_dynamics_state_[leg_index],
-            current_time_,
-            delta_time_,
-            &params);
-        break;
-
-    case PRECISION_MEDIUM:
-        // Use RK2 for balanced performance
-        new_state = math_utils::rungeKutta2<Point3D>(
-            admittanceDerivatives,
-            leg_dynamics_state_[leg_index],
-            current_time_,
-            delta_time_,
-            &params);
-        break;
-
-    case PRECISION_LOW:
-    default:
-        // Use Euler for fastest computation
-        new_state = math_utils::forwardEuler<Point3D>(
-            admittanceDerivatives,
-            leg_dynamics_state_[leg_index],
-            current_time_,
-            delta_time_,
-            &params);
-        break;
+    if (legs[adjacent_2].getLegState() != LEG_MANUAL) {
+        legs[adjacent_2].setVirtualStiffness(load_stiffness);
     }
-
-    // Update state
-    leg_dynamics_state_[leg_index] = new_state;
-
-    // Update legacy params for compatibility
-    state.params.velocity = new_state.velocity;
-
-    // Calculate position delta from velocity
-    Point3D position_delta = new_state.velocity * delta_time_;
-
-    // For validation and comparison, also calculate using direct acceleration method
-    if (config_.precision == PRECISION_HIGH) {
-        // Use calculateAcceleration for validation against derivative method
-        Point3D direct_acceleration = calculateAcceleration(state.params, position_error);
-
-        // The results should be mathematically equivalent
-        // This can be used for debugging or switching integration methods
-        (void)direct_acceleration; // Suppress unused variable warning for now
-    }
-
-    return position_delta;
 }
 
-math_utils::StateVector<Point3D> AdmittanceController::admittanceDerivatives(
-    const math_utils::StateVector<Point3D> &state,
-    double t,
-    void *params) {
+void AdmittanceController::rk4Step(double state[2], double force, double mass,
+                                   double damping, double stiffness, double dt) {
+    /**
+     * ODE (OpenSHC):
+     *   dxdt[0] = x[1]
+     *   dxdt[1] = -force/mass - damping/mass * x[1] - stiffness/mass * x[0]
+     */
+    auto deriv = [force, mass, damping, stiffness](const double s[2], double d[2]) {
+        d[0] = s[1];
+        d[1] = -force / mass - damping / mass * s[1] - stiffness / mass * s[0];
+    };
 
-    // Cast parameters
-    AdmittanceDerivativeParams *admittance_params =
-        static_cast<AdmittanceDerivativeParams *>(params);
+    double k1[2], k2[2], k3[2], k4[2];
+    double tmp[2];
 
-    if (!admittance_params) {
-        return math_utils::StateVector<Point3D>(Point3D(0, 0, 0), Point3D(0, 0, 0));
-    }
+    /** k1 = f(state). */
+    deriv(state, k1);
 
-    // Extract state variables
-    Point3D position = state.position; // x = displacement from equilibrium
-    Point3D velocity = state.velocity; // ẋ = velocity
+    /** k2 = f(state + 0.5*dt*k1). */
+    tmp[0] = state[0] + 0.5 * dt * k1[0];
+    tmp[1] = state[1] + 0.5 * dt * k1[1];
+    deriv(tmp, k2);
 
-    // Admittance differential equation: M*ẍ + B*ẋ + K*x = F_ext
-    // Solving for acceleration: ẍ = (F_ext - B*ẋ - K*x) / M
+    /** k3 = f(state + 0.5*dt*k2). */
+    tmp[0] = state[0] + 0.5 * dt * k2[0];
+    tmp[1] = state[1] + 0.5 * dt * k2[1];
+    deriv(tmp, k3);
 
-    Point3D spring_force = position * (-admittance_params->stiffness);
-    Point3D damping_force = velocity * (-admittance_params->damping);
-    Point3D net_force = admittance_params->external_force + spring_force + damping_force;
+    /** k4 = f(state + dt*k3). */
+    tmp[0] = state[0] + dt * k3[0];
+    tmp[1] = state[1] + dt * k3[1];
+    deriv(tmp, k4);
 
-    Point3D acceleration = net_force * (DEFAULT_ANGULAR_SCALING / admittance_params->mass);
-
-    // Return derivatives: [dx/dt, dv/dt] = [velocity, acceleration]
-    return math_utils::StateVector<Point3D>(velocity, acceleration);
+    /** Update state: state += dt/6 * (k1 + 2*k2 + 2*k3 + k4). */
+    state[0] += dt / 6.0 * (k1[0] + 2.0 * k2[0] + 2.0 * k3[0] + k4[0]);
+    state[1] += dt / 6.0 * (k1[1] + 2.0 * k2[1] + 2.0 * k3[1] + k4[1]);
 }

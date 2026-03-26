@@ -1,98 +1,95 @@
 # HexaMotion Velocity Control Guide
 
-Este documento describe las diferentes formas de ajustar la velocidad de desplazamiento en HexaMotion, basándose en el análisis del código y la arquitectura del sistema.
+This document describes different ways to adjust locomotion speed in HexaMotion, based on the current architecture and code behavior.
 
-## Resumen Ejecutivo
+## Executive Summary
 
-HexaMotion proporciona múltiples métodos para controlar y ajustar la velocidad de desplazamiento del robot hexápodo:
+HexaMotion provides multiple methods to control and tune hexapod motion speed:
 
-1. **Comandos de velocidad cartesiana directa**
-2. **Parámetros del gait (paso y frecuencia)**
-3. **Velocidad de servos por defecto**
-4. **Límites de velocidad dinámicos**
-5. **Modo de velocidad crucero**
+1. **Direct Cartesian velocity commands**
+2. **Gait parameters (step length and frequency)**
+3. **Default servo speed configuration**
+4. **Dynamic velocity limits**
+5. **Cruise velocity mode**
 
-## 1. Comandos de Velocidad Cartesiana
+## 1. Cartesian Velocity Commands
 
-### Método Principal: setDesiredVelocity
+### Main Method: `setDesiredVelocity`
 
 ```cpp
-// Usando StateController
-Eigen::Vector2f linear_vel(30.0f, 10.0f);  // x=30mm/s, y=10mm/s
-float angular_vel = 15.0f;                  // 15°/s rotation
+// Using StateController
+Eigen::Vector2d linear_vel(30.0, 10.0);  // x=30mm/s, y=10mm/s
+double angular_vel = 15.0;                // 15°/s rotation
 state_controller.setDesiredVelocity(linear_vel, angular_vel);
 ```
 
-### Métodos Directos en LocomotionSystem
+### Direct Methods in `LocomotionSystem`
 
 ```cpp
-// Movimiento hacia adelante
-bool walkForward(float velocity);                    // velocity en mm/s
-bool walkForward(float velocity, float duration);    // con duración
+// Forward movement
+bool walkForward(double velocity);                    // velocity in mm/s
 
-// Movimiento hacia atrás
-bool walkBackward(float velocity);
-bool walkBackward(float velocity, float duration);
+// Backward movement
+bool walkBackward(double velocity);
 
-// Movimiento lateral
-bool walkSideways(float velocity, bool right_direction = true);
-bool walkSideways(float velocity, float duration, bool right_direction = true);
+// Side movement
+bool walkSideways(double velocity, bool right_direction = true);
 
-// Giro en el lugar
-bool turnInPlace(float angular_velocity);           // angular_velocity en °/s
+// In-place turn
+bool turnInPlace(double angular_velocity);          // angular_velocity in °/s
 
-// Control combinado (método más flexible)
-bool planGaitSequence(float vx, float vy, float omega);
+// Combined control (most flexible method)
+bool planGaitSequence(double vx, double vy, double omega);
 ```
 
-### Ejemplo de Uso Básico
+### Basic Usage Example
 
 ```cpp
 void setup() {
-    // Inicialización del sistema...
-    state_controller.requestRobotState(ROBOT_READY);
+    // System initialization...
+    state_controller.requestRobotState(ROBOT_RUNNING);
 }
 
 void loop() {
     if (state_controller.isReadyForOperation()) {
-        // Movimiento directo
-        locomotion_system.walkForward(25.0f);     // 25 mm/s hacia adelante
+        // Direct movement
+        locomotion_system.walkForward(25.0f);     // 25 mm/s forward
         delay(2000);
-        locomotion_system.turnInPlace(30.0f);     // 30°/s giro
+        locomotion_system.turnInPlace(30.0f);     // 30°/s turn
         delay(1000);
     // API update: stopMovement() replaced by stopWalking()
     locomotion_system.stopWalking();
     }
 
-    state_controller.update();
+    state_controller.update(0.02);
     locomotion_system.update();
 }
 ```
 
-## 2. Parámetros del Gait
+## 2. Gait Parameters
 
-### Configuración de Paso (Step Length)
+### Step Length Configuration
 
-NOTA (consistency update): A partir de la unificación de stride planning, `step_length` se basa en el "standing horizontal reach" (alcance horizontal conservador con tibia vertical y proyección del fémur) y no en la suma geométrica completa (coxa+femur+tibia). Esto elimina la sobre‑estimación de zancada y alinea el límite de velocidad con la trayectoria real. Los factores gait\_\*\_length_factor siguen aplicándose sobre este alcance horizontal.
+NOTE (consistency update): After stride-planning unification, `step_length` is based on the standing horizontal reach (a conservative horizontal reach with vertical tibia and femur projection), not on full geometric extension (`coxa + femur + tibia`). This removes stride overestimation and aligns velocity limits with real reachable trajectories. The `gait_*_length_factor` multipliers are still applied over this horizontal reach.
 
-El `step_length` se calcula dinámicamente basándose en varios factores:
+`step_length` is computed dynamically based on several factors:
 
 ```cpp
-// En LocomotionSystem::updateStepParameters()
+// In LocomotionSystem::updateStepParameters()
 switch (current_gait) {
 case TRIPOD_GAIT:
-    // Pasos más largos para velocidad
+    // Longer steps for speed
     step_length = leg_reach * params.gait_factors.tripod_length_factor;
     break;
 case WAVE_GAIT:
-    // Pasos más cortos para estabilidad
+    // Shorter steps for stability
     step_length = leg_reach * params.gait_factors.wave_length_factor;
     break;
 // ...
 }
 ```
 
-### Factores que Afectan step_length
+### Factors Affecting `step_length`
 
 ```cpp
 float LocomotionSystem::getStepLength() const {
@@ -100,13 +97,13 @@ float LocomotionSystem::getStepLength() const {
     float leg_reach = calculateLegReach();
     float max_safe_step = leg_reach * params.gait_factors.max_length_factor;
 
-    // Ajuste por estabilidad
+    // Stability adjustment
     float stability_factor = 1.0f;
     if (stability_index < 0.5f) {
         stability_factor = 0.7f + 0.3f * stability_index;
     }
 
-    // Ajuste por terreno (usando IMU)
+    // Terrain adjustment (using IMU)
     float terrain_factor = 1.0f;
     if (terrain_complexity > threshold) {
         terrain_factor *= adjustment_factor;
@@ -116,15 +113,15 @@ float LocomotionSystem::getStepLength() const {
 }
 ```
 
-### Configuración de Frecuencia
+### Frequency Configuration
 
-La frecuencia del gait se puede ajustar usando parámetros:
+Gait frequency can be adjusted with parameters:
 
 ```cpp
-// En OpenSHC (parámetros dinámicos)
+// In OpenSHC (dynamic parameters)
 params_.step_frequency.current_value = new_frequency;  // Hz
 
-// En HexaMotion equivalente
+// Equivalent in HexaMotion
 gait_config.frequency = 1.5f;                         // 1.5 Hz
 walk_controller.updateVelocityLimits(
     gait_config.frequency,
@@ -133,64 +130,64 @@ walk_controller.updateVelocityLimits(
 );
 ```
 
-## 3. Velocidad de Servos por Defecto
+## 3. Default Servo Speed
 
-### Configuración Global
+### Global Configuration
 
 ```cpp
-// En HexaModel.h - parámetros de configuración
+// In HexaModel.h - configuration parameters
 struct ServoConfig {
-    float default_servo_speed = 100.0f;  // Velocidad por defecto
-    float max_servo_speed = 200.0f;      // Velocidad máxima
+    float default_servo_speed = 100.0f;  // Default speed
+    float max_servo_speed = 200.0f;      // Maximum speed
     // ...
 };
 
-// Usar la nueva interfaz unificada
+// Use the unified interface
 servo_interface->setJointAngleAndSpeed(angle, speed);
 ```
 
-### Relación con Velocidad Cartesiana
+### Relationship with Cartesian Velocity
 
-La velocidad de los servos está relacionada con la velocidad cartesiana a través de la **matriz Jacobiana**:
+Servo speed is related to Cartesian velocity through the **Jacobian matrix**:
 
 ```
 joint_velocities = J^(-1) * cartesian_velocities
 ```
 
-En HexaMotion, esta relación se maneja implícitamente mediante:
+In HexaMotion, this relation is handled implicitly through:
 
--   Cálculo de posiciones target usando cinemática inversa
--   Ajuste del timing del gait y frecuencia de comandos
--   Aplicación de límites de velocidad calculados dinámicamente
+- Inverse-kinematics target position calculations
+- Gait timing and command-frequency adjustments
+- Dynamically computed velocity limits
 
-## 4. Límites de Velocidad Dinámicos
+## 4. Dynamic Velocity Limits
 
-### Sistema VelocityLimits
+### `VelocityLimits` System
 
-HexaMotion implementa un sistema sofisticado de límites de velocidad:
+HexaMotion implements a dynamic velocity limit system:
 
 ```cpp
 class VelocityLimits {
 public:
     struct LimitValues {
-        float linear_x;      // Velocidad lineal en X (mm/s)
-        float linear_y;      // Velocidad lineal en Y (mm/s)
-        float angular_z;     // Velocidad angular en Z (°/s)
+        float linear_x;      // Linear speed in X (mm/s)
+        float linear_y;      // Linear speed in Y (mm/s)
+        float angular_z;     // Angular speed in Z (°/s)
     };
 
     struct WorkspaceConfig {
-        float leg_length;           // Longitud total de la pata
-        float body_radius;          // Radio del cuerpo del robot
-        float safety_margin;        // Margen de seguridad (0-1)
-        float min_ground_clearance; // Altura mínima sobre el suelo
+        float leg_length;           // Total leg length
+        float body_radius;          // Robot body radius
+        float safety_margin;        // Safety margin (0-1)
+        float min_ground_clearance; // Minimum ground clearance
     };
 };
 ```
 
-### Cálculo de Límites
+### Limit Calculation
 
 ```cpp
-// En VelocityLimits::calculateMaxLinearSpeed()
+// In VelocityLimits::calculateMaxLinearSpeed()
 float calculateMaxLinearSpeed(float walkspace_radius,
                               float on_ground_ratio,
                               float frequency) const {
@@ -201,14 +198,14 @@ float calculateMaxLinearSpeed(float walkspace_radius,
     float cycle_time = on_ground_ratio / frequency;
     float max_speed = (walkspace_radius * 2.0f) / cycle_time;
 
-    return std::min(max_speed, 5.0f); // Cap de seguridad: 5 m/s
+    return std::min(max_speed, 5.0f); // Safety cap: 5 m/s
 }
 ```
 
-### Aplicación de Límites
+### Limit Application
 
 ```cpp
-// En WalkController
+// In WalkController
 VelocityLimits::LimitValues WalkController::applyVelocityLimits(
     float vx, float vy, float omega) const {
 
@@ -223,53 +220,47 @@ VelocityLimits::LimitValues WalkController::applyVelocityLimits(
 }
 ```
 
-## 5. Modo de Velocidad Crucero
+## 5. Cruise Velocity Mode
 
-### Configuración
+### Configuration
 
 ```cpp
-// En StateController
-void setCruiseVelocity(const Eigen::Vector3f& velocity) {
-    cruise_velocity_ = velocity;  // x, y, angular
-    cruise_mode_enabled_ = true;
-}
-
-void enableCruiseMode(bool enable) {
-    cruise_mode_enabled_ = enable;
-}
+// In StateController
+state_controller.setCruiseControlMode(CRUISE_CONTROL_ON, Eigen::Vector3d(20.0, 5.0, 10.0));
+state_controller.setCruiseControlMode(CRUISE_CONTROL_OFF);
 ```
 
-### Uso en Control de Velocidad
+### Usage in Velocity Control
 
 ```cpp
 void StateController::updateVelocityControl() {
     float linear_x, linear_y, angular_z;
 
     if (cruise_mode_enabled_) {
-        // Usar velocidad crucero predefinida
+        // Use predefined cruise velocity
         linear_x = cruise_velocity_.x();
         linear_y = cruise_velocity_.y();
         angular_z = cruise_velocity_.z();
     } else {
-        // Usar entrada directa de velocidad
+        // Use direct velocity input
         linear_x = desired_linear_velocity_.x();
         linear_y = desired_linear_velocity_.y();
         angular_z = desired_angular_velocity_;
     }
 
-    // Aplicar control de velocidad
+    // Apply velocity control
     if (abs(linear_x) > 0.01f || abs(linear_y) > 0.01f || abs(angular_z) > 0.01f) {
         locomotion_system_.planGaitSequence(linear_x, linear_y, angular_z);
     }
 }
 ```
 
-## 6. Cadena de Control de Velocidad
+## 6. Velocity Control Chain
 
-### Flujo de Datos
+### Data Flow
 
 ```
-Usuario/Aplicación
+User/Application
        ↓
 StateController::setDesiredVelocity()
        ↓
@@ -286,116 +277,113 @@ LocomotionSystem::update()
 IServoInterface::setJointAngleAndSpeed()
 ```
 
-### Componentes Clave
+### Key Components
 
-1. **VelocityLimits**: Calcula límites dinámicos basados en geometría y gait
-2. **WalkController**: Aplica límites y valida comandos de velocidad
-3. **LocomotionSystem**: Ejecuta patrones de gait y coordina movimiento
-4. **StateController**: Gestiona estados y proporciona interfaz de alto nivel
+1. **VelocityLimits**: Computes dynamic limits from geometry and gait
+2. **WalkController**: Applies limits and validates velocity commands
+3. **LocomotionSystem**: Executes gait patterns and coordinates movement
+4. **StateController**: Manages states and provides a high-level interface
 
-## 7. Ejemplos Prácticos
+## 7. Practical Examples
 
-### Ejemplo 1: Control de Velocidad Básico
+### Example 1: Basic Velocity Control
 
 ```cpp
 void basicVelocityControl() {
-    // Configuración inicial
-    state_controller.requestRobotState(ROBOT_READY);
+    // Initial setup
+    state_controller.requestRobotState(ROBOT_RUNNING);
 
     while (!state_controller.isReadyForOperation()) {
-        state_controller.update();
+        state_controller.update(0.01);
         delay(10);
     }
 
-    // Movimiento controlado
-    Eigen::Vector2f linear(25.0f, 0.0f);  // 25 mm/s hacia adelante
-    float angular = 0.0f;
+    // Controlled movement
+    Eigen::Vector2d linear(25.0, 0.0);  // 25 mm/s forward
+    double angular = 0.0;
 
     state_controller.setDesiredVelocity(linear, angular);
 
-    // Ejecutar por 3 segundos
+    // Execute for 3 seconds
     for (int i = 0; i < 300; i++) {
-        state_controller.update();
+        state_controller.update(0.01);
         locomotion_system.update();
         delay(10);
     }
 
-    // Detener
-    state_controller.setDesiredVelocity(Eigen::Vector2f(0.0f, 0.0f), 0.0f);
+    // Stop
+    state_controller.setDesiredVelocity(Eigen::Vector2d(0.0, 0.0), 0.0);
 }
 ```
 
-### Ejemplo 2: Ajuste Dinámico de Velocidad
+### Example 2: Adaptive Velocity Tuning
 
 ```cpp
 void adaptiveVelocityControl() {
     float base_speed = 30.0f;  // mm/s
 
     while (true) {
-        // Obtener datos del sensor
+        // Read sensor data
         if (imu_interface && imu_interface->isConnected()) {
             IMUData imu_data = imu_interface->readIMU();
 
-            // Ajustar velocidad según inclinación del terreno
+            // Adjust speed according to terrain tilt
             float tilt = sqrt(imu_data.roll * imu_data.roll +
                              imu_data.pitch * imu_data.pitch);
 
             float speed_factor = 1.0f;
-            if (tilt > 10.0f) {  // Reducir velocidad en terreno inclinado
+            if (tilt > 10.0f) {  // Reduce speed on inclined terrain
                 speed_factor = std::max(0.5f, 1.0f - (tilt - 10.0f) / 20.0f);
             }
 
             float adjusted_speed = base_speed * speed_factor;
 
-            Eigen::Vector2f linear(adjusted_speed, 0.0f);
+            Eigen::Vector2d linear(adjusted_speed, 0.0);
             state_controller.setDesiredVelocity(linear, 0.0f);
         }
 
-        state_controller.update();
+        state_controller.update(0.05);
         locomotion_system.update();
         delay(50);
     }
 }
 ```
 
-### Ejemplo 3: Control de Velocidad Crucero
+### Example 3: Cruise Control
 
 ```cpp
 void cruiseControlDemo() {
-    // Configurar velocidad crucero
-    Eigen::Vector3f cruise_vel(20.0f, 5.0f, 10.0f);  // x, y, angular
-    state_controller.setCruiseVelocity(cruise_vel);
+    // Configure cruise velocity
+    Eigen::Vector3d cruise_vel(20.0, 5.0, 10.0);  // x, y, angular
+    state_controller.setCruiseControlMode(CRUISE_CONTROL_ON, cruise_vel);
 
-    // Activar modo crucero
-    state_controller.enableCruiseMode(true);
-
-    // El robot mantendrá esta velocidad automáticamente
+    // Robot maintains this velocity automatically
     while (cruiseActive) {
-        state_controller.update();
+        state_controller.update(0.02);
         locomotion_system.update();
         delay(20);
     }
 
-    // Desactivar crucero
-    state_controller.enableCruiseMode(false);
+    // Disable cruise mode
+    state_controller.setCruiseControlMode(CRUISE_CONTROL_OFF);
 }
 ```
 
-## 8. Configuración Avanzada
+## 8. Advanced Configuration
 
-### Ajuste de Parámetros de Gait
+### Gait Parameter Tuning
 
 ```cpp
-// Configurar factores de gait para diferentes velocidades
+// Configure gait factors for different speed targets
 struct GaitFactors {
-    float tripod_length_factor = 0.8f;   // Para velocidad alta
-    float wave_length_factor = 0.6f;     // Para estabilidad
-    float ripple_length_factor = 0.7f;   // Balanceado
+    float tripod_length_factor = 0.8f;   // High speed
+    float wave_length_factor = 0.6f;     // High stability
+    float ripple_length_factor = 0.7f;   // Balanced
 
-    float max_length_factor = 0.9f;      // Límite de seguridad
+    float max_length_factor = 0.9f;      // Safety limit
 };
 
-// Ajustar según condiciones
+// Adjust based on conditions
 if (high_speed_mode) {
     params.gait_factors.tripod_length_factor = 0.9f;
     locomotion_system.setGaitType(TRIPOD_GAIT);
@@ -405,84 +393,84 @@ if (high_speed_mode) {
 }
 ```
 
-### Configuración de Límites de Velocidad
+### Velocity Limit Setup
 
 ```cpp
-// Configurar workspace y límites
+// Configure workspace and limits
 VelocityLimits::WorkspaceConfig workspace;
 workspace.leg_length = 150.0f;           // mm
 workspace.body_radius = 100.0f;          // mm
-workspace.safety_margin = 0.8f;          // 80% del workspace
+workspace.safety_margin = 0.8f;          // 80% of workspace
 workspace.min_ground_clearance = 20.0f;  // mm
 
-// Configurar gait para límites
+// Configure gait for limit calculations
 GaitConfiguration gait;
 gait.step_frequency = 1.5f;              // Hz
 gait.time_to_max_stride = 2.0f;          // s
-// gait.phase_config se configura automáticamente basado en tipo de gait
+// gait.phase_config is configured automatically from gait type
 
-// Aplicar configuración
+// Apply configuration
 walk_controller.updateVelocityLimits(gait);
 walk_controller.setVelocitySafetyMargin(workspace.safety_margin);
 ```
 
-## 9. Resolución de Problemas
+## 9. Troubleshooting
 
-### Problema: Robot no alcanza la velocidad deseada
+### Problem: Robot does not reach desired speed
 
-**Posibles causas:**
+**Possible causes:**
 
-1. Comandos de velocidad exceden los límites calculados
-2. Parámetros de gait restrictivos
-3. Terreno o condiciones que reducen los límites
+1. Velocity commands exceed computed limits
+2. Restrictive gait parameters
+3. Terrain/conditions reduce dynamic limits
 
-**Soluciones:**
+**Solutions:**
 
 ```cpp
-// Verificar límites actuales
+// Check current limits
 auto limits = walk_controller.getVelocityLimits();
 Serial.println("Max linear X: " + String(limits.linear_x));
 Serial.println("Max linear Y: " + String(limits.linear_y));
 Serial.println("Max angular Z: " + String(limits.angular_z));
 
-// Ajustar parámetros si es necesario
-walk_controller.setVelocitySafetyMargin(0.9f);  // Aumentar margen utilizable
-walk_controller.updateVelocityLimits(2.0f, 0.5f, 1.5f);  // Frecuencia más alta
+// Tune parameters if needed
+walk_controller.setVelocitySafetyMargin(0.9f);  // Increase usable margin
+walk_controller.updateVelocityLimits(2.0f, 0.5f, 1.5f);  // Higher frequency
 ```
 
-### Problema: Movimiento inestable a altas velocidades
+### Problem: Unstable motion at high speed
 
-**Soluciones:**
+**Solutions:**
 
 ```cpp
-// Cambiar a gait más estable
+// Switch to a more stable gait
 locomotion_system.setGaitType(WAVE_GAIT);
 
-// Reducir step_length
+// Reduce step length
 params.gait_factors.wave_length_factor = 0.5f;
 
-// Aumentar frecuencia manteniendo velocidad
+// Increase frequency while preserving speed target
 walk_controller.updateVelocityLimits(2.5f, 0.7f, 1.0f);
 ```
 
-## 10. Comparación con OpenSHC
+## 10. Comparison with OpenSHC
 
-| Aspecto                  | HexaMotion                                  | OpenSHC                                         |
-| ------------------------ | ------------------------------------------- | ----------------------------------------------- |
-| **Límites de Velocidad** | Calculados dinámicamente por VelocityLimits | Calculados por WalkController::generateLimits() |
-| **Parámetros**           | Estructuras configurables                   | Parámetros ajustables en tiempo real            |
-| **Interfaz**             | StateController::setDesiredVelocity()       | WalkController::updateWalk()                    |
-| **Gait**                 | Enum con tipos predefinidos                 | Parámetros de timing flexibles                  |
-| **Servo Speed**          | setJointAngleAndSpeed() unificado           | Parámetros separados de velocidad               |
+| Aspect              | HexaMotion                               | OpenSHC                                        |
+| ------------------- | ---------------------------------------- | ---------------------------------------------- |
+| **Velocity Limits** | Dynamically computed by `VelocityLimits` | Computed by `WalkController::generateLimits()` |
+| **Parameters**      | Configurable structures                  | Runtime-tunable parameters                     |
+| **Interface**       | `StateController::setDesiredVelocity()`  | `WalkController::updateWalk()`                 |
+| **Gait**            | Enum with predefined types               | Flexible timing parameters                     |
+| **Servo Speed**     | Unified `setJointAngleAndSpeed()`        | Separate speed parameters                      |
 
-## Conclusión
+## Conclusion
 
-HexaMotion proporciona un sistema completo y flexible para el control de velocidad que permite:
+HexaMotion provides a complete and flexible velocity-control system that enables:
 
-1. **Control directo** a través de comandos de velocidad cartesiana
-2. **Configuración avanzada** mediante parámetros de gait y workspace
-3. **Seguridad** a través de límites dinámicos y validación
-4. **Adaptabilidad** con ajustes automáticos según condiciones del terreno
-5. **Flexibilidad** con múltiples métodos de ajuste según las necesidades
+1. **Direct control** through Cartesian velocity commands
+2. **Advanced configuration** via gait and workspace parameters
+3. **Safety** through dynamic limits and command validation
+4. **Adaptability** with condition-based adjustments
+5. **Flexibility** with multiple control approaches for different applications
 
-El sistema está diseñado para ser tanto fácil de usar para casos básicos como potente para aplicaciones avanzadas que requieren control fino sobre el comportamiento de locomoción.
+The system is designed to be simple for basic use and powerful for advanced scenarios that require fine locomotion tuning.

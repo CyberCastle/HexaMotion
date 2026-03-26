@@ -1,23 +1,53 @@
 #ifndef ROBOT_MODEL_H
 #define ROBOT_MODEL_H
 
-#include "gait_types.h" // Shared gait type enumeration
 #include "hexamotion_constants.h"
+#include "locomotion_types.h"
 #include "math_utils.h"
+#include "pose.h"
 #include "precision_config.h"
 #include <Arduino.h>
 #include <ArduinoEigen.h>
+#include <cmath>
+#include <limits>
 #include <memory>
 #include <utility>
 
 // Forward declaration para evitar dependencias circulares
 class WorkspaceAnalyzer;
-struct ValidationConfig;
+
+/**
+ * @brief Joint pose angles for one leg in radians.
+ */
+struct JointPoseAngles {
+    double coxa = 0.0;
+    double femur = 0.0;
+    double tibia = 0.0;
+};
 
 /**
  * @brief Robot configuration parameters.
  */
 struct Parameters {
+    Parameters()
+        : hexagon_radius(0), coxa_length(0), femur_length(0), tibia_length(0),
+          robot_height(0),
+          coxa_angle_limits{0, 0}, femur_angle_limits{0, 0}, tibia_angle_limits{0, 0},
+          dh_parameters{},
+          max_velocity(0), max_angular_velocity(0) {
+        for (int i = 0; i < NUM_LEGS; ++i) {
+            packed_pose_joints[i] = {-1.571, 1.900, 1.200};
+            unpacked_pose_joints[i] = {0.000, 0.785, -1.138};
+            for (int s = 0; s < MAX_PACK_STEPS; ++s) {
+                packed_pose_steps[i][s] = packed_pose_joints[i];
+            }
+            for (int j = 0; j < DOF_PER_LEG; ++j) {
+                joint_angle_offset_deg[i][j] = 0.0;
+                joint_max_angular_speed_deg_s[i][j] = 0.0;
+            }
+        }
+    }
+
     double hexagon_radius;
     double coxa_length;
     double femur_length;
@@ -27,8 +57,6 @@ struct Parameters {
     double standing_height = 150;        //< Default standing height in mm
     double height_offset = 0.0f;         //< structural body height offset
     double default_height_offset = 0.0f; //< Default height offset when all joint angles are 0°
-    double robot_weight;
-    Eigen::Vector3d center_of_mass;
 
     double coxa_angle_limits[2];
     double femur_angle_limits[2];
@@ -39,17 +67,37 @@ struct Parameters {
     double angle_sign_femur = 1.0f; //< Sign multiplier for femur joint output (+1.0 or -1.0 to match servo direction)
     double angle_sign_tibia = 1.0f; //< Sign multiplier for tibia joint output (+1.0 or -1.0 to match servo direction)
 
+    // Per-physical-joint output calibration in servo command space (degrees).
+    // Indexed as [leg][joint] where joint=0(c),1(f),2(t).
+    double joint_angle_offset_deg[NUM_LEGS][DOF_PER_LEG];
+
+    // Per-physical-joint angular speed limit in servo command space (deg/s).
+    // Value <= 0.0 disables limiting for that joint.
+    double joint_max_angular_speed_deg_s[NUM_LEGS][DOF_PER_LEG];
+
     // Enable FSR contact detection
     bool use_fsr_contact = false;
 
     bool use_custom_dh_parameters = false; //< Use custom Denavit-Hartenberg parameters
+
+    // Configured packed/unpacked joint poses (OpenSHC YAML parity moved to Parameters).
+    // All values are in radians in the robot model frame.
+    bool use_configured_packed_unpacked_poses = true; //< Enable explicit packed/unpacked joint pose targets
+    JointPoseAngles packed_pose_joints[NUM_LEGS];     //< Packed target pose per leg (= step 0 shortcut)
+    JointPoseAngles unpacked_pose_joints[NUM_LEGS];   //< Unpacked (ready) target pose per leg
+
+    // Multi-step packed positions (OpenSHC Joint::packed_positions_ vector equivalent).
+    // packed_pose_steps[leg][step] gives the target joint angles for packing step `step`.
+    // Step 0 is always identical to packed_pose_joints[leg] (backward-compatible single-step).
+    // num_pack_steps defines how many entries per leg are valid (1 = single step, default).
+    JointPoseAngles packed_pose_steps[NUM_LEGS][MAX_PACK_STEPS];
+    int num_pack_steps = 1; //< Number of valid multi-step pack stages (1 = backward-compatible)
+
     /**
      * @brief DH parameter table for each leg.
      * The first entry represents the fixed base transform.
      */
     double dh_parameters[NUM_LEGS][DOF_PER_LEG + 1][4];
-
-    Eigen::Vector3d imu_calibration_offset;
 
     // FSR contact filtering thresholds (used in LocomotionSystem::updateLegStates)
     // fsr_touchdown_threshold: minimum historical rolling average to consider contact (hysteresis enter)
@@ -57,19 +105,16 @@ struct Parameters {
     // fsr_min_pressure: minimum normalized/raw pressure/average to validate physical contact and reject false positives
     double fsr_touchdown_threshold = 0.7; //< Average contact value (0-1) to switch to STANCE
     double fsr_liftoff_threshold = 0.3;   //< Average contact value (0-1) to switch to SWING
-    double fsr_min_pressure = 0.05;       //< Minimum normalized value (0-1) to trust reported contact (legacy raw=10 maps ≈0.05)
+    double fsr_min_pressure = 0.05;       //< Minimum normalized value (0-1) to trust reported contact
     double fsr_max_pressure = 0.9;        //< Maximum expected normalized pressure (0-1). 1.0 = saturated/full contact (used for clamping/validation)
 
     double max_velocity;
     double max_angular_velocity;
     double overshoot_stride_fraction = DEFAULT_OVERSHOOT_STRIDE_FRACTION;   //< Max fraction of stride dedicated to overshoot damping
     double min_effective_stride_ratio = DEFAULT_MIN_EFFECTIVE_STRIDE_RATIO; //< Minimum stride fraction preserved after overshoot deduction
-    double stability_margin;
-
-    // Toggle global velocity limiting system (HexaMotion extension).
-    // When false, VelocityLimits generation/validation is bypassed and commanded velocities
-    // are passed through (still subject to any downstream physical clamping).
-    bool enable_velocity_limits = true; //< Enable bearing-based dynamic velocity limiting
+    // Scales all body velocity inputs (OpenSHC: body_velocity_scaler, default 1.0).
+    // Applied at the velocity command entry point before walk controller processing.
+    double body_velocity_scaler = 1.0;
 
     // Global gait tempo (Hz). Used by GaitConfiguration::generateStepCycle() to derive the
     // nominal (pre‑normalization) cycle duration: raw_iterations ≈ (1 / step_frequency) / time_delta.
@@ -90,19 +135,6 @@ struct Parameters {
     bool enable_body_translation = false; //< When true, LocomotionSystem::update() integrates body_position & yaw from commanded velocities
 
     /**
-     * @brief Smooth trajectory configuration for pose updates.
-     * Equivalent to OpenSHC's trajectory interpolation system.
-     */
-    struct SmoothTrajectoryConfig {
-        bool use_current_servo_positions = false;          //< Use current servo positions as starting point for trajectories (OpenSHC-style)
-        bool enable_pose_interpolation = false;            //< Enable smooth pose interpolation between positions
-        double interpolation_speed = MIN_SERVO_VELOCITY;   //< Interpolation speed factor (0.01-1.0, where 0.1 is smooth)
-        double position_tolerance_mm = POSITION_TOLERANCE; //< Position tolerance for determining if servo has reached target
-        uint8_t max_interpolation_steps = 20;              //< Maximum steps for pose interpolation
-        bool use_quaternion_slerp = true;                  //< Use spherical interpolation for orientations
-    } smooth_trajectory;
-
-    /**
      * @brief Inverse kinematics solver settings.
      */
     struct IKConfig {
@@ -121,7 +153,31 @@ struct Parameters {
         double kp = 0.6f;
         double lp_alpha = 0.10f;
         double max_tilt_deg = 12.0f;
+        // PID gains for IMU posing (OpenSHC rotation_pid_gains equivalent)
+        double imu_pid_kp = 1.0; //< Proportional gain for rotation correction
+        double imu_pid_ki = 0.0; //< Integral gain (absement) for rotation correction
+        double imu_pid_kd = 0.0; //< Derivative gain (angular velocity) for rotation correction
     } body_comp;
+
+    /**
+     * @brief Manual leg manipulation parameters (OpenSHC equivalent).
+     */
+    struct ManualLegConfig {
+        double max_translation_velocity = 200.0; //< Max tip translation speed in mm/s (OpenSHC: max_translation_velocity)
+        double max_rotation_velocity = 1.0;      //< Max joint rotation speed in rad/s (OpenSHC: max_rotation_velocity)
+        bool joint_control = true;               //< true = joint_control mode, false = tip_control mode (OpenSHC: leg_manipulation_mode)
+    } manual_leg;
+
+    // OpenSHC-equivalent body posing runtime flags and velocity caps.
+    bool manual_posing = true;
+    bool inclination_posing = false;
+    bool imu_posing = false;
+    bool auto_posing = false;
+    double max_translation_velocity = 50.0; //< mm/s
+    double max_rotation_velocity = 0.2;     //< rad/s
+    double pose_frequency = -1.0;           //< Hz, -1 sync to gait cycle
+    int pose_phase_length = 4;
+    double time_to_start = 6.0; //< directStartup duration in seconds
 
     // Tipo de gait seleccionado (OpenSHC compatible)
     std::string gait_type;
@@ -164,31 +220,15 @@ struct Parameters {
     double phase_end_snap_tolerance_mm = 1.0; //< Distance tolerance (mm) for hard snap
     double phase_end_snap_alpha = 1.0;        //< Blend factor (1.0 hard snap, <1.0 partial correction)
 
-    // --- Segment mass properties (optional) ---
-    // When > 0 they are used for relative torque computation in startup normalization.
-    // Units: kilograms (or any consistent unit; only ratios are used).
-    double coxa_mass = 0.0;  //< Coxa mass (0 => use lengths only)
-    double femur_mass = 0.0; //< Femur mass (0 => use lengths only)
-    double tibia_mass = 0.0; //< Tibia mass (0 => use lengths only)
-
     // --- Constraint tolerances ---
     // Tolerancia para preservar la altura exacta del plano de marcha al aplicar
     // el constriñimiento geométrico (evita deriva vertical artificial en touchdown)
     double walk_plane_z_tolerance_mm = WALK_PLANE_Z_TOLERANCE_MM;
 
-    // --- Startup (initial standing) normalization configuration ---
-    struct StartupNormalizationConfig {
-        bool enable_torque_balanced = true; //< Enable torque/energy balanced scaling in LIFT phase
-        double alpha = 0.6;                 //< Exponent smoothing factor for weight factors (0.5-0.8 recommended)
-        double speed_deadband = 0.2;        //< Minimum non-zero normalized speed after scaling
-        double accel_deadband = 0.1;        //< Minimum non-zero normalized acceleration after scaling
-        double tibia_speed_cap = 1.0;       //< Optional ceiling for tibia speed after scaling (1.0 disables extra cap)
-    } startup_norm;
-
     /**
-     * @brief Global motion and workspace scaling factors (moved from hardcoded implementation in WorkspaceAnalyzer::getScalingFactors()).
+     * @brief Global motion and workspace scaling factors used by higher-level controllers.
      *
-     * These values previously lived as literal constants (e.g. 0.65, 0.9, 1.0) inside the analyzer. Exposing them here
+     * These values previously lived as literal constants (e.g. 0.65, 0.9, 1.0) in controller logic. Exposing them here
      * allows runtime / configuration level tuning (same style as StartupNormalizationConfig) without touching core code.
      *
      * Usage notes:
@@ -197,10 +237,10 @@ struct Parameters {
      *  - Keep values in a sane physical range (0.4 – 1.2) to avoid destabilizing stride / velocity estimations.
      */
     struct ScalingFactors {
-        double linear_scale = 0.65;      //< Legacy linear scaling (replaces scattered WORKSPACE / WALKSPACE constants)
+        double linear_scale = 0.65;      //< Baseline linear scaling (replaces scattered WORKSPACE / WALKSPACE constants)
         double angular_scale = 1.0;      //< Angular scaling (kept at 1.0 unless deliberate reduction required)
         double workspace_scale = 0.65;   //< Conservative workspace envelope scaling
-        double collision_scale = 0.0;    //< If <= 0 => derive from ValidationConfig::safety_margin_factor
+        double collision_scale = 0.0;    //< If <= 0 => derive from runtime collision safety factor
         double velocity_scale = 0.9;     //< 10% safety margin for derived velocity limits
         double acceleration_scale = 1.0; //< Acceleration scaling (placeholder for future tuning)
         double safety_margin = 0.9;      //< Unified safety margin for servo speed / other conservative clamps
@@ -231,6 +271,26 @@ struct Parameters {
         double collision_adjust_step = 0.1;        //< Decrement step per attempt
         double safe_scale_ratio = 0.7;             //< Fallback ratio of leg_reach when iterative scaling fails
     } workspace_tuning;                            //< params.workspace_tuning
+
+    /**
+     * @brief Admittance controller parameters (OpenSHC 1:1 equivalent).
+     *
+     * Replaces OpenSHC YAML: admittance_control, dynamic_stiffness, use_joint_effort,
+     * integrator_step_time, virtual_mass, virtual_stiffness, virtual_damping_ratio,
+     * force_gain, swing_stiffness_scaler, load_stiffness_scaler.
+     */
+    struct AdmittanceConfig {
+        bool enable = false;                 //< Master toggle (OpenSHC: admittance_control)
+        bool dynamic_stiffness = true;       //< Enable per-phase stiffness scaling (OpenSHC: dynamic_stiffness)
+        bool use_joint_effort = false;       //< Use calculated (true) vs measured (false) tip force (OpenSHC: use_joint_effort)
+        double integrator_step_time = 0.5;   //< Integration step time in seconds (OpenSHC default: 0.5)
+        double virtual_mass = 10.0;          //< Virtual mass in kg (OpenSHC default: 10.0)
+        double virtual_stiffness = 12.0;     //< Virtual spring stiffness (OpenSHC default: 12.0)
+        double virtual_damping_ratio = 0.8;  //< Damping ratio ζ; actual damping = ζ·2·√(m·k) (OpenSHC default: 0.8)
+        double force_gain = 0.1;             //< Force scaling gain (OpenSHC default: 0.1)
+        double swing_stiffness_scaler = 0.1; //< Stiffness scaler for swing legs (OpenSHC default: 0.1)
+        double load_stiffness_scaler = 5.0;  //< Stiffness scaler for loaded adjacent legs (OpenSHC default: 5.0)
+    } admittance;                            //< params.admittance
 };
 
 // Centralized servo angle solution for standing height (previously in body_pose_config_factory)
@@ -246,160 +306,6 @@ enum StepPhase {
     SWING_PHASE,
     LIFT_PHASE,
     TOUCHDOWN_PHASE
-};
-
-/**
- * @brief 3D coordinate in millimeters.
- */
-struct Point3D {
-    double x, y, z;
-    explicit Point3D(double x = 0, double y = 0, double z = 0) : x(x), y(y), z(z) {}
-
-    // Operator overloads
-    Point3D operator+(const Point3D &other) const {
-        return Point3D(x + other.x, y + other.y, z + other.z);
-    }
-
-    Point3D &operator+=(const Point3D &other) {
-        x += other.x;
-        y += other.y;
-        z += other.z;
-        return *this;
-    }
-
-    Point3D operator-(const Point3D &other) const {
-        return Point3D(x - other.x, y - other.y, z - other.z);
-    }
-
-    Point3D operator*(double scalar) const {
-        return Point3D(x * scalar, y * scalar, z * scalar);
-    }
-
-    Point3D operator/(double scalar) const {
-        return Point3D(x / scalar, y / scalar, z / scalar);
-    }
-
-    bool operator==(const Point3D &other) const {
-        return (x == other.x && y == other.y && z == other.z);
-    }
-
-    bool operator!=(const Point3D &other) const {
-        return !(*this == other);
-    }
-
-    double norm() const {
-        return sqrt(x * x + y * y + z * z);
-    }
-
-    Point3D normalized() const {
-        double n = norm();
-        if (n > 0) {
-            return Point3D(x / n, y / n, z / n);
-        }
-        return Point3D(0, 0, 0);
-    }
-};
-
-/**
- * @brief Pose structure with position and orientation (equivalent to OpenSHC's Pose)
- */
-struct Pose {
-    Point3D position;
-    Eigen::Quaterniond rotation;
-
-    explicit Pose(const Point3D &pos = Point3D(), const Eigen::Quaterniond &rot = Eigen::Quaterniond::Identity())
-        : position(pos), rotation(rot) {}
-
-    explicit Pose(const Point3D &pos, const Eigen::Vector3d &euler_angles_deg)
-        : position(pos) {
-        Eigen::Vector3d euler_rad = euler_angles_deg * math_utils::degreesToRadians(1.0);
-        rotation = Eigen::AngleAxisd(euler_rad.z(), Eigen::Vector3d::UnitZ()) *
-                   Eigen::AngleAxisd(euler_rad.y(), Eigen::Vector3d::UnitY()) *
-                   Eigen::AngleAxisd(euler_rad.x(), Eigen::Vector3d::UnitX());
-    }
-
-    static Pose Identity() {
-        return Pose(Point3D(), Eigen::Quaterniond::Identity());
-    }
-
-    bool operator==(const Pose &other) const {
-        return (position == other.position && rotation.isApprox(other.rotation));
-    }
-
-    bool operator!=(const Pose &other) const {
-        return !(*this == other);
-    }
-
-    /**
-     * Transform a pose by this pose (equivalent to OpenSHC's transform method)
-     */
-    Pose transform(const Eigen::Matrix4d &transform_matrix) const {
-        Eigen::Vector4d pos_homogeneous(position.x, position.y, position.z, 1.0);
-        Eigen::Vector4d transformed_pos = transform_matrix * pos_homogeneous;
-
-        Eigen::Matrix3d rot_matrix = transform_matrix.block<3, 3>(0, 0);
-        Eigen::Quaterniond transformed_rot(rot_matrix);
-        Eigen::Quaterniond result_rot = transformed_rot * rotation.cast<double>();
-
-        return Pose(Point3D(transformed_pos.x(),
-                            transformed_pos.y(),
-                            transformed_pos.z()),
-                    result_rot.cast<double>());
-    }
-
-    /**
-     * Transform a vector into this pose's reference frame (equivalent to OpenSHC's transformVector)
-     */
-    Point3D transformVector(const Point3D &vec) const {
-        Eigen::Vector3d eigen_vec(vec.x, vec.y, vec.z);
-        Eigen::Vector3d eigen_pos(position.x, position.y, position.z);
-        Eigen::Vector3d transformed = eigen_pos + rotation.cast<double>()._transformVector(eigen_vec);
-        return Point3D(transformed.x(), transformed.y(), transformed.z());
-    }
-
-    /**
-     * Transform a vector from this pose's reference frame (equivalent to OpenSHC's inverseTransformVector)
-     */
-    Point3D inverseTransformVector(const Point3D &vec) const {
-        return inverse().transformVector(vec);
-    }
-
-    /**
-     * Get the inverse of this pose (equivalent to OpenSHC's ~ operator)
-     */
-    Pose inverse() const {
-        Eigen::Quaterniond inv_rotation = rotation.cast<double>().conjugate();
-        Eigen::Vector3d eigen_pos(position.x, position.y, position.z);
-        Eigen::Vector3d inv_position = inv_rotation._transformVector(-eigen_pos);
-        return Pose(Point3D(inv_position.x(), inv_position.y(), inv_position.z()), inv_rotation.cast<double>());
-    }
-
-    /**
-     * Add another pose to this pose (equivalent to OpenSHC's addPose)
-     */
-    Pose addPose(const Pose &other) const {
-        Point3D new_position = transformVector(other.position);
-        Eigen::Quaterniond new_rotation = rotation.cast<double>() * other.rotation.cast<double>();
-        return Pose(new_position, new_rotation.cast<double>());
-    }
-
-    /**
-     * Remove another pose from this pose (equivalent to OpenSHC's removePose)
-     */
-    Pose removePose(const Pose &other) const {
-        Point3D new_position = transformVector(Point3D(-other.position.x, -other.position.y, -other.position.z));
-        Eigen::Quaterniond new_rotation = rotation.cast<double>() * other.rotation.cast<double>().inverse();
-        return Pose(new_position, new_rotation.cast<double>());
-    }
-
-    /**
-     * Interpolate between this pose and target pose (equivalent to OpenSHC's interpolate)
-     */
-    Pose interpolate(double control_input, const Pose &target_pose) const {
-        Point3D new_position = position * (1.0 - control_input) + target_pose.position * control_input;
-        Eigen::Quaterniond new_rotation = rotation.cast<double>().slerp(control_input, target_pose.rotation.cast<double>());
-        return Pose(new_position, new_rotation.cast<double>());
-    }
 };
 
 /**
@@ -549,9 +455,9 @@ class IServoInterface {
     virtual bool setJointAngleAndSpeed(int leg_index, int joint_index, double angle, double speed) = 0;
 
     /**
-     * Extended joint motion command including acceleration (jerk-limited motion planners support).
+     * Extended joint motion command including acceleration.
      * Implementations that do not natively support acceleration can ignore the parameter and
-     * fallback to setJointAngleAndSpeed(). Default implementation delegates to that legacy method.
+     * fallback to setJointAngleAndSpeed(). Default implementation delegates to that base method.
      * @param leg_index Index of the leg (0-5)
      * @param joint_index Joint index within leg (0-2)
      * @param angle Target angular position in degrees
@@ -567,6 +473,12 @@ class IServoInterface {
 
     /** Retrieve the current joint angle (radians). */
     virtual double getJointAngle(int leg_index, int joint_index) = 0;
+
+    /** Retrieve the current joint velocity (rad/s). Default returns 0.0 if unsupported. */
+    virtual double getJointVelocity(int leg_index, int joint_index) { return 0.0; }
+
+    /** Retrieve the current joint effort/torque (driver units). Default returns 0.0 if unsupported. */
+    virtual double getJointEffort(int leg_index, int joint_index) { return 0.0; }
 
     /** Check if a joint is currently moving. */
     virtual bool isJointMoving(int leg_index, int joint_index) = 0;
@@ -591,8 +503,8 @@ class IServoInterface {
 
     /**
      * Batch command to set all joints' angles, speeds and accelerations.
-     * This extends syncSetAllJointAnglesAndSpeeds by adding an acceleration parameter
-     * (for jerk-limited or S-curve motion planners). Implementations that do not
+     * This extends syncSetAllJointAnglesAndSpeeds by adding an acceleration parameter.
+     * Implementations that do not
      * natively support acceleration limits may ignore the parameter and delegate to
      * syncSetAllJointAnglesAndSpeeds(), mirroring the behaviour of
      * setJointAngleSpeedAccel which falls back to setJointAngleAndSpeed.
@@ -652,8 +564,7 @@ class RobotModel {
      * @param config Compute configuration for the WorkspaceAnalyzer
      * @param validation_config Validation configuration (optional)
      */
-    void workspaceAnalyzerInitializer(ComputeConfig config = ComputeConfig::medium(),
-                                      const ValidationConfig *validation_config = nullptr);
+    void workspaceAnalyzerInitializer(ComputeConfig config = ComputeConfig::medium());
 
     /**
      * @brief Get reference to the internal WorkspaceAnalyzer
@@ -704,6 +615,18 @@ class RobotModel {
     /** Compute forward kinematics for a leg (Global coordinates). */
     Point3D forwardKinematicsGlobalCoordinates(int leg, const JointAngles &q) const;
 
+    /**
+     * @brief Compute vector from tip to last actuated joint in robot frame.
+     *
+     * For 3DOF legs this corresponds to (joint-3 position) - (tip position),
+     * derived from the full DH chain rather than an analytical shortcut.
+     *
+     * @param leg Leg index.
+     * @param q Joint angles.
+     * @return Vector from tip to last joint in robot frame.
+     */
+    Point3D getTipToLastJointVectorGlobal(int leg, const JointAngles &q) const;
+
     /** Numerical Jacobian calculation. */
     Eigen::Matrix3d calculateJacobian(int leg, const JointAngles &q, const Point3D &target) const;
     /** Homogeneous transform for a full leg chain. */
@@ -723,6 +646,20 @@ class RobotModel {
     std::pair<double, double> calculateHeightRange() const;
     const Parameters &getParams() const { return params; }
     double getTimeDelta() const { return params.time_delta; }
+
+    /** @brief Get joint angle limits in radians (precomputed from degree params). */
+    double getCoxaAngleLimitRad(int index) const { return coxa_angle_limits_rad[index]; }
+    double getFemurAngleLimitRad(int index) const { return femur_angle_limits_rad[index]; }
+    double getTibiaAngleLimitRad(int index) const { return tibia_angle_limits_rad[index]; }
+
+    /** @brief Clamp joint angles to radian limits (OpenSHC parity). */
+    void clampToJointLimits(JointAngles &angles) const;
+
+    /**
+     * @brief Update the global step frequency (Hz) at runtime.
+     * @param step_frequency New step frequency in Hz
+     */
+    void setStepFrequency(double step_frequency) { params.step_frequency = step_frequency; }
 
     /**
      * @brief Get the default height offset when all joint angles are 0°
@@ -864,9 +801,6 @@ class RobotModel {
      * This function follows OpenSHC's approach to automatically adjust positions that are
      * outside the leg's workspace to be within reachable bounds.
      *
-     * REFACTORED: Now uses WorkspaceAnalyzer::generateWorkspace() and
-     * WorkspaceAnalyzer::getWorkplane() following the OpenSHC pattern.
-     *
      * @param leg_index Index of the leg (0-5)
      * @param reference_tip_position Target position that may be outside workspace
      * @return Adjusted position that is guaranteed to be within leg workspace
@@ -930,7 +864,8 @@ class RobotModel {
     // WorkspaceAnalyzer for workspace analysis (OpenSHC-style)
     std::unique_ptr<WorkspaceAnalyzer> workspace_analyzer_;
 
-    JointAngles solveIK(int leg, const Point3D &local_target, JointAngles current) const;
+    JointAngles solveIK(int leg, const Point3D &global_target, JointAngles current,
+                        JointAngles current_velocity = JointAngles(0, 0, 0)) const;
 
     // Helper methods to reduce code duplication
     Point3D transformGlobalToLocalLegCoordinates(int leg, const Point3D &global_target) const;

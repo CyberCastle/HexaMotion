@@ -9,21 +9,6 @@
 #include <memory>
 #include <vector>
 
-// Use existing Pose from robot_model.h
-
-/**
- * @brief External target structure for leg positioning
- * Equivalent to OpenSHC's ExternalTarget
- */
-struct ExternalTarget {
-    Pose pose;              //< The target tip pose
-    double swing_clearance; //< The height of the swing trajectory clearance
-    std::string frame_id;   //< The target tip pose reference frame id
-    unsigned long time;     //< The time of the request for the target tip pose (milliseconds)
-    Pose transform;         //< The transform between reference frames
-    bool defined = false;   //< Flag denoting if external target object has been defined
-};
-
 /**
  * @brief LegPoser class for HexaMotion
  *
@@ -49,14 +34,36 @@ class LegPoser {
 
     // Accessors
     inline int getLegIndex() const { return leg_index_; }
-    inline Pose getCurrentTipPose() const {
-        Point3D tip_pos = leg_.getCurrentTipPositionGlobal();
-        return Pose(tip_pos, Eigen::Vector3d(0, 0, 0));
-    }
+    /**
+     * @brief Get the current tip pose (OpenSHC parity: returns stored current_tip_pose_).
+     * The stored value is set by setCurrentTipPose() from BodyPoseController::updateStance().
+     */
+    inline const Pose &getCurrentTipPose() const { return current_tip_pose_; }
     inline Pose getTargetTipPose() const { return target_tip_pose_; }
-    inline ExternalTarget getExternalTarget() const { return external_target_; }
     inline Pose getAutoPose() const { return auto_pose_; }
     inline bool getLegCompletedStep() const { return leg_completed_step_; }
+    /**
+     * @brief Get the default (stance) tip position for this leg.
+     * @return Default tip position from the associated Leg object
+     */
+    inline Point3D getDefaultTipPose() const { return leg_.getDefaultTipPosition(); }
+
+    // Transition sequence helpers (OpenSHC parity)
+    /** Reset stored transition poses for sequence generation. */
+    void resetTransitionSequence() { transition_poses_.clear(); }
+    /** Append a transition pose in sequence order. */
+    void addTransitionPose(const Pose &pose) { transition_poses_.push_back(pose); }
+    /** Check if a transition pose exists for the given index. */
+    bool hasTransitionPose(int index) const {
+        return index >= 0 && static_cast<size_t>(index) < transition_poses_.size();
+    }
+    /** Get transition pose by index (identity if missing). */
+    Pose getTransitionPose(int index) const {
+        if (!hasTransitionPose(index)) {
+            return Pose::Identity();
+        }
+        return transition_poses_[index];
+    }
 
     // Progress (0.0 - 1.0) of current stepping maneuver
     double getCurrentStepProgress() const {
@@ -72,14 +79,21 @@ class LegPoser {
     }
 
     // Modifiers
+    // OpenSHC parity: only store in LegPoser's current_tip_pose_, do NOT modify
+    // the Leg's global tip position. The Leg's tip is updated exclusively via FK
+    // after IK (setJointAngles → updateTipPosition). Writing it here would make
+    // current == desired in the IK pipeline, producing zero movement.
     inline void setCurrentTipPose(const RobotModel &model, const Pose &current) {
-        leg_.setCurrentTipPositionGlobal(current.position);
         current_tip_pose_ = current;
     }
     inline void setTargetTipPose(const Pose &target) { target_tip_pose_ = target; }
-    inline void setExternalTarget(const ExternalTarget &target) { external_target_ = target; }
     inline void setAutoPose(const Pose &auto_pose) { auto_pose_ = auto_pose; }
     inline void setLegCompletedStep(bool complete) { leg_completed_step_ = complete; }
+
+    // Negation parameter setters (OpenSHC parity: set from setAutoPoseParams)
+    inline void setPoseNegationPhaseStart(int start) { pose_negation_phase_start_ = start; }
+    inline void setPoseNegationPhaseEnd(int end) { pose_negation_phase_end_ = end; }
+    inline void setNegationTransitionRatio(double ratio) { negation_transition_ratio_ = ratio; }
     // Admittance delta (external compliance offset) setter
     inline void setAdmittanceDelta(const Point3D &delta) {
         // Defensive validation: sanitize NaN/Inf and clamp to safe engineering bounds (class constant)
@@ -108,6 +122,27 @@ class LegPoser {
     }
 
     /**
+     * @brief Set the desired joint configuration for transitionConfiguration.
+     * @param coxa Target coxa angle (radians)
+     * @param femur Target femur angle (radians)
+     * @param tibia Target tibia angle (radians)
+     */
+    inline void setDesiredConfiguration(double coxa, double femur, double tibia) {
+        desired_config_coxa_ = coxa;
+        desired_config_femur_ = femur;
+        desired_config_tibia_ = tibia;
+        desired_config_set_ = true;
+    }
+
+    /**
+     * @brief Uses a cubic bezier curve to smoothly transition joint positions from current
+     * to target configuration (OpenSHC LegPoser::transitionConfiguration equivalent).
+     * @param transition_time The time period in which to complete this transition (seconds)
+     * @return Progress percentage (0-100), 100 indicates completion
+     */
+    int transitionConfiguration(double transition_time);
+
+    /**
      * @brief Uses bezier curves to smoothly update the desired tip position of the leg
      * @param target_tip_pose The target tip pose in reference to the body centre frame
      * @param target_pose A Pose to be linearly applied to the tip position over the course of the maneuver
@@ -120,12 +155,17 @@ class LegPoser {
                        double lift_height, double time_to_step, bool apply_delta = true);
 
     /**
-     * @brief Update leg-specific auto pose using phased window & negation logic (OpenSHC-style).
-     * @param phase_index Integer phase index in [0, base_period) for the unified posing cycle.
-     * @param auto_cfg   Reference auto-pose configuration (phase windows, amplitudes, negation windows).
-     * @param body_cfg   Reference body pose configuration (stance reference positions).
+     * @brief Update leg-specific auto pose (1:1 port of OpenSHC LegPoser::updateAutoPose).
+     *
+     * Takes the global auto_pose_ from BodyPoseController and applies per-leg negation
+     * using iteration-based first_half/smoothStep logic, matching OpenSHC exactly.
+     *
+     * @param phase Current master phase index.
+     * @param global_auto_pose Global auto pose from BodyPoseController aggregation.
+     * @param normaliser Normaliser for scaling negation phase windows.
+     * @param phase_length Total normalised phase length (pose_phase_length_).
      */
-    void updateAutoPose(int phase_index, const AutoPoseConfiguration &auto_cfg, const BodyPoseConfiguration &body_cfg);
+    void updateAutoPose(int phase, const Pose &global_auto_pose, int normaliser, int phase_length);
 
     /**
      * @brief Set target position for leg movement
@@ -169,24 +209,35 @@ class LegPoser {
     RobotModel &robot_model_; //< Reference to the robot model for parameter access
 
     Pose auto_pose_;                         //< Leg specific auto pose (post-negation)
-    Pose base_auto_pose_;                    //< Base (global) auto pose before leg negation
-    int pose_negation_phase_start_ = 0;      //< Phase start for negation window
-    int pose_negation_phase_end_ = 0;        //< Phase end for negation window
+    int pose_negation_phase_start_ = 0;      //< Base phase start for negation window (pre-normaliser)
+    int pose_negation_phase_end_ = 0;        //< Base phase end for negation window (pre-normaliser)
     double negation_transition_ratio_ = 0.0; //< Ratio of window used for ramp in/out
     bool negate_auto_pose_ = false;          //< Flag if currently negating
     bool first_iteration_ = true;            //< Flag denoting if an iterating function is on it's first iteration
     int master_iteration_count_ = 0;         //< Master iteration count used in generating time input for bezier curves
     int current_num_iterations_ = 0;         //< Total iterations for current step (for progress reporting)
 
-    Pose origin_tip_pose_;           //< Origin tip pose used in bezier curve equations
-    Pose current_tip_pose_;          //< Current tip pose
-    Pose target_tip_pose_;           //< Target tip pose used in bezier curve equations
-    ExternalTarget external_target_; //< Externally set target tip pose object
-
+    Pose origin_tip_pose_;            //< Origin tip pose used in bezier curve equations
+    Pose current_tip_pose_;           //< Current tip pose
+    Pose target_tip_pose_;            //< Target tip pose used in bezier curve equations
     bool leg_completed_step_ = false; //< Flag denoting if leg has completed its required step in a sequence
+
+    // OpenSHC-style transition sequence poses
+    std::vector<Pose> transition_poses_;
 
     double physical_reference_height_;  //< Physical reference height (z = getDefaultHeightOffset() when all angles are 0°)
     Point3D admittance_delta_{0, 0, 0}; //< Latest admittance (compliance) delta applied when apply_delta=true
+
+    // transitionConfiguration state (OpenSHC LegPoser parity)
+    bool desired_config_set_ = false;    //< Flag if desired configuration has been set
+    bool config_first_iteration_ = true; //< First iteration flag for configuration transition
+    int config_iteration_count_ = 0;     //< Iteration counter for configuration transition
+    double desired_config_coxa_ = 0.0;   //< Target coxa angle (radians)
+    double desired_config_femur_ = 0.0;  //< Target femur angle (radians)
+    double desired_config_tibia_ = 0.0;  //< Target tibia angle (radians)
+    double origin_config_coxa_ = 0.0;    //< Origin coxa angle (radians)
+    double origin_config_femur_ = 0.0;   //< Origin femur angle (radians)
+    double origin_config_tibia_ = 0.0;   //< Origin tibia angle (radians)
 };
 
 #endif // LEG_POSER_H

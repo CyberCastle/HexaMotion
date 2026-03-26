@@ -1,21 +1,21 @@
 /**
  * @file swing_coxa_orientation_test.cpp
- * @brief Detecta si la generación de la trayectoria de SWING (target_tip_pose + nodos Bezier)
- *        ignora el ángulo actual de la coxa (hipótesis: se asume coxa=0° al calcular el objetivo).
+ * @brief Detects whether SWING trajectory generation (target_tip_pose + Bezier nodes)
+ *        ignores the current coxa angle (hypothesis: coxa=0° is assumed when computing the target).
  *
- * Metodología:
- *  - Fijar un LegStepper con identidad y default_tip_pose conocidos.
- *  - Aplicar una velocidad lineal (stride) para forzar un target en swing.
- *  - Para varios ángulos de coxa (-20, 0, +20 grados) modificar el joint de la pata
- *    antes de invocar updateTipPositionIterative() en estado SWING (iteración 1).
- *  - Registrar:
- *      * current_tip_pose inicial (post rotación coxa)
- *      * target_tip_pose_ congelado
- *      * swing_2_nodes_[4] (nodo final de swing)
- *      * Dirección y magnitud planares base->target y base->final_swing
- *  - Calcular referencia OpenSHC: raw_target = default_tip_pose + 0.5 * stride_vector
- *  - Si los vectores base->target son idénticos para todos los ángulos (diferencia angular ~0)
- *    indica que el ángulo actual de coxa NO se incorporó explícitamente al cálculo del objetivo.
+ * Methodology:
+ *  - Set up a LegStepper with identity and known default_tip_pose.
+ *  - Apply a linear velocity (stride) to force a target in swing.
+ *  - For several coxa angles (-20, 0, +20 degrees) modify the leg joint
+ *    before invoking updateTipPositionIterative() in SWING state (iteration 1).
+ *  - Record:
+ *      * Initial current_tip_pose (post coxa rotation)
+ *      * Frozen target_tip_pose_
+ *      * swing_2_nodes_[4] (swing end node)
+ *      * Planar direction and magnitude base->target and base->final_swing
+ *  - Compute OpenSHC reference: raw_target = default_tip_pose + 0.5 * stride_vector
+ *  - If base->target vectors are identical for all angles (angular difference ~0)
+ *    it indicates that the current coxa angle was NOT explicitly incorporated into the target computation.
  */
 
 #include "leg_stepper.h"
@@ -34,10 +34,10 @@ static double planarAngle(const Point3D &v) { return std::atan2(v.y, v.x); }
 static double planarNorm(const Point3D &v) { return std::sqrt(v.x * v.x + v.y * v.y); }
 
 int main() {
-    std::cout << std::fixed << std::setprecision(6);
+    std::cout << std::fixed << std::setprecision(3);
     std::cout << "=== Swing Coxa Orientation Influence Test ===\n";
 
-    // Parámetros mínimos coherentes con AGENTS.md
+    // Minimum parameters consistent with AGENTS.md
     Parameters params{};
     params.hexagon_radius = 160.0;
     params.coxa_length = 45.0;
@@ -51,7 +51,7 @@ int main() {
 
     RobotModel model(params);
 
-    // Configuración de StepCycle común
+    // Common StepCycle configuration
     StepCycle cycle{};
     cycle.frequency_ = 1.0;
     cycle.period_ = 4;
@@ -62,7 +62,7 @@ int main() {
     cycle.swing_start_ = 2;
     cycle.swing_end_ = 4;
 
-    // Datos acumulados por pata
+    // Accumulated data per leg
     struct LegSummary {
         int leg;
         double max_delta_target_deg;
@@ -70,19 +70,19 @@ int main() {
     };
     std::vector<LegSummary> leg_summaries;
 
-    // Recorremos las 6 patas
+    // Iterate over all 6 legs
     for (int leg_index = 0; leg_index < 6; ++leg_index) {
         Leg leg(leg_index, model);
 
-        // Construir identidad radial para la pata usando su base theta
+        // Build radial identity for the leg using its base theta
         double base_theta = model.getLegBaseAngleOffset(leg_index);                         // radians
-        double planar_r = params.hexagon_radius + params.coxa_length + params.femur_length; // mismo razonamiento que stride test
+        double planar_r = params.hexagon_radius + params.coxa_length + params.femur_length; // same reasoning as stride test
         Point3D identity_tip(planar_r * std::cos(base_theta), planar_r * std::sin(base_theta), params.default_height_offset);
 
         LegStepper stepper(leg_index, identity_tip, leg, model);
         stepper.setStepCycle(cycle);
 
-        // Velocidades que generan stride (idénticas para todas, se proyectan vía stride update)
+        // Velocities that generate stride (identical for all, projected via stride update)
         Point3D linear_vel(60.0, 20.0, 0.0);
         double angular_vel = 0.3; // yaw
         stepper.setDesiredVelocity(linear_vel, angular_vel);
@@ -101,7 +101,7 @@ int main() {
         };
         std::vector<Result> results;
 
-        // Referencia raw_target para esta pata
+        // raw_target reference for this leg
         double stance_ratio = double(cycle.stance_period_) / double(cycle.period_);
         Point3D radius(identity_tip.x, identity_tip.y, 0.0);
         Point3D angular_component(-angular_vel * radius.y, angular_vel * radius.x, 0.0);
@@ -125,23 +125,23 @@ int main() {
             results.push_back(Result{cs.coxa_deg, planarAngle(base_to_target), planarAngle(base_to_swing_end), planarNorm(base_to_target), planarNorm(base_to_swing_end), target, swing_end, leg.getCurrentTipPositionGlobal()});
         }
 
-        // Reporte por pata
-        std::cout << "\n[Pata " << leg_index << "] base_theta(deg)=" << math_utils::radiansToDegrees(base_theta) << " raw_target=(" << reference_raw_target.x << ", " << reference_raw_target.y << ")" << "\n";
+        // Per-leg report
+        std::cout << "\n[Leg " << leg_index << "] base_theta(deg)=" << math_utils::radiansToDegrees(base_theta)
+                  << " raw_target=(" << reference_raw_target.x << ", " << reference_raw_target.y << ")" << "\n";
         const double DEG = math_utils::radiansToDegrees(1.0);
         if (!results.empty()) {
             double base_dir = results[0].target_dir;
+            std::cout << "  Coxa(deg) | dTarget(deg) | dSwingEnd(deg) | target_norm | swing_norm\n";
             for (auto &r : results) {
                 double dtheta_target = (r.target_dir - base_dir) * DEG;
                 double dtheta_swing_end = (r.swing_end_dir - base_dir) * DEG;
-                std::cout << " Coxa=" << r.coxa_deg
-                          << "° target_dir(deg)=" << r.target_dir * DEG
-                          << " Δtarget_dir(deg)=" << dtheta_target
-                          << " swing_end_dir(deg)=" << r.swing_end_dir * DEG
-                          << " Δswing_end_dir(deg)=" << dtheta_swing_end
-                          << " target_norm=" << r.target_norm
-                          << " swing_end_norm=" << r.swing_end_norm
-                          << " tip_before=(" << r.tip_before.x << ", " << r.tip_before.y << ")"
-                          << " target=(" << r.target.x << ", " << r.target.y << ")"
+                std::cout << "  " << std::setw(8) << r.coxa_deg
+                          << " | " << std::setw(11) << dtheta_target
+                          << " | " << std::setw(13) << dtheta_swing_end
+                          << " | " << std::setw(11) << r.target_norm
+                          << " | " << std::setw(10) << r.swing_end_norm
+                          << "\n"
+                          << "    target=(" << r.target.x << ", " << r.target.y << ")"
                           << " swing_end=(" << r.swing_end.x << ", " << r.swing_end.y << ")"
                           << "\n";
             }
@@ -159,15 +159,16 @@ int main() {
         leg_summaries.push_back(LegSummary{leg_index, max_delta_target_deg, max_delta_swing_end_deg});
     }
 
-    // Resumen global
+    // Global summary
     const double THRESH = 1e-3; // 0.001 deg
-    std::cout << "\n=== Resumen Global ===\n";
+    std::cout << "\n=== Global Summary ===\n";
     for (auto &ls : leg_summaries) {
         std::cout << "Leg " << ls.leg
-                  << " maxΔ target_dir(deg)=" << ls.max_delta_target_deg
-                  << " maxΔ swing_end_dir(deg)=" << ls.max_delta_swing_end_deg
-                  << (ls.max_delta_target_deg <= THRESH ? " [INV]" : " [VAR]")
-                  << (ls.max_delta_swing_end_deg <= THRESH ? " [INV]" : " [VAR]")
+                  << ": dTargetMax=" << ls.max_delta_target_deg
+                  << " deg, dSwingEndMax=" << ls.max_delta_swing_end_deg
+                  << " deg ->"
+                  << (ls.max_delta_target_deg <= THRESH ? " target INV" : " target VAR")
+                  << (ls.max_delta_swing_end_deg <= THRESH ? ", swing INV" : ", swing VAR")
                   << "\n";
     }
     bool all_invariant = true;
@@ -178,10 +179,10 @@ int main() {
         }
     }
     if (all_invariant)
-        std::cout << "Conclusión: target_tip_pose y swing_end invariables al ángulo de coxa en TODAS las patas (escenario probado).\n";
+        std::cout << "Conclusion: target_tip_pose and swing_end are invariant to coxa angle in all legs.\n";
     else
-        std::cout << "Conclusión: Se detectó variación en alguna pata.\n";
-    std::cout << "Umbral usado (deg): " << THRESH << "\n";
+        std::cout << "Conclusion: Variation detected in at least one leg.\n";
+    std::cout << "Threshold (deg): " << THRESH << "\n";
 
     return 0;
 }

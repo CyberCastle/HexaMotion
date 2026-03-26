@@ -30,6 +30,7 @@
 #include "../src/body_pose_config_factory.h"
 #include "../src/gait_config_factory.h"
 #include "../src/locomotion_system.h"
+#include "../src/state_controller.h"
 #include "robot_model.h"
 #include "test_stubs.h"
 #include <cassert>
@@ -50,11 +51,8 @@ constexpr int ANGLE_HISTORY_SIZE = 200;        // Number of angle measurements t
 
 // CLI flags
 static const char *FLAG_ENABLE_FSR = "--fsr";                        // Enable FSR-based contact adaptation
-static const char *FLAG_CONTACT_THRESHOLD = "--contact-th=";         // (Deprecated) Override contact threshold (alias for fsr touchdown)
 static const char *FLAG_FSR_TOUCHDOWN_THRESHOLD = "--fsr-touch-th="; // Override fsr touchdown threshold (0-1)
-static const char *FLAG_RELEASE_THRESHOLD = "--release-th=";         // (Deprecated) Override release threshold (alias liftoff)
 static const char *FLAG_FSR_LIFTOFF_THRESHOLD = "--fsr-liftoff-th="; // Override FSR liftoff threshold (0-1)
-static const char *FLAG_MIN_PRESSURE = "--min-pressure=";            // (Deprecated) Override minimum pressure (alias)
 static const char *FLAG_FSR_MIN_PRESSURE = "--fsr-min-pressure=";    // Override minimum normalized FSR pressure (0-1)
 static const char *FLAG_PRESERVE_SWING = "--preserve-swing";         // Preserve swing end pose as stance origin
 static const char *FLAG_NO_PRESERVE_SWING = "--no-preserve-swing";   // Reset stance origin each stance
@@ -289,7 +287,7 @@ class AngleVisualizationServo : public IServoInterface {
             record.joint = joint;
             record.angle_degrees = angle; // Already in degrees
             record.speed = speed;
-            record.acceleration = 0.0;           // legacy call (no acceleration provided)
+            record.acceleration = 0.0;           // base call path (no acceleration provided)
             record.target_angle_degrees = angle; // Already in degrees
             record.timestamp = std::chrono::steady_clock::now();
 
@@ -375,7 +373,7 @@ class AngleVisualizationServo : public IServoInterface {
     void generateAngleReport() const {
         std::ofstream report("hexamotion_angle_report.txt");
         if (!report.is_open()) {
-            std::cerr << "Warning: Could not create angle report file" << std::endl;
+            std::cerr << "INFO: Could not create angle report file" << std::endl;
             return;
         }
 
@@ -484,11 +482,8 @@ static void printHelp() {
     std::cout << "Usage: virtual_hardware_sim_test [options]\n"
               << "Options:\n"
               << "  " << FLAG_ENABLE_FSR << "            Enable FSR contact adaptation logic\n"
-              << "  " << FLAG_CONTACT_THRESHOLD << "X   (Deprecated) Set contact threshold (alias, default 0.7)\n"
               << "  " << FLAG_FSR_TOUCHDOWN_THRESHOLD << "X   Set FSR touchdown threshold (0-1, default 0.7)\n"
-              << "  " << FLAG_RELEASE_THRESHOLD << "X   (Deprecated) Set release threshold (alias, default 0.3)\n"
               << "  " << FLAG_FSR_LIFTOFF_THRESHOLD << "X   Set FSR liftoff threshold (0-1, default 0.3)\n"
-              << "  " << FLAG_MIN_PRESSURE << "X       (Deprecated) Set min pressure (legacy raw, alias)\n"
               << "  " << FLAG_FSR_MIN_PRESSURE << "X   Set min normalized FSR pressure (0-1, default 0.05)\n"
               << "  " << FLAG_PRESERVE_SWING << "          Preserve swing touchdown as stance origin (continuous)\n"
               << "  " << FLAG_NO_PRESERVE_SWING << "      Reset stance origin each cycle (anti-drift)\n"
@@ -516,7 +511,6 @@ int main(int argc, char **argv) {
             return 0;
         } else if (arg == FLAG_ENABLE_FSR) {
             enable_fsr = true;
-        } else if (arg == "--debug-drift") { /* deprecated flag ignored */
         } else if (arg == FLAG_DEBUG_FSR) {
             debug_fsr = true;
         } else if (arg == FLAG_DRIFT_METRICS) {
@@ -528,11 +522,8 @@ int main(int argc, char **argv) {
             params.preserve_swing_end_pose = false;
             preserve_flag_set = true;
         } else if (!parseFlagValue(arg, FLAG_FSR_TOUCHDOWN_THRESHOLD, params.fsr_touchdown_threshold) &&
-                   !parseFlagValue(arg, FLAG_CONTACT_THRESHOLD, params.fsr_touchdown_threshold) &&
                    !parseFlagValue(arg, FLAG_FSR_LIFTOFF_THRESHOLD, params.fsr_liftoff_threshold) &&
-                   !parseFlagValue(arg, FLAG_RELEASE_THRESHOLD, params.fsr_liftoff_threshold) &&
-                   !parseFlagValue(arg, FLAG_FSR_MIN_PRESSURE, params.fsr_min_pressure) &&
-                   !parseFlagValue(arg, FLAG_MIN_PRESSURE, params.fsr_min_pressure)) {
+                   !parseFlagValue(arg, FLAG_FSR_MIN_PRESSURE, params.fsr_min_pressure)) {
             std::cout << "Unknown argument: " << arg << " (ignored)" << std::endl;
         }
     }
@@ -558,6 +549,9 @@ int main(int argc, char **argv) {
                   << " debug_fsr=" << (params.debug_fsr_transitions ? "on" : "off")
                   << " (override with " << FLAG_PRESERVE_SWING << " or " << FLAG_NO_PRESERVE_SWING << ")" << std::endl;
     }
+    // Enable configured packed/unpacked poses for Bézier-based transitions
+    enableConfiguredPackedUnpackedPoses(params);
+
     LocomotionSystem sys(params);
 
     VisualizationIMU imu;
@@ -565,6 +559,7 @@ int main(int argc, char **argv) {
     AngleVisualizationServo servos;
 
     BodyPoseConfiguration pose_config = getDefaultBodyPoseConfig(params);
+    pose_config.start_up_sequence = true; // Enable Bézier-based startup/shutdown sequences
 
     std::cout << "Initializing HexaMotion system with visualization interfaces..." << std::endl;
     if (!sys.initialize(&imu, &fsr, &servos, pose_config)) {
@@ -572,58 +567,52 @@ int main(int argc, char **argv) {
         return 1;
     }
 
-    // 2. Establish standing pose using jerk-limited S-curve transition
-    std::cout << "\nStarting initial standing pose S-curve transition..." << std::endl;
-    bool s_curve_started = sys.establishInitialStandingPose();
-    if (!s_curve_started && !sys.isInitialStandingPoseActive()) {
+    // 2. Establish standing pose using initial standing transition
+    std::cout << "\nStarting initial standing pose transition..." << std::endl;
+    bool standing_started = sys.establishInitialStandingPose();
+    if (!standing_started && !sys.isInitialStandingPoseActive()) {
         std::cerr << "ERROR: Failed to start initial standing pose transition." << std::endl;
         return 1;
     }
 
-    BodyPoseController *pose_ctrl = sys.getBodyPoseController();
-    int scurve_iter = 0;
-    int max_scurve_iters = 600; // will be expanded dynamically based on progress feedback
+    int standing_iter = 0;
+    int max_standing_iters = 600; // will be expanded dynamically based on progress feedback
 
     while (sys.isInitialStandingPoseActive()) {
-        if (scurve_iter >= max_scurve_iters) {
-            std::cerr << "ERROR: Initial standing pose transition exceeded estimated iteration budget (" << max_scurve_iters << ")." << std::endl;
+        if (standing_iter >= max_standing_iters) {
+            std::cerr << "ERROR: Initial standing pose transition exceeded estimated iteration budget (" << max_standing_iters << ")." << std::endl;
             return 1;
         }
-        servos.updateStep(-scurve_iter);
+        servos.updateStep(-standing_iter);
 
         if (!sys.stepInitialStandingPose()) {
-            std::cerr << "ERROR: stepInitialStandingPose() failed at iteration " << scurve_iter << std::endl;
+            std::cerr << "ERROR: stepInitialStandingPose() failed at iteration " << standing_iter << std::endl;
             return 1;
         }
 
-        if (pose_ctrl) {
-            double normalized = pose_ctrl->getInitialStandingPoseProgress(); // 0.0-1.0
-            if (scurve_iter % 20 == 0) {
-                double progress_pct = normalized * 100.0;
-                std::cout << "Initial standing pose progress: " << std::fixed << std::setprecision(1) << progress_pct << "% ";
-                if (pose_ctrl->isInitialStandingAlignmentPhase()) {
-                    std::cout << "[ALIGN]";
-                } else {
-                    std::cout << "[LIFT]";
-                }
-                std::cout << std::endl;
+        {
+            double progress_pct = static_cast<double>(sys.getStartupProgressPercent());
+            double normalized = progress_pct / 100.0;
+            if (standing_iter % 20 == 0) {
+                std::cout << "Initial standing pose progress: " << std::fixed << std::setprecision(1) << progress_pct << "%" << std::endl;
                 std::cout << std::defaultfloat;
             }
 
             if (normalized > 0.0) {
-                int estimated_iters = static_cast<int>(std::ceil((scurve_iter + 1) / normalized));
+                int estimated_iters = static_cast<int>(std::ceil((standing_iter + 1) / normalized));
                 // add generous buffer to account for jerk profile tapering
                 estimated_iters += 100;
-                if (estimated_iters > max_scurve_iters) {
-                    max_scurve_iters = estimated_iters;
+                if (estimated_iters > max_standing_iters) {
+                    max_standing_iters = estimated_iters;
                 }
             }
         }
 
-        scurve_iter++;
+        standing_iter++;
     }
 
-    std::cout << "Initial standing pose transition completed in " << scurve_iter << " iterations." << std::endl;
+    std::cout << "Initial standing pose transition completed in " << standing_iter << " iterations." << std::endl;
+    std::cout << "  (Bézier type: quartic dual via LegPoser::stepToPosition)" << std::endl;
 
     // Validate that resulting standing pose matches configured default stance
     const auto &default_stance_positions = pose_config.leg_stance_positions;
@@ -662,7 +651,7 @@ int main(int argc, char **argv) {
     }
 
     if (!angles_match || !positions_match) {
-        std::cerr << "ERROR: Standing pose after S-curve transition does not match default configuration." << std::endl;
+        std::cerr << "ERROR: Standing pose after transition does not match default configuration." << std::endl;
         return 1;
     }
 
@@ -686,36 +675,62 @@ int main(int argc, char **argv) {
         return 1;
     }
 
-    // 4. Execute startup sequence
-    std::cout << "Executing startup sequence..." << std::endl;
-    int startup_attempts = 0;
-    // Estimate iterations for two-phase startup matching BodyPoseController timing
-    const Parameters &startup_params = sys.getParameters();
-    double time_delta_startup = startup_params.time_delta;
-    double step_frequency_startup = startup_params.step_frequency;
-    int horiz_iters = std::max(1, (int)std::round((1.0 / step_frequency_startup) / time_delta_startup));
-    int vert_iters = std::max(1, (int)std::round((3.0 / step_frequency_startup) / time_delta_startup));
-    int expected_total_iters = horiz_iters + vert_iters;
-    const int MAX_STARTUP_ATTEMPTS = expected_total_iters + 80; // margin
-    std::cout << "Estimated startup iterations (horizontal=" << horiz_iters << ", vertical=" << vert_iters
-              << ", total=" << expected_total_iters << ")  Max attempts=" << MAX_STARTUP_ATTEMPTS << std::endl;
+    // 4. Execute startup sequence (StateController handles internally via update())
+    // Track Bézier iterations through state machine transitions
+    std::cout << "\n=== BÉZIER TRANSITION TRACKING (PACKED → READY → RUNNING) ===" << std::endl;
 
-    while (sys.isStartupInProgress() && startup_attempts < MAX_STARTUP_ATTEMPTS) {
+    StateController *sc = sys.getStateController();
+    assert(sc != nullptr);
+
+    int startup_attempts = 0;
+    int unpack_bezier_iters = 0;  // PACKED → READY (cubic Bézier per joint)
+    int startup_bezier_iters = 0; // READY → RUNNING (quartic Bézier tip position)
+    RobotState prev_robot_state = sc->getRobotState();
+    bool unpack_phase_complete = false;
+    const int MAX_STARTUP_ATTEMPTS = 2000;
+
+    while (sc->getRobotState() != ROBOT_RUNNING && startup_attempts < MAX_STARTUP_ATTEMPTS) {
         servos.updateStep(startup_attempts);
-        if (sys.executeStartupSequence()) {
-            std::cout << "✅ Startup sequence completed after " << startup_attempts << " attempts." << std::endl;
-            break;
+        sys.update();
+
+        RobotState cur_robot_state = sc->getRobotState();
+
+        // Count iterations per transition phase
+        if (!unpack_phase_complete) {
+            if (cur_robot_state == ROBOT_PACKED) {
+                unpack_bezier_iters++;
+            } else if (prev_robot_state == ROBOT_PACKED && cur_robot_state != ROBOT_PACKED) {
+                unpack_bezier_iters++;
+                unpack_phase_complete = true;
+                std::cout << "  Unpack (cubic Bézier via transitionConfiguration): " << unpack_bezier_iters << " iterations" << std::endl;
+            }
         }
+        if (unpack_phase_complete && cur_robot_state != ROBOT_RUNNING) {
+            startup_bezier_iters++;
+        }
+
+        prev_robot_state = cur_robot_state;
+
         if (startup_attempts % 25 == 0) {
             std::cout << "Startup attempt " << startup_attempts << " Progress=" << sys.getStartupProgressPercent() << "%" << std::endl;
         }
         startup_attempts++;
     }
 
-    if (startup_attempts >= MAX_STARTUP_ATTEMPTS) {
-        std::cerr << "ERROR: Startup sequence failed to complete." << std::endl;
+    if (!unpack_phase_complete) {
+        std::cout << "  Unpack: skipped (direct mode / instant)" << std::endl;
+    }
+    if (startup_bezier_iters > 0) {
+        std::cout << "  Startup (quartic Bézier via stepToPosition): " << startup_bezier_iters << " iterations" << std::endl;
+    } else {
+        std::cout << "  Startup: direct mode (1 iteration)" << std::endl;
+    }
+
+    if (sc->getRobotState() != ROBOT_RUNNING) {
+        std::cerr << "ERROR: Startup sequence did not complete within budget." << std::endl;
         return 1;
     }
+    std::cout << "✅ Startup sequence completed after " << startup_attempts << " attempts." << std::endl;
 
     // 5. Main visualization loop
     std::cout << "\n🔥 Starting servo angle visualization..." << std::endl;
@@ -749,8 +764,8 @@ int main(int argc, char **argv) {
 
         // Update the locomotion system
         if (!sys.update()) {
-            std::cerr << "Warning: System update failed at step " << step << std::endl;
-            continue;
+            std::cerr << "ERROR: System update failed at step " << step << std::endl;
+            return 1;
         }
 
         // Show detailed servo angles every 18 steps
@@ -771,23 +786,55 @@ int main(int argc, char **argv) {
     std::cout << "\n🎯 VISUALIZATION COMPLETE!" << std::endl;
     servos.printCurrentAngles();
 
-    // 7. Stop walking and return to standing
+    // 7. Stop walking and return to standing — track shutdown/pack Bézier iterations
     std::cout << "Stopping walk and returning to standing pose..." << std::endl;
     if (!sys.stopWalking()) {
-        std::cerr << "Warning: Failed to stop walking." << std::endl;
+        std::cerr << "ERROR: Failed to stop walking." << std::endl;
+        return 1;
     }
 
-    // Execute shutdown sequence
-    int shutdown_attempts = 0;
-    const int MAX_SHUTDOWN_ATTEMPTS = 50;
+    std::cout << "\n=== BÉZIER TRANSITION TRACKING (RUNNING → READY → PACKED) ===" << std::endl;
 
-    while (sys.isShutdownInProgress() && shutdown_attempts < MAX_SHUTDOWN_ATTEMPTS) {
+    // Run update loop to let StateController orchestrate the shutdown
+    int shutdown_attempts = 0;
+    int shutdown_bezier_iters = 0;
+    const int MAX_SHUTDOWN_ATTEMPTS = 2000;
+    while (shutdown_attempts < MAX_SHUTDOWN_ATTEMPTS && sc->getRobotState() == ROBOT_RUNNING) {
         servos.updateStep(VISUALIZATION_STEPS + shutdown_attempts);
-        if (sys.executeShutdownSequence()) {
-            std::cout << "✅ Shutdown sequence completed." << std::endl;
-            break;
-        }
+        sys.update();
         shutdown_attempts++;
+        shutdown_bezier_iters++;
+    }
+    if (sc->getRobotState() == ROBOT_READY) {
+        std::cout << "  Shutdown (quartic Bézier via stepToPosition): " << shutdown_bezier_iters << " iterations" << std::endl;
+        std::cout << "✅ Shutdown completed after " << shutdown_attempts << " iterations." << std::endl;
+    } else {
+        std::cerr << "ERROR: Shutdown did not complete after " << shutdown_attempts << " iterations." << std::endl;
+        return 1;
+    }
+
+    if (sc->getRobotState() != ROBOT_READY) {
+        std::cerr << "ERROR: System did not reach READY before PACK request." << std::endl;
+        return 1;
+    }
+
+    // Request pack to observe READY → PACKED transition (cubic Bézier)
+    int pack_bezier_iters = 0;
+    if (!sc->requestRobotState(ROBOT_PACKED)) {
+        std::cerr << "ERROR: PACK state request was rejected." << std::endl;
+        return 1;
+    }
+    const int MAX_PACK_ATTEMPTS = 2000;
+    while (pack_bezier_iters < MAX_PACK_ATTEMPTS && sc->getRobotState() != ROBOT_PACKED) {
+        servos.updateStep(VISUALIZATION_STEPS + shutdown_attempts + pack_bezier_iters);
+        sys.update();
+        pack_bezier_iters++;
+    }
+    if (sc->getRobotState() == ROBOT_PACKED) {
+        std::cout << "  Pack (cubic Bézier via transitionConfiguration): " << pack_bezier_iters << " iterations" << std::endl;
+    } else {
+        std::cerr << "ERROR: Pack transition did not complete." << std::endl;
+        return 1;
     }
 
     // 8. Generate final report
@@ -802,6 +849,19 @@ int main(int argc, char **argv) {
     std::cout << "✅ HexaMotion angle generation successfully visualized" << std::endl;
     std::cout << "✅ Report saved to: hexamotion_angle_report.txt" << std::endl;
 
+    // 9b. Bézier transition iteration summary
+    std::cout << "\n=== BÉZIER TRANSITION ITERATION SUMMARY ===" << std::endl;
+    std::cout << "  Phase                     | Bézier Type     | Iterations" << std::endl;
+    std::cout << "  --------------------------+-----------------+-----------" << std::endl;
+    std::cout << "  Standing pose (initial)   | Quartic dual    | " << standing_iter << std::endl;
+    std::cout << "  Unpack (PACKED→READY)     | Cubic per-joint | " << unpack_bezier_iters << std::endl;
+    std::cout << "  Startup (READY→RUNNING)   | Dual quartic    | " << startup_bezier_iters << std::endl;
+    std::cout << "  Shutdown (RUNNING→READY)  | Dual quartic    | " << shutdown_bezier_iters << std::endl;
+    std::cout << "  Pack (READY→PACKED)       | Cubic per-joint | " << pack_bezier_iters << std::endl;
+    std::cout << "  --------------------------+-----------------+-----------" << std::endl;
+    std::cout << "  Total transition iters    |                 | "
+              << (standing_iter + unpack_bezier_iters + startup_bezier_iters + shutdown_bezier_iters + pack_bezier_iters) << std::endl;
+
     // 10. SYNCHRONIZATION VERIFICATION WITH tripod_walk_visualization_test.cpp
     std::cout << "\n=== SYNCHRONIZATION VERIFICATION ===" << std::endl;
     std::cout << "📋 ANGLE UNIT CONSISTENCY CHECK:" << std::endl;
@@ -813,7 +873,7 @@ int main(int argc, char **argv) {
     std::cout << "\n🔄 TRAJECTORY TIMING SYNCHRONIZATION:" << std::endl;
     std::cout << "  ✅ Both tests use identical LocomotionSystem configuration" << std::endl;
     std::cout << "  ✅ Both tests execute the same WalkController → LegStepper trajectory sequence" << std::endl;
-    std::cout << "  ✅ Both tests use the same StepCycle timing (iteraciones derivadas dinámicamente por fase)" << std::endl;
+    std::cout << "  ✅ Both tests use the same StepCycle timing (iterations dynamically derived per phase)" << std::endl;
     std::cout << "  ✅ Both tests call sys.update() with identical frequency" << std::endl;
 
     std::cout << "\n🎯 EXPECTED RESULT:" << std::endl;

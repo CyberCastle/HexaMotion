@@ -1,49 +1,63 @@
 # HexaMotion
 
-Library for controlling locomotion, gait, and pose of a hexapod robot.
+**HexaMotion** is a near-complete 1:1 port of [OpenSHC (Syropod High-level Controller)](https://github.com/csiro-robotics/syropod_highlevel_controller) — CSIRO's versatile multilegged robot controller — rewritten **without ROS** to run on MCU targets such as the STM32H7 (Arduino Giga R1).
+
+OpenSHC is a powerful ROS-based C++ controller for quasi-static multilegged robots, developed by [CSIRO's Robotics and Autonomous Systems Group](https://research.csiro.au/robotics/). HexaMotion brings that same locomotion logic to embedded hardware, replacing the ROS transport and configuration layer with a direct C++ API and a `Parameters` structure, while preserving the core algorithms and control flow as faithfully as possible.
+
+> **AI-assisted development:** The porting of OpenSHC's logic to HexaMotion was done almost entirely with AI, using **GitHub Copilot** powered by the **GPT** and **Claude Opus** large language models, and to a lesser extent **Gemini**. The AI agents handled code translation, architecture adaptation, test generation and iterative debugging throughout the project.
 
 ## Overview
 
-HexaMotion provides kinematic and gait planning utilities to drive a six legged robot. It is designed for use with the **Arduino Giga R1** and relies on the [ArduinoEigen](https://github.com/arduino-libraries/ArduinoEigen) package for matrix math.
-The robot body forms a hexagon, so each coxa joint is mounted at a 60° interval around the center.
+HexaMotion targets hexapod robots with a **hexagonal body**, **six legs** spaced 60° apart, and **three joints (3DOF) per leg**. It includes:
 
-## Features
+- Inverse kinematics using DH parameters and Jacobians.
+- Body pose and orientation control via IMU feedback.
+- Multiple gait planners: tripod, wave, ripple and metachronal.
+- Terrain adaptation and inclination compensation.
+- Admittance control and cartesian velocity control.
+- FSR (Force Sensitive Resistor) input for contact detection.
+- Smart servo interface for precise joint control.
+- Error reporting, diagnostics and self-tests.
 
--   **Smooth Trajectory Interpolation**: OpenSHC-style movement using current servo positions as starting points for natural, smooth robot motion.
--   Inverse kinematics using DH parameters and Jacobians.
--   Pose and orientation control via IMU feedback.
--   Multiple gait planner with tripod, wave, ripple and metachronal options.
--   FSR input for contact detection.
--   Smart servo interface for precise joint control.
--   Error reporting and self tests.
+The library relies on [ArduinoEigen](https://github.com/arduino-libraries/ArduinoEigen) for matrix math and is designed for use with the **Arduino Giga R1**.
 
-## 🚀 Smooth Movement Feature
+## Relationship with OpenSHC
 
-HexaMotion includes **smooth trajectory interpolation** that uses current servo positions as starting points for pose changes (OpenSHC-style). This provides:
+HexaMotion is a **port**, not a fork. The original OpenSHC codebase (included in the `OpenSHC/` directory for reference) was systematically translated into a standalone C++ library. The core state machine, gait planning, body pose control, walk controller sequencing and inverse kinematics logic are preserved 1:1 from OpenSHC.
 
--   **Natural movement**: Smooth transitions instead of sudden position jumps
--   **Current position awareness**: Trajectories start from actual servo positions
--   **Configurable smoothness**: Adjustable interpolation speed and precision
--   **Backward compatibility**: Existing code works with improved behavior
+### Key differences and limitations
 
-### Quick Start with Smooth Movement
+| Area                   | OpenSHC                                        | HexaMotion                                                    |
+| ---------------------- | ---------------------------------------------- | ------------------------------------------------------------- |
+| **Leg count**          | Configurable (any)                             | Fixed to 6 legs                                               |
+| **DOF per leg**        | Configurable                                   | Fixed to 3DOF                                                 |
+| **ROS**                | Required                                       | Not supported — replaced by direct API                        |
+| **Configuration**      | YAML files + dynamic parameters                | `Parameters` struct + explicit setter APIs                    |
+| **Workspace strategy** | Full model copy for isolation                  | Decoupled `WorkspaceAnalyzer` over live model (MCU-optimized) |
+| **Gravity estimation** | Orientation-based (`Model::estimateGravity()`) | Accelerometer-based (simpler, noisier under dynamic accel.)   |
 
-```cpp
-// Configure smooth trajectory parameters
-params.smooth_trajectory.use_current_servo_positions = true;  // Enable feature
-params.smooth_trajectory.interpolation_speed = 0.15f;        // Smooth speed
-params.smooth_trajectory.max_interpolation_steps = 20;       // Precision
+**Intentionally not ported:**
 
-// Standard pose changes use smooth trajectories automatically when enabled in params
-locomotion_system.setBodyPose(new_position, new_orientation);
-```
+- **Tip orientation control** (`updateTipRotation`, gravity-aligned tips, rotation-constrained IK retries) — not applicable with 3DOF legs where tip orientation is not an independent task variable.
+- **AMBLE_GAIT** — not supported with current morphology/constraints.
+- **Planner mode** — equivalent planning should be implemented externally via `LocomotionSystem` API.
+- **Cruise control** — equivalent cruise behavior should be implemented externally.
+- **`ExternalTarget`** — externally-driven tip targets should use the `LocomotionSystem` API.
+- **`velocity_input_mode`** — throttle-vs-real input should be handled externally by pre-scaling commands.
+- **`ignore_IK_warnings`** — suppressing IK warnings would interfere with HexaMotion's diagnostic flow.
+- **Runtime/dynamic parameter adjustment** (`ParameterSelection`, `adjustParameter()`) — replaced by explicit setter APIs (`setStepFrequency`, `setSwingHeight`, etc.) and/or direct `Parameters` updates before runtime.
 
-See [Smooth Movement Guide](docs/SMOOTH_MOVEMENT_GUIDE.md) for complete documentation.
+**Architectural changes:**
+
+- `LocomotionSystem` acts as a ROS-less facade around `StateController`, replacing OpenSHC's external ROS graph/script role. It routes external inputs, runs the control pipeline (sensors → walk update → IK → servo output) and exposes high-level convenience methods (forward, backward, turn, stop).
+- OpenSHC logic is split into more focused classes for readability and maintainability.
+- Class/data naming follows a semantic, self-documenting pattern — some names differ from OpenSHC while keeping 1:1 logic.
+- Configurations use factory patterns where appropriate.
 
 ## Prerequisites
 
--   Arduino IDE with board support for **Arduino Giga R1**.
--   Install the **ArduinoEigen** library using the Library Manager or by copying it into your `libraries` folder.
+- Arduino IDE with board support for **Arduino Giga R1**.
+- Install the **ArduinoEigen** library using the Library Manager or by copying it into your `libraries` folder.
 
 ## Including the library
 
@@ -89,13 +103,8 @@ MyFSR fsr;
 MyServo servos;
 
 void setup() {
-    // Optional: configure smoothing before init
-    params.smooth_trajectory.use_current_servo_positions = true;
-    params.smooth_trajectory.enable_pose_interpolation = true;
-    params.smooth_trajectory.interpolation_speed = 0.15f; // 0.01 - 1.0
-
-    // Create a body pose configuration (factory pattern)
-    BodyPoseConfiguration pose_cfg = BodyPoseConfigFactory::create("default", params);
+    // Create a body pose configuration (factory function)
+    BodyPoseConfiguration pose_cfg = getDefaultBodyPoseConfig(params);
 
     // Initialize hardware + controllers
     robot.initialize(&imu, &fsr, &servos, pose_cfg);
@@ -104,7 +113,7 @@ void setup() {
     robot.setStandingPose();
 
     // Select gait (TRIPOD_GAIT, WAVE_GAIT, RIPPLE_GAIT, METACHRONAL_GAIT)
-    robot.setGaitType(TRIPOD_GAIT);
+    robot.selectGait(TRIPOD_GAIT);
 
     // Start continuous forward motion (mm/s), or use turnInPlace / walkSideways
     robot.walkForward(30.0);
@@ -117,73 +126,25 @@ void loop() {
 }
 ```
 
-## 🔧 Servo Interface Changes
-
-HexaMotion now requires **simultaneous control of servo position and speed** for better motor control and smoother movement:
-
-### **New Combined Interface:**
-
-```cpp
-class MyServo : public IServoInterface {
-public:
-    bool initialize() override { return true; }
-
-    // NEW: Primary method - sets angle and speed together
-    bool setJointAngleAndSpeed(int leg_index, int joint_index, float angle, float speed) override {
-        // Your servo control code here
-        // angle: target position in degrees
-        // speed: movement speed (0.1-3.0, where 1.0 is normal speed)
-        return sendServoCommand(leg_index, joint_index, angle, speed);
-    }
-
-    float getJointAngle(int leg_index, int joint_index) override {
-        return readServoPosition(leg_index, joint_index);
-    }
-
-    bool isJointMoving(int leg_index, int joint_index) override { return false; }
-    bool enableTorque(int leg_index, int joint_index, bool enable) override { return true; }
-};
-```
-
-### **Key Changes:**
-
--   **`setJointAngleAndSpeed()`** is now the **only** method for servo control
--   **`setJointAngle()`** and **`setJointSpeed()`** have been **removed**
--   Position and speed **must be set together** - no separate control
--   Default servo speed can be configured in `Parameters::default_servo_speed`
-
-### **Migration Guide:**
-
-```cpp
-// OLD - separate calls (no longer available)
-servo->setJointAngle(leg, joint, 45.0f);
-servo->setJointSpeed(leg, joint, 1.5f);
-
-// NEW - combined call (required)
-servo->setJointAngleAndSpeed(leg, joint, 45.0f, 1.5f);
-```
-
 Make sure the joint limit arrays (`coxa_angle_limits`, `femur_angle_limits` and
 `tibia_angle_limits`) are populated with valid ranges before creating the
 `LocomotionSystem` instance. If these values remain at their defaults the system
 will flag `KINEMATICS_ERROR` and skip sending servo commands.
 
-Example mock implementations of these interfaces can be created following the skeletons above (a dedicated `examples/` directory was removed).
-
-Debug logging can be enabled by defining the `ENABLE_LOG` macro before
-including the library. When active, certain events such as joint limit
-violations will be printed to the serial console.
+Debug logging can be enabled by defining the `DEBUG_LOGGING` macro before
+including the library. When active, certain events such as state transitions
+will be printed to the serial console.
 
 ## Configurable parameters
 
-The `Parameters` structure defines the physical dimensions and control limits of the robot. Key fields include:
+The `Parameters` structure (defined in `src/robot_model.h`) defines the physical dimensions and control limits of the robot. Key fields include:
 
--   `hexagon_radius`, `coxa_length`, `femur_length`, `tibia_length`.
--   `robot_height` and `robot_weight`.
--   Joint angle limits for coxa, femur and tibia.
--   IMU and FSR calibration settings.
--   Gait tuning factors and control frequency.
-    See `src/locomotion_system.h` for a detailed list.
+- `hexagon_radius`, `coxa_length`, `femur_length`, `tibia_length`.
+- `robot_height`, `standing_height`, `default_height_offset`.
+- Joint angle limits for coxa, femur and tibia.
+- FSR contact thresholds (`fsr_touchdown_threshold`, `fsr_liftoff_threshold`, `fsr_min_pressure`).
+- Gait tuning (`step_frequency`, `body_velocity_scaler`), control frequency (`time_delta`) and servo speed (`default_servo_speed`).
+- IK solver settings (`ik`), body compensation (`body_comp`), admittance control (`admittance`) and workspace tuning (`workspace_tuning`).
 
 ## Running tests
 
@@ -205,3 +166,13 @@ Each test binary can be executed individually once the build completes.
 ## IMU Integration
 
 Advanced IMUs (e.g. BNO055) automatically enable: absolute orientation usage, improved terrain adaptation, gravity-free linear acceleration, quaternion-based terrain analysis and multi-factor stability estimation. When an IMU does not provide absolute positioning, the system gracefully falls back to the baseline algorithms without code changes required. Implement `hasAbsolutePositioning()` accordingly in your `IIMUInterface` implementation.
+
+## References
+
+- **OpenSHC repository:** [csiro-robotics/syropod_highlevel_controller](https://github.com/csiro-robotics/syropod_highlevel_controller)
+- **OpenSHC paper:** B. Tam, F. Talbot, R. Steindl, A. Elfes and N. Kottege, "OpenSHC: A Versatile Multilegged Robot Controller," in _IEEE Access_, vol. 8, pp. 188908-188926, 2020, doi: [10.1109/ACCESS.2020.3031019](https://doi.org/10.1109/ACCESS.2020.3031019).
+- **OpenSHC tutorials:** [csiro-robotics/shc_tutorials](https://github.com/csiro-robotics/shc_tutorials)
+
+## License
+
+See [LICENSE](LICENSE).

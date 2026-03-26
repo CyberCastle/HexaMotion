@@ -40,28 +40,28 @@ Eigen::Matrix4d AnalyticRobotModel::legTransformAnalytic(int leg_index, const Jo
 }
 
 Eigen::Matrix3d AnalyticRobotModel::calculateJacobianAnalytic(int leg, const JointAngles &q, const Point3D &) const {
-    // Numerical Jacobian computation using forward kinematics
+    /** Numerical Jacobian via central differences for O(h²) accuracy. */
     const double delta = JACOBIAN_DELTA;
-    Point3D base = forwardKinematicsGlobalCoordinatesAnalytic(leg, q);
-    JointAngles qd = q;
-    qd.coxa += delta;
-    Point3D p_dx = forwardKinematicsGlobalCoordinatesAnalytic(leg, qd);
-    qd = q;
-    qd.femur += delta;
-    Point3D p_dy = forwardKinematicsGlobalCoordinatesAnalytic(leg, qd);
-    qd = q;
-    qd.tibia += delta;
-    Point3D p_dz = forwardKinematicsGlobalCoordinatesAnalytic(leg, qd);
+    const double half = delta * 0.5;
     Eigen::Matrix3d jacobian;
-    jacobian.col(0) = Eigen::Vector3d((p_dx.x - base.x) / delta,
-                                      (p_dx.y - base.y) / delta,
-                                      (p_dx.z - base.z) / delta);
-    jacobian.col(1) = Eigen::Vector3d((p_dy.x - base.x) / delta,
-                                      (p_dy.y - base.y) / delta,
-                                      (p_dy.z - base.z) / delta);
-    jacobian.col(2) = Eigen::Vector3d((p_dz.x - base.x) / delta,
-                                      (p_dz.y - base.y) / delta,
-                                      (p_dz.z - base.z) / delta);
+    for (int joint = 0; joint < DOF_PER_LEG; ++joint) {
+        JointAngles plus = q, minus = q;
+        if (joint == 0) {
+            plus.coxa += half;
+            minus.coxa -= half;
+        } else if (joint == 1) {
+            plus.femur += half;
+            minus.femur -= half;
+        } else {
+            plus.tibia += half;
+            minus.tibia -= half;
+        }
+        Point3D pp = forwardKinematicsGlobalCoordinatesAnalytic(leg, plus);
+        Point3D pm = forwardKinematicsGlobalCoordinatesAnalytic(leg, minus);
+        jacobian(0, joint) = (pp.x - pm.x) / delta;
+        jacobian(1, joint) = (pp.y - pm.y) / delta;
+        jacobian(2, joint) = (pp.z - pm.z) / delta;
+    }
     return jacobian;
 }
 

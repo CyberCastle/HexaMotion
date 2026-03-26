@@ -2,7 +2,14 @@
 #include "hexamotion_constants.h"
 
 Leg::Leg(int leg_id, const RobotModel &model)
-    : model_(model), leg_id_(leg_id), leg_name_(("Leg_" + std::to_string(leg_id)).c_str()), joint_angles_(0.0, 0.0, 0.0), tip_position_(0.0, 0.0, 0.0), base_position_(0.0, 0.0, 0.0), step_phase_(STANCE_PHASE), gait_phase_(0.0), in_contact_(false), contact_force_(0.0), fsr_history_index_(0), leg_phase_offset_(0.0), desired_tip_position_(0.0, 0.0, 0.0), default_angles_(0.0, 0.0, 0.0), default_tip_position_(0.0, 0.0, 0.0) {
+    : model_(model), leg_id_(leg_id), leg_name_(("Leg_" + std::to_string(leg_id)).c_str()),
+      joint_angles_(0.0, 0.0, 0.0), desired_joint_velocity_(0.0, 0.0, 0.0),
+      current_joint_velocity_(0.0, 0.0, 0.0), current_joint_effort_(0.0, 0.0, 0.0),
+      tip_position_(0.0, 0.0, 0.0), base_position_(0.0, 0.0, 0.0), leg_state_(LEG_WALKING),
+      swing_progress_(-1.0), step_phase_(STANCE_PHASE), gait_phase_(0.0), in_contact_(false),
+      contact_force_(0.0), tip_force_calculated_(Eigen::Vector3d::Zero()), fsr_history_index_(0),
+      leg_phase_offset_(0.0), desired_tip_position_(0.0, 0.0, 0.0), default_angles_(0.0, 0.0, 0.0),
+      default_tip_position_(0.0, 0.0, 0.0) {
 
     // Initialize FSR contact history
     for (int i = 0; i < 3; ++i) {
@@ -53,6 +60,15 @@ void Leg::setJointAngle(int joint_index, double angle) {
     }
     // Synchronize tip position using forward kinematics
     updateTipPosition();
+}
+
+void Leg::setCurrentJointVelocity(const JointAngles &velocities) {
+    current_joint_velocity_ = velocities;
+}
+
+void Leg::setCurrentJointEffort(const JointAngles &efforts) {
+    current_joint_effort_ = efforts;
+    has_effort_data_ = true;
 }
 
 void Leg::setCurrentTipPositionGlobal(const Point3D &position) {
@@ -124,6 +140,22 @@ Eigen::Matrix3d Leg::getJacobian() const {
     return model_.calculateJacobian(leg_id_, joint_angles_, tip_position_);
 }
 
+void Leg::calculateTipForce() {
+    if (!has_effort_data_) {
+        return;
+    }
+
+    Eigen::Matrix3d jacobian = model_.calculateJacobian(leg_id_, joint_angles_, tip_position_);
+    Eigen::Matrix3d identity = Eigen::Matrix3d::Identity();
+    Eigen::Matrix3d jt_j = jacobian.transpose() * jacobian;
+    Eigen::Matrix3d transformation =
+        jacobian * (jt_j + (IK_DLS_COEFFICIENT * IK_DLS_COEFFICIENT) * identity).inverse();
+    Eigen::Vector3d joint_torques(current_joint_effort_.coxa,
+                                  current_joint_effort_.femur,
+                                  current_joint_effort_.tibia);
+    tip_force_calculated_ = transformation * joint_torques;
+}
+
 void Leg::initialize(const Pose &default_stance) {
     // Calculate default tip position from stance pose
     Point3D stance_tip = default_stance.position;
@@ -138,24 +170,27 @@ void Leg::initialize(const Pose &default_stance) {
 
     // Set current configuration to default
     joint_angles_ = stance_angles;
+    // Keep the commanded stance_tip as authoritative position.
+    // FK(IK(stance_tip)) may drift due to IK solver tolerances;
+    // the desired position is the ground truth during planning.
     tip_position_ = stance_tip;
-
-    // Update FK to ensure consistency
-    updateTipPosition();
 }
 
 void Leg::reset() {
     // Reset to default configuration
     joint_angles_ = default_angles_;
+    // Keep the authoritative default_tip_position_ (same rationale as initialize).
     tip_position_ = default_tip_position_;
     step_phase_ = STANCE_PHASE;
     gait_phase_ = 0.0;
 
     // Reset FSR contact history
     resetFSRHistory();
+}
 
-    // Update FK
-    updateTipPosition();
+void Leg::updateDefaultConfiguration() {
+    default_angles_ = joint_angles_;
+    default_tip_position_ = tip_position_;
 }
 
 double Leg::getDistanceToTarget(const Point3D &target) const {
@@ -232,12 +267,10 @@ void Leg::resetFSRHistory() {
 
 // ===== GAIT PHASE OFFSET METHODS =====
 
-void Leg::setPhaseOffset(double offset) {
-    // Normalize offset to 0.0-1.0 range
-    leg_phase_offset_ = fmod(offset, 1.0);
-    if (leg_phase_offset_ < 0.0) {
-        leg_phase_offset_ += 1.0;
-    }
+void Leg::setPhaseOffset(int offset) {
+    // OpenSHC: Store phase offset directly as iterations (no float conversion)
+    // This matches OpenSHC exactly and avoids floating-point rounding errors
+    leg_phase_offset_ = offset;
 }
 
 double Leg::calculateLegPhase(double global_gait_phase) const {

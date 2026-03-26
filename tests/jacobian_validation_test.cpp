@@ -4,16 +4,16 @@
 #include <iomanip>
 #include <iostream>
 
-// Numerical differentiation to validate Jacobian
+/** Numerical differentiation to validate Jacobian. */
 Eigen::Matrix3d numericalJacobian(const RobotModel &model, int leg,
                                   const JointAngles &angles,
                                   double delta = JACOBIAN_DELTA) {
     Eigen::Matrix3d jacobian;
 
-    // Get base position
+    /** Get base position. */
     Point3D base_pos = model.forwardKinematicsGlobalCoordinates(leg, angles);
 
-    // Test each joint using central differences for better accuracy
+    /** Test each joint using central differences for better accuracy. */
     for (int joint = 0; joint < 3; ++joint) {
         JointAngles plus = angles;
         JointAngles minus = angles;
@@ -36,7 +36,7 @@ Eigen::Matrix3d numericalJacobian(const RobotModel &model, int leg,
         Point3D pos_plus = model.forwardKinematicsGlobalCoordinates(leg, plus);
         Point3D pos_minus = model.forwardKinematicsGlobalCoordinates(leg, minus);
 
-        // Calculate partial derivative
+        /** Calculate partial derivative. */
         jacobian(0, joint) = (pos_plus.x - pos_minus.x) / delta;
         jacobian(1, joint) = (pos_plus.y - pos_minus.y) / delta;
         jacobian(2, joint) = (pos_plus.z - pos_minus.z) / delta;
@@ -58,7 +58,8 @@ void printMatrix(const Eigen::Matrix3d &matrix, const std::string &name) {
     std::cout << "└─────────────────────────────────────┘" << std::endl;
 }
 
-void printErrorAnalysis(const Eigen::Matrix3d &analytical, const Eigen::Matrix3d &numerical) {
+/** @return true if Jacobian error is within acceptable threshold. */
+bool printErrorAnalysis(const Eigen::Matrix3d &analytical, const Eigen::Matrix3d &numerical) {
     Eigen::Matrix3d error = analytical - numerical;
     double max_error = error.cwiseAbs().maxCoeff();
     double avg_error = error.cwiseAbs().mean();
@@ -69,8 +70,10 @@ void printErrorAnalysis(const Eigen::Matrix3d &analytical, const Eigen::Matrix3d
     std::cout << "├─ Avg Absolute Error: " << std::setw(12) << std::fixed << std::setprecision(6) << avg_error << std::endl;
     std::cout << "└─ Max Relative Error: " << std::setw(12) << std::fixed << std::setprecision(6) << max_relative_error << std::endl;
 
+    bool passed = true;
     if (max_error > 1e-3f) {
-        std::cout << "⚠️  WARNING: Large Jacobian error detected!" << std::endl;
+        std::cout << "❌ FAIL: Large Jacobian error detected!" << std::endl;
+        passed = false;
     } else if (max_error > 1e-4f) {
         std::cout << "⚠️  WARNING: Moderate Jacobian error detected!" << std::endl;
     } else {
@@ -78,6 +81,7 @@ void printErrorAnalysis(const Eigen::Matrix3d &analytical, const Eigen::Matrix3d
     }
 
     std::cout << std::endl;
+    return passed;
 }
 
 int main() {
@@ -86,7 +90,8 @@ int main() {
     p.coxa_length = 50;
     p.femur_length = 101;
     p.tibia_length = 208;
-    p.default_height_offset = -208.0; // Set to -tibia_length for explicit configuration
+    /** Set to -tibia_length for explicit configuration. */
+    p.default_height_offset = -208.0;
     p.robot_height = 208;
     p.time_delta = 1.0 / 50.0;
     p.coxa_angle_limits[0] = -65;
@@ -97,7 +102,8 @@ int main() {
     p.tibia_angle_limits[1] = 45;
 
     RobotModel model(p);
-    model.workspaceAnalyzerInitializer(); // Inicializar WorkspaceAnalyzer
+    /** Initialize WorkspaceAnalyzer. */
+    model.workspaceAnalyzerInitializer();
 
     std::cout << std::fixed << std::setprecision(6);
 
@@ -115,7 +121,9 @@ int main() {
     std::cout << "╚══════════════════════════════════════════════════════════════╝" << std::endl;
     std::cout << std::endl;
 
-    // Test with zero angles first
+    bool ok = true;
+
+    /** Test with zero angles first. */
     JointAngles zero_angles(0, 0, 0);
 
     for (int leg = 0; leg < NUM_LEGS; ++leg) {
@@ -143,16 +151,19 @@ int main() {
         Eigen::Matrix3d numerical_jacobian = numericalJacobian(model, leg, zero_angles);
         printMatrix(numerical_jacobian, "Numerical Jacobian (finite differences)");
 
-        printErrorAnalysis(analytical_jacobian, numerical_jacobian);
+        if (!printErrorAnalysis(analytical_jacobian, numerical_jacobian)) {
+            ok = false;
+        }
     }
 
-    // Test with a very simple case - just one joint
+    /** Test with a very simple case: just one joint. */
     std::cout << "╔══════════════════════════════════════════════════════════════╗" << std::endl;
     std::cout << "║                 SINGLE JOINT PERTURBATION TEST              ║" << std::endl;
     std::cout << "╚══════════════════════════════════════════════════════════════╝" << std::endl;
     std::cout << std::endl;
 
-    for (int leg = 0; leg < 1; ++leg) { // Just test leg 0
+    /** Just test leg 0. */
+    for (int leg = 0; leg < 1; ++leg) {
         std::cout << "🔍 Detailed Analysis for Leg " << leg << ":" << std::endl;
         std::cout << std::endl;
 
@@ -162,8 +173,9 @@ int main() {
                   << ", " << std::setw(8) << base_pos.y
                   << ", " << std::setw(8) << base_pos.z << ") mm" << std::endl;
 
-        // Test coxa joint only
-        double perturbation = JACOBIAN_DELTA; // 0.001 radians ≈ 0.057 degree
+        /** Test coxa joint only. */
+        /** 0.001 radians ~= 0.057 degree. */
+        double perturbation = JACOBIAN_DELTA;
 
         JointAngles plus = test_angles;
         JointAngles minus = test_angles;
@@ -193,7 +205,7 @@ int main() {
 
         std::cout << std::endl;
 
-        // Calculate individual errors
+        /** Calculate individual errors. */
         double error_x = std::abs(dx - analytical_jacobian(0, 0));
         double error_y = std::abs(dy - analytical_jacobian(1, 0));
         double error_z = std::abs(dz - analytical_jacobian(2, 0));
@@ -207,7 +219,8 @@ int main() {
         if (max_error < 1e-4f) {
             std::cout << "✅ Single joint test PASSED (max error < 1e-4)" << std::endl;
         } else {
-            std::cout << "⚠️  Single joint test FAILED (max error = " << max_error << ")" << std::endl;
+            std::cout << "❌ Single joint test FAILED (max error = " << max_error << ")" << std::endl;
+            ok = false;
         }
     }
 
@@ -216,5 +229,10 @@ int main() {
     std::cout << "║                        TEST COMPLETED                       ║" << std::endl;
     std::cout << "╚══════════════════════════════════════════════════════════════╝" << std::endl;
 
-    return 0;
+    if (ok) {
+        std::cout << "\n✓ All Jacobian validation tests passed!" << std::endl;
+    } else {
+        std::cerr << "\n✗ Some Jacobian validation tests failed." << std::endl;
+    }
+    return ok ? 0 : 1;
 }

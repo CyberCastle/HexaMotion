@@ -1,10 +1,10 @@
 #include "math_utils.h"
 #include "hexamotion_constants.h"
-#include "robot_model.h"
+#include "pose.h"
 #include <algorithm>
 #include <cmath>
 
-// Utility function implementations
+/** Utility function implementations. */
 namespace math_utils {
 
 double normalizeAngle(double angle) {
@@ -70,7 +70,8 @@ Eigen::Vector4d quaternionInverse(const Eigen::Vector4d &q) {
     if (norm_sq > 0) {
         return Eigen::Vector4d(q[0] / norm_sq, -q[1] / norm_sq, -q[2] / norm_sq, -q[3] / norm_sq);
     }
-    return q; // Return original if degenerate
+    /** Return original if degenerate. */
+    return q;
 }
 
 template <typename T>
@@ -91,8 +92,11 @@ Eigen::Matrix<T, 4, 4> dhTransform(T a, T alpha, T d, T theta) {
 template <typename T>
 Eigen::Matrix<T, 4, 4> dhTransformY(T a, T alpha, T d, T theta) {
 
-    // Similar to dhTransform but rotates around the Y axis. This matches
-    // the analytic model where femur and tibia joints pitch about Y.
+    /**
+     * @brief Similar to dhTransform but rotates around the Y axis.
+     *
+     * This matches the analytic model where femur and tibia joints pitch about Y.
+     */
     Eigen::Matrix<T, 4, 4> R_y = Eigen::Matrix<T, 4, 4>::Identity();
     R_y.block(0, 0, 3, 3) =
         Eigen::AngleAxis<T>(theta, Eigen::Matrix<T, 3, 1>::UnitY()).toRotationMatrix();
@@ -110,7 +114,7 @@ Eigen::Matrix<T, 4, 4> dhTransformY(T a, T alpha, T d, T theta) {
     return R_y * T_z * T_x * R_x;
 }
 
-// Explicit instantiations for common precisions
+/** Explicit instantiations for common precisions. */
 template Eigen::Matrix4d dhTransform<double>(double, double, double, double);
 template Eigen::Matrix4d dhTransformY<double>(double, double, double, double);
 
@@ -188,7 +192,7 @@ Eigen::Matrix3d rotationMatrixZ(double angle) {
     return R;
 }
 
-// Pose system quaternion utilities
+/** Pose system quaternion utilities. */
 Eigen::Vector3d point3DToVector3d(const Point3D &point) {
     return Eigen::Vector3d(point.x, point.y, point.z);
 }
@@ -208,17 +212,17 @@ Point3D quaternionToEulerPoint3D(const Eigen::Vector4d &quaternion) {
 }
 
 Eigen::Vector4d quaternionSlerp(const Eigen::Vector4d &q1, const Eigen::Vector4d &q2, double t) {
-    // Compute dot product
+    /** Compute dot product. */
     double dot = q1[0] * q2[0] + q1[1] * q2[1] + q1[2] * q2[2] + q1[3] * q2[3];
 
-    // If dot product is negative, take the shorter path by negating one quaternion
+    /** If dot product is negative, take the shorter path by negating one quaternion. */
     Eigen::Vector4d q2_adj = q2;
     if (dot < 0.0) {
         q2_adj = -q2;
         dot = -dot;
     }
 
-    // If quaternions are very close, use linear interpolation to avoid numerical issues
+    /** If quaternions are very close, use linear interpolation to avoid numerical issues. */
     if (dot > 0.9995) {
         Eigen::Vector4d result = q1 + t * (q2_adj - q1);
         double norm = sqrt(result[0] * result[0] + result[1] * result[1] +
@@ -229,7 +233,7 @@ Eigen::Vector4d quaternionSlerp(const Eigen::Vector4d &q1, const Eigen::Vector4d
         return result;
     }
 
-    // Calculate angle and perform SLERP
+    /** Calculate angle and perform SLERP. */
     double theta_0 = acos(std::abs(dot));
     double sin_theta_0 = sin(theta_0);
 
@@ -243,32 +247,32 @@ Eigen::Vector4d quaternionSlerp(const Eigen::Vector4d &q1, const Eigen::Vector4d
 }
 
 double pointToLineDistance(const Point3D &point, const Point3D &line_start, const Point3D &line_end) {
-    // Calculate the vector from line_start to line_end
+    /** Calculate the vector from line_start to line_end. */
     Point3D line_vec = Point3D(line_end.x - line_start.x, line_end.y - line_start.y, line_end.z - line_start.z);
 
-    // Calculate the vector from line_start to the point
+    /** Calculate the vector from line_start to the point. */
     Point3D point_vec = Point3D(point.x - line_start.x, point.y - line_start.y, point.z - line_start.z);
 
-    // Calculate the length squared of the line vector
+    /** Calculate the length squared of the line vector. */
     double line_length_sq = line_vec.x * line_vec.x + line_vec.y * line_vec.y + line_vec.z * line_vec.z;
 
-    // Handle degenerate case where line_start == line_end
+    /** Handle degenerate case where line_start == line_end. */
     if (line_length_sq < 1e-6) {
         return distance(point, line_start);
     }
 
-    // Calculate the projection parameter t
+    /** Calculate the projection parameter t. */
     double t = (point_vec.x * line_vec.x + point_vec.y * line_vec.y + point_vec.z * line_vec.z) / line_length_sq;
 
-    // Clamp t to [0, 1] to get the closest point on the line segment
+    /** Clamp t to [0, 1] to get the closest point on the line segment. */
     t = std::max(0.0, std::min(1.0, t));
 
-    // Calculate the closest point on the line segment
+    /** Calculate the closest point on the line segment. */
     Point3D closest_point = Point3D(line_start.x + t * line_vec.x,
                                     line_start.y + t * line_vec.y,
                                     line_start.z + t * line_vec.z);
 
-    // Return the distance from the point to the closest point on the line segment
+    /** Return the distance from the point to the closest point on the line segment. */
     return distance(point, closest_point);
 }
 
@@ -281,7 +285,7 @@ Point3D crossProduct(const Point3D &a, const Point3D &b) {
 Point3D projectVector(const Point3D &vector, const Point3D &onto) {
     double onto_magnitude_sq = onto.x * onto.x + onto.y * onto.y + onto.z * onto.z;
 
-    // Handle degenerate case where onto vector is zero
+    /** Handle degenerate case where onto vector is zero. */
     if (onto_magnitude_sq < 1e-6) {
         return Point3D(0, 0, 0);
     }
@@ -293,14 +297,14 @@ Point3D projectVector(const Point3D &vector, const Point3D &onto) {
 }
 
 Point3D rejectVector(const Point3D &vector, const Point3D &onto) {
-    // r = a - proj_b(a)
+    /** r = a - proj_b(a). */
     Point3D proj = projectVector(vector, onto);
     return Point3D(vector.x - proj.x, vector.y - proj.y, vector.z - proj.z);
 }
 
 bool solveLeastSquaresPlane(const double *raw_A, const double *raw_B, int num_points, double &a, double &b, double &c) {
 
-    // Build normal equations: A^T * A * x = A^T * b
+    /** Build normal equations: A^T * A * x = A^T * b. */
     double ATA[3][3] = {{0}};
     double ATb[3] = {0};
 
@@ -309,7 +313,7 @@ bool solveLeastSquaresPlane(const double *raw_A, const double *raw_B, int num_po
         double y = raw_A[i * 3 + 1];
         double z = raw_B[i];
 
-        // A^T * A
+        /** A^T * A. */
         ATA[0][0] += x * x;
         ATA[0][1] += x * y;
         ATA[0][2] += x;
@@ -317,23 +321,24 @@ bool solveLeastSquaresPlane(const double *raw_A, const double *raw_B, int num_po
         ATA[1][2] += y;
         ATA[2][2] += 1;
 
-        // A^T * b
+        /** A^T * b. */
         ATb[0] += x * z;
         ATb[1] += y * z;
         ATb[2] += z;
     }
 
-    // Symmetric matrix
+    /** Symmetric matrix. */
     ATA[1][0] = ATA[0][1];
     ATA[2][0] = ATA[0][2];
     ATA[2][1] = ATA[1][2];
 
-    // Solve using Cramer's rule for 3x3 system
+    /** Solve using Cramer's rule for 3x3 system. */
     double det = ATA[0][0] * (ATA[1][1] * ATA[2][2] - ATA[1][2] * ATA[2][1]) -
                  ATA[0][1] * (ATA[1][0] * ATA[2][2] - ATA[1][2] * ATA[2][0]) +
                  ATA[0][2] * (ATA[1][0] * ATA[2][1] - ATA[1][1] * ATA[2][0]);
 
-    if (abs(det) > 1e-6) { // Check for singular matrix
+    /** Check for singular matrix. */
+    if (abs(det) > 1e-6) {
         a = (ATb[0] * (ATA[1][1] * ATA[2][2] - ATA[1][2] * ATA[2][1]) -
              ATA[0][1] * (ATb[1] * ATA[2][2] - ATA[1][2] * ATb[2]) +
              ATA[0][2] * (ATb[1] * ATA[2][1] - ATA[1][1] * ATb[2])) /
@@ -349,10 +354,9 @@ bool solveLeastSquaresPlane(const double *raw_A, const double *raw_B, int num_po
         return true;
     }
 
-    return false; // Matrix is singular
+    /** Matrix is singular. */
+    return false;
 }
 
-// setPrecision is declared inline in the header; keep a weak ODR anchor if needed (not required but available for debugging link symbols)
-// double setPrecision(double value, int precision); // (header-only implementation)
-
+/** End namespace math_utils. */
 } // namespace math_utils

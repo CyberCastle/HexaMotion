@@ -58,7 +58,7 @@ static constexpr double STANCE_CENTROID_DRIFT_TOL = 5.0; // mm
 static constexpr double BODY_MAX_LATERAL_TOL = 3.0;      // mm
 static constexpr double BODY_YAW_DRIFT_TOL_DEG = 1.0;    // deg
 
-// Eliminated estructura detallada de ciclo para reducir verbosidad
+// Eliminated detailed cycle structure to reduce verbosity
 
 int main() {
     Parameters params = createDefaultParameters();
@@ -89,15 +89,14 @@ int main() {
         return 1;
     }
 
-    // Run startup sequence until system enters RUNNING state (flag now auto-clears internally)
+    // Run update loop until system enters RUNNING state (StateController orchestrates startup)
     int startup_loops = 0;
     const int STARTUP_MAX_LOOPS = 600; // Allow ample iterations
-    while (startup_loops < STARTUP_MAX_LOOPS && sys.getSystemState() != SYSTEM_RUNNING) {
-        sys.executeStartupSequence();
+    while (startup_loops < STARTUP_MAX_LOOPS && sys.getRobotState() != ROBOT_RUNNING) {
         sys.update();
         startup_loops++;
     }
-    if (sys.getSystemState() != SYSTEM_RUNNING) {
+    if (sys.getRobotState() != ROBOT_RUNNING) {
         std::cerr << "ERROR: Startup sequence did not reach RUNNING state (loops=" << startup_loops << ")" << std::endl;
         return 1;
     }
@@ -124,9 +123,9 @@ int main() {
     all_tip_y_samples.reserve(total_iterations_target * NUM_LEGS);
     std::vector<double> stance_centroid_y_samples;
     stance_centroid_y_samples.reserve(total_iterations_target);
-    // Se eliminan estadísticas por ciclo para salida compacta
+    // Per-cycle statistics removed for compact output
 
-    // Ya no se hace agrupación detallada; sólo métricas globales
+    // No detailed grouping; only global metrics
 
     double initial_centroid_y = 0.0;
     bool initial_centroid_set = false;
@@ -150,7 +149,7 @@ int main() {
     bool init_centroid_x_set = false;
     double last_stance_centroid_x = 0.0;
 
-    // Sin seguimiento de alternancia detallado (se asume configuración válida del gait)
+    // No detailed alternation tracking (valid gait configuration assumed)
 
     while (iteration < total_iterations_target) {
         if (!sys.update()) {
@@ -181,7 +180,7 @@ int main() {
             all_tip_y_samples.push_back(tip.y);
         }
 
-        // Construir centroide de apoyo (piernas en STANCE_PHASE)
+        // Build stance centroid (legs in STANCE_PHASE)
         double sum_y = 0.0;
         double sum_x = 0.0;
         int stance_count = 0;
@@ -212,13 +211,13 @@ int main() {
 
         iteration++;
         if (iteration % cycle_iterations == 0) {
-            // Progreso: imprimir un punto cada ciclo (sin saltos de línea hasta el resumen final)
+            // Progress: print one dot per cycle (no newlines until final summary)
             if (cycle_index == 0) {
                 std::cout << "[RUNNING] tripod_linearity_test: " << NUM_CYCLES_TO_SAMPLE
-                          << " ciclos..." << std::flush;
+                          << " cycles..." << std::flush;
             }
             std::cout << '.' << std::flush;
-            // Reiniciar acumuladores por ciclo
+            // Reset per-cycle accumulators
             accum_centroid_y_current_cycle = 0.0;
             centroid_samples_current_cycle = 0;
             cycle_index++;
@@ -250,13 +249,13 @@ int main() {
     double body_yaw_drift = std::fabs(final_body_yaw_deg - initial_body_yaw_deg);
 
     // Report
-    // Asegurar salto de línea tras la línea de progreso
+    // Ensure newline after the progress line
     std::cout << "\n=== Tripod Linearity Metrics ===" << std::endl;
     std::cout << "Cycles sampled: " << NUM_CYCLES_TO_SAMPLE << " (" << cycle_iterations << " iterations each)" << std::endl;
     std::cout << "Overall mean tip Y: " << overall_mean_tip_y << " mm" << std::endl;
     std::cout << "Initial stance centroid Y: " << initial_centroid_y << " mm" << std::endl;
     std::cout << "Max abs stance centroid Y drift: " << max_abs_centroid_y << " mm" << std::endl;
-    // Salida compacta sin listado por ciclo
+    // Compact output without per-cycle listing
     std::cout << "-- Body trajectory --" << std::endl;
     std::cout << "Forward progress X: " << total_forward_progress_x << " mm" << std::endl;
     std::cout << "Body mean |Y deviation|: " << body_mean_abs_y << " mm" << std::endl;

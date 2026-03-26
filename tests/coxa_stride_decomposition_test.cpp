@@ -108,7 +108,8 @@ struct PairBuffer {
 
 int main() {
     Parameters params = createDefaultParameters();
-    params.max_velocity = 1000.0; // keep velocity limits permissive for diagnostics
+    /** Keep velocity limits permissive for diagnostics. */
+    params.max_velocity = 1000.0;
 
     LocomotionSystem system(params);
     DummyIMU imu;
@@ -128,8 +129,8 @@ int main() {
 
     GaitConfiguration tripod = createGaitConfig(TRIPOD_GAIT, params);
     double reach = RobotModel::computeStandingHorizontalReach(params);
-    tripod.step_length = reach * 2.0; // replicate locomotion test configuration
-    tripod.time_to_max_stride = 0.2;
+    /** Replicate locomotion test configuration. */
+    tripod.step_length = reach * 2.0;
 
     if (!system.setGaitConfiguration(tripod)) {
         std::cerr << "ERROR: Unable to configure tripod gait" << std::endl;
@@ -142,19 +143,15 @@ int main() {
         return 1;
     }
 
-    // Execute startup sequence exactly once before sampling debug data
-    const int MAX_STARTUP_ITERATIONS = 400;
+    /** Run update loop until system reaches RUNNING state (startup handled by StateController). */
+    const int MAX_STARTUP_ITERATIONS = 500;
     int startup_iterations = 0;
-    bool startup_completed = false;
-    while (system.isStartupInProgress() && startup_iterations < MAX_STARTUP_ITERATIONS) {
-        if (system.executeStartupSequence()) {
-            startup_completed = true;
-            break;
-        }
+    while (system.getRobotState() != ROBOT_RUNNING && startup_iterations < MAX_STARTUP_ITERATIONS) {
+        system.update();
         startup_iterations++;
     }
 
-    if (!startup_completed && system.isStartupInProgress()) {
+    if (system.getRobotState() != ROBOT_RUNNING) {
         std::cerr << "ERROR: Startup sequence did not complete" << std::endl;
         return 1;
     }
@@ -220,7 +217,8 @@ int main() {
                 previous_phase[leg] = phase;
 
                 if (phase != STANCE_PHASE) {
-                    continue; // only inspect transitions into stance for precise drift checks
+                    /** Only inspect transitions into stance for precise drift checks. */
+                    continue;
                 }
 
                 stance_transition_samples++;
@@ -253,7 +251,7 @@ int main() {
                 row += " | ";
                 row += formatNumber(coxa_deg, 7, 2);
 
-                // Register sample for pairwise comparison when matching iterations are observed
+                /** Register sample for pairwise comparison when matching iterations are observed. */
                 LegSample sample;
                 sample.leg = leg;
                 sample.iteration = debug.iteration;

@@ -12,20 +12,15 @@
 
 namespace {
 // File-scope empty defaults to avoid static local initialization locks
-static const TerrainAdaptation::ExternalTarget EMPTY_EXTERNAL_TARGET;
 static const TerrainAdaptation::StepPlane EMPTY_STEP_PLANE;
 } // namespace
 
 TerrainAdaptation::TerrainAdaptation(RobotModel &model)
     : model_(model), rough_terrain_mode_(false), force_normal_touchdown_(false),
-      gravity_aligned_tips_(false), step_depth_(STEP_DEPTH_DEFAULT),
+      step_depth_(STEP_DEPTH_DEFAULT),
       gravity_estimate_(0, 0, -math_utils::GRAVITY_ACCELERATION) {
 
-    // Initialize workspace validator for reachability checking
-    ValidationConfig validator_config;
-    validator_config.enable_collision_checking = false;  // Disable for terrain adaptation
-    validator_config.enable_joint_limit_checking = true; // Enable for accuracy
-    workspace_analyzer_ = std::make_unique<WorkspaceAnalyzer>(model_, ComputeConfig::medium(), validator_config);
+    workspace_analyzer_ = std::make_unique<WorkspaceAnalyzer>(model_, ComputeConfig::medium());
 
     // Initialize FSR thresholds from model parameters or use defaults
     const Parameters &params = model_.getParams();
@@ -92,25 +87,6 @@ void TerrainAdaptation::update(IFSRInterface *fsr_interface, IIMUInterface *imu_
     }
 }
 
-void TerrainAdaptation::setExternalTarget(int leg_index, const ExternalTarget &target) {
-    if (leg_index >= 0 && leg_index < NUM_LEGS) {
-        external_targets_[leg_index] = target;
-    }
-}
-
-void TerrainAdaptation::setExternalDefault(int leg_index, const ExternalTarget &default_pos) {
-    if (leg_index >= 0 && leg_index < NUM_LEGS) {
-        external_defaults_[leg_index] = default_pos;
-    }
-}
-
-const TerrainAdaptation::ExternalTarget &TerrainAdaptation::getExternalTarget(int leg_index) const {
-    if (leg_index >= 0 && leg_index < NUM_LEGS) {
-        return external_targets_[leg_index];
-    }
-    return EMPTY_EXTERNAL_TARGET;
-}
-
 const TerrainAdaptation::StepPlane &TerrainAdaptation::getStepPlane(int leg_index) const {
     if (leg_index >= 0 && leg_index < NUM_LEGS) {
         return step_planes_[leg_index];
@@ -132,26 +108,6 @@ Point3D TerrainAdaptation::adaptTrajectoryForTerrain(int leg_index, const Point3
     }
 
     Point3D adapted_trajectory = trajectory;
-
-    // Apply external target if defined
-    if (external_targets_[leg_index].defined && leg_state == SWING_PHASE) {
-        // Use external target position for swing trajectory
-        const ExternalTarget &target = external_targets_[leg_index];
-
-        // Interpolate towards external target
-        double blend_factor = swing_progress;
-        adapted_trajectory.x = trajectory.x * (DEFAULT_ANGULAR_SCALING - blend_factor) + target.position.x * blend_factor;
-        adapted_trajectory.y = trajectory.y * (DEFAULT_ANGULAR_SCALING - blend_factor) + target.position.y * blend_factor;
-        adapted_trajectory.z = trajectory.z * (DEFAULT_ANGULAR_SCALING - blend_factor) + target.position.z * blend_factor;
-
-        // Apply swing clearance
-        if (swing_progress > 0.2 && swing_progress < 0.8) {
-            adapted_trajectory.z +=
-                target.swing_clearance * sin(M_PI * (swing_progress - 0.2) / 0.6);
-        }
-
-        return adapted_trajectory;
-    }
 
     // Apply proactive adaptation if step plane detected
     if (step_planes_[leg_index].valid && step_planes_[leg_index].confidence > WORKSPACE_SCALING_FACTOR) {
@@ -176,22 +132,21 @@ bool TerrainAdaptation::isTargetReachableOnTerrain(int leg_index, const Point3D 
         return false; // Safety fallback
     }
 
-    // Use high-precision IK validation for terrain adaptation
-    bool is_reachable = workspace_analyzer_->isPositionReachable(leg_index, target, true);
+    Point3D reachable = workspace_analyzer_->makeReachable(leg_index, target);
+    bool is_reachable = math_utils::distance(reachable, target) <= IK_TOLERANCE;
 
     if (!is_reachable) {
         return false;
     }
 
-    // Additional terrain-specific checks using workspace bounds
+    // Additional terrain-specific checks using geometric walk-plane consistency
     if (current_walk_plane_.valid) {
         // Check if target is reasonable relative to walk plane
         Point3D projected = projectOntoWalkPlane(target);
         double walk_plane_deviation = abs(target.z - projected.z);
 
-        // Use workspace bounds for step height validation
-        auto bounds = workspace_analyzer_->getWorkspaceBounds(leg_index);
-        double max_step_height = bounds.max_height - bounds.min_height;
+        const Parameters &params = model_.getParams();
+        double max_step_height = std::max(1.0, params.femur_length + params.tibia_length);
 
         // Allow deviation up to 50% of workspace height range
         if (walk_plane_deviation > max_step_height * 0.5) {
@@ -246,19 +201,15 @@ void TerrainAdaptation::detectTouchdownEvents(int leg_index, const FSRData &fsr_
             return; // Safety fallback
         }
 
-        // Get workspace bounds instead of manual calculation
-        auto bounds = workspace_analyzer_->getWorkspaceBounds(leg_index);
-        auto scaling_factors = workspace_analyzer_->getScalingFactors();
-
-        // Calculate foot position using workspace scaling
+        // Calculate foot position using default stance geometry
         const Parameters &p = model_.getParams();
         Point3D base_pos = model_.getLegBasePosition(leg_index);
+        Point3D default_pos = model_.getLegDefaultPosition(leg_index);
         double base_x = base_pos.x;
         double base_y = base_pos.y;
         double base_angle = model_.getLegBaseAngleOffset(leg_index);
 
-        // Use scaling instead of hardcoded 65%
-        double safe_reach = bounds.max_reach * scaling_factors.workspace_scale;
+        double safe_reach = std::hypot(default_pos.x - base_x, default_pos.y - base_y);
 
         Point3D foot_position;
         foot_position.x = base_x + safe_reach * cos(base_angle);

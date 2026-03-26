@@ -15,10 +15,19 @@
 #define DOF_PER_LEG 3
 #define TOTAL_DOF (NUM_LEGS * DOF_PER_LEG)
 
+// Maximum number of intermediate packed position steps per leg (OpenSHC multi-step packing).
+// The default YAML defines a single "packed" step; additional steps ("packed_0", "packed_1", ...)
+// can be configured for morphologies that need multi-stage folding.
+#define MAX_PACK_STEPS 4
+
 // Numerical differentiation step for Jacobians
 #define JACOBIAN_DELTA 0.001f
 
 #include "math_utils.h"
+#include <climits>
+
+// Sentinel for unassigned/unlimited values (OpenSHC equivalent)
+#define UNASSIGNED_VALUE double(INT_MAX)
 
 // ========================================================================
 // VELOCITY CONTROL CONSTANTS
@@ -108,6 +117,15 @@
 // This is gait-independent, unlike gait-specific step heights
 #define BODY_POSE_DEFAULT_SWING_HEIGHT_FACTOR 0.10 // 10% of standing height (OpenSHC: 0.020m for typical robot)
 
+// OpenSHC startup/shutdown transition tuning (seconds @ step frequency == 1.0)
+#define SAFETY_FACTOR 0.15             // Joint limit safety factor during sequence generation
+#define HORIZONTAL_TRANSITION_TIME 1.0 // Horizontal transition time (s)
+#define VERTICAL_TRANSITION_TIME 3.0   // Vertical transition time (s)
+#define TRANSITION_STEP_THRESHOLD 20   // Max allowed transition steps before failure
+
+// OpenSHC load-bearing estimate threshold (mm)
+#define HALF_BODY_DEPTH_MM 50.0
+
 // Velocity scaling and coupling factors
 #define DEFAULT_ANGULAR_SCALING 1.0        // Default angular velocity scaling
 #define ANGULAR_ACCELERATION_FACTOR 2000.0 // Angular acceleration threshold (mm/s²)
@@ -129,12 +147,13 @@
 // DLS (Damped Least Squares) IK parameters (OpenSHC-style)
 #define IK_DLS_COEFFICIENT 0.02        // Damping factor for numerical stability in DLS method
 #define IK_JOINT_LIMIT_COST_WEIGHT 0.1 // Gain used in determining cost weight for joints approaching limits (OpenSHC)
+#define IK_MAX_JOINT_ANGULAR_SPEED 3.0 // Maximum joint angular velocity for velocity cost gradient (rad/s, OpenSHC)
 #define IK_TOLERANCE 1.0               // Position tolerance for IK convergence (1mm)
 #define IK_DEFAULT_MAX_ITERATIONS 30   // Default maximum iterations for IK solver
 #define IK_MAX_ANGLE_STEP 5.0          // Maximum angle change per IK iteration (degrees)
 
 // Workspace analysis parameters (OpenSHC equivalent, converted to mm)
-#define MAX_POSITION_DELTA 50.0    // Position delta increment for workspace generation (50mm, OpenSHC uses 0.05m)
+#define MAX_POSITION_DELTA 50.0    // Position delta increment for workspace generation (50mm, OpenSHC uses 0.002m=2mm)
 #define MAX_WORKSPACE_RADIUS 359.0 // Maximum radius based on robot morphology: coxa(50) + femur(101) + tibia(208) = 359mm
 #define BEARING_STEP 45            // Bearing step for workspace generation (45°, from OpenSHC)
 #define WORKSPACE_LAYERS 5         // Number of height layers for workspace generation (from OpenSHC)
@@ -183,11 +202,23 @@
 // ========================================================================
 
 // System states (OpenSHC equivalent)
+// Top-level system state is independent from RobotState.
+// OpenSHC uses SUSPENDED/OPERATIONAL only.
 enum SystemState {
-    SYSTEM_UNKNOWN = 0, // Unknown state
-    SYSTEM_PACKED = 1,  // Robot is packed/disabled
-    SYSTEM_READY = 2,   // Robot is ready but not walking
-    SYSTEM_RUNNING = 3  // Robot is running/walking
+    SUSPENDED = 0,          // Top-level suspended state (OpenSHC equivalent)
+    OPERATIONAL = 1,        // Top-level operational state (OpenSHC equivalent)
+    SYSTEM_STATE_COUNT = 2, // Number of top-level system states
+    SYSTEM_UNKNOWN = -1     // Unknown/uninitialized system state
+};
+
+// Robot states (OpenSHC equivalent, independent from SystemState)
+enum RobotState {
+    ROBOT_PACKED = 0,      // Robot packed/disabled (joints in packed configuration)
+    ROBOT_READY = 1,       // Robot unpacked and ready, not walking
+    ROBOT_RUNNING = 2,     // Robot actively operating/walking
+    ROBOT_STATE_COUNT = 3, // Number of robot operational states
+    ROBOT_UNKNOWN = -1,    // Unknown/uninitialized robot state
+    ROBOT_OFF = -2         // Robot explicitly off (direct-startup alternative)
 };
 
 // Progress constants
@@ -199,15 +230,19 @@ enum SystemState {
 
 // Per-leg base orientation offsets in radians, ordered clockwise from the
 // anterior right leg (AR) to match OpenSHC's default robot configuration.
-// Opposing leg pairs now cancel out (AR+AL, BR+BL, CR+CL), preserving the
+//
+// OpenSHC convention (default.yaml DH base_link_parameters.theta):
+//   AR=-30°, BR=-90°, CR=-150°, CL=+150°, BL=+90°, AL=+30°.
+//
+// Opposing leg pairs cancel out (AR+AL, BR+BL, CR+CL), preserving the
 // DH-origin symmetry relied upon by analytic tests and gait factories.
 const double BASE_THETA_OFFSETS[NUM_LEGS] = {
-    math_utils::degreesToRadians(30.0),   // Leg 0 (AR)
-    math_utils::degreesToRadians(90.0),   // Leg 1 (BR)
-    math_utils::degreesToRadians(150.0),  // Leg 2 (CR)
-    math_utils::degreesToRadians(-150.0), // Leg 3 (CL)
-    math_utils::degreesToRadians(-90.0),  // Leg 4 (BL)
-    math_utils::degreesToRadians(-30.0)   // Leg 5 (AL)
+    math_utils::degreesToRadians(-30.0),  // Leg 0 (AR)
+    math_utils::degreesToRadians(-90.0),  // Leg 1 (BR)
+    math_utils::degreesToRadians(-150.0), // Leg 2 (CR)
+    math_utils::degreesToRadians(150.0),  // Leg 3 (CL)
+    math_utils::degreesToRadians(90.0),   // Leg 4 (BL)
+    math_utils::degreesToRadians(30.0)    // Leg 5 (AL)
 };
 
 #endif // HEXAMOTION_CONSTANTS_H

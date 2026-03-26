@@ -1,9 +1,11 @@
 #ifndef GAIT_CONFIG_H
 #define GAIT_CONFIG_H
 
-#include "gait_types.h" // Centralized gait enum
 #include "hexamotion_constants.h"
+#include "locomotion_types.h"
+#include "math_utils.h"
 #include <array>
+#include <cassert>
 #include <cmath>
 #include <map>
 #include <string>
@@ -50,14 +52,6 @@ struct GaitPhaseConfig {
 struct LegOffsetMultipliers {
     std::map<std::string, int> multipliers; //< Leg name to offset multiplier mapping
 
-    // Convenience accessors for each leg
-    int getAR() const { return multipliers.count("AR") ? multipliers.at("AR") : 0; }
-    int getBR() const { return multipliers.count("BR") ? multipliers.at("BR") : 0; }
-    int getCR() const { return multipliers.count("CR") ? multipliers.at("CR") : 0; }
-    int getCL() const { return multipliers.count("CL") ? multipliers.at("CL") : 0; }
-    int getBL() const { return multipliers.count("BL") ? multipliers.at("BL") : 0; }
-    int getAL() const { return multipliers.count("AL") ? multipliers.at("AL") : 0; }
-
     // Get multiplier for leg index (0-5)
     int getForLegIndex(int leg_index) const {
         const std::string leg_names[] = {"AR", "BR", "CR", "CL", "BL", "AL"};
@@ -81,6 +75,7 @@ struct GaitConfiguration {
     // Gait-specific parameters
     double step_length;                //< Default step length in mm
     double swing_height;               //< Swing trajectory height in mm
+    double step_depth;                 //< Reactive step depth in mm
     double body_clearance;             //< Body clearance above ground in mm
     double stance_span_modifier = 0.0; // Modificador de span lateral de apoyo (OpenSHC compatible)
 
@@ -90,54 +85,46 @@ struct GaitConfiguration {
     double time_delta;     //< Control loop timestep in seconds (copied from Parameters)
 
     // Gait performance parameters
-    double max_velocity;         //< Maximum walking velocity in mm/s
     double stability_factor;     //< Stability factor (0.0-1.0, higher = more stable)
     bool supports_rough_terrain; //< Whether gait supports rough terrain adaptation
-    double time_to_max_stride;   //< Time to reach maximum stride (s)
-
-    // Gait description
-    std::string description;             //< Human-readable description of the gait
-    std::vector<std::string> step_order; //< Order of leg movements in the gait
 
     // Generate StepCycle using stored configuration (OpenSHC-style normalization)
     StepCycle generateStepCycle() const {
         StepCycle step_cycle{};
         int base_step_period = phase_config.stance_phase + phase_config.swing_phase;
         if (time_delta <= 0.0 || base_step_period <= 0 || step_frequency <= 0.0) {
-            // Defensive invalid state
             step_cycle.period_ = 0;
             step_cycle.frequency_ = 0.0;
             return step_cycle;
         }
 
-        // Target total iterations for one full cycle based purely on desired frequency and loop dt
-        double target_iterations = (1.0 / step_frequency) / time_delta;
+        step_cycle.stance_end_ = static_cast<int>(phase_config.stance_phase * 0.5);
+        step_cycle.swing_start_ = step_cycle.stance_end_;
+        step_cycle.swing_end_ = step_cycle.swing_start_ + phase_config.swing_phase;
+        step_cycle.stance_start_ = step_cycle.swing_end_;
 
-        // Determine integer normaliser (multiplier of base_step_period) that minimizes frequency error.
-        double ideal_normaliser = target_iterations / base_step_period;
-        int n_floor = std::max(1, (int)std::floor(ideal_normaliser));
-        int n_ceil = std::max(1, (int)std::ceil(ideal_normaliser));
-        // Evaluate both candidates
-        auto freq_for = [&](int n) { return 1.0 / (double(n * base_step_period) * time_delta); };
-        double freq_floor = freq_for(n_floor);
-        double freq_ceil = freq_for(n_ceil);
-        double err_floor = std::fabs(freq_floor - step_frequency);
-        double err_ceil = std::fabs(freq_ceil - step_frequency);
-        int normaliser = (err_floor <= err_ceil) ? n_floor : n_ceil;
-        // Ensure at least 1
-        if (normaliser < 1)
-            normaliser = 1;
+        double swing_ratio = double(phase_config.swing_phase) / double(base_step_period);
+        double raw_step_period = ((1.0 / step_frequency) / time_delta) / swing_ratio;
+        int even_normaliser = math_utils::roundToEvenInt(raw_step_period / base_step_period);
+        if (even_normaliser < 1) {
+            even_normaliser = 1;
+        }
 
-        step_cycle.period_ = normaliser * base_step_period;
+        step_cycle.period_ = even_normaliser * base_step_period;
         step_cycle.frequency_ = 1.0 / (step_cycle.period_ * time_delta);
 
-        // Partition periods proportionally
-        step_cycle.stance_period_ = phase_config.stance_phase * normaliser;
-        step_cycle.swing_period_ = phase_config.swing_phase * normaliser;
-        step_cycle.stance_start_ = 0;
-        step_cycle.stance_end_ = step_cycle.stance_period_;
-        step_cycle.swing_start_ = step_cycle.stance_period_;
-        step_cycle.swing_end_ = step_cycle.period_;
+        int normaliser = step_cycle.period_ / base_step_period;
+        step_cycle.stance_end_ *= normaliser;
+        step_cycle.swing_start_ *= normaliser;
+        step_cycle.swing_end_ *= normaliser;
+        step_cycle.stance_start_ *= normaliser;
+
+        step_cycle.stance_period_ = math_utils::mod(step_cycle.stance_end_ - step_cycle.stance_start_, step_cycle.period_);
+        step_cycle.swing_period_ = step_cycle.swing_end_ - step_cycle.swing_start_;
+
+        /** OpenSHC parity: assert stance and swing periods are even. */
+        assert(step_cycle.stance_period_ % 2 == 0);
+        assert(step_cycle.swing_period_ % 2 == 0);
 
         return step_cycle;
     }
@@ -156,73 +143,6 @@ struct GaitConfiguration {
     double getStepFrequency() const {
         return step_frequency; // Configurable OpenSHC step frequency
     }
-
-    double getStepCycleTime() const {
-        return 1.0 / getStepFrequency();
-    }
-
-    /**
-     * @brief Get gait type as string
-     * @return String representation of the gait type
-     */
-    std::string getGaitTypeString() const {
-        // Use the stored string name which matches the enum conversion
-        return gait_name;
-    }
-
-    /**
-     * @brief Check if gait supports rough terrain
-     * @return true if gait is suitable for rough terrain
-     */
-    bool isTerrainAdaptive() const {
-        return supports_rough_terrain;
-    }
-
-    /**
-     * @brief Check if gait is a tripod-style (two-group) gait
-     * @return true if gait uses two alternating groups
-     */
-    bool isTripodStyle() const {
-        return (gait_type == TRIPOD_GAIT ||
-                (phase_config.stance_phase + phase_config.swing_phase) <= 4);
-    }
-
-    /**
-     * @brief Get number of simultaneous support legs
-     * Estimates how many legs are typically in stance phase
-     * @return Number of legs providing support
-     */
-    int getTypicalSupportLegCount() const {
-        if (gait_type == TRIPOD_GAIT) {
-            return 3; // Tripod: 3 legs in stance
-        } else if (gait_type == WAVE_GAIT) {
-            return 5; // Wave: typically 5 legs in stance
-        } else if (gait_type == RIPPLE_GAIT) {
-            return 4; // Ripple: typically 4 legs in stance
-        } else {
-            // General estimation based on duty cycle
-            double stance_ratio = getStanceRatio();
-            return static_cast<int>(std::round(stance_ratio * NUM_LEGS));
-        }
-    }
-};
-
-/**
- * @brief Gait selection configuration
- * Contains all available gaits and selection parameters
- */
-struct GaitSelectionConfig {
-    std::map<std::string, GaitConfiguration> available_gaits; //< All available gait configurations
-    std::string default_gait;                                 //< Default gait to use
-    std::string current_gait;                                 //< Currently selected gait
-
-    // Gait transition parameters
-    double transition_time;  //< Time to transition between gaits in seconds
-    bool smooth_transitions; //< Whether to use smooth gait transitions
-
-    // Gait selection criteria
-    double min_stability_threshold; //< Minimum stability threshold for gait selection
-    double max_velocity_threshold;  //< Maximum velocity threshold for gait selection
 };
 
 /**

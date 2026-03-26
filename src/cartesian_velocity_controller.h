@@ -4,7 +4,6 @@
 #include "hexamotion_constants.h"
 #include "math_utils.h"
 #include "robot_model.h"
-#include "velocity_limits.h"
 #include <algorithm>
 #include <array>
 #include <memory>
