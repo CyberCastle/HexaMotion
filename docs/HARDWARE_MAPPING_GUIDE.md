@@ -464,7 +464,6 @@ void initializeRobotParameters() {
 
     // Robot characteristics
     robot_params.robot_height = 80.0f;
-    robot_params.robot_weight = 2.5f;
     robot_params.center_of_mass = Eigen::Vector3d(0.0, 0.0, 0.0);
 
     // Joint limits (degrees)

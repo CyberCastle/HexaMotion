@@ -150,7 +150,7 @@ violations will be printed to the serial console.
 The `Parameters` structure defines the physical dimensions and control limits of the robot. Key fields include:
 
 - `hexagon_radius`, `coxa_length`, `femur_length`, `tibia_length`.
-- `robot_height` and `robot_weight`.
+- `robot_height`.
 - Joint angle limits for coxa, femur and tibia.
 - IMU and FSR calibration settings.
 - Gait tuning factors and control frequency.
