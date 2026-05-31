@@ -18,7 +18,6 @@ The StateController implements all major OpenSHC state management capabilities:
 ### Operational Modes
 
 - **Posing Modes**: X_Y, PITCH_ROLL, Z_YAW, EXTERNAL positioning
-- **Cruise Control**: Constant velocity with time limits
 - **Pose Reset**: Various axis combinations for pose reset
 - **Manual Leg Control**: Individual leg manipulation (up to 2 legs simultaneously)
 
@@ -120,16 +119,7 @@ if (state_controller.isReadyForOperation()) {
 }
 ```
 
-### Cruise Control
-
-```cpp
-// Enable cruise control with constant velocity
-Eigen::Vector3d cruise_velocity(25.0, 0.0, 10.0); // linear_x, linear_y, angular_z
-state_controller.setCruiseControlMode(CRUISE_CONTROL_ON, cruise_velocity);
-
-// Disable cruise control
-state_controller.setCruiseControlMode(CRUISE_CONTROL_OFF);
-```
+> **Note:** HexaMotion does not implement cruise control. Per `AGENTS.md`, constant-velocity / cruise behavior is the responsibility of external software, which should maintain and re-issue velocity commands through the API.
 
 ### Gait Control
 
@@ -201,7 +191,6 @@ void printSystemStatus() {
     Serial.println("Robot: " + String(state_controller.getRobotState()));
     Serial.println("Walk: " + String(state_controller.getWalkState()));
     Serial.println("Posing: " + String(state_controller.getPosingMode()));
-    Serial.println("Cruise: " + String(state_controller.getCruiseControlMode()));
     Serial.println("Ready: " + String(state_controller.isReadyForOperation()));
     Serial.println("Manual Legs: " + String(state_controller.getManualLegCount()));
 }
@@ -236,7 +225,6 @@ config.transition_timeout = 10.0f;          // Max transition time (seconds)
 config.pack_unpack_time = 2.0f;             // Pack/unpack duration
 config.enable_auto_posing = false;          // Automatic posing
 config.enable_manual_posing = true;         // Manual posing
-config.enable_cruise_control = true;        // Cruise control mode
 config.max_manual_legs = 2;                 // Max simultaneous manual legs
 ```
 
@@ -375,7 +363,6 @@ if (state_controller.isTransitioning()) {
 
 - `setDesiredVelocity(linear, angular)` - Set movement velocity
 - `setDesiredPose(position, orientation)` - Set body pose
-- `setCruiseControlMode(mode, velocity)` - Configure cruise control
 
 ### Leg Control
 

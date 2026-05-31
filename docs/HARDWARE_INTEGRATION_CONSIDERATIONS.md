@@ -2,13 +2,9 @@
 
 **IMU and FSR Real-World Implementation Guide**
 
-**Date:** June 11, 2025
-**Version:** 1.0
-**Target:** Production Hardware Integration
-
 ## Overview
 
-During the development and testing of OpenSHC equivalent features, several critical issues were discovered in the simulation interfaces (DummyIMU and DummyFSR) that reveal important considerations when integrating real hardware sensors. This document provides guidance for successful real-world implementation.
+During the development and testing of OpenSHC-equivalent features, several issues were discovered in the simulation interfaces (`DummyIMU` and `DummyFSR`, see `tests/test_stubs.h`) that reveal important considerations when integrating real hardware sensors. These are not implementation defects in the stubs — they expose the real-world complexity of physical sensors. This document provides guidance for successful real-world implementation.
 
 ## 🚨 Critical Issues Discovered
 
@@ -26,14 +22,14 @@ Point3D gravity_estimate = accel * (-1.0f);  // Wrong for our DummyIMU
 **Root Cause:**
 Different IMU manufacturers use different acceleration vector conventions:
 
--   **Physics Convention:** IMU reports acceleration opposing gravity (e.g., +9.81 m/s² when stationary)
--   **Direct Convention:** IMU reports gravity vector directly (e.g., -9.81 m/s² pointing down)
+- **Physics Convention:** IMU reports acceleration opposing gravity (e.g., +9.81 m/s² when stationary)
+- **Direct Convention:** IMU reports gravity vector directly (e.g., -9.81 m/s² pointing down)
 
 **Real-World Impact:**
 
--   Auto-posing systems may compensate in wrong direction
--   Gravity estimation will be incorrect
--   Robot may become unstable during IMU-based corrections
+- Auto-posing systems may compensate in wrong direction
+- Gravity estimation will be incorrect
+- Robot may become unstable during IMU-based corrections
 
 #### Issue 2: Timing and Update Rate Problems
 
@@ -48,9 +44,9 @@ if (current_time - last_update_time_ < update_interval_) {
 
 **Real-World Impact:**
 
--   IMU data may be missed during critical moments
--   Auto-pose corrections may lag behind actual orientation changes
--   System may become unresponsive during high-frequency operations
+- IMU data may be missed during critical moments
+- Auto-pose corrections may lag behind actual orientation changes
+- System may become unresponsive during high-frequency operations
 
 #### Issue 3: Filter Convergence Time
 
@@ -64,9 +60,9 @@ gravity_filter_ = lowPassFilter(gravity_estimate, gravity_filter_, filter_alpha_
 
 **Real-World Impact:**
 
--   Slow response to orientation changes
--   Robot may not adapt quickly enough to terrain changes
--   Startup time may be extended for initial calibration
+- Slow response to orientation changes
+- Robot may not adapt quickly enough to terrain changes
+- Startup time may be extended for initial calibration
 
 ### FSR Integration Issues
 
@@ -81,9 +77,9 @@ data.in_contact = (data.pressure > threshold);
 
 **Real-World Challenges:**
 
--   Static thresholds don't account for surface variations
--   Noise and vibration can cause false triggers
--   Temperature and humidity affect sensor readings
+- Static thresholds don't account for surface variations
+- Noise and vibration can cause false triggers
+- Temperature and humidity affect sensor readings
 
 #### Issue 5: Force Calibration and Scaling
 
@@ -319,35 +315,35 @@ void updateContactState(int leg_index, float pressure) {
 
 **Recommended Specifications:**
 
--   **Update Rate:** Minimum 100Hz, preferred 200Hz+
--   **Gyro Range:** ±500°/s minimum for hexapod applications
--   **Accelerometer Range:** ±4g minimum (±8g preferred)
--   **Digital Interface:** I2C or SPI (avoid analog outputs)
--   **Built-in Filtering:** Digital filtering capabilities preferred
--   **Temperature Compensation:** Essential for outdoor applications
+- **Update Rate:** Minimum 100Hz, preferred 200Hz+
+- **Gyro Range:** ±500°/s minimum for hexapod applications
+- **Accelerometer Range:** ±4g minimum (±8g preferred)
+- **Digital Interface:** I2C or SPI (avoid analog outputs)
+- **Built-in Filtering:** Digital filtering capabilities preferred
+- **Temperature Compensation:** Essential for outdoor applications
 
 **Recommended Models:**
 
--   **MPU-6050/6500:** Budget option, good for indoor use
--   **BNO055:** Built-in sensor fusion, excellent for beginners
--   **ICM-20948:** High precision, good temperature stability
--   **Bosch BMI088:** Professional grade, excellent stability
+- **MPU-6050/6500:** Budget option, good for indoor use
+- **BNO055:** Built-in sensor fusion, excellent for beginners
+- **ICM-20948:** High precision, good temperature stability
+- **Bosch BMI088:** Professional grade, excellent stability
 
 ### FSR Selection and Installation
 
 **FSR Specifications:**
 
--   **Force Range:** 0-50N minimum per leg (adjust based on robot weight)
--   **Response Time:** <1ms for dynamic applications
--   **Repeatability:** <3% error for consistent measurements
--   **Operating Temperature:** Match your environment requirements
+- **Force Range:** 0-50N minimum per leg (adjust based on robot weight)
+- **Response Time:** <1ms for dynamic applications
+- **Repeatability:** <3% error for consistent measurements
+- **Operating Temperature:** Match your environment requirements
 
 **Installation Guidelines:**
 
--   **Mounting:** Ensure even pressure distribution across sensor area
--   **Protection:** Waterproof housing for outdoor applications
--   **Wiring:** Use shielded cables to reduce noise
--   **Backup:** Consider redundant sensors for critical applications
+- **Mounting:** Ensure even pressure distribution across sensor area
+- **Protection:** Waterproof housing for outdoor applications
+- **Wiring:** Use shielded cables to reduce noise
+- **Backup:** Consider redundant sensors for critical applications
 
 ## 🧪 Testing and Validation Procedures
 
@@ -443,36 +439,60 @@ class SensorHealth {
 };
 ```
 
+## ⚠️ Warning Signs in Production
+
+Use these symptoms to diagnose sensor problems quickly in the field:
+
+### IMU
+
+- **Auto-pose worsens stability** → wrong acceleration convention
+- **Very slow response to tilt** → filters too conservative (alpha too small)
+- **Erratic readings during movement** → vibration/noise problems
+- **Gradual drift during operation** → incorrect bias calibration
+
+### FSR
+
+- **False contacts during walking** → threshold too sensitive or excessive noise
+- **Missed contacts** → threshold too high or damaged sensor
+- **Inconsistency between legs** → assembly/calibration problems
+- **Gradual degradation** → sensor aging
+
+### Simulation vs Real Hardware
+
+| Aspect      | Dummy IMU/FSR  | Real Hardware        | Implication               |
+| ----------- | -------------- | -------------------- | ------------------------- |
+| Noise       | Perfect data   | Noise, drift, jitter | Needs robust filtering    |
+| Timing      | Instantaneous  | Variable latency     | Needs buffers and timeout |
+| Calibration | Pre-calibrated | Requires calibration | Startup procedures        |
+| Failures    | Never fails    | Can fail             | Detection and recovery    |
+| Temperature | Stable         | Thermal drift        | Automatic compensation    |
+
 ## 📋 Integration Checklist
 
 ### Pre-Implementation
 
--   [ ] Determine IMU acceleration convention
--   [ ] Characterize FSR force-resistance relationship
--   [ ] Plan sensor mounting and protection
--   [ ] Design calibration procedures
--   [ ] Prepare validation test procedures
+- [ ] Determine IMU acceleration convention
+- [ ] Characterize FSR force-resistance relationship
+- [ ] Plan sensor mounting and protection
+- [ ] Design calibration procedures
+- [ ] Prepare validation test procedures
 
 ### Implementation
 
--   [ ] Implement adaptive thresholding for FSR
--   [ ] Add robust timing and error handling for IMU
--   [ ] Include temperature compensation if needed
--   [ ] Implement sensor health monitoring
--   [ ] Add diagnostic and debug capabilities
+- [ ] Implement adaptive thresholding for FSR
+- [ ] Add robust timing and error handling for IMU
+- [ ] Include temperature compensation if needed
+- [ ] Implement sensor health monitoring
+- [ ] Add diagnostic and debug capabilities
 
 ### Validation
 
--   [ ] Test all sensors under expected operating conditions
--   [ ] Validate sensor fusion algorithms
--   [ ] Test failure modes and error handling
--   [ ] Document calibration procedures
--   [ ] Train operators on maintenance procedures
+- [ ] Test all sensors under expected operating conditions
+- [ ] Validate sensor fusion algorithms
+- [ ] Test failure modes and error handling
+- [ ] Document calibration procedures
+- [ ] Train operators on maintenance procedures
 
 ---
-
-**Document Version:** 1.0
-**Last Updated:** June 11, 2025
-**Next Review:** September 11, 2025
 
 _This document is based on real issues discovered during simulation testing and should be updated as hardware integration experience is gained._
