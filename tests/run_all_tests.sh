@@ -1,5 +1,5 @@
 #!/bin/bash
-cd /Users/cybercastle/tmp/HexaMotion/tests
+cd "$(dirname "$0")"
 PASS=0
 FAIL=0
 FAILED=""

@@ -1,4 +1,442 @@
 /**
+ * @file bezier_test.cpp
+ * @brief Consolidated test suite.
+ *
+ * This single translation unit folds together the following sub-tests
+ * without losing any coverage. Each sub-test keeps its original assertions
+ * and entry function; their bodies are wrapped in a dedicated namespace to
+ * avoid symbol collisions, and this file's main() runs them in sequence and
+ * aggregates the exit status:
+ *   - run_bezier_validation()
+ *   - run_bezier_curve_deterministic()
+ *   - run_bezier_transition_single_leg()
+ *   - run_bezier_transition_all_legs()
+ */
+
+#include "../src/body_pose_config_factory.h"
+#include "../src/gait_config_factory.h"
+#include "../src/locomotion_system.h"
+#include "../src/state_controller.h"
+#include "body_pose_config_factory.h"
+#include "gait_config.h"
+#include "gait_config_factory.h"
+#include "hexamotion_constants.h"
+#include "leg_stepper.h"
+#include "math_utils.h"
+#include "robot_model.h"
+#include "test_stubs.h"
+#include <cassert>
+#include <cmath>
+#include <iomanip>
+#include <iostream>
+#include <vector>
+
+// ===========================================================================
+// Sub-test: run_bezier_validation (from bezier_validation_test.cpp)
+// ===========================================================================
+namespace cm_bezier_validation_test {
+/**
+ * @file bezier_validation_test.cpp
+ * @brief Validation test to compare HexaMotion Bezier implementation with OpenSHC
+ * @author HexaMotion Team
+ * @version 2.0
+ * @date 2024
+ *
+ * This test validates that our Bezier curve implementation is equivalent to OpenSHC.
+ */
+
+using namespace std;
+
+// Test parameters
+const double TEST_TOLERANCE = 1e-6f;
+const int NUM_TEST_POINTS = 100;
+
+/**
+ * @brief Independent reference: De Casteljau's algorithm for quartic Bezier.
+ *
+ * This is a fundamentally different computation than the direct polynomial
+ * expansion used in math_utils::quarticBezier. De Casteljau uses recursive
+ * linear interpolation, so shared implementation bugs are not possible.
+ */
+template <class T>
+inline T deCasteljauQuarticBezier(const T *points, double t) {
+    double s = 1.0 - t;
+    // Level 1: 4 intermediate points
+    T p01 = points[0] * s + points[1] * t;
+    T p12 = points[1] * s + points[2] * t;
+    T p23 = points[2] * s + points[3] * t;
+    T p34 = points[3] * s + points[4] * t;
+    // Level 2: 3 intermediate points
+    T p012 = p01 * s + p12 * t;
+    T p123 = p12 * s + p23 * t;
+    T p234 = p23 * s + p34 * t;
+    // Level 3: 2 intermediate points
+    T p0123 = p012 * s + p123 * t;
+    T p1234 = p123 * s + p234 * t;
+    // Level 4: final point
+    return p0123 * s + p1234 * t;
+}
+
+/**
+ * @brief Independent reference: numerical Bezier derivative via central finite differences.
+ *
+ * Uses the De Casteljau evaluator (not the SUT) and a small step h to approximate
+ * the derivative numerically. This is a different method than the analytical
+ * coefficient formula used in math_utils::quarticBezierDot.
+ */
+template <class T>
+inline T numericalBezierDerivative(const T *points, double t, double h = 1e-7) {
+    double t_plus = std::min(t + h, 1.0);
+    double t_minus = std::max(t - h, 0.0);
+    double actual_h = t_plus - t_minus;
+    return (deCasteljauQuarticBezier(points, t_plus) - deCasteljauQuarticBezier(points, t_minus)) * (1.0 / actual_h);
+}
+
+bool testBezierEquivalence() {
+    cout << "Testing Bezier Implementation Equivalence..." << endl;
+
+    // Test control points (typical swing trajectory)
+    Eigen::Vector3d control_points[5] = {
+        Eigen::Vector3d(80.0f, 0.0f, -80.0f), // Start position
+        Eigen::Vector3d(85.0f, 0.0f, -70.0f), // First control
+        Eigen::Vector3d(90.0f, 0.0f, -60.0f), // Peak control
+        Eigen::Vector3d(95.0f, 0.0f, -70.0f), // Third control
+        Eigen::Vector3d(100.0f, 0.0f, -80.0f) // End position
+    };
+
+    cout << "Control Points:" << endl;
+    for (int i = 0; i < 5; i++) {
+        cout << "  P" << i << ": ("
+             << control_points[i][0] << ", "
+             << control_points[i][1] << ", "
+             << control_points[i][2] << ")" << endl;
+    }
+    cout << endl;
+
+    bool all_tests_passed = true;
+    double max_position_error = 0.0f;
+    double max_velocity_error = 0.0f;
+
+    // Test at multiple time points
+    for (int i = 0; i <= NUM_TEST_POINTS; i++) {
+        double t = static_cast<double>(i) / NUM_TEST_POINTS;
+
+        // Test position: SUT (polynomial expansion) vs De Casteljau (recursive lerp)
+        Eigen::Vector3d hexamotion_pos = math_utils::quarticBezier(control_points, t);
+        Eigen::Vector3d decasteljau_pos = deCasteljauQuarticBezier(control_points, t);
+
+        double pos_error = (hexamotion_pos - decasteljau_pos).norm();
+        max_position_error = max(max_position_error, pos_error);
+
+        if (pos_error > TEST_TOLERANCE) {
+            cout << "❌ Position mismatch at t=" << t << endl;
+            cout << "  HexaMotion (polynomial): (" << hexamotion_pos[0] << ", " << hexamotion_pos[1] << ", " << hexamotion_pos[2] << ")" << endl;
+            cout << "  De Casteljau (lerp):     (" << decasteljau_pos[0] << ", " << decasteljau_pos[1] << ", " << decasteljau_pos[2] << ")" << endl;
+            cout << "  Error:                   " << pos_error << endl;
+            all_tests_passed = false;
+        }
+
+        // Test velocity: SUT (analytical derivative) vs numerical finite differences over De Casteljau
+        Eigen::Vector3d hexamotion_vel = math_utils::quarticBezierDot(control_points, t);
+        Eigen::Vector3d numerical_vel = numericalBezierDerivative(control_points, t);
+
+        double vel_error = (hexamotion_vel - numerical_vel).norm();
+        max_velocity_error = max(max_velocity_error, vel_error);
+
+        // Slightly relaxed tolerance for numerical derivative (finite difference approximation)
+        double vel_tolerance = 1e-4;
+        if (vel_error > vel_tolerance) {
+            cout << "❌ Velocity mismatch at t=" << t << endl;
+            cout << "  HexaMotion (analytical):     (" << hexamotion_vel[0] << ", " << hexamotion_vel[1] << ", " << hexamotion_vel[2] << ")" << endl;
+            cout << "  Numerical (finite diff):     (" << numerical_vel[0] << ", " << numerical_vel[1] << ", " << numerical_vel[2] << ")" << endl;
+            cout << "  Error:                       " << vel_error << endl;
+            all_tests_passed = false;
+        }
+    }
+
+    cout << "Maximum Position Error (vs De Casteljau): " << scientific << setprecision(2) << max_position_error << endl;
+    cout << "Maximum Velocity Error (vs numerical diff): " << scientific << setprecision(2) << max_velocity_error << endl;
+
+    if (all_tests_passed) {
+        cout << "✓ Bezier implementation matches independent De Casteljau oracle!" << endl;
+    }
+
+    return all_tests_passed;
+}
+
+bool testSwingTrajectoryEquivalence() {
+    cout << "\nTesting Swing Trajectory Implementation..." << endl;
+
+    Parameters params = createDefaultParameters();
+    RobotModel model(params);
+    model.workspaceAnalyzerInitializer(); // Initialize WorkspaceAnalyzer
+
+    // Test parameters matching OpenSHC usage
+    int leg_index = 0;
+    double step_height = 20.0f;
+    double step_length = 40.0f;
+    double stance_duration = 0.6f;
+    double swing_duration = 0.4f;
+    double robot_height = 80.0f;
+
+    cout << "Test Parameters:" << endl;
+    cout << "  Step Height: " << step_height << " mm" << endl;
+    cout << "  Step Length: " << step_length << " mm" << endl;
+    cout << "  Stance Duration: " << stance_duration << endl;
+    cout << "  Swing Duration: " << swing_duration << endl;
+    cout << "  Robot Height: " << robot_height << " mm" << endl;
+    cout << endl;
+
+    // Test swing phase (equivalent to OpenSHC swing trajectory)
+    cout << "Testing Swing Phase Trajectory:" << endl;
+    cout << "Phase\tX\t\tY\t\tZ\t\tHeight" << endl;
+    cout << "-----\t--------\t--------\t--------\t--------" << endl;
+
+    for (int i = 0; i <= 20; i++) {
+        double phase = stance_duration + (swing_duration * i / 20.0f);
+        double t = (double)i / 20.0f; // Normalized parameter for Bezier curve
+
+        // Create simple swing trajectory control points
+        Point3D control_points[5] = {
+            Point3D(0.0f, 0.0f, -robot_height),                                     // Start: ground level
+            Point3D(step_length * 0.25f, 0.0f, -robot_height + step_height * 0.5f), // Early lift
+            Point3D(step_length * 0.5f, 0.0f, -robot_height + step_height),         // Mid-swing: peak
+            Point3D(step_length * 0.75f, 0.0f, -robot_height + step_height * 0.5f), // Late descent
+            Point3D(step_length, 0.0f, -robot_height)                               // End: ground level
+        };
+
+        Point3D pos = math_utils::quarticBezier(control_points, t);
+
+        double height_above_ground = pos.z + robot_height;
+
+        cout << fixed << setprecision(2)
+             << phase << "\t"
+             << pos.x << "\t\t"
+             << pos.y << "\t\t"
+             << pos.z << "\t\t"
+             << height_above_ground << endl;
+
+        // Validate trajectory against De Casteljau independent oracle
+        Point3D dc_pos = deCasteljauQuarticBezier(control_points, t);
+        double dc_error = sqrt(pow(pos.x - dc_pos.x, 2) + pow(pos.y - dc_pos.y, 2) + pow(pos.z - dc_pos.z, 2));
+        assert(dc_error < 1e-6);
+
+        // Validate physical trajectory properties
+        if (i > 0 && i < 20) {
+            // Mid-swing should be above ground
+            assert(height_above_ground > 0.0f);
+        }
+
+        // At midpoint (t=0.5) validate height against analytically-derived value.
+        // For these symmetric control points the quartic Bezier midpoint Z is:
+        // B(0.5).z = (1*P0.z + 4*P1.z + 6*P2.z + 4*P3.z + 1*P4.z) / 16
+        if (i == 10) {
+            double expected_mid_z = (1.0 * (-robot_height) + 4.0 * (-robot_height + step_height * 0.5) +
+                                     6.0 * (-robot_height + step_height) + 4.0 * (-robot_height + step_height * 0.5) +
+                                     1.0 * (-robot_height)) /
+                                    16.0;
+            assert(abs(pos.z - expected_mid_z) < 1e-6);
+        }
+    }
+
+    cout << "✓ Swing trajectory properties validated" << endl;
+    return true;
+}
+
+bool testContinuityAndSmoothness() {
+    cout << "\nTesting Trajectory Continuity and Smoothness..." << endl;
+
+    Eigen::Vector3d control_points[5] = {
+        Eigen::Vector3d(80.0f, 0.0f, -80.0f),
+        Eigen::Vector3d(85.0f, 0.0f, -70.0f),
+        Eigen::Vector3d(90.0f, 0.0f, -60.0f),
+        Eigen::Vector3d(95.0f, 0.0f, -70.0f),
+        Eigen::Vector3d(100.0f, 0.0f, -80.0f)};
+
+    // Validate against De Casteljau at multiple points (independent oracle for interior)
+    double max_dc_error = 0.0;
+    for (int i = 0; i <= 50; i++) {
+        double t = static_cast<double>(i) / 50.0;
+        Eigen::Vector3d sut_pos = math_utils::quarticBezier(control_points, t);
+        Eigen::Vector3d dc_pos = deCasteljauQuarticBezier(control_points, t);
+        double err = (sut_pos - dc_pos).norm();
+        max_dc_error = max(max_dc_error, err);
+    }
+    cout << "De Casteljau cross-check max error: " << max_dc_error << endl;
+    assert(max_dc_error < TEST_TOLERANCE);
+
+    // Validate midpoint B(0.5) against hand-computed value:
+    // B(0.5) = (P0 + 4*P1 + 6*P2 + 4*P3 + P4) / 16
+    Eigen::Vector3d expected_mid = (control_points[0] + control_points[1] * 4.0 +
+                                    control_points[2] * 6.0 + control_points[3] * 4.0 +
+                                    control_points[4]) /
+                                   16.0;
+    Eigen::Vector3d sut_mid = math_utils::quarticBezier(control_points, 0.5);
+    double mid_error = (sut_mid - expected_mid).norm();
+    cout << "Midpoint (analytic B(0.5)) error: " << mid_error << endl;
+    assert(mid_error < TEST_TOLERANCE);
+
+    // Test C1 continuity (velocity continuity at endpoints)
+    Eigen::Vector3d start_vel = math_utils::quarticBezierDot(control_points, 0.0);
+    Eigen::Vector3d end_vel = math_utils::quarticBezierDot(control_points, 1.0);
+
+    cout << "C1 Continuity Test:" << endl;
+    cout << "  Start velocity: (" << start_vel[0] << ", " << start_vel[1] << ", " << start_vel[2] << ")" << endl;
+    cout << "  End velocity: (" << end_vel[0] << ", " << end_vel[1] << ", " << end_vel[2] << ")" << endl;
+
+    // Test smoothness by checking velocity magnitude changes
+    double max_velocity_change = 0.0f;
+    Eigen::Vector3d prev_vel = start_vel;
+
+    for (int i = 1; i <= 100; i++) {
+        double t = static_cast<double>(i) / 100.0;
+        Eigen::Vector3d curr_vel = math_utils::quarticBezierDot(control_points, t);
+        double velocity_change = (curr_vel - prev_vel).norm();
+        max_velocity_change = max(max_velocity_change, velocity_change);
+        prev_vel = curr_vel;
+    }
+
+    cout << "Smoothness Test:" << endl;
+    cout << "  Maximum velocity change between adjacent points: " << max_velocity_change << endl;
+
+    cout << "✓ Trajectory continuity and smoothness validated" << endl;
+    return true;
+}
+
+bool testOpenSHCCompatibility() {
+    cout << "\nTesting OpenSHC Compatibility Features..." << endl;
+
+    // Test that our implementation produces the same control node structure as OpenSHC
+    cout << "Verifying control node generation..." << endl;
+
+    // This tests the same 5-control-point quartic Bezier approach used in OpenSHC
+    // for stance, primary swing, and secondary swing curves
+
+    // Stance trajectory (linear ground movement)
+    Eigen::Vector3d stance_nodes[5];
+    Eigen::Vector3d stride_vector(40.0f, 0.0f, 0.0f);
+    Eigen::Vector3d start_pos(80.0f, 0.0f, -80.0f);
+
+    // Generate stance control nodes (equivalent to OpenSHC generateStanceControlNodes)
+    for (int i = 0; i < 5; i++) {
+        stance_nodes[i] = start_pos + stride_vector * (i / 4.0f);
+    }
+
+    cout << "Stance control nodes:" << endl;
+    for (int i = 0; i < 5; i++) {
+        cout << "  Node " << i << ": (" << stance_nodes[i][0] << ", " << stance_nodes[i][1] << ", " << stance_nodes[i][2] << ")" << endl;
+    }
+
+    // Validate stance trajectory: SUT must match De Casteljau (independent oracle)
+    double max_dc_stance_error = 0.0;
+    for (int i = 0; i <= 20; i++) {
+        double t = static_cast<double>(i) / 20.0;
+        Eigen::Vector3d sut_pos = math_utils::quarticBezier(stance_nodes, t);
+        Eigen::Vector3d dc_pos = deCasteljauQuarticBezier(stance_nodes, t);
+        double error = (sut_pos - dc_pos).norm();
+        max_dc_stance_error = max(max_dc_stance_error, error);
+    }
+    cout << "Stance De Casteljau cross-check error: " << max_dc_stance_error << endl;
+    assert(max_dc_stance_error < TEST_TOLERANCE);
+
+    // Verify linearity: for equally-spaced collinear control points, quartic Bezier
+    // IS exactly linear (all control points on a line with uniform spacing).
+    // This IS a meaningful check: it verifies the SUT handles this degenerate case.
+    double max_stance_linearity_error = 0.0;
+    for (int i = 0; i <= 20; i++) {
+        double t = static_cast<double>(i) / 20.0;
+        Eigen::Vector3d pos = math_utils::quarticBezier(stance_nodes, t);
+        Eigen::Vector3d linear_expected = start_pos + stride_vector * t;
+        double error = (pos - linear_expected).norm();
+        max_stance_linearity_error = max(max_stance_linearity_error, error);
+    }
+    cout << "Maximum stance linearity error: " << max_stance_linearity_error << endl;
+    // Collinear equally-spaced quartic Bezier is exactly linear (within float precision)
+    assert(max_stance_linearity_error < 1e-10);
+    cout << "✓ Stance trajectory is exactly linear for uniformly-spaced collinear nodes" << endl;
+
+    // Test swing trajectory shape matches OpenSHC characteristics
+    cout << "Verifying swing trajectory characteristics..." << endl;
+
+    Parameters params = createDefaultParameters();
+    RobotModel model(params);
+    model.workspaceAnalyzerInitializer(); // Initialize WorkspaceAnalyzer
+
+    // Test that swing trajectory has proper bell curve shape
+    double max_height = -1000.0f;
+    double min_height = 1000.0f;
+
+    for (int i = 0; i <= 100; i++) {
+        double swing_progress = i / 100.0f;
+        double total_phase = 0.6f + 0.4f * swing_progress; // Swing phase
+
+        // Create simple swing trajectory control points
+        Point3D control_points[5] = {
+            Point3D(0.0f, 0.0f, -80.0f),  // Start: ground level
+            Point3D(10.0f, 0.0f, -60.0f), // Early lift
+            Point3D(20.0f, 0.0f, -60.0f), // Mid-swing: peak
+            Point3D(30.0f, 0.0f, -60.0f), // Late descent
+            Point3D(40.0f, 0.0f, -80.0f)  // End: ground level
+        };
+
+        Point3D pos = math_utils::quarticBezier(control_points, swing_progress);
+
+        max_height = max(max_height, pos.z);
+        min_height = min(min_height, pos.z);
+    }
+
+    cout << "Swing trajectory height range: " << min_height << " to " << max_height << " mm" << endl;
+    assert(max_height > min_height); // Should have height variation
+    assert(max_height > -70.0f);     // Should lift above ground
+
+    cout << "✓ OpenSHC compatibility validated" << endl;
+    return true;
+}
+
+int run_bezier_validation() {
+    cout << "========================================" << endl;
+    cout << "HexaMotion vs OpenSHC Bezier Validation" << endl;
+    cout << "========================================" << endl;
+
+    bool all_tests_passed = true;
+
+    try {
+        all_tests_passed &= testBezierEquivalence();
+        all_tests_passed &= testSwingTrajectoryEquivalence();
+        all_tests_passed &= testContinuityAndSmoothness();
+        all_tests_passed &= testOpenSHCCompatibility();
+
+        cout << "\n========================================" << endl;
+
+        if (all_tests_passed) {
+            cout << "🎉 VALIDATION SUCCESSFUL! 🎉" << endl;
+            cout << "HexaMotion Bezier validated against independent oracles:" << endl;
+            cout << "  ✓ Quartic Bezier matches De Casteljau (independent algorithm)" << endl;
+            cout << "  ✓ Derivative matches numerical finite differences" << endl;
+            cout << "  ✓ Midpoint values match hand-computed analytic expectation" << endl;
+            cout << "  ✓ Trajectory smoothness validated" << endl;
+            cout << "  ✓ Stance linearity verified for collinear control points" << endl;
+        } else {
+            cout << "❌ VALIDATION FAILED" << endl;
+            cout << "Some tests did not pass - implementation differs from OpenSHC" << endl;
+        }
+
+    } catch (const exception &e) {
+        cout << "❌ TEST EXCEPTION: " << e.what() << endl;
+        all_tests_passed = false;
+    }
+
+    cout << "========================================" << endl;
+
+    return all_tests_passed ? 0 : 1;
+}
+} // namespace cm_bezier_validation_test
+
+// ===========================================================================
+// Sub-test: run_bezier_curve_deterministic (from bezier_curve_deterministic_test.cpp)
+// ===========================================================================
+namespace cm_bezier_curve_deterministic_test {
+/**
  * @file bezier_curve_deterministic_test.cpp
  * @brief Deterministic validation that swing/stance trajectories conform to their
  *        analytical quartic Bézier curves with pre-established parameters.
@@ -25,19 +463,6 @@
  * @author HexaMotion Team
  * @version 1.0
  */
-
-#include "body_pose_config_factory.h"
-#include "gait_config.h"
-#include "gait_config_factory.h"
-#include "hexamotion_constants.h"
-#include "leg_stepper.h"
-#include "math_utils.h"
-#include "robot_model.h"
-#include <cassert>
-#include <cmath>
-#include <iomanip>
-#include <iostream>
-#include <vector>
 
 // ── Configuration ──────────────────────────────────────────────────────────────
 
@@ -1039,8 +1464,6 @@ static int test_stride_vector_influence() {
     //       simplified constants below.  Sub-tests that feed a fixed external velocity (e.g. 9b)
     //       must query the stepper's actual timing values to avoid residual mismatch.
     const double STRIDE_SCALE = 0.5;
-    const double SWING_DT = 1.0 / 13.0;     // actual value after round-to-even
-    const double STANCE_DT = 1.0 / 26.0;    // actual value after round-to-even
     const double TIME_DELTA = p.time_delta; // 0.02
     const double CLEARANCE = 30.0;
     const double SWING_W = 5.0; // default swing_width_
@@ -1251,8 +1674,9 @@ static int test_stride_vector_influence() {
 
             // Expected: final_vel = stride * (-1) * (stance_dt / time_delta)
             //           departure_sep = final_vel * 0.25 * (time_delta / swing_dt)
-            Point3D final_vel = stride * (-1.0) * (STANCE_DT / TIME_DELTA);
-            Point3D dep_sep = final_vel * 0.25 * (TIME_DELTA / SWING_DT);
+            // Query the stepper's actual deltas (post-§2.2 stance is plain int).
+            Point3D final_vel = stride * (-1.0) * (stepper.getStanceDeltaT() / TIME_DELTA);
+            Point3D dep_sep = final_vel * 0.25 * (TIME_DELTA / stepper.getSwingDeltaT());
             departure_seps[v] = dep_sep;
 
             Point3D s2[5];
@@ -1452,8 +1876,9 @@ static int test_stride_vector_influence() {
         stepper.testGenerateSecondarySwingControlNodes(false);
 
         // departure_sep = stride * (-1) * (stance_dt/time_delta) * 0.25 * (time_delta/swing_dt)
-        Point3D final_vel = stride * (-1.0) * (STANCE_DT / TIME_DELTA);
-        Point3D departure_sep = final_vel * 0.25 * (TIME_DELTA / SWING_DT);
+        // Query the stepper's actual deltas (post-§2.2 stance is plain int).
+        Point3D final_vel = stride * (-1.0) * (stepper.getStanceDeltaT() / TIME_DELTA);
+        Point3D departure_sep = final_vel * 0.25 * (TIME_DELTA / stepper.getSwingDeltaT());
 
         Point3D s2_3 = stepper.getSwing2ControlNode(3);
         Point3D exp_s2_3 = target - departure_sep;
@@ -1487,7 +1912,7 @@ static int test_stride_vector_influence() {
 // Main
 // ════════════════════════════════════════════════════════════════════════════════
 
-int main() {
+int run_bezier_curve_deterministic() {
     std::cout << "╔══════════════════════════════════════════════════════════════╗" << std::endl;
     std::cout << "║  DETERMINISTIC BÉZIER CURVE VALIDATION TEST                  ║" << std::endl;
     std::cout << "║  Validates swing/stance trajectories against analytical      ║" << std::endl;
@@ -1515,4 +1940,693 @@ int main() {
     std::cout << "════════════════════════════════════════════════════════════════" << std::endl;
 
     return (total_failures == 0) ? 0 : 1;
+}
+} // namespace cm_bezier_curve_deterministic_test
+
+// ===========================================================================
+// Sub-test: run_bezier_transition_single_leg (from bezier_transition_single_leg_test.cpp)
+// ===========================================================================
+namespace cm_bezier_transition_single_leg_test {
+/**
+ * @file bezier_transition_single_leg_test.cpp
+ * @brief Visualizes Bézier curves during pack, unpack and standing pose transitions for a single leg.
+ *
+ * This test exercises the full LocomotionSystem state machine through PACKED → READY → RUNNING
+ * transitions, displaying detailed per-iteration joint angle data for Leg 0 (AR) to observe:
+ *
+ * 1. **Unpack (PACKED → READY):** Cubic Bézier interpolation via LegPoser::transitionConfiguration()
+ *    from packed joints to unpacked joints.
+ * 2. **Startup Sequence (READY → RUNNING):** Uses stepToPosition() quartic Bézier inside
+ *    BodyPoseController::executeSequenceInternal() for multi-step H/V transitions.
+ * 3. **Shutdown (RUNNING → READY):** Reverse startup via executeShutdownSequence().
+ * 4. **Pack (READY → PACKED):** Cubic Bézier via transitionConfiguration() from
+ *    unpacked back to packed joints.
+ *
+ * Requires start_up_sequence=true in BodyPoseConfiguration so the state machine uses
+ * the full Bézier-based startup/shutdown paths (not direct mode).
+ *
+ * @author HexaMotion Team
+ * @version 1.0
+ * @date 2025
+ */
+
+static double toDeg(double rad) { return math_utils::radiansToDegrees(rad); }
+
+/** Print column header for the iteration table. */
+static void printTableHeader(const char *phase_name) {
+    std::cout << "\n=== " << phase_name << " ===" << std::endl;
+    std::cout << std::left
+              << std::setw(6) << "Iter"
+              << std::setw(10) << "Coxa(d)"
+              << std::setw(10) << "Femur(d)"
+              << std::setw(10) << "Tibia(d)"
+              << std::setw(30) << "Tip Position (x, y, z)"
+              << "RobotState" << std::endl;
+    std::cout << std::string(90, '-') << std::endl;
+}
+
+/** State name helper. */
+static const char *robotStateName(RobotState s) {
+    switch (s) {
+    case ROBOT_UNKNOWN:
+        return "UNKNOWN";
+    case ROBOT_PACKED:
+        return "PACKED";
+    case ROBOT_READY:
+        return "READY";
+    case ROBOT_RUNNING:
+        return "RUNNING";
+    default:
+        return "?";
+    }
+}
+
+/** Print a single iteration row for leg 0. */
+static void printLegRow(int iter, const Leg &leg, RobotState rs) {
+    JointAngles a = leg.getJointAngles();
+    Point3D tip = leg.getCurrentTipPositionGlobal();
+    std::cout << std::fixed << std::setprecision(2)
+              << std::left
+              << std::setw(6) << iter
+              << std::setw(10) << toDeg(a.coxa)
+              << std::setw(10) << toDeg(a.femur)
+              << std::setw(10) << toDeg(a.tibia);
+    std::cout << "(" << std::setw(8) << tip.x << ", " << std::setw(8) << tip.y << ", " << std::setw(8) << tip.z << ")  ";
+    std::cout << robotStateName(rs) << std::endl;
+}
+
+int run_bezier_transition_single_leg() {
+    std::cout << "============================================================================" << std::endl;
+    std::cout << "     BEZIER TRANSITION VISUALIZATION TEST — SINGLE LEG (Leg 0 / AR)" << std::endl;
+    std::cout << "============================================================================" << std::endl;
+
+    // ── 1. Initialize ──────────────────────────────────────────────────────────
+    Parameters p = createDefaultParameters();
+    enableConfiguredPackedUnpackedPoses(p);
+
+    LocomotionSystem sys(p);
+    DummyIMU imu;
+    DummyFSR fsr;
+    DummyServo servos;
+    BodyPoseConfiguration pose_config = getDefaultBodyPoseConfig(p);
+    // Enable Bezier-based startup/shutdown sequences (not direct mode)
+    pose_config.start_up_sequence = true;
+
+    if (!sys.initialize(&imu, &fsr, &servos, pose_config)) {
+        std::cerr << "ERROR: Failed to initialize locomotion system." << std::endl;
+        return 1;
+    }
+
+    StateController *sc = sys.getStateController();
+    assert(sc != nullptr);
+
+    // Show initial joint angles for leg 0
+    {
+        const Leg &leg = sys.getLeg(0);
+        JointAngles a = leg.getJointAngles();
+        std::cout << "\nInitial joint angles (Leg 0):" << std::endl;
+        std::cout << "  Coxa:  " << toDeg(a.coxa) << " deg" << std::endl;
+        std::cout << "  Femur: " << toDeg(a.femur) << " deg" << std::endl;
+        std::cout << "  Tibia: " << toDeg(a.tibia) << " deg" << std::endl;
+        std::cout << "  RobotState: " << robotStateName(sc->getRobotState()) << std::endl;
+    }
+
+    // ── 2. FULL CYCLE: PACKED → READY → RUNNING ────────────────────────────────
+    // Configure gait (needed by walk controller internals) but do NOT set any velocity.
+    // Walking is not required for this test — we only exercise state transitions
+    // that use Bezier curves (pack/unpack/startup/shutdown). Without velocity,
+    // the walk controller stays in WALK_STOPPED, allowing instant shutdown.
+    GaitConfiguration tripod_gait = createGaitConfig(TRIPOD_GAIT, p);
+    sys.setGaitConfiguration(tripod_gait);
+    sys.startWalking(); // requests ROBOT_RUNNING (triggers PACKED->READY->RUNNING)
+
+    std::cout << "\n──────────────────────────────────────────────────────────────" << std::endl;
+    std::cout << "PHASE 1+2: PACKED -> READY (Cubic Bezier) -> RUNNING (Quartic Bezier)" << std::endl;
+    std::cout << "──────────────────────────────────────────────────────────────" << std::endl;
+
+    printTableHeader("STARTUP CYCLE — Leg 0 Joint Angles per Iteration");
+
+    int total_startup_iters = 0;
+    int unpack_iters = 0;
+    int startup_iters = 0;
+    const int MAX_ITERS = 1000;
+    RobotState prev_state = sc->getRobotState();
+    bool unpack_detected = false;
+    bool startup_detected = false;
+
+    while (total_startup_iters < MAX_ITERS) {
+        sys.update();
+        total_startup_iters++;
+
+        RobotState cur_state = sc->getRobotState();
+
+        // Track phase transitions
+        if (!unpack_detected && cur_state == ROBOT_PACKED) {
+            unpack_iters++;
+        }
+        if (prev_state == ROBOT_PACKED && cur_state != ROBOT_PACKED && !unpack_detected) {
+            unpack_iters++;
+            unpack_detected = true;
+            std::cout << "  >>> Unpack completed at iteration " << total_startup_iters
+                      << " (cubic Bezier, " << unpack_iters << " iters)" << std::endl;
+        }
+        if (unpack_detected && !startup_detected && cur_state != ROBOT_RUNNING) {
+            startup_iters++;
+        }
+        if (prev_state != ROBOT_RUNNING && cur_state == ROBOT_RUNNING && !startup_detected) {
+            startup_iters++;
+            startup_detected = true;
+            std::cout << "  >>> Startup completed at iteration " << total_startup_iters
+                      << " (quartic Bezier, " << startup_iters << " iters)" << std::endl;
+        }
+
+        // Print every N iterations to keep output manageable
+        if (total_startup_iters <= 10 || total_startup_iters % 5 == 0 || cur_state != prev_state) {
+            printLegRow(total_startup_iters, sys.getLeg(0), cur_state);
+        }
+
+        if (cur_state == ROBOT_RUNNING) {
+            break;
+        }
+
+        prev_state = cur_state;
+    }
+
+    if (sc->getRobotState() != ROBOT_RUNNING) {
+        std::cerr << "ERROR: Failed to reach RUNNING state after " << MAX_ITERS << " iterations." << std::endl;
+        return 1;
+    }
+
+    {
+        const Leg &leg = sys.getLeg(0);
+        JointAngles a = leg.getJointAngles();
+        Point3D tip = leg.getCurrentTipPositionGlobal();
+        std::cout << "\nRUNNING state reached. Leg 0 final:" << std::endl;
+        std::cout << "  Angles: Coxa=" << toDeg(a.coxa) << ", Femur=" << toDeg(a.femur)
+                  << ", Tibia=" << toDeg(a.tibia) << " deg" << std::endl;
+        std::cout << "  Tip: (" << tip.x << ", " << tip.y << ", " << tip.z << ")" << std::endl;
+    }
+
+    // ── 3. SHUTDOWN (RUNNING → READY): Quartic Bézier via stepToPosition ──
+    std::cout << "\n──────────────────────────────────────────────────────────────" << std::endl;
+    std::cout << "PHASE 3: SHUTDOWN (RUNNING -> READY) — Quartic Bezier" << std::endl;
+    std::cout << "──────────────────────────────────────────────────────────────" << std::endl;
+
+    // Request READY directly — walk controller is already WALK_STOPPED
+    // because no velocity was ever commanded.
+    sc->requestRobotState(ROBOT_READY);
+
+    int shutdown_iters = 0;
+
+    printTableHeader("SHUTDOWN — Leg 0 Joint Angles per Iteration");
+
+    int shutdown_iters_loop = 0;
+    const int MAX_SHUTDOWN_ITERS = 800;
+    prev_state = sc->getRobotState();
+
+    while (shutdown_iters_loop < MAX_SHUTDOWN_ITERS) {
+        sys.update();
+        shutdown_iters_loop++;
+
+        RobotState cur_state = sc->getRobotState();
+
+        // Print every N iterations or on state change
+        if (shutdown_iters_loop <= 10 || shutdown_iters_loop % 5 == 0 || cur_state != prev_state) {
+            printLegRow(shutdown_iters_loop, sys.getLeg(0), cur_state);
+        }
+
+        if (cur_state == ROBOT_READY) {
+            std::cout << "  >>> Shutdown completed at iteration " << shutdown_iters_loop << std::endl;
+            shutdown_iters = shutdown_iters_loop;
+            break;
+        }
+        prev_state = cur_state;
+    }
+
+    if (sc->getRobotState() != ROBOT_READY) {
+        std::cout << "WARNING: Shutdown did not reach READY after " << shutdown_iters_loop << " iterations." << std::endl;
+        shutdown_iters = shutdown_iters_loop;
+    }
+
+    // ── 4. PACK (READY → PACKED): Cubic Bézier via transitionConfiguration ──
+    std::cout << "\n──────────────────────────────────────────────────────────────" << std::endl;
+    std::cout << "PHASE 4: PACK (READY -> PACKED) — Cubic Bezier" << std::endl;
+    std::cout << "──────────────────────────────────────────────────────────────" << std::endl;
+
+    sc->requestRobotState(ROBOT_PACKED);
+
+    int pack_iters = 0;
+
+    printTableHeader("PACK — Leg 0 Joint Angles per Iteration");
+
+    int pack_iters_loop = 0;
+    const int MAX_PACK_ITERS = 500;
+    prev_state = sc->getRobotState();
+
+    while (pack_iters_loop < MAX_PACK_ITERS) {
+        sys.update();
+        pack_iters_loop++;
+
+        RobotState cur_state = sc->getRobotState();
+
+        if (pack_iters_loop <= 10 || pack_iters_loop % 5 == 0 || cur_state != prev_state) {
+            printLegRow(pack_iters_loop, sys.getLeg(0), cur_state);
+        }
+
+        if (cur_state == ROBOT_PACKED) {
+            std::cout << "  >>> Pack completed at iteration " << pack_iters_loop << std::endl;
+            const Leg &leg = sys.getLeg(0);
+            JointAngles a = leg.getJointAngles();
+            std::cout << "  Final packed angles: Coxa=" << toDeg(a.coxa)
+                      << ", Femur=" << toDeg(a.femur)
+                      << ", Tibia=" << toDeg(a.tibia) << " deg" << std::endl;
+            pack_iters = pack_iters_loop;
+            break;
+        }
+        prev_state = cur_state;
+    }
+
+    if (pack_iters_loop >= MAX_PACK_ITERS) {
+        std::cout << "WARNING: Pack did not complete within " << pack_iters_loop << " iterations." << std::endl;
+        pack_iters = pack_iters_loop;
+    }
+
+    // ── 5. SUMMARY ─────────────────────────────────────────────────────────────
+    std::cout << "\n============================================================================" << std::endl;
+    std::cout << "                    BEZIER TRANSITION SUMMARY (Single Leg)" << std::endl;
+    std::cout << "============================================================================" << std::endl;
+    std::cout << "Phase                     | Bezier Type       | Iterations | Method" << std::endl;
+    std::cout << "--------------------------+-------------------+------------+-------------------------" << std::endl;
+    std::cout << std::left
+              << std::setw(26) << "Unpack (PACKED->READY)"
+              << "| " << std::setw(18) << "Cubic per-joint"
+              << "| " << std::setw(11) << unpack_iters
+              << "| transitionConfiguration()" << std::endl;
+    std::cout << std::setw(26) << "Startup (READY->RUNNING)"
+              << "| " << std::setw(18) << "Dual quartic"
+              << "| " << std::setw(11) << startup_iters
+              << "| stepToPosition()" << std::endl;
+    std::cout << std::setw(26) << "Shutdown (RUNNING->READY)"
+              << "| " << std::setw(18) << "Dual quartic"
+              << "| " << std::setw(11) << shutdown_iters
+              << "| stepToPosition()" << std::endl;
+    std::cout << std::setw(26) << "Pack (READY->PACKED)"
+              << "| " << std::setw(18) << "Cubic per-joint"
+              << "| " << std::setw(11) << pack_iters
+              << "| transitionConfiguration()" << std::endl;
+    std::cout << "--------------------------+-------------------+------------+-------------------------" << std::endl;
+    int total = unpack_iters + startup_iters + shutdown_iters + pack_iters;
+    std::cout << std::setw(26) << "TOTAL"
+              << "| " << std::setw(18) << ""
+              << "| " << std::setw(11) << total
+              << "|" << std::endl;
+    std::cout << "============================================================================" << std::endl;
+
+    // Final verdict
+    bool success = (sc->getRobotState() == ROBOT_PACKED);
+    if (success) {
+        std::cout << "\nTEST PASSED" << std::endl;
+    } else {
+        std::cerr << "\nTEST FAILED: Final state = " << robotStateName(sc->getRobotState())
+                  << " (expected PACKED)." << std::endl;
+    }
+
+    return success ? 0 : 1;
+}
+} // namespace cm_bezier_transition_single_leg_test
+
+// ===========================================================================
+// Sub-test: run_bezier_transition_all_legs (from bezier_transition_all_legs_test.cpp)
+// ===========================================================================
+namespace cm_bezier_transition_all_legs_test {
+/**
+ * @file bezier_transition_all_legs_test.cpp
+ * @brief Visualizes Bezier curves during pack, unpack and standing pose transitions for ALL six legs.
+ *
+ * This test extends bezier_transition_single_leg_test by showing all legs simultaneously during
+ * the full PACKED -> READY -> RUNNING -> READY -> PACKED state machine cycle. Each phase prints:
+ * - Per-iteration joint angles for every leg (in degrees)
+ * - Tip positions in global coordinates
+ * - Symmetry verification between opposite leg pairs
+ *
+ * Requires start_up_sequence=true so the state machine uses Bezier-based startup/shutdown.
+ *
+ * Bezier curves exercised:
+ * 1. **Unpack (PACKED -> READY):** Cubic Bezier per joint via LegPoser::transitionConfiguration()
+ * 2. **Startup (READY -> RUNNING):** Dual quartic Bezier via executeSequenceInternal()
+ * 3. **Shutdown (RUNNING -> READY):** Reverse of startup H/V transitions
+ * 4. **Pack (READY -> PACKED):** Cubic Bezier per joint via transitionConfiguration()
+ *
+ * @author HexaMotion Team
+ * @version 1.0
+ * @date 2025
+ */
+
+static const char *LEG_NAMES[NUM_LEGS] = {"AR(0)", "BR(1)", "CR(2)", "CL(3)", "BL(4)", "AL(5)"};
+
+static double toDeg(double rad) { return math_utils::radiansToDegrees(rad); }
+
+static const char *robotStateName(RobotState s) {
+    switch (s) {
+    case ROBOT_UNKNOWN:
+        return "UNKNOWN";
+    case ROBOT_PACKED:
+        return "PACKED";
+    case ROBOT_READY:
+        return "READY";
+    case ROBOT_RUNNING:
+        return "RUNNING";
+    default:
+        return "?";
+    }
+}
+
+/** Print compact header for the all-legs table. */
+static void printAllLegsHeader(const char *phase_name) {
+    std::cout << "\n=== " << phase_name << " ===" << std::endl;
+    std::cout << std::left << std::setw(6) << "Iter";
+    for (int i = 0; i < NUM_LEGS; ++i) {
+        std::cout << "| " << std::setw(8) << LEG_NAMES[i]
+                  << std::setw(8) << "Coxa"
+                  << std::setw(8) << "Femur"
+                  << std::setw(8) << "Tibia ";
+    }
+    std::cout << "| State" << std::endl;
+    std::cout << std::string(6 + NUM_LEGS * 35 + 10, '-') << std::endl;
+}
+
+/** Print one row with all legs' joint angles. */
+static void printAllLegsRow(int iter, const LocomotionSystem &sys, RobotState rs) {
+    std::cout << std::fixed << std::setprecision(1)
+              << std::left << std::setw(6) << iter;
+    for (int i = 0; i < NUM_LEGS; ++i) {
+        const Leg &leg = sys.getLeg(i);
+        JointAngles a = leg.getJointAngles();
+        std::cout << "| " << std::setw(8) << ""
+                  << std::setw(8) << toDeg(a.coxa)
+                  << std::setw(8) << toDeg(a.femur)
+                  << std::setw(8) << toDeg(a.tibia);
+    }
+    std::cout << "| " << robotStateName(rs) << std::endl;
+}
+
+/** Print detailed tip positions for all legs. */
+static void printAllLegsTipPositions(int iter, const LocomotionSystem &sys) {
+    std::cout << "  Tip positions at iter " << iter << ":" << std::endl;
+    for (int i = 0; i < NUM_LEGS; ++i) {
+        Point3D tip = sys.getLeg(i).getCurrentTipPositionGlobal();
+        std::cout << "    " << LEG_NAMES[i] << ": ("
+                  << std::fixed << std::setprecision(2)
+                  << tip.x << ", " << tip.y << ", " << tip.z << ")" << std::endl;
+    }
+}
+
+/** Validate symmetry between opposite leg pairs after a transition. */
+static bool validateOppositeSymmetry(const LocomotionSystem &sys, const char *phase_name) {
+    const int pairs[][2] = {{0, 5}, {1, 4}, {2, 3}};
+    const char *pair_names[] = {"AR/AL", "BR/BL", "CR/CL"};
+    constexpr double ANGLE_TOLERANCE_DEG = 1.0;
+    bool all_ok = true;
+
+    std::cout << "\n  Symmetry check (" << phase_name << "):" << std::endl;
+    for (int p = 0; p < 3; ++p) {
+        int a = pairs[p][0], b = pairs[p][1];
+        JointAngles ja = sys.getLeg(a).getJointAngles();
+        JointAngles jb = sys.getLeg(b).getJointAngles();
+
+        double femur_diff = std::abs(toDeg(ja.femur) - toDeg(jb.femur));
+        double tibia_diff = std::abs(toDeg(ja.tibia) - toDeg(jb.tibia));
+
+        bool ok = (femur_diff < ANGLE_TOLERANCE_DEG) && (tibia_diff < ANGLE_TOLERANCE_DEG);
+        std::cout << "    " << pair_names[p]
+                  << ": femur_diff=" << std::fixed << std::setprecision(2) << femur_diff
+                  << " deg, tibia_diff=" << tibia_diff << " deg "
+                  << (ok ? "OK" : "WARN") << std::endl;
+        if (!ok)
+            all_ok = false;
+    }
+    return all_ok;
+}
+
+int run_bezier_transition_all_legs() {
+    std::cout << "============================================================================" << std::endl;
+    std::cout << "   BEZIER TRANSITION VISUALIZATION TEST — ALL LEGS (6 legs simultaneous)" << std::endl;
+    std::cout << "============================================================================" << std::endl;
+
+    // ── 1. Initialize ──────────────────────────────────────────────────────────
+    Parameters p = createDefaultParameters();
+    enableConfiguredPackedUnpackedPoses(p);
+
+    LocomotionSystem sys(p);
+    DummyIMU imu;
+    DummyFSR fsr;
+    DummyServo servos;
+    BodyPoseConfiguration pose_config = getDefaultBodyPoseConfig(p);
+    // Enable Bezier-based startup/shutdown sequences (not direct mode)
+    pose_config.start_up_sequence = true;
+
+    if (!sys.initialize(&imu, &fsr, &servos, pose_config)) {
+        std::cerr << "ERROR: Failed to initialize locomotion system." << std::endl;
+        return 1;
+    }
+
+    StateController *sc = sys.getStateController();
+    assert(sc != nullptr);
+
+    // Show initial state
+    std::cout << "\nInitial state: " << robotStateName(sc->getRobotState()) << std::endl;
+    for (int i = 0; i < NUM_LEGS; ++i) {
+        JointAngles a = sys.getLeg(i).getJointAngles();
+        std::cout << "  " << LEG_NAMES[i]
+                  << ": Coxa=" << std::fixed << std::setprecision(1) << toDeg(a.coxa)
+                  << ", Femur=" << toDeg(a.femur)
+                  << ", Tibia=" << toDeg(a.tibia) << " deg" << std::endl;
+    }
+
+    // Configure gait (needed by walk controller internals) but do NOT set any velocity.
+    // Walking is not required — we only exercise state transitions with Bezier curves.
+    // Without velocity, the walk controller stays in WALK_STOPPED, allowing instant shutdown.
+    GaitConfiguration tripod_gait = createGaitConfig(TRIPOD_GAIT, p);
+    sys.setGaitConfiguration(tripod_gait);
+    sys.startWalking(); // requests ROBOT_RUNNING (triggers PACKED->READY->RUNNING)
+
+    // ── 2. FULL STARTUP: PACKED -> READY -> RUNNING ────────────────────────────
+    std::cout << "\n===================================================================" << std::endl;
+    std::cout << "PHASES 1+2: PACKED -> READY (Cubic) -> RUNNING (Quartic)" << std::endl;
+    std::cout << "===================================================================" << std::endl;
+
+    printAllLegsHeader("STARTUP CYCLE — All Legs");
+
+    int total_iters = 0;
+    int unpack_iters = 0;
+    int startup_iters = 0;
+    const int MAX_ITERS = 1000;
+    RobotState prev_state = sc->getRobotState();
+    bool unpack_done = false;
+    bool startup_done = false;
+
+    while (total_iters < MAX_ITERS) {
+        sys.update();
+        total_iters++;
+
+        RobotState cur = sc->getRobotState();
+
+        if (!unpack_done && cur == ROBOT_PACKED)
+            unpack_iters++;
+        if (prev_state == ROBOT_PACKED && cur != ROBOT_PACKED && !unpack_done) {
+            unpack_iters++;
+            unpack_done = true;
+            std::cout << "  >>> Unpack done at iteration " << total_iters
+                      << " (" << unpack_iters << " iters)" << std::endl;
+            validateOppositeSymmetry(sys, "post-unpack");
+        }
+        if (unpack_done && !startup_done && cur != ROBOT_RUNNING)
+            startup_iters++;
+        if (prev_state != ROBOT_RUNNING && cur == ROBOT_RUNNING && !startup_done) {
+            startup_iters++;
+            startup_done = true;
+            std::cout << "  >>> Startup done at iteration " << total_iters
+                      << " (" << startup_iters << " iters)" << std::endl;
+        }
+
+        // Print every 5 iters or on state change
+        if (total_iters <= 5 || total_iters % 5 == 0 || cur != prev_state) {
+            printAllLegsRow(total_iters, sys, cur);
+        }
+        if (total_iters % 25 == 0) {
+            printAllLegsTipPositions(total_iters, sys);
+        }
+
+        if (cur == ROBOT_RUNNING)
+            break;
+        prev_state = cur;
+    }
+
+    if (sc->getRobotState() != ROBOT_RUNNING) {
+        std::cerr << "ERROR: Did not reach RUNNING after " << MAX_ITERS << " iters." << std::endl;
+        return 1;
+    }
+
+    std::cout << "\nRUNNING state reached. Standing pose:" << std::endl;
+    for (int i = 0; i < NUM_LEGS; ++i) {
+        const Leg &leg = sys.getLeg(i);
+        JointAngles a = leg.getJointAngles();
+        Point3D tip = leg.getCurrentTipPositionGlobal();
+        std::cout << "  " << LEG_NAMES[i]
+                  << ": angles=(" << std::setprecision(1)
+                  << toDeg(a.coxa) << ", " << toDeg(a.femur) << ", " << toDeg(a.tibia) << ")"
+                  << " tip=(" << std::setprecision(2) << tip.x << ", " << tip.y << ", " << tip.z << ")" << std::endl;
+    }
+    validateOppositeSymmetry(sys, "standing/running");
+
+    // ── 3. SHUTDOWN (RUNNING -> READY) ─────────────────────────────────────────
+    std::cout << "\n===================================================================" << std::endl;
+    std::cout << "PHASE 3: SHUTDOWN (RUNNING -> READY) — Quartic Bezier" << std::endl;
+    std::cout << "===================================================================" << std::endl;
+
+    // Request READY directly — walk controller is already WALK_STOPPED
+    // because no velocity was ever commanded.
+    sc->requestRobotState(ROBOT_READY);
+
+    int shutdown_iters = 0;
+
+    printAllLegsHeader("SHUTDOWN — All Legs");
+
+    int shutdown_iters_loop = 0;
+    const int MAX_SHUTDOWN = 800;
+    prev_state = sc->getRobotState();
+
+    while (shutdown_iters_loop < MAX_SHUTDOWN) {
+        sys.update();
+        shutdown_iters_loop++;
+
+        RobotState cur = sc->getRobotState();
+        if (shutdown_iters_loop <= 5 || shutdown_iters_loop % 10 == 0 || cur != prev_state) {
+            printAllLegsRow(shutdown_iters_loop, sys, cur);
+        }
+
+        if (cur == ROBOT_READY) {
+            std::cout << "  >>> Shutdown done at iteration " << shutdown_iters_loop << std::endl;
+            shutdown_iters = shutdown_iters_loop;
+            break;
+        }
+        prev_state = cur;
+    }
+
+    if (sc->getRobotState() != ROBOT_READY) {
+        std::cout << "WARNING: Shutdown did not complete after " << shutdown_iters_loop << " iters." << std::endl;
+        shutdown_iters = shutdown_iters_loop;
+    }
+
+    // ── 4. PACK (READY -> PACKED) ──────────────────────────────────────────────
+    std::cout << "\n===================================================================" << std::endl;
+    std::cout << "PHASE 4: PACK (READY -> PACKED) — Cubic Bezier" << std::endl;
+    std::cout << "===================================================================" << std::endl;
+
+    sc->requestRobotState(ROBOT_PACKED);
+
+    int pack_iters = 0;
+
+    printAllLegsHeader("PACK — All Legs");
+
+    int pack_iters_loop = 0;
+    const int MAX_PACK = 500;
+    prev_state = sc->getRobotState();
+
+    while (pack_iters_loop < MAX_PACK) {
+        sys.update();
+        pack_iters_loop++;
+
+        RobotState cur = sc->getRobotState();
+        if (pack_iters_loop <= 5 || pack_iters_loop % 10 == 0 || cur != prev_state) {
+            printAllLegsRow(pack_iters_loop, sys, cur);
+        }
+
+        if (cur == ROBOT_PACKED) {
+            std::cout << "  >>> Pack done at iteration " << pack_iters_loop << std::endl;
+            validateOppositeSymmetry(sys, "post-pack");
+            pack_iters = pack_iters_loop;
+            break;
+        }
+        prev_state = cur;
+    }
+
+    if (pack_iters_loop >= MAX_PACK) {
+        std::cout << "WARNING: Pack did not complete after " << pack_iters_loop << " iters." << std::endl;
+        pack_iters = pack_iters_loop;
+    }
+
+    // ── 5. SUMMARY ─────────────────────────────────────────────────────────────
+    std::cout << "\n============================================================================" << std::endl;
+    std::cout << "              BEZIER TRANSITION SUMMARY — ALL LEGS" << std::endl;
+    std::cout << "============================================================================" << std::endl;
+    std::cout << std::left
+              << std::setw(30) << "Phase"
+              << std::setw(22) << "Bezier Type"
+              << std::setw(14) << "Iterations"
+              << "Method" << std::endl;
+    std::cout << std::string(90, '-') << std::endl;
+    std::cout << std::setw(30) << "1. Unpack (PACKED->READY)"
+              << std::setw(22) << "Cubic per-joint"
+              << std::setw(14) << unpack_iters
+              << "transitionConfiguration()" << std::endl;
+    std::cout << std::setw(30) << "2. Startup (READY->RUNNING)"
+              << std::setw(22) << "Dual quartic"
+              << std::setw(14) << startup_iters
+              << "stepToPosition()" << std::endl;
+    std::cout << std::setw(30) << "3. Shutdown (RUNNING->READY)"
+              << std::setw(22) << "Dual quartic"
+              << std::setw(14) << shutdown_iters
+              << "stepToPosition()" << std::endl;
+    std::cout << std::setw(30) << "4. Pack (READY->PACKED)"
+              << std::setw(22) << "Cubic per-joint"
+              << std::setw(14) << pack_iters
+              << "transitionConfiguration()" << std::endl;
+    std::cout << std::string(90, '-') << std::endl;
+    int total = unpack_iters + startup_iters + shutdown_iters + pack_iters;
+    std::cout << std::setw(30) << "TOTAL"
+              << std::setw(22) << ""
+              << std::setw(14) << total
+              << std::endl;
+    std::cout << "============================================================================" << std::endl;
+
+    // Final state
+    std::cout << "\nFinal state: " << robotStateName(sc->getRobotState()) << std::endl;
+    for (int i = 0; i < NUM_LEGS; ++i) {
+        JointAngles a = sys.getLeg(i).getJointAngles();
+        std::cout << "  " << LEG_NAMES[i]
+                  << ": Coxa=" << std::fixed << std::setprecision(1) << toDeg(a.coxa)
+                  << ", Femur=" << toDeg(a.femur)
+                  << ", Tibia=" << toDeg(a.tibia) << " deg" << std::endl;
+    }
+
+    bool success = (sc->getRobotState() == ROBOT_PACKED);
+    if (success) {
+        std::cout << "\nTEST PASSED" << std::endl;
+    } else {
+        std::cerr << "\nTEST FAILED: Final state = " << robotStateName(sc->getRobotState())
+                  << " (expected PACKED)." << std::endl;
+    }
+
+    return success ? 0 : 1;
+}
+} // namespace cm_bezier_transition_all_legs_test
+
+int main() {
+    int rc = 0;
+
+    std::cout << "\n========== bezier validation ==========\n";
+    rc |= cm_bezier_validation_test::run_bezier_validation();
+
+    std::cout << "\n========== bezier curve deterministic ==========\n";
+    rc |= cm_bezier_curve_deterministic_test::run_bezier_curve_deterministic();
+
+    std::cout << "\n========== bezier transition single leg ==========\n";
+    rc |= cm_bezier_transition_single_leg_test::run_bezier_transition_single_leg();
+
+    std::cout << "\n========== bezier transition all legs ==========\n";
+    rc |= cm_bezier_transition_all_legs_test::run_bezier_transition_all_legs();
+
+    std::cout << "\n[bezier_test] overall: " << (rc == 0 ? "PASS" : "FAIL") << "\n";
+    return rc == 0 ? 0 : 1;
 }

@@ -513,12 +513,33 @@ bool LocomotionSystem::setStepDepth(double value) {
     return setGaitConfiguration(updated);
 }
 
+void LocomotionSystem::setStrictOpenSHCParity(bool enabled) {
+    // Mutate the RobotModel's parameter instance so every LegStepper (which binds a const reference
+    // to it) observes the change on its next trajectory update.
+    params.strict_openshc_parity = enabled;
+    model.setStrictOpenSHCParity(enabled);
+}
+
+bool LocomotionSystem::togglePrimaryLegState(int leg_index) {
+    if (!state_controller_) {
+        last_error = STATE_ERROR;
+        return false;
+    }
+    return state_controller_->requestLegToggle(leg_index);
+}
+
+bool LocomotionSystem::toggleSecondaryLegState(int leg_index) {
+    if (!state_controller_) {
+        last_error = STATE_ERROR;
+        return false;
+    }
+    return state_controller_->requestSecondaryLegToggle(leg_index);
+}
+
 bool LocomotionSystem::setVirtualMass(double value) {
     params.admittance.virtual_mass = clampAndStep(value, 0.01, 10.0, 0.01);
     return true;
-}
-
-bool LocomotionSystem::setVirtualStiffness(double value) {
+}bool LocomotionSystem::setVirtualStiffness(double value) {
     params.admittance.virtual_stiffness = clampAndStep(value, 0.0, 100.0, 1.0);
     return true;
 }

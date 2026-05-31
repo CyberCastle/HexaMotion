@@ -16,6 +16,12 @@ This document reflects the current API surface used by `WalkController`, `Veloci
 - Reachability/constraint checks (`isPositionReachable`, `constrainToValidWorkspace`) replace ad-hoc external checks.
 - Validation config (`ValidationConfig`) centralizes collision/joint-limit safety behavior.
 
+> **Walk-plane fit (OpenSHC-aligned):** `BodyPoseController::calculateWalkPlaneNormal` /
+> `calculateWalkPlaneHeight` fit a least-squares plane (`z = a·x + b·y + c`) over the **default tip
+> positions of all six legs** — matching `WalkController::updateWalkPlane` in OpenSHC — rather than a
+> subset of stance legs. The normal is `(-a, -b, 1).normalized()` (flipped to point up) and the
+> height is the plane offset `c` at the body origin.
+
 ## Access Pattern
 
 ```cpp

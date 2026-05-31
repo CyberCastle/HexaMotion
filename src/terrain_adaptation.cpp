@@ -94,6 +94,21 @@ const TerrainAdaptation::StepPlane &TerrainAdaptation::getStepPlane(int leg_inde
     return EMPTY_STEP_PLANE;
 }
 
+Point3D TerrainAdaptation::computeRoughTerrainSwingTarget(const Point3D &current_target,
+                                                         const Point3D &step_plane_position,
+                                                         const Point3D &walk_plane_normal,
+                                                         bool step_plane_valid,
+                                                         double step_depth) {
+    // OpenSHC rough_terrain_mode swing-target logic (LegStepper::updateTipPosition):
+    // project the commanded target onto a confirmed step plane along the walk-plane normal, or
+    // reactively lower the target by step_depth when no valid step plane is available.
+    if (step_plane_valid) {
+        Point3D difference = step_plane_position - current_target;
+        return current_target + math_utils::projectVector(difference, walk_plane_normal);
+    }
+    return Point3D(current_target.x, current_target.y, current_target.z - step_depth);
+}
+
 bool TerrainAdaptation::hasTouchdownDetection(int leg_index) const {
     if (leg_index >= 0 && leg_index < NUM_LEGS) {
         return touchdown_detection_[leg_index];

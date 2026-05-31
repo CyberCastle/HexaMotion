@@ -210,6 +210,12 @@ class LegStepper {
 #endif
 
   private:
+    // Master-parity helpers: resolve whether HexaMotion-only stability extensions are active.
+    // strictParity() returns true when the trajectory pipeline must reproduce OpenSHC verbatim.
+    bool strictParity() const { return params_.strict_openshc_parity; }
+    // True only when in-gait workspace constraining should run (off under strict parity).
+    bool useWorkspaceClamp() const { return !params_.strict_openshc_parity && params_.enable_workspace_constrain; }
+
     // Auxiliary method for velocity calculations
     Point3D calculateCurrentTipVelocity() const;
 

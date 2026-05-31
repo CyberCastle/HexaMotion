@@ -114,7 +114,9 @@ void RobotModel::initializeDH() {
 /** OpenSHC-style Damped Least Squares (DLS) iterative inverse kinematics. */
 JointAngles RobotModel::solveIK(int leg, const Point3D &global_target, JointAngles current,
                                 JointAngles current_velocity) const {
-    const double tolerance = IK_TOLERANCE;
+    // Bounded internal DLS convergence loop (HexaMotion divergence from OpenSHC, documented in AGENTS.md).
+    // Early-exit tolerance is user-tunable via params.ik.pos_threshold_mm.
+    const double tolerance = params.ik.pos_threshold_mm;
     const double dls_coefficient = IK_DLS_COEFFICIENT;
     const double max_joint_speed = IK_MAX_JOINT_ANGULAR_SPEED;
     /** Max angle change per iteration. */

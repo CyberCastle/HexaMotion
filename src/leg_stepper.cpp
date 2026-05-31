@@ -2,6 +2,7 @@
 #include "body_pose_controller.h"
 #include "hexamotion_constants.h"
 #include "math_utils.h"
+#include "terrain_adaptation.h"
 #include "workspace_analyzer.h"
 #include <algorithm>
 #include <cmath>
@@ -129,6 +130,14 @@ void LegStepper::setDesiredVelocity(const Point3D &linear_velocity, double angul
 // Here we compute stride each call but freeze (cache) its value at phase start; downstream code uses the
 // frozen copy, preventing migration of the swing target. This mirrors OpenSHC intent where stride parameters
 // remain effectively constant during a phase.
+/**
+ * @brief Recompute the per-leg stride vector for the current command.
+ *
+ * Stride is derived from the linear/angular velocity command projected onto the walk plane. By
+ * default (HexaMotion extension) the value is frozen at phase start so the swing target cannot
+ * migrate mid-phase. When @ref strictParity is active the freeze is bypassed and the live
+ * @c stride_vector_ is recomputed and used every call, reproducing OpenSHC verbatim.
+ */
 void LegStepper::updateStride() {
 
     // In OpenSHC this comes from walker_->getWalkPlane()/getWalkPlaneNormal().
@@ -173,8 +182,10 @@ void LegStepper::updateStride() {
     // Apply stride validation and safety constraints
     // stride_vector_ = calculateSafeStride(stride_vector_);
 
-    // Freeze stride if not yet frozen for current phase
-    if (!stride_frozen_) {
+    // Freeze stride if not yet frozen for current phase (HexaMotion stability extension).
+    // Under strict OpenSHC parity the stride is recomputed live every cycle, so freezing is skipped
+    // and stride_frozen_ stays false (downstream selectors then pick the live stride_vector_).
+    if (!strictParity() && !stride_frozen_) {
         frozen_stride_vector_linear_ = linear_scaled;
         frozen_stride_vector_angular_ = angular_scaled; // already scaled
         frozen_stride_vector_total_ = stride_vector_;
@@ -202,6 +213,17 @@ void LegStepper::beginStancePhase() {
     target_frozen_ = false;
 }
 
+/**
+ * @brief Compute swing/stance iteration counts and per-iteration deltas for the gait cycle.
+ *
+ * Implements OpenSHC's exact formula
+ * @c iterations = (period_ratio) / (frequency * time_delta) for both phases. Swing is rounded to an
+ * even number of nodes so the primary/secondary Bezier halves split cleanly; stance uses a plain
+ * integer count (no forced-even, no minimum clamp) to match OpenSHC after the §2.2 alignment. A
+ * single divide-by-zero guard keeps @c stance_iterations_ >= 1.
+ *
+ * @param time_delta Control period seed (overridden internally by @c params_.time_delta for consistency).
+ */
 void LegStepper::calculateSwingTiming(double time_delta) {
     // Override provided time_delta with unified global value to ensure consistency
     time_delta = params_.time_delta;
@@ -215,34 +237,16 @@ void LegStepper::calculateSwingTiming(double time_delta) {
     if (swing_iterations_ % 2 != 0)
         swing_iterations_++;
 
-    // Ensure minimum iterations for Bezier curve development
-    if (swing_iterations_ < 10)
-        swing_iterations_ = 10;
-
     // OpenSHC exact: swing_delta_t_ = 1.0 / (swing_iterations / 2.0)
     swing_delta_t_ = 1.0 / (swing_iterations_ / 2.0);
 
-    // Calculate stance timing using same OpenSHC formula,
-    // but apply symmetric rounding & parity rules like swing
-    double raw_stance_iters =
-        (double(step_cycle_.stance_period_) /
-         step_cycle_.period_) /
-        (step_cycle_.frequency_ * time_delta);
+    // Stance timing (OpenSHC exact): plain truncating int conversion, no even-rounding and no
+    // minimum-iteration clamp. Only a divide-by-zero guard is retained.
+    stance_iterations_ = int((double(step_cycle_.stance_period_) / step_cycle_.period_) / (step_cycle_.frequency_ * time_delta));
+    if (stance_iterations_ < 1)
+        stance_iterations_ = 1;
 
-    stance_iterations_ = static_cast<int>(std::round(raw_stance_iters));
-    if (stance_iterations_ % 2 != 0) {
-        // Enforce even count for midpoint consistency (mirrors swing handling)
-        stance_iterations_++;
-    }
-
-    // Maintain minimum for numerical stability of integration
-    if (stance_iterations_ < 10) {
-        stance_iterations_ = 10;
-        if (stance_iterations_ % 2 != 0)
-            stance_iterations_++; // keep even
-    }
-
-    stance_delta_t_ = (stance_iterations_ > 0) ? (1.0 / static_cast<double>(stance_iterations_)) : 0.0;
+    stance_delta_t_ = 1.0 / static_cast<double>(stance_iterations_);
 }
 
 void LegStepper::initializeSwingPeriod(int iteration) {
@@ -291,7 +295,10 @@ void LegStepper::generatePrimarySwingControlNodes() {
     // Set to default tip position so max swing height and transition to 2nd swing curve occurs at default tip position
     swing_1_nodes_[4] = mid_tip_position;
 
-    validateAndFixControlNodes(swing_1_nodes_);
+    // Workspace clamping of control nodes is a HexaMotion stability extension; skipped under strict parity.
+    if (!strictParity()) {
+        validateAndFixControlNodes(swing_1_nodes_);
+    }
 }
 
 void LegStepper::generateSecondarySwingControlNodes(bool ground_contact) {
@@ -314,9 +321,12 @@ void LegStepper::generateSecondarySwingControlNodes(bool ground_contact) {
     // Set for position continuity at transition between secondary swing and stance curves (C0 Smoothness)
     swing_2_nodes_[4] = target_tip_pose_;
 
-    // Ensure touchdown occurs exactly on the walking plane (standing height)
-    // This eliminates tiny numerical drift in Z accumulated during swing integration
-    swing_2_nodes_[4].z = default_tip_pose_.z;
+    // Ensure touchdown occurs exactly on the walking plane (standing height).
+    // This eliminates tiny numerical drift in Z accumulated during swing integration and is a
+    // HexaMotion stability extension; under strict OpenSHC parity the raw target Z is preserved.
+    if (!strictParity()) {
+        swing_2_nodes_[4].z = default_tip_pose_.z;
+    }
 
     // Stops further movement of tip position in direction normal to walk plane
     if (ground_contact) {
@@ -327,20 +337,30 @@ void LegStepper::generateSecondarySwingControlNodes(bool ground_contact) {
         swing_2_nodes_[4] = current_tip_pose_ + stance_node_seperation * 4.0;
     }
 
-    if (params_.enable_workspace_constrain) {
+    if (useWorkspaceClamp()) {
         validateAndFixControlNodes(swing_2_nodes_);
     }
 }
 
+/**
+ * @brief Reshape the secondary swing Bezier so the tip touches down vertically (normal to the plane).
+ *
+ * Derives the control-node separation from the final stance tip velocity
+ * (@c stride_vector_ * -(stance_delta_t_ / time_delta)) rescaled into the swing time base by
+ * @c 0.25 * (time_delta / swing_delta_t_). This matches OpenSHC's
+ * @c generateSecondarySwingControlNodes node spacing exactly (§4.bis-D2 fix) instead of the previous
+ * simplified factor. No-ops when timing deltas are non-positive.
+ */
 void LegStepper::forceNormalTouchdown() {
-    if (stance_iterations_ <= 0) {
+    double time_delta = params_.time_delta;
+    if (swing_delta_t_ <= 0.0 || time_delta <= 0.0) {
         return;
     }
 
-    // Node separation is based on stance iterations only,
-    // matching the OpenSHC reference derivation.
-    Point3D final_tip_velocity = stride_vector_ * (-1.0 / static_cast<double>(stance_iterations_));
-    Point3D stance_node_separation = final_tip_velocity * 0.25;
+    // OpenSHC exact derivation: final stance tip velocity scaled by the stance/time ratio, then the
+    // node separation rescaled into the swing time base (matches generateSecondarySwingControlNodes).
+    Point3D final_tip_velocity = stride_vector_ * (-(stance_delta_t_ / time_delta));
+    Point3D stance_node_separation = final_tip_velocity * 0.25 * (time_delta / swing_delta_t_);
 
     Point3D bezier_target = target_tip_pose_;
     Point3D bezier_origin = target_tip_pose_ - stance_node_separation * 4.0;
@@ -373,7 +393,7 @@ void LegStepper::generateStanceControlNodes(double stride_scaler) {
     // Set as target tip position
     stance_nodes_[4] = stance_origin_tip_position_ + stance_node_separation * 4.0;
 
-    if (params_.enable_workspace_constrain) {
+    if (useWorkspaceClamp()) {
         validateAndFixControlNodes(stance_nodes_);
     }
 }
@@ -400,12 +420,30 @@ double LegStepper::calculateStanceStrideScaler() {
     return stride_scaler;
 }
 
+/**
+ * @brief Advance the tip position by one control iteration (main OpenSHC-style trajectory update).
+ *
+ * Drives the swing and stance Bezier integration for the current phase iteration. In the default
+ * HexaMotion configuration it also applies the stability extensions (stride/target freezing, hybrid
+ * anti-drift, lateral residual cleanup, in-gait workspace clamping, per-iteration stance Z lock and
+ * phase-end snap). When @c params.strict_openshc_parity is set, the @c parity local forces every one
+ * of those extensions off, reproducing OpenSHC's raw trajectory regardless of the fine-grained flags.
+ *
+ * @param iteration            1-based iteration index within the current phase.
+ * @param time_delta           Control period in seconds.
+ * @param rough_terrain_mode   When true, delegates swing-target adaptation to @ref TerrainAdaptation.
+ * @param force_normal_touchdown When true, enforces vertical touchdown via @ref forceNormalTouchdown.
+ */
 void LegStepper::updateTipPositionIterative(int iteration, double time_delta, bool rough_terrain_mode, bool force_normal_touchdown) {
-    // OpenSHC-style iterative update - This is the MAIN method following OpenSHC philosophy
 
     // Single cached reference to parameters (avoid repeated getParams() bindings further below)
     const Parameters &params = params_;
 
+    // Resolve the master OpenSHC parity switch once per cycle. When parity is active, ALL HexaMotion-only
+    // stability extensions below are disabled regardless of their individual flags.
+    const bool parity = params.strict_openshc_parity;
+    const bool use_phase_snap = !parity && params.enable_phase_end_snap;
+    const bool use_ws_clamp = !parity && params.enable_workspace_constrain;
 #ifdef COXA_STRIDE_TESTING_ENABLED
     debug_state_.iteration = iteration;
     debug_state_.step_state = step_state_;
@@ -492,13 +530,17 @@ void LegStepper::updateTipPositionIterative(int iteration, double time_delta, bo
     debug_state_.active_stride = active_stride;
 #endif
     if (!target_frozen_) {
-        if (params_.enable_workspace_constrain) {
+        if (use_ws_clamp) {
             target_tip_pose_ = calculateSafeTarget(raw_target);
         } else {
             target_tip_pose_ = raw_target;
         }
-        frozen_target_tip_pose_ = target_tip_pose_;
-        target_frozen_ = true;
+        // Target freezing is a HexaMotion stability extension; under strict parity the target is
+        // recomputed live each cycle (target_frozen_ stays false).
+        if (!parity) {
+            frozen_target_tip_pose_ = target_tip_pose_;
+            target_frozen_ = true;
+        }
     } else {
         target_tip_pose_ = frozen_target_tip_pose_;
     }
@@ -518,17 +560,13 @@ void LegStepper::updateTipPositionIterative(int iteration, double time_delta, bo
             ground_contact = leg_.isInContact();
         }
 
-        // Rough terrain handling: step plane and reactive probing
-        if (rough_terrain_mode) {
-            if (touchdown_detection_) {
-                if (step_plane_valid_) {
-                    Point3D target_tip_position = step_plane_position_;
-                    Point3D difference = target_tip_position - target_tip_pose_;
-                    target_tip_pose_ = target_tip_pose_ + math_utils::projectVector(difference, walk_plane_normal_);
-                } else {
-                    target_tip_pose_.z -= step_depth_;
-                }
-            }
+        // Rough terrain handling: step plane projection and reactive probing.
+        // The full OpenSHC rough-terrain target computation is owned by TerrainAdaptation; the leg
+        // stepper simply forwards the per-leg step-plane data already pushed in by WalkController.
+        if (rough_terrain_mode && touchdown_detection_) {
+            target_tip_pose_ = TerrainAdaptation::computeRoughTerrainSwingTarget(
+                target_tip_pose_, step_plane_position_, walk_plane_normal_,
+                step_plane_valid_, step_depth_);
         }
 
         // OpenSHC: regenerate ALL swing control nodes EVERY iteration
@@ -567,7 +605,7 @@ void LegStepper::updateTipPositionIterative(int iteration, double time_delta, bo
         debug_state_.last_delta = delta_pos;
 #endif
         Point3D next_pose = current_tip_pose_ + delta_pos;
-        if (params_.enable_workspace_constrain) {
+        if (use_ws_clamp) {
             current_tip_pose_ = robot_model_.getWorkspaceAnalyzer().makeReachable(leg_index_, next_pose);
         } else {
             current_tip_pose_ = next_pose;
@@ -584,7 +622,11 @@ void LegStepper::updateTipPositionIterative(int iteration, double time_delta, bo
         // Initialize stance origin if needed (hybrid anti-drift extension).
         // Only reinitialize when truly entering stance from another state, not on cycle wrapping
         bool just_entered_stance = (previous_step_state_ != STEP_STANCE);
-        if (stance_iteration == 1 && just_entered_stance) {
+        if (stance_iteration == 1 && just_entered_stance && parity) {
+            // Verbatim OpenSHC: stance integrates directly from the touchdown pose, with no lateral
+            // residual cleanup, no hybrid anti-drift reset and no walking-plane Z lock.
+            stance_origin_tip_position_ = current_tip_pose_;
+        } else if (stance_iteration == 1 && just_entered_stance) {
 
             // At stance entry, compare the touchdown pose against the frozen swing target. Any residual lateral
             // offset is projected onto the leg-aligned axis and bled off immediately. This keeps opposing legs
@@ -689,7 +731,8 @@ void LegStepper::updateTipPositionIterative(int iteration, double time_delta, bo
 #endif
         current_tip_pose_ += delta_pos;
         // Keep stance motion constrained to the walking plane when not in rough terrain mode
-        if ((!rough_terrain_mode || force_normal_touchdown) && !params.use_fsr_contact) {
+        // (HexaMotion stability extension; disabled under strict OpenSHC parity).
+        if (!parity && (!rough_terrain_mode || force_normal_touchdown) && !params.use_fsr_contact) {
             current_tip_pose_.z = default_tip_pose_.z;
         }
 #ifdef COXA_STRIDE_TESTING_ENABLED
@@ -699,7 +742,7 @@ void LegStepper::updateTipPositionIterative(int iteration, double time_delta, bo
     }
 
     // Optional phase-end snap to frozen target (enhancement; documented difference from vanilla OpenSHC)
-    if (params.enable_phase_end_snap && target_frozen_) {
+    if (use_phase_snap && target_frozen_) {
         bool at_end = (step_progress_ >= 0.999);
         if (at_end) {
             Point3D err = frozen_target_tip_pose_ - current_tip_pose_;

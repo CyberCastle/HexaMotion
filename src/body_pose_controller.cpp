@@ -586,7 +586,7 @@ void BodyPoseController::updateWalkPlanePose(Leg legs[NUM_LEGS]) {
         double swing_progress = legs[i].getSwingProgress() * swing_progress_scaler;
         if (swing_progress >= 0.0 && swing_progress <= 1.0) {
             c = math_utils::smoothStep(swing_progress);
-            // Calculate walk plane from stance legs (HexaMotion: no per-leg LegStepper walk plane data)
+            // Calculate walk plane from all legs' default tip poses (OpenSHC WalkController::updateWalkPlane parity)
             Point3D normal = calculateWalkPlaneNormal(legs);
             walk_plane_normal = Eigen::Vector3d(normal.x, normal.y, normal.z);
             walk_plane[2] = calculateWalkPlaneHeight(legs);
@@ -612,31 +612,29 @@ void BodyPoseController::updateWalkPlanePose(Leg legs[NUM_LEGS]) {
 }
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-// Walk plane calculation helpers (HexaMotion adaptation - stance-leg-based since no per-leg LegStepper walk plane)
+// Walk plane calculation helpers (OpenSHC WalkController::updateWalkPlane() equivalent)
+//
+// OpenSHC fits the walk plane by least squares over the DEFAULT tip pose of EVERY leg (not just the
+// stance legs and not the live tip positions). HexaMotion mirrors this 1:1 using each leg's default
+// (stance) tip position, which is the direct equivalent of OpenSHC's LegStepper::getDefaultTipPose().
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 Point3D BodyPoseController::calculateWalkPlaneNormal(Leg legs[NUM_LEGS]) const {
-    std::vector<Point3D> stance_points;
-    for (int i = 0; i < NUM_LEGS; i++) {
-        if (legs[i].getStepPhase() == STANCE_PHASE) {
-            stance_points.push_back(legs[i].getCurrentTipPositionGlobal());
-        }
-    }
-
-    if (stance_points.size() < 3) {
-        return Point3D(0.0, 0.0, 1.0);
-    }
-
+    // Plane model: z = a*x + b*y + c, fitted over all legs' default tip positions.
     std::vector<double> raw_A;
     std::vector<double> raw_B;
-    for (const auto &point : stance_points) {
-        raw_A.push_back(point.x);
-        raw_A.push_back(point.y);
+    raw_A.reserve(NUM_LEGS * 3);
+    raw_B.reserve(NUM_LEGS);
+    for (int i = 0; i < NUM_LEGS; i++) {
+        Point3D p = legs[i].getDefaultTipPosition();
+        raw_A.push_back(p.x);
+        raw_A.push_back(p.y);
         raw_A.push_back(1.0);
-        raw_B.push_back(point.z);
+        raw_B.push_back(p.z);
     }
 
     double a, b, c_val;
-    if (math_utils::solveLeastSquaresPlane(raw_A.data(), raw_B.data(), stance_points.size(), a, b, c_val)) {
+    if (math_utils::solveLeastSquaresPlane(raw_A.data(), raw_B.data(), NUM_LEGS, a, b, c_val)) {
+        // OpenSHC: walk_plane_normal_ = Vector3d(-a, -b, 1).normalized()
         double normal_magnitude = std::sqrt(a * a + b * b + 1.0);
         Point3D normal(-a / normal_magnitude, -b / normal_magnitude, 1.0 / normal_magnitude);
         if (normal.z < 0) {
@@ -651,16 +649,23 @@ Point3D BodyPoseController::calculateWalkPlaneNormal(Leg legs[NUM_LEGS]) const {
 }
 
 double BodyPoseController::calculateWalkPlaneHeight(Leg legs[NUM_LEGS]) const {
-    double total_z = 0.0;
-    int stance_count = 0;
+    // OpenSHC uses walk_plane_[2] (the fitted plane's z-offset at the body origin), not an average of
+    // tip heights. Fit the same plane over all legs' default tip positions and return its c term.
+    std::vector<double> raw_A;
+    std::vector<double> raw_B;
+    raw_A.reserve(NUM_LEGS * 3);
+    raw_B.reserve(NUM_LEGS);
     for (int i = 0; i < NUM_LEGS; i++) {
-        if (legs[i].getStepPhase() == STANCE_PHASE) {
-            total_z += legs[i].getCurrentTipPositionGlobal().z;
-            stance_count++;
-        }
+        Point3D p = legs[i].getDefaultTipPosition();
+        raw_A.push_back(p.x);
+        raw_A.push_back(p.y);
+        raw_A.push_back(1.0);
+        raw_B.push_back(p.z);
     }
-    if (stance_count > 0) {
-        return total_z / stance_count;
+
+    double a, b, c_val;
+    if (math_utils::solveLeastSquaresPlane(raw_A.data(), raw_B.data(), NUM_LEGS, a, b, c_val)) {
+        return c_val;
     }
     return walk_plane_pose_.position.z - body_pose_config.body_clearance;
 }

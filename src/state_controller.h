@@ -197,6 +197,18 @@ class StateController {
      */
     bool requestLegToggle(int leg_index);
 
+    /**
+     * @brief Request a toggle on the SECONDARY leg-selection slot (OpenSHC dual-selection equivalent).
+     *
+     * OpenSHC exposes two independent leg-selection channels (primary and secondary) so that up to
+     * MAX_MANUAL_LEGS legs can be designated for manual manipulation and toggled independently.
+     * This routes the request to the secondary slot; @ref requestLegToggle uses the primary slot.
+     *
+     * @param leg_index Index of the leg to toggle (0-5)
+     * @return True if toggle request was accepted
+     */
+    bool requestSecondaryLegToggle(int leg_index);
+
     /** Velocity and pose control. */
 
     /**
@@ -352,9 +364,11 @@ class StateController {
     LegState leg_states_[NUM_LEGS];
     int manual_leg_count_;
 
-    /** Leg state toggle tracking (OpenSHC equivalent). */
-    int toggle_leg_index_;          /**< Index of leg currently toggling (-1 if none). */
-    bool toggle_leg_state_pending_; /**< Flag indicating a leg state toggle is in progress. */
+    /** Leg state toggle tracking (OpenSHC dual-selection equivalent). */
+    int primary_leg_selection_;       /**< Index of the primary selected leg (-1 if none). */
+    int secondary_leg_selection_;     /**< Index of the secondary selected leg (-1 if none). */
+    bool toggle_primary_leg_state_;   /**< True while the primary leg toggle is in progress. */
+    bool toggle_secondary_leg_state_; /**< True while the secondary leg toggle is in progress. */
 
     /** Transition management. */
     bool is_transitioning_;
@@ -419,6 +433,22 @@ class StateController {
      * @brief Handle leg state transitions.
      */
     void handleLegStateTransitions();
+
+    /**
+     * @brief Shared implementation for primary/secondary leg-toggle requests.
+     * @param leg_index Index of the leg to toggle (0-5).
+     * @param secondary True to use the secondary selection slot, false for the primary slot.
+     * @return True if the toggle request was accepted.
+     */
+    bool requestLegToggleSlot(int leg_index, bool secondary);
+
+    /**
+     * @brief Advance the gradual transition for a single selected leg slot (OpenSHC legStateToggle).
+     * @param leg_index Index of the leg being toggled.
+     * @param toggle_pending In/out flag cleared when the transition completes.
+     * @param to_manual_scale True for WALKING->MANUAL stiffness ramp (0->1), false for the reverse.
+     */
+    void processLegToggleSlot(int leg_index, bool &toggle_pending);
 
     /**
      * @brief Update pose control based on current mode.

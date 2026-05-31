@@ -398,6 +398,30 @@ class LocomotionSystem : public StateControllerContext {
     bool setStepDepth(double value);
 
     /**
+     * @brief Enable/disable strict OpenSHC parity for the LegStepper trajectory pipeline.
+     *
+     * When enabled, all HexaMotion-only stability extensions (stride/target freezing, hybrid
+     * anti-drift, lateral residual cleanup, phase-end snap and in-gait workspace constraining) are
+     * disabled and the swing/stance trajectory reproduces OpenSHC verbatim. Default: disabled.
+     * @param enabled True to force strict OpenSHC parity.
+     */
+    void setStrictOpenSHCParity(bool enabled);
+
+    /**
+     * @brief Toggle a leg between WALKING and MANUAL on the PRIMARY selection slot.
+     * @param leg_index Leg index (0-5).
+     * @return True if the toggle request was accepted.
+     */
+    bool togglePrimaryLegState(int leg_index);
+
+    /**
+     * @brief Toggle a leg between WALKING and MANUAL on the SECONDARY selection slot.
+     * @param leg_index Leg index (0-5).
+     * @return True if the toggle request was accepted.
+     */
+    bool toggleSecondaryLegState(int leg_index);
+
+    /**
      * @brief Set admittance virtual mass.
      * @param value New virtual mass.
      * @return True if applied.

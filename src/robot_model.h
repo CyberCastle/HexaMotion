@@ -136,13 +136,18 @@ struct Parameters {
 
     /**
      * @brief Inverse kinematics solver settings.
+     *
+     * HexaMotion deliberately diverges from OpenSHC here: instead of OpenSHC's single DLS step per
+     * control cycle, RobotModel::solveIK runs a bounded internal convergence loop (up to
+     * @ref max_iterations iterations, early-exit once the positional error drops below
+     * @ref pos_threshold_mm). Combined with the analytic seed produced by
+     * inverseKinematicsGlobalCoordinates(), this converges within a single ~50 Hz MCU cycle while
+     * keeping the average iteration count low. See AGENTS.md for the full rationale.
      */
     struct IKConfig {
-        uint8_t max_iterations = IK_DEFAULT_MAX_ITERATIONS; //< Maximum iterations for RobotModel::inverseKinematics
-        double pos_threshold_mm = 0.5f;
-        bool use_damping = true;
-        double damping_lambda = 30.0f;
-        bool clamp_joints = true;
+        uint8_t max_iterations = IK_DEFAULT_MAX_ITERATIONS; //< Maximum iterations of the bounded internal DLS loop
+        double pos_threshold_mm = 0.5f;                     //< Positional early-exit threshold (mm)
+        bool clamp_joints = true;                           //< Clamp final joint angles to configured limits
     } ik;
 
     /**
@@ -190,6 +195,15 @@ struct Parameters {
     // at the cost of potential long-term drift. When false, an anti-drift policy resets (or blends toward) the
     // calibrated default tip pose at the start of stance for deterministic repeatability.
     bool preserve_swing_end_pose = true; // true = continuity (default), false = anti-drift (uses hybrid reset logic below)
+
+    // --- Master OpenSHC parity switch ---
+    // When true, HexaMotion reproduces OpenSHC's LegStepper trajectory pipeline verbatim and disables
+    // ALL HexaMotion-only stability extensions (stride freezing, hybrid anti-drift, lateral residual
+    // cleanup, phase-end snap, in-gait workspace constraining and swing-end Z snapping).
+    // This switch has the HIGHEST precedence: when set, the fine-grained flags above/below
+    // (preserve_swing_end_pose, enable_phase_end_snap, enable_workspace_constrain, drift_*) are ignored.
+    // Default: false (HexaMotion stability extensions remain active).
+    bool strict_openshc_parity = false;
 
     // --- Drift management thresholds ---
     // Shared by both continuity and hybrid reset modes. In continuity (preserve_swing_end_pose=true) these values
@@ -646,6 +660,12 @@ class RobotModel {
     std::pair<double, double> calculateHeightRange() const;
     const Parameters &getParams() const { return params; }
     double getTimeDelta() const { return params.time_delta; }
+
+    /**
+     * @brief Enable/disable strict OpenSHC parity for the LegStepper trajectory pipeline at runtime.
+     * @param enabled True to disable all HexaMotion-only stability extensions.
+     */
+    void setStrictOpenSHCParity(bool enabled) { params.strict_openshc_parity = enabled; }
 
     /** @brief Get joint angle limits in radians (precomputed from degree params). */
     double getCoxaAngleLimitRad(int index) const { return coxa_angle_limits_rad[index]; }

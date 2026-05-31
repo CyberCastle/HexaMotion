@@ -123,7 +123,7 @@ String toArduinoString(const std::string &str) {
 } // namespace
 
 StateController::StateController(StateControllerContext &context, const StateMachineConfig &config)
-    : context_(context), config_(config), current_system_state_(SystemState::SUSPENDED), current_robot_state_(RobotState::ROBOT_UNKNOWN), current_walk_state_(WalkState::WALK_STOPPED), current_posing_mode_(PosingMode::POSING_NONE), current_pose_reset_mode_(PoseResetMode::NO_RESET), desired_system_state_(SystemState::SUSPENDED), desired_robot_state_(RobotState::ROBOT_UNKNOWN), leg_states_{}, manual_leg_count_(0), toggle_leg_index_(-1), toggle_leg_state_pending_(false), is_transitioning_(false), desired_linear_velocity_(Eigen::Vector2d::Zero()), desired_angular_velocity_(0.0f), desired_body_position_(Eigen::Vector3d::Zero()), desired_body_orientation_(Eigen::Vector3d::Zero()), last_update_time_(0), time_delta_(0.02f), has_error_(false), startup_step_(0), startup_transition_initialized_(false), startup_transition_step_count_(4), shutdown_step_(0), shutdown_transition_initialized_(false), shutdown_transition_step_count_(3), executing_pack_transition_(false), is_initialized_(false) {
+    : context_(context), config_(config), current_system_state_(SystemState::SUSPENDED), current_robot_state_(RobotState::ROBOT_UNKNOWN), current_walk_state_(WalkState::WALK_STOPPED), current_posing_mode_(PosingMode::POSING_NONE), current_pose_reset_mode_(PoseResetMode::NO_RESET), desired_system_state_(SystemState::SUSPENDED), desired_robot_state_(RobotState::ROBOT_UNKNOWN), leg_states_{}, manual_leg_count_(0), primary_leg_selection_(-1), secondary_leg_selection_(-1), toggle_primary_leg_state_(false), toggle_secondary_leg_state_(false), is_transitioning_(false), desired_linear_velocity_(Eigen::Vector2d::Zero()), desired_angular_velocity_(0.0f), desired_body_position_(Eigen::Vector3d::Zero()), desired_body_orientation_(Eigen::Vector3d::Zero()), last_update_time_(0), time_delta_(0.02f), has_error_(false), startup_step_(0), startup_transition_initialized_(false), startup_transition_step_count_(4), shutdown_step_(0), shutdown_transition_initialized_(false), shutdown_transition_step_count_(3), executing_pack_transition_(false), is_initialized_(false) {
 
     // Initialize leg states
     for (int i = 0; i < NUM_LEGS; i++) {
@@ -395,6 +395,14 @@ bool StateController::setLegState(int leg_index, LegState state) {
 }
 
 bool StateController::requestLegToggle(int leg_index) {
+    return requestLegToggleSlot(leg_index, /*secondary=*/false);
+}
+
+bool StateController::requestSecondaryLegToggle(int leg_index) {
+    return requestLegToggleSlot(leg_index, /*secondary=*/true);
+}
+
+bool StateController::requestLegToggleSlot(int leg_index, bool secondary) {
     if (leg_index < 0 || leg_index >= NUM_LEGS) {
         setError("Invalid leg index for toggle: " + toArduinoString(toString(leg_index)));
         return false;
@@ -403,8 +411,17 @@ bool StateController::requestLegToggle(int leg_index) {
         setError("Cannot toggle leg state when robot is not in RUNNING state");
         return false;
     }
-    if (toggle_leg_state_pending_) {
-        setError("A leg toggle is already in progress");
+
+    int &selection = secondary ? secondary_leg_selection_ : primary_leg_selection_;
+    bool &toggle_pending = secondary ? toggle_secondary_leg_state_ : toggle_primary_leg_state_;
+    const int other_selection = secondary ? primary_leg_selection_ : secondary_leg_selection_;
+
+    if (toggle_pending) {
+        setError("A leg toggle is already in progress on this selection slot");
+        return false;
+    }
+    if (leg_index == other_selection) {
+        setError("Leg " + toArduinoString(toString(leg_index)) + " is already selected on the other slot");
         return false;
     }
 
@@ -417,14 +434,14 @@ bool StateController::requestLegToggle(int leg_index) {
         }
         // Begin WALKING -> WALKING_TO_MANUAL transition
         leg_states_[leg_index] = LegState::LEG_WALKING_TO_MANUAL;
-        toggle_leg_index_ = leg_index;
-        toggle_leg_state_pending_ = true;
+        selection = leg_index;
+        toggle_pending = true;
         logDebug("Leg " + toArduinoString(toString(leg_index)) + " toggle requested: WALKING -> MANUAL");
     } else if (current == LegState::LEG_MANUAL) {
         // Begin MANUAL -> MANUAL_TO_WALKING transition
         leg_states_[leg_index] = LegState::LEG_MANUAL_TO_WALKING;
-        toggle_leg_index_ = leg_index;
-        toggle_leg_state_pending_ = true;
+        selection = leg_index;
+        toggle_pending = true;
         logDebug("Leg " + toArduinoString(toString(leg_index)) + " toggle requested: MANUAL -> WALKING");
     } else {
         setError("Leg " + toArduinoString(toString(leg_index)) + " is already transitioning");
@@ -825,14 +842,13 @@ void StateController::updateWalkState() {
 }
 
 void StateController::handleLegStateTransitions() {
-    // OpenSHC legStateToggle equivalent: handles gradual leg state transitions
-    // via poseForLegManipulation when a toggle request is pending.
+    // OpenSHC legStateToggle equivalent: handles gradual leg state transitions via
+    // poseForLegManipulation. Two independent selection slots (primary/secondary) are supported so
+    // up to max_manual_legs legs can be manipulated, matching OpenSHC's dual-selection design.
 
-    if (!toggle_leg_state_pending_ || toggle_leg_index_ < 0 || toggle_leg_index_ >= NUM_LEGS) {
+    if (!toggle_primary_leg_state_ && !toggle_secondary_leg_state_) {
         return;
     }
-
-    LegState &state = leg_states_[toggle_leg_index_];
 
     // Must be WALK_STOPPED before transitions can proceed (OpenSHC forces stop first)
     if (current_walk_state_ != WalkState::WALK_STOPPED) {
@@ -841,6 +857,23 @@ void StateController::handleLegStateTransitions() {
         desired_angular_velocity_ = 0.0;
         return;
     }
+
+    // OpenSHC processes the primary slot first, then the secondary slot.
+    if (toggle_primary_leg_state_) {
+        processLegToggleSlot(primary_leg_selection_, toggle_primary_leg_state_);
+    }
+    if (toggle_secondary_leg_state_) {
+        processLegToggleSlot(secondary_leg_selection_, toggle_secondary_leg_state_);
+    }
+}
+
+void StateController::processLegToggleSlot(int leg_index, bool &toggle_pending) {
+    if (leg_index < 0 || leg_index >= NUM_LEGS) {
+        toggle_pending = false;
+        return;
+    }
+
+    LegState &state = leg_states_[leg_index];
 
     // Retrieve body pose controller for poseForLegManipulation
     BodyPoseController *bpc = context_.getBodyPoseController();
@@ -856,15 +889,14 @@ void StateController::handleLegStateTransitions() {
         // Update admittance stiffness during transition (OpenSHC: scale 0->1)
         {
             double scale_reference = static_cast<double>(progress) / PROGRESS_COMPLETE;
-            context_.updateAdmittanceStiffness(toggle_leg_index_, scale_reference);
+            context_.updateAdmittanceStiffness(leg_index, scale_reference);
         }
 
         if (progress >= 100) {
             state = LegState::LEG_MANUAL;
             manual_leg_count_++;
-            toggle_leg_state_pending_ = false;
-            toggle_leg_index_ = -1;
-            logDebug("Leg " + toArduinoString(toString(toggle_leg_index_)) + " set to state: MANUAL");
+            toggle_pending = false;
+            logDebug("Leg " + toArduinoString(toString(leg_index)) + " set to state: MANUAL");
         }
         break;
     }
@@ -878,22 +910,20 @@ void StateController::handleLegStateTransitions() {
         // Update admittance stiffness during transition (OpenSHC: scale 1->0)
         {
             double scale_reference = std::abs(static_cast<double>(progress) / PROGRESS_COMPLETE - 1.0);
-            context_.updateAdmittanceStiffness(toggle_leg_index_, scale_reference);
+            context_.updateAdmittanceStiffness(leg_index, scale_reference);
         }
 
         if (progress >= 100) {
             state = LegState::LEG_WALKING;
             manual_leg_count_--;
-            toggle_leg_state_pending_ = false;
-            toggle_leg_index_ = -1;
-            logDebug("Leg " + toArduinoString(toString(toggle_leg_index_)) + " set to state: WALKING");
+            toggle_pending = false;
+            logDebug("Leg " + toArduinoString(toString(leg_index)) + " set to state: WALKING");
         }
         break;
     }
     default:
         // No valid transition state; clear pending flag
-        toggle_leg_state_pending_ = false;
-        toggle_leg_index_ = -1;
+        toggle_pending = false;
         break;
     }
 }

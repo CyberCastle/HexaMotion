@@ -153,6 +153,29 @@ class TerrainAdaptation {
     const StepPlane &getStepPlane(int leg_index) const;
 
     /**
+     * @brief Compute the rough-terrain swing touchdown target (1:1 OpenSHC rough_terrain_mode logic).
+     *
+     * Ports OpenSHC's LegStepper rough-terrain target adjustment into the TerrainAdaptation domain.
+     * When a valid step plane has been detected, the commanded target is projected onto that plane
+     * along the walk-plane normal so touchdown lands on the sensed surface; otherwise the target is
+     * lowered by @p step_depth to reactively probe for unexpected ground. Implemented as a pure
+     * function of the per-leg terrain data that WalkController already pushes into each LegStepper,
+     * so it introduces no ownership coupling.
+     *
+     * @param current_target     Currently commanded swing target tip position.
+     * @param step_plane_position Detected step-plane contact position for the leg.
+     * @param walk_plane_normal   Unit normal of the estimated walking plane.
+     * @param step_plane_valid    True when @p step_plane_position is a confirmed detection.
+     * @param step_depth          Reactive probing depth (mm) used when no step plane is valid.
+     * @return Adjusted swing target tip position.
+     */
+    static Point3D computeRoughTerrainSwingTarget(const Point3D &current_target,
+                                                  const Point3D &step_plane_position,
+                                                  const Point3D &walk_plane_normal,
+                                                  bool step_plane_valid,
+                                                  double step_depth);
+
+    /**
      * @brief Check if leg has touchdown detection enabled
      * @param leg_index Leg index (0-5)
      * @return True if touchdown detection is active

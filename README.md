@@ -54,6 +54,23 @@ HexaMotion is a **port**, not a fork. The original OpenSHC codebase (included in
 - Class/data naming follows a semantic, self-documenting pattern — some names differ from OpenSHC while keeping 1:1 logic.
 - Configurations use factory patterns where appropriate.
 
+### Parity & deliberate divergences
+
+HexaMotion targets a near-complete 1:1 reproduction of OpenSHC. A master switch
+`Parameters::strict_openshc_parity` (default **false**) disables every HexaMotion-only stability
+extension in `LegStepper` (stride freezing, hybrid anti-drift, lateral residual cleanup, phase-end
+snap, in-gait workspace constraining and swing-end Z snapping) to obtain OpenSHC-verbatim
+trajectories. It has the highest precedence over the fine-grained extension flags.
+
+One intentional divergence is retained for MCU effectiveness: inverse kinematics uses a bounded
+internal DLS convergence loop (≤30 iterations, 1 mm early-exit) with an analytic seed and a
+5°/iteration clamp, instead of OpenSHC's single DLS step per control cycle. It converges within one
+~50 Hz MCU cycle and the analytic seed lowers the average iteration count. Rough-terrain swing-target
+adaptation (proactive step-plane projection and reactive step-depth probing) lives in
+`TerrainAdaptation` rather than inline in `LegStepper`, keeping HexaMotion's class decomposition. The
+iterative timing rounding, dual manual-leg toggle, all-legs walk-plane fit and `forceNormalTouchdown`
+node-separation formula are aligned 1:1 with OpenSHC.
+
 ## Prerequisites
 
 - Arduino IDE with board support for **Arduino Giga R1**.
