@@ -292,9 +292,16 @@ void testForceNormalTouchdownParity(LegStepper &stepper, const RobotModel &model
     assert(isPointClose(stride_vector_actual, stride_vector_expected, 1e-6));
     assert(isPointClose(swing_clearance_actual, swing_clearance_expected, 1e-6));
 
-    // Now derive expected Bezier nodes from independently-computed values
-    Point3D final_tip_velocity = stride_vector_expected * (-1.0 / static_cast<double>(stance_iterations));
-    Point3D stance_node_separation = final_tip_velocity * 0.25;
+    // Now derive expected Bezier nodes from independently-computed values.
+    // OpenSHC-aligned node-separation formula (matches LegStepper::forceNormalTouchdown):
+    //   final_tip_velocity = stride * (-(stance_delta_t / time_delta))
+    //   stance_node_separation = final_tip_velocity * 0.25 * (time_delta / swing_delta_t)
+    // (the previous simplified -1/stance_iterations factor was outdated).
+    double stance_dt = stepper.getStanceDeltaT();
+    double swing_dt = stepper.getSwingDeltaT();
+    double time_delta = model.getTimeDelta();
+    Point3D final_tip_velocity = stride_vector_expected * (-(stance_dt / time_delta));
+    Point3D stance_node_separation = final_tip_velocity * 0.25 * (time_delta / swing_dt);
 
     Point3D expected_bezier_origin = target - stance_node_separation * 4.0;
     expected_bezier_origin.z = std::max(origin.z, target.z);

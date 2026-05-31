@@ -19,7 +19,7 @@ SOURCES = ../src/math_utils.cpp ../src/robot_model.cpp ../src/body_pose_controll
 CONSOLIDATED = numeric_integration_test ik_test dh_kinematics_test bezier_test coxa_stride_test trajectory_test tripod_walk_test runtime_api_test
 
 # Standalone tests that were NOT consolidated.
-STANDALONE = math_utils_test pose_controller_test walk_controller_test kinematics_validation_test brute_force_workspace_test jacobian_validation_test pose_gait_integration_test finetune_angles_test virtual_hardware_sim_test workspace_analyzer_fusion_test step_frequency_regeneration_test default_configuration_tripod_pose_transition_test gravity_inclination_test timing_rounding_parity_test force_normal_touchdown_parity_test strict_parity_legstepper_test rough_terrain_adaptation_test walk_plane_all_legs_test manual_leg_toggle_dual_test
+STANDALONE = math_utils_test pose_controller_test walk_controller_test kinematics_validation_test brute_force_workspace_test jacobian_validation_test pose_gait_integration_test finetune_angles_test virtual_hardware_sim_test workspace_analyzer_fusion_test step_frequency_regeneration_test default_configuration_tripod_pose_transition_test gravity_inclination_test timing_rounding_parity_test force_normal_touchdown_parity_test strict_parity_legstepper_test rough_terrain_adaptation_test walk_plane_all_legs_test manual_leg_toggle_dual_test cartesian_velocity_controller_test accessor_coverage_test terrain_adaptation_test leg_stepper_accessor_test factory_pose_admittance_test walk_controller_accessor_test
 
 all: $(CONSOLIDATED) $(STANDALONE)
 
@@ -115,6 +115,33 @@ walk_plane_all_legs_test: walk_plane_all_legs_test.cpp ../src/robot_model.cpp ..
 	$(CXX) $(CXXFLAGS) $^ -o $@
 
 manual_leg_toggle_dual_test: manual_leg_toggle_dual_test.cpp $(SOURCES)
+	$(CXX) $(CXXFLAGS) $^ -o $@
+
+# --- TODO_TEST_COVERAGE additions ---
+
+# CartesianVelocityController dedicated coverage ([A]).
+cartesian_velocity_controller_test: cartesian_velocity_controller_test.cpp ../src/cartesian_velocity_controller.cpp ../src/robot_model.cpp ../src/math_utils.cpp ../src/workspace_analyzer.cpp
+	$(CXX) $(CXXFLAGS) $^ -o $@
+
+# Accessor/mutator coverage for LocomotionSystem/StateController/Leg/RobotModel ([C][F][H][K]).
+accessor_coverage_test: accessor_coverage_test.cpp $(SOURCES)
+	$(CXX) $(CXXFLAGS) $^ -o $@
+
+# TerrainAdaptation proactive/reactive/projection coverage ([D]).
+terrain_adaptation_test: terrain_adaptation_test.cpp ../src/terrain_adaptation.cpp ../src/robot_model.cpp ../src/math_utils.cpp ../src/workspace_analyzer.cpp ../src/leg.cpp ../src/leg_stepper.cpp ../src/velocity_limits.cpp ../src/gait_config_factory.cpp ../src/body_pose_config_factory.cpp ../src/body_pose_controller.cpp ../src/leg_poser.cpp
+	$(CXX) $(CXXFLAGS) $^ -o $@
+
+# LegStepper getter/setter and trajectory-helper coverage ([J]).
+leg_stepper_accessor_test: leg_stepper_accessor_test.cpp ../src/leg_stepper.cpp ../src/robot_model.cpp ../src/math_utils.cpp ../src/workspace_analyzer.cpp ../src/leg.cpp ../src/gait_config_factory.cpp ../src/body_pose_config_factory.cpp ../src/body_pose_controller.cpp ../src/leg_poser.cpp ../src/velocity_limits.cpp ../src/terrain_adaptation.cpp
+	$(CXX) $(CXXFLAGS) $^ -o $@
+
+# gait_config_factory, body_pose_controller residuals, admittance updateStiffness
+# and auto_poser coverage ([G][I][L][M]).
+factory_pose_admittance_test: factory_pose_admittance_test.cpp $(SOURCES)
+	$(CXX) $(CXXFLAGS) $^ -o $@
+
+# WalkController residual accessor/gait/terrain coverage ([B]).
+walk_controller_accessor_test: walk_controller_accessor_test.cpp $(SOURCES)
 	$(CXX) $(CXXFLAGS) $^ -o $@
 
 clean:
